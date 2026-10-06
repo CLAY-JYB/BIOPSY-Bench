@@ -1,0 +1,1999 @@
+diff --git a/Zend/tests/no_early_binding_if_already_declared.inc b/Zend/tests/no_early_binding_if_already_declared.inc
+deleted file mode 100644
+index e2feae12..00000000
+--- a/Zend/tests/no_early_binding_if_already_declared.inc
++++ /dev/null
+@@ -1,5 +0,0 @@
+-<?php
+-if (class_exists(B::class)) {
+-    return;
+-}
+-class B extends A {}
+diff --git a/Zend/tests/no_early_binding_if_already_declared.phpt b/Zend/tests/no_early_binding_if_already_declared.phpt
+deleted file mode 100644
+index 659bbbbc..00000000
+--- a/Zend/tests/no_early_binding_if_already_declared.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-No early binding should occur if the class is already declared
+---FILE--
+-<?php
+-class A {}
+-class B extends A {}
+-include __DIR__ . '/no_early_binding_if_already_declared.inc';
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/nowdoc.inc b/Zend/tests/nowdoc.inc
+index d2aa5c4a..c903740e 100644
+--- a/Zend/tests/nowdoc.inc
++++ b/Zend/tests/nowdoc.inc
+@@ -4,7 +4,7 @@
+ $a = 1;
+ $b = 2;
+ $c = array( 'c' => 3, );
+-class d { public $d = 4; };
++class d { public function __construct() { $this->d = 4; } };
+ $d = new d;
+ 
+ ?>
+diff --git a/Zend/tests/nullsafe_operator/gh8661.phpt b/Zend/tests/nullsafe_operator/gh8661.phpt
+deleted file mode 100644
+index 9c4d47be..00000000
+--- a/Zend/tests/nullsafe_operator/gh8661.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-8661: Nullsafe in coalesce triggers undefined variable error
+---FILE--
+-<?php
+-
+-var_dump($a?->foo ?? null);
+-
+-?>
+---EXPECT--
+-NULL
+diff --git a/Zend/tests/objects_014.phpt b/Zend/tests/objects_014.phpt
+index 858de748..138fd4f2 100644
+--- a/Zend/tests/objects_014.phpt
++++ b/Zend/tests/objects_014.phpt
+@@ -12,4 +12,4 @@ interface bar extends foo, foo {
+ echo "Done\n";
+ ?>
+ --EXPECTF--
+-Fatal error: Interface bar cannot implement previously implemented interface foo in %s on line %d
++Fatal error: Class bar cannot implement previously implemented interface foo in %s on line %d
+diff --git a/Zend/tests/oss_fuzz_60441.phpt b/Zend/tests/oss_fuzz_60441.phpt
+deleted file mode 100644
+index 7492a754..00000000
+--- a/Zend/tests/oss_fuzz_60441.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-oss-fuzz #60441 (Double compilation of arrow function)
+---FILE--
+-<?php
+-assert(fn()=>y)[y]??=y;
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Undefined constant "y" in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/attributes.phpt b/Zend/tests/prop_const_expr/attributes.phpt
+deleted file mode 100644
+index 96ebb919..00000000
+--- a/Zend/tests/prop_const_expr/attributes.phpt
++++ /dev/null
+@@ -1,44 +0,0 @@
+---TEST--
+-Allow fetching properties in attributes
+---EXTENSIONS--
+-reflection
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case B = 'C';
+-}
+-
+-#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
+-class Attr {
+-    public function __construct(public $value) {}
+-}
+-
+-#[Attr(A::B->name)]
+-#[Attr(A::B->value)]
+-#[Attr(A::B?->name)]
+-#[Attr(A::B?->value)]
+-class C {}
+-
+-foreach ((new ReflectionClass(C::class))->getAttributes() as $reflectionAttribute) {
+-    var_dump($reflectionAttribute->newInstance());
+-}
+-
+-?>
+---EXPECT--
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "B"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "C"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "B"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "C"
+-}
+diff --git a/Zend/tests/prop_const_expr/basic.phpt b/Zend/tests/prop_const_expr/basic.phpt
+deleted file mode 100644
+index 7499e7c5..00000000
+--- a/Zend/tests/prop_const_expr/basic.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Allow fetching properties in constant expressions on enums
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case Case = 'A::Case';
+-}
+-
+-const A_name = A::Case->name;
+-const A_value = A::Case->value;
+-
+-var_dump(A_name);
+-var_dump(A_value);
+-
+-const A_name_nullsafe = A::Case?->name;
+-const A_value_nullsafe = A::Case?->value;
+-
+-var_dump(A_name_nullsafe);
+-var_dump(A_value_nullsafe);
+-
+-?>
+---EXPECT--
+-string(4) "Case"
+-string(7) "A::Case"
+-string(4) "Case"
+-string(7) "A::Case"
+diff --git a/Zend/tests/prop_const_expr/basic_nullsafe.phpt b/Zend/tests/prop_const_expr/basic_nullsafe.phpt
+deleted file mode 100644
+index da870c03..00000000
+--- a/Zend/tests/prop_const_expr/basic_nullsafe.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Nullsafe property constant expression
+---FILE--
+-<?php
+-
+-class Printer {
+-    public function __construct() {
+-        echo "Printer\n";
+-    }
+-}
+-
+-const A = (null)?->test;
+-var_dump(A);
+-
+-const B = (null)?->test->test;
+-var_dump(B);
+-
+-const C = (null)->test?->test;
+-var_dump(C);
+-
+-const D = (null)?->test['test'];
+-var_dump(D);
+-
+-const E = (null)['test']?->test;
+-var_dump(E);
+-
+-const F = (null)?->{new Printer};
+-var_dump(F);
+-
+-const G = (null)?->test + (new Printer ? 1 : 0);
+-var_dump(G);
+-
+-?>
+---EXPECTF--
+-NULL
+-NULL
+-
+-Warning: Attempt to read property "test" on null in %s on line %d
+-NULL
+-NULL
+-
+-Warning: Trying to access array offset on value of type null in %s on line %d
+-NULL
+-NULL
+-Printer
+-int(1)
+diff --git a/Zend/tests/prop_const_expr/class_const.phpt b/Zend/tests/prop_const_expr/class_const.phpt
+deleted file mode 100644
+index ff49ef58..00000000
+--- a/Zend/tests/prop_const_expr/class_const.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Allow fetching properties in class constants
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case Case = 'A::Case';
+-}
+-
+-class C {
+-    const A_name = A::Case->name;
+-    const A_value = A::Case->value;
+-    const A_name_nullsafe = A::Case?->name;
+-    const A_value_nullsafe = A::Case?->value;
+-}
+-
+-var_dump(C::A_name);
+-var_dump(C::A_value);
+-var_dump(C::A_name_nullsafe);
+-var_dump(C::A_value_nullsafe);
+-
+-?>
+---EXPECT--
+-string(4) "Case"
+-string(7) "A::Case"
+-string(4) "Case"
+-string(7) "A::Case"
+diff --git a/Zend/tests/prop_const_expr/default_args.phpt b/Zend/tests/prop_const_expr/default_args.phpt
+deleted file mode 100644
+index 9046ddc8..00000000
+--- a/Zend/tests/prop_const_expr/default_args.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-Property fetch in default argument
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case B = 'C';
+-}
+-
+-function test(
+-    $name = A::B->name,
+-    $value = A::B->value,
+-    $nameNullsafe = A::B?->name,
+-    $valueNullsafe = A::B?->value,
+-) {
+-    var_dump($name);
+-    var_dump($value);
+-    var_dump($nameNullsafe);
+-    var_dump($valueNullsafe);
+-}
+-
+-test();
+-test('D', 'E', 'F', 'G');
+-
+-?>
+---EXPECT--
+-string(1) "B"
+-string(1) "C"
+-string(1) "B"
+-string(1) "C"
+-string(1) "D"
+-string(1) "E"
+-string(1) "F"
+-string(1) "G"
+diff --git a/Zend/tests/prop_const_expr/enum_initializer.phpt b/Zend/tests/prop_const_expr/enum_initializer.phpt
+deleted file mode 100644
+index 9b5c0314..00000000
+--- a/Zend/tests/prop_const_expr/enum_initializer.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-Property fetch in enum initializers
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case B = 'C';
+-}
+-
+-enum D: string {
+-    case E = A::B->name;
+-    case F = A::B->value;
+-}
+-
+-enum G: string {
+-    case H = A::B?->name;
+-    case I = A::B?->value;
+-}
+-
+-var_dump(D::E->value);
+-var_dump(D::F->value);
+-var_dump(G::H->value);
+-var_dump(G::I->value);
+-
+-?>
+---EXPECT--
+-string(1) "B"
+-string(1) "C"
+-string(1) "B"
+-string(1) "C"
+diff --git a/Zend/tests/prop_const_expr/lhs_class_not_found.phpt b/Zend/tests/prop_const_expr/lhs_class_not_found.phpt
+deleted file mode 100644
+index 9d10ec0f..00000000
+--- a/Zend/tests/prop_const_expr/lhs_class_not_found.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Property constant expression lhs error
+---FILE--
+-<?php
+-
+-const A_prop = (new A)->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Class "A" not found in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/lhs_class_not_found_nullsafe.phpt b/Zend/tests/prop_const_expr/lhs_class_not_found_nullsafe.phpt
+deleted file mode 100644
+index 76bf62b2..00000000
+--- a/Zend/tests/prop_const_expr/lhs_class_not_found_nullsafe.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Nullsafe property constant expression lhs error
+---FILE--
+-<?php
+-
+-const A_prop = (new A)?->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Class "A" not found in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/lhs_non_object.phpt b/Zend/tests/prop_const_expr/lhs_non_object.phpt
+deleted file mode 100644
+index 357c58c3..00000000
+--- a/Zend/tests/prop_const_expr/lhs_non_object.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property constant expression lhs wrong type
+---FILE--
+-<?php
+-
+-const A_prop = (42)->prop;
+-var_dump(A_prop);
+-
+-const A_prop_nullsafe = (42)?->prop;
+-var_dump(A_prop_nullsafe);
+-
+-?>
+---EXPECTF--
+-Warning: Attempt to read property "prop" on int in %s on line %d
+-NULL
+-
+-Warning: Attempt to read property "prop" on int in %s on line %d
+-NULL
+diff --git a/Zend/tests/prop_const_expr/non_enums.phpt b/Zend/tests/prop_const_expr/non_enums.phpt
+deleted file mode 100644
+index e045d437..00000000
+--- a/Zend/tests/prop_const_expr/non_enums.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Disallow fetching properties in constant expressions on non-enums
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-const A_prop = (new A)->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_catchable.phpt b/Zend/tests/prop_const_expr/non_enums_catchable.phpt
+deleted file mode 100644
+index 6f410ac7..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_catchable.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-RHS gets evaluated before throwing error when accessing properties on non-enums in constant expressions
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-class Printer {
+-    public function __construct() {
+-        echo "Printer\n";
+-        return 'printer';
+-    }
+-}
+-
+-const A_prop = (new A)->{new Printer ? 'printer' : null};
+-
+-?>
+---EXPECTF--
+-Printer
+-
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_cost.phpt b/Zend/tests/prop_const_expr/non_enums_cost.phpt
+deleted file mode 100644
+index 29311aa9..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_cost.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Disallow fetching properties in constant expressions on non-enums even if lhs is other const
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-const A = new A();
+-const A_prop = A->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt b/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt
+deleted file mode 100644
+index 428651c1..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Disallow nullsafe fetching properties in constant expressions on non-enums
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-const A_prop = (new A)?->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_rhs.phpt b/Zend/tests/prop_const_expr/non_enums_rhs.phpt
+deleted file mode 100644
+index 0bffe9d8..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_rhs.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Error when fetching properties on non-enums in constant expressions is catchable
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-function foo($prop = (new A)->prop) {}
+-
+-function test() {
+-    try {
+-        foo();
+-    } catch (Error $e) {
+-        echo $e->getMessage(), "\n";
+-    }
+-}
+-
+-test();
+-test();
+-
+-?>
+---EXPECT--
+-Fetching properties on non-enums in constant expressions is not allowed
+-Fetching properties on non-enums in constant expressions is not allowed
+diff --git a/Zend/tests/prop_const_expr/property_initializer.phpt b/Zend/tests/prop_const_expr/property_initializer.phpt
+deleted file mode 100644
+index 3cfe5a87..00000000
+--- a/Zend/tests/prop_const_expr/property_initializer.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Property fetch in property initializer
+---FILE--
+-<?php
+-
+-enum A: int {
+-    case B = 42;
+-}
+-
+-class C {
+-    public string $d = A::B->name;
+-    public int $e = A::B->value;
+-    public string $f = A::B?->name;
+-    public int $g = A::B?->value;
+-}
+-
+-$c = new C();
+-var_dump($c->d);
+-var_dump($c->e);
+-var_dump($c->f);
+-var_dump($c->g);
+-
+-?>
+---EXPECT--
+-string(1) "B"
+-int(42)
+-string(1) "B"
+-int(42)
+diff --git a/Zend/tests/prop_const_expr/rhs_object.phpt b/Zend/tests/prop_const_expr/rhs_object.phpt
+deleted file mode 100644
+index d9d01b81..00000000
+--- a/Zend/tests/prop_const_expr/rhs_object.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property constant expression rhs wrong type
+---FILE--
+-<?php
+-
+-class A {}
+-class B {}
+-
+-const A_prop = (new A)->{new B};
+-
+-var_dump(A_prop);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class B could not be converted to string in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt b/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt
+deleted file mode 100644
+index 72242b16..00000000
+--- a/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Nullsafe property constant expression rhs wrong type
+---FILE--
+-<?php
+-
+-class A {}
+-class B {}
+-
+-const A_prop = (new A)?->{new B};
+-
+-var_dump(A_prop);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class B could not be converted to string in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/rhs_prop_not_found.phpt b/Zend/tests/prop_const_expr/rhs_prop_not_found.phpt
+deleted file mode 100644
+index 09940759..00000000
+--- a/Zend/tests/prop_const_expr/rhs_prop_not_found.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Property not found error
+---FILE--
+-<?php
+-
+-enum A {
+-    case B;
+-}
+-
+-const A_prop = A::B->prop;
+-var_dump(A_prop);
+-
+-const A_prop_nullsafe = A::B?->prop;
+-var_dump(A_prop_nullsafe);
+-
+-?>
+---EXPECTF--
+-Warning: Undefined property: A::$prop in %s on line %d
+-NULL
+-
+-Warning: Undefined property: A::$prop in %s on line %d
+-NULL
+diff --git a/Zend/tests/prop_const_expr/static_initalizer.phpt b/Zend/tests/prop_const_expr/static_initalizer.phpt
+deleted file mode 100644
+index 837ddcd5..00000000
+--- a/Zend/tests/prop_const_expr/static_initalizer.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-Allow fetching properties in static initializer
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case Case = 'A::Case';
+-}
+-
+-function foo() {
+-    static $name = A::Case->name;
+-    static $value = A::Case->value;
+-    static $nameNullsafe = A::Case?->name;
+-    static $valueNullsafe = A::Case?->value;
+-
+-    var_dump($name);
+-    var_dump($value);
+-    var_dump($nameNullsafe);
+-    var_dump($valueNullsafe);
+-}
+-
+-foo();
+-
+-?>
+---EXPECT--
+-string(4) "Case"
+-string(7) "A::Case"
+-string(4) "Case"
+-string(7) "A::Case"
+diff --git a/Zend/tests/prop_const_expr/static_property_initializer.phpt b/Zend/tests/prop_const_expr/static_property_initializer.phpt
+deleted file mode 100644
+index 825c8d09..00000000
+--- a/Zend/tests/prop_const_expr/static_property_initializer.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Property fetch in static property initializer
+---FILE--
+-<?php
+-
+-enum A: int {
+-    case B = 42;
+-}
+-
+-class C {
+-    public static string $d = A::B->name;
+-    public static int $e = A::B->value;
+-    public static string $f = A::B?->name;
+-    public static int $g = A::B?->value;
+-}
+-
+-var_dump(C::$d);
+-var_dump(C::$e);
+-var_dump(C::$f);
+-var_dump(C::$g);
+-
+-?>
+---EXPECT--
+-string(1) "B"
+-int(42)
+-string(1) "B"
+-int(42)
+diff --git a/Zend/tests/readonly_classes/gh9285_error.phpt b/Zend/tests/readonly_classes/gh9285_error.phpt
+deleted file mode 100644
+index 31658901..00000000
+--- a/Zend/tests/readonly_classes/gh9285_error.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Bug GH-9285: PHP 8.2 readonly classes allow inheriting mutable properties from traits - error
+---FILE--
+-<?php
+-
+-trait T {
+-    public $prop;
+-}
+-
+-readonly class C {
+-    use T;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Readonly class C cannot use trait with a non-readonly property T::$prop in %s on line %d
+diff --git a/Zend/tests/readonly_classes/gh9285_success.phpt b/Zend/tests/readonly_classes/gh9285_success.phpt
+deleted file mode 100644
+index 38dfdb37..00000000
+--- a/Zend/tests/readonly_classes/gh9285_success.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Bug GH-9285: PHP 8.2 readonly classes allow inheriting mutable properties from traits - success
+---FILE--
+-<?php
+-
+-trait T {
+-    public readonly int $prop;
+-}
+-
+-readonly class C {
+-    use T;
+-
+-    public function __construct()
+-    {
+-        $this->prop = 1;
+-    }
+-}
+-
+-$c = new C();
+-var_dump($c->prop);
+-
+-?>
+---EXPECT--
+-int(1)
+diff --git a/Zend/tests/readonly_classes/readonly_class_duplicated_modifier.phpt b/Zend/tests/readonly_classes/readonly_class_duplicated_modifier.phpt
+deleted file mode 100644
+index bd042204..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_duplicated_modifier.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-The readonly class modifier can only be added once
+---FILE--
+-<?php
+-
+-readonly readonly class Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Multiple readonly modifiers are not allowed in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_dynamic_property.phpt b/Zend/tests/readonly_classes/readonly_class_dynamic_property.phpt
+deleted file mode 100644
+index b4da25ab..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_dynamic_property.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Readonly classes cannot use dynamic properties
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-}
+-
+-$foo = new Foo();
+-
+-try {
+-    $foo->bar = 1;
+-} catch (Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot create dynamic property Foo::$bar
+diff --git a/Zend/tests/readonly_classes/readonly_class_dynamic_property_attribute.phpt b/Zend/tests/readonly_classes/readonly_class_dynamic_property_attribute.phpt
+deleted file mode 100644
+index ace50c57..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_dynamic_property_attribute.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Readonly classes cannot apply the #[AllowDynamicProperties] attribute
+---FILE--
+-<?php
+-
+-#[AllowDynamicProperties]
+-readonly class Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Cannot apply #[AllowDynamicProperties] to readonly class Foo in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_final_modifier.phpt b/Zend/tests/readonly_classes/readonly_class_final_modifier.phpt
+deleted file mode 100644
+index e530534c..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_final_modifier.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-The readonly and final class modifiers can be defined in the same time
+---FILE--
+-<?php
+-
+-final readonly class Foo
+-{
+-}
+-
+-readonly class Bar extends Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Class Bar cannot extend final class Foo in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_inheritance_error1.phpt b/Zend/tests/readonly_classes/readonly_class_inheritance_error1.phpt
+deleted file mode 100644
+index 2d76d844..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_inheritance_error1.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Non-readonly class cannot extend a readonly class
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-}
+-
+-class Bar extends Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Non-readonly class Bar cannot extend readonly class Foo in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_inheritance_error2.phpt b/Zend/tests/readonly_classes/readonly_class_inheritance_error2.phpt
+deleted file mode 100644
+index 09966536..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_inheritance_error2.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Readonly class cannot extend a non-readonly class
+---FILE--
+-<?php
+-
+-class Foo
+-{
+-}
+-
+-readonly class Bar extends Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Readonly class Bar cannot extend non-readonly class Foo in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_inheritance_success.phpt b/Zend/tests/readonly_classes/readonly_class_inheritance_success.phpt
+deleted file mode 100644
+index 33e73554..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_inheritance_success.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Readonly class can extend a readonly class
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-}
+-
+-readonly class Bar extends Foo
+-{
+-}
+-
+-?>
+---EXPECT--
+diff --git a/Zend/tests/readonly_classes/readonly_class_missing_type1.phpt b/Zend/tests/readonly_classes/readonly_class_missing_type1.phpt
+deleted file mode 100644
+index ef4d7c0a..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_missing_type1.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Normal properties of a readonly class must have type
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-    public $bar;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Readonly property Foo::$bar must have type in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_missing_type2.phpt b/Zend/tests/readonly_classes/readonly_class_missing_type2.phpt
+deleted file mode 100644
+index 38fbd722..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_missing_type2.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Promoted properties of a readonly class must have type
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-    public function __construct(
+-        private $bar
+-    ) {}
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Readonly property Foo::$bar must have type in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_property1.phpt b/Zend/tests/readonly_classes/readonly_class_property1.phpt
+deleted file mode 100644
+index 34e09eec..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_property1.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Normal properties of a readonly class are implicitly declared as readonly
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-    public int $bar;
+-
+-    public function __construct() {
+-        $this->bar = 1;
+-    }
+-}
+-
+-$foo = new Foo();
+-
+-try {
+-    $foo->bar = 2;
+-} catch (Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot modify readonly property Foo::$bar
+diff --git a/Zend/tests/readonly_classes/readonly_class_property2.phpt b/Zend/tests/readonly_classes/readonly_class_property2.phpt
+deleted file mode 100644
+index 6db08f4d..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_property2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Promoted properties of a readonly class are implicitly declared as readonly
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-    public function __construct(
+-        public int $bar
+-    ) {}
+-}
+-
+-$foo = new Foo(1);
+-
+-try {
+-    $foo->bar = 2;
+-} catch (Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot modify readonly property Foo::$bar
+diff --git a/Zend/tests/readonly_classes/readonly_class_property3.phpt b/Zend/tests/readonly_classes/readonly_class_property3.phpt
+deleted file mode 100644
+index 34df1dde..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_property3.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Declaring static property for a readonly class is forbidden
+---FILE--
+-<?php
+-
+-readonly class Foo
+-{
+-    public static int $bar;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Static property Foo::$bar cannot be readonly in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_class_unserialize_error.phpt b/Zend/tests/readonly_classes/readonly_class_unserialize_error.phpt
+deleted file mode 100644
+index e0672e4d..00000000
+--- a/Zend/tests/readonly_classes/readonly_class_unserialize_error.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Fix GH-9186 Readonly classes can have dynamic properties created by unserialize()
+---FILE--
+-<?php
+-
+-readonly class C {}
+-
+-try {
+-    $readonly = unserialize('O:1:"C":1:{s:1:"x";b:1;}');
+-} catch (Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot create dynamic property C::$x
+diff --git a/Zend/tests/readonly_classes/readonly_enum.phpt b/Zend/tests/readonly_classes/readonly_enum.phpt
+deleted file mode 100644
+index afc1f235..00000000
+--- a/Zend/tests/readonly_classes/readonly_enum.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-Enums cannot be readonly
+---FILE--
+-<?php
+-
+-readonly enum Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Parse error: syntax error, unexpected token "enum", expecting "abstract" or "final" or "readonly" or "class" in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_interface.phpt b/Zend/tests/readonly_classes/readonly_interface.phpt
+deleted file mode 100644
+index c6fd42d5..00000000
+--- a/Zend/tests/readonly_classes/readonly_interface.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-Interfaces cannot be readonly
+---FILE--
+-<?php
+-
+-readonly interface Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Parse error: syntax error, unexpected token "interface", expecting "abstract" or "final" or "readonly" or "class" in %s on line %d
+diff --git a/Zend/tests/readonly_classes/readonly_trait.phpt b/Zend/tests/readonly_classes/readonly_trait.phpt
+deleted file mode 100644
+index 0e18d14b..00000000
+--- a/Zend/tests/readonly_classes/readonly_trait.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-Traits cannot be readonly
+---FILE--
+-<?php
+-
+-readonly trait Foo
+-{
+-}
+-
+-?>
+---EXPECTF--
+-Parse error: syntax error, unexpected token "trait", expecting "abstract" or "final" or "readonly" or "class" in %s on line %d
+diff --git a/Zend/tests/readonly_function.phpt b/Zend/tests/readonly_function.phpt
+index 35102d36..0262b3b7 100644
+--- a/Zend/tests/readonly_function.phpt
++++ b/Zend/tests/readonly_function.phpt
+@@ -7,34 +7,10 @@ function readonly() {
+     echo "Hi!\n";
+ }
+ 
+-class A {
+-    const readonly = 'Const hi!';
+-
+-    static function readonly() {
+-        echo "Static hi!\n";
+-    }
+-}
+-
+-class B {
+-    public $readonly = 'Prop hi!';
+-
+-    function readonly() {
+-        echo "Instance hi!\n";
+-    }
+-}
+-
+-$b = new B();
+-
+ readonly();
+-echo A::readonly, "\n";
+-A::readonly();
+-$b->readonly();
+-echo $b->readonly, "\n";
++readonly ();
+ 
+ ?>
+ --EXPECT--
+ Hi!
+-Const hi!
+-Static hi!
+-Instance hi!
+-Prop hi!
++Hi!
+diff --git a/Zend/tests/return_types/generators001.phpt b/Zend/tests/return_types/generators001.phpt
+index 615dabc2..64793eaa 100644
+--- a/Zend/tests/return_types/generators001.phpt
++++ b/Zend/tests/return_types/generators001.phpt
+@@ -26,10 +26,6 @@ function test6() : object|callable {
+     yield 6;
+ }
+ 
+-function test7() : iterable {
+-    yield 7;
+-}
+-
+ var_dump(
+     test1(),
+     test2(),
+@@ -37,7 +33,6 @@ var_dump(
+     test4(),
+     test5(),
+     test6(),
+-    test7(),
+ );
+ ?>
+ --EXPECTF--
+@@ -53,5 +48,3 @@ object(Generator)#%d (%d) {
+ }
+ object(Generator)#%d (%d) {
+ }
+-object(Generator)#%d (%d) {
+-}
+diff --git a/Zend/tests/string_offset_as_object.phpt b/Zend/tests/string_offset_as_object.phpt
+deleted file mode 100644
+index 6fdebe93..00000000
+--- a/Zend/tests/string_offset_as_object.phpt
++++ /dev/null
+@@ -1,63 +0,0 @@
+---TEST--
+-Using string offset as object
+---FILE--
+-<?php
+-
+-$str = "x";
+-try {
+-    $str[0]->bar = "xyz";
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar[1] = "bang";
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar += 1;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar = &$b;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    ++$str[0]->bar;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    --$str[0]->bar;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar++;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar--;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    unset($str[0]->bar);
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+diff --git a/Zend/tests/string_offset_errors.phpt b/Zend/tests/string_offset_errors.phpt
+index 726dc41f..b709408c 100644
+--- a/Zend/tests/string_offset_errors.phpt
++++ b/Zend/tests/string_offset_errors.phpt
+@@ -8,11 +8,6 @@ function &test() : string {
+     return $str[0];
+ }
+ 
+-function &gen() {
+-    $str = "foo";
+-    yield $str[0];
+-}
+-
+ try {
+     test();
+ } catch (Error $e) {
+@@ -26,14 +21,7 @@ try {
+     echo $e->getMessage(), "\n";
+ }
+ 
+-try {
+-    foreach (gen() as $v) {}
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+ ?>
+ --EXPECT--
+-Cannot create references to/from string offsets
+-Cannot create references to/from string offsets
++Cannot return string offsets by reference
+ Cannot create references to/from string offsets
+diff --git a/Zend/tests/string_offset_optimization.phpt b/Zend/tests/string_offset_optimization.phpt
+deleted file mode 100644
+index 7ccef860..00000000
+--- a/Zend/tests/string_offset_optimization.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Invalid string offset use where the actual use may be optimized away
+---FILE--
+-<?php
+-function test() {
+-    $a = "";
+-    $c = array(&$a[0]);
+-}
+-test();
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot create references to/from string offsets in %s:%d
+-Stack trace:
+-#0 %s(%d): test()
+-#1 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/temporary_cleaning_013.phpt b/Zend/tests/temporary_cleaning_013.phpt
+index e5f4b73b..ce121d03 100644
+--- a/Zend/tests/temporary_cleaning_013.phpt
++++ b/Zend/tests/temporary_cleaning_013.phpt
+@@ -77,7 +77,6 @@ try {
+ 
+ try {
+     var_dump((function() { return new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     }; })()->foo++);
+@@ -93,7 +92,6 @@ try {
+ 
+ try {
+     var_dump((function() { return new class {
+-        public $bar;
+         function __construct() { $this->bar = new stdClass; }
+         function &__get($x) { return $this->bar; }
+         function __destruct() { throw new Exception; }
+@@ -117,7 +115,6 @@ try {
+ 
+ try {
+     var_dump(++(function() { return new class {
+-        public $bar;
+         function __construct() { $this->bar = new stdClass; }
+         function &__get($x) { return $this->bar; }
+         function __destruct() { throw new Exception; }
+@@ -146,7 +143,6 @@ try {
+ 
+ try {
+     var_dump((new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     })->foo);
+@@ -172,7 +168,6 @@ try {
+ 
+ try {
+     var_dump(isset((new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     })->foo->bar));
+@@ -283,22 +278,14 @@ caught Exception 2
+ caught Exception 3
+ caught Exception 4
+ caught Exception 5
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 6
+ caught Exception 7
+ caught Exception 8
+ caught Exception 9
+ caught Exception 10
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 11
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 12
+ caught Exception 13
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 14
+ 
+ Notice: Indirect modification of overloaded element of ArrayAccess@anonymous has no effect in %s on line %d
+diff --git a/Zend/tests/temporary_cleaning_016.phpt b/Zend/tests/temporary_cleaning_016.phpt
+index 8dc4c8ea..cdc9bff0 100644
+--- a/Zend/tests/temporary_cleaning_016.phpt
++++ b/Zend/tests/temporary_cleaning_016.phpt
+@@ -11,6 +11,5 @@ try {
+ }
+ ?>
+ DONE
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ DONE
+diff --git a/Zend/tests/throw/exit_in_finally.phpt b/Zend/tests/throw/exit_in_finally.phpt
+deleted file mode 100644
+index fc88d87c..00000000
+--- a/Zend/tests/throw/exit_in_finally.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Test exit with uncaught exception in finally block
+---FILE--
+-<?php
+-try {
+-    throw new Exception();
+-} finally {
+-    echo "Done\n";
+-    exit();
+-}
+-?>
+---EXPECT--
+-Done
+diff --git a/Zend/tests/throwing_overloaded_compound_assign_op.phpt b/Zend/tests/throwing_overloaded_compound_assign_op.phpt
+index 39c38627..e6e79baf 100644
+--- a/Zend/tests/throwing_overloaded_compound_assign_op.phpt
++++ b/Zend/tests/throwing_overloaded_compound_assign_op.phpt
+@@ -3,7 +3,6 @@ Exception in compound assign op should prevent call to overloaded object handler
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public function __get($k) {
+         $this->$k = 42;
+diff --git a/Zend/tests/traits/bug76773-deprecated.phpt b/Zend/tests/traits/bug76773-deprecated.phpt
+deleted file mode 100644
+index e6dac201..00000000
+--- a/Zend/tests/traits/bug76773-deprecated.phpt
++++ /dev/null
+@@ -1,35 +0,0 @@
+---TEST--
+-Bug #76773 (Traits used on the parent are ignored for child classes) [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-trait MyTrait
+-{
+-    public function hello()
+-    {
+-        echo __CLASS__, "\n";
+-
+-        if (\is_callable(array('parent', __FUNCTION__))) {
+-            parent::hello();
+-        }
+-    }
+-}
+-
+-class ParentClass
+-{
+-    use MyTrait;
+-}
+-
+-class ChildClass extends ParentClass
+-{
+-    use MyTrait;
+-}
+-
+-$c = new ChildClass();
+-$c->hello();
+-?>
+---EXPECTF--
+-ChildClass
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-ParentClass
+diff --git a/Zend/tests/traits/bug76773.phpt b/Zend/tests/traits/bug76773.phpt
+index 50b31479..4ab53bf6 100644
+--- a/Zend/tests/traits/bug76773.phpt
++++ b/Zend/tests/traits/bug76773.phpt
+@@ -9,7 +9,7 @@ trait MyTrait
+     {
+         echo __CLASS__, "\n";
+ 
+-        if (get_parent_class(__CLASS__) !== false) {
++        if (\is_callable(array('parent', __FUNCTION__))) {
+             parent::hello();
+         }
+     }
+diff --git a/Zend/tests/traits/constant_001.phpt b/Zend/tests/traits/constant_001.phpt
+deleted file mode 100644
+index ad5d5a86..00000000
+--- a/Zend/tests/traits/constant_001.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Trying to access a constant on Trait via a Class
+---FILE--
+-<?php
+-
+-trait Foo {
+-    public const PUBLIC = 'public';
+-    protected const PROTECTED = 'protected';
+-    private const PRIVATE = 'private';
+-
+-    public function f1(): void {
+-        echo self::PUBLIC, ' via self', PHP_EOL;
+-        echo static::PUBLIC, ' via static', PHP_EOL;
+-        echo $this::PUBLIC, ' via $this', PHP_EOL;
+-    }
+-}
+-
+-class Base {
+-    use Foo;
+-
+-    public function f2(): void {
+-        echo self::PRIVATE, ' via self', PHP_EOL;
+-        echo static::PRIVATE, ' via static', PHP_EOL;
+-    }
+-}
+-
+-class Derived extends Base {
+-    public function f3(): void {
+-        echo self::PROTECTED, ' via self', PHP_EOL;
+-        echo static::PROTECTED, ' via static', PHP_EOL;
+-        echo parent::PROTECTED, ' via parent', PHP_EOL;
+-    }
+-}
+-
+-echo Base::PUBLIC, ' via class name', PHP_EOL;
+-echo (new Base)::PUBLIC, ' via object', PHP_EOL;
+-(new Base)->f1();
+-(new Base)->f2();
+-echo Derived::PUBLIC, ' via derived class name', PHP_EOL;
+-echo (new Derived)::PUBLIC, ' via derived class object', PHP_EOL;
+-(new Derived)->f3();
+-?>
+---EXPECTF--
+-public via class name
+-public via object
+-public via self
+-public via static
+-public via $this
+-private via self
+-private via static
+-public via derived class name
+-public via derived class object
+-protected via self
+-protected via static
+-protected via parent
+diff --git a/Zend/tests/traits/constant_002.phpt b/Zend/tests/traits/constant_002.phpt
+deleted file mode 100644
+index 560aa69c..00000000
+--- a/Zend/tests/traits/constant_002.phpt
++++ /dev/null
+@@ -1,42 +0,0 @@
+---TEST--
+-Defining a constant in both trait and its composing class with the same name, visibility, finality and value is allowed
+---FILE--
+-<?php
+-
+-trait TestTrait1 {
+-    public const A = 42;
+-}
+-
+-trait TestTrait2 {
+-    public const A = 42;
+-}
+-
+-trait TestTrait3 {
+-    use TestTrait2;
+-    public const A = 42;
+-}
+-
+-class ComposingClass1 {
+-    use TestTrait1;
+-    use TestTrait2;
+-}
+-
+-class ComposingClass2 {
+-    use TestTrait1;
+-    use TestTrait3;
+-}
+-
+-class ComposingClass3 {
+-    use TestTrait1;
+-    use TestTrait3;
+-    public const A = 42;
+-}
+-
+-echo ComposingClass1::A, PHP_EOL;
+-echo ComposingClass2::A, PHP_EOL;
+-echo ComposingClass3::A, PHP_EOL;
+-?>
+---EXPECTF--
+-42
+-42
+-42
+diff --git a/Zend/tests/traits/constant_003.phpt b/Zend/tests/traits/constant_003.phpt
+deleted file mode 100644
+index 7e946f53..00000000
+--- a/Zend/tests/traits/constant_003.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Non-final Constants in traits can be overridden in derived classes
+---FILE--
+-<?php
+-
+-trait Foo {
+-    public const A = 123;
+-}
+-
+-class Base {
+-    use Foo;
+-}
+-
+-class Derived extends Base {
+-    public const A = 456;
+-}
+-
+-echo Derived::A, PHP_EOL;
+-?>
+---EXPECTF--
+-456
+diff --git a/Zend/tests/traits/constant_004.phpt b/Zend/tests/traits/constant_004.phpt
+deleted file mode 100644
+index b850ed7e..00000000
+--- a/Zend/tests/traits/constant_004.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Trying to access a constant on trait via the name of trait causes a Fatal error
+---FILE--
+-<?php
+-trait Foo {
+-    const A = 42;
+-}
+-
+-class Bar {
+-    use Foo;
+-}
+-
+-echo Foo::A, PHP_EOL;
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot access trait constant Foo::A directly in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/traits/constant_005.phpt b/Zend/tests/traits/constant_005.phpt
+deleted file mode 100644
+index 247fa48a..00000000
+--- a/Zend/tests/traits/constant_005.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Conflicting constants in composing classes with different visibility modifiers should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class ComposingClass {
+-    use TestTrait;
+-    private const Constant = 42;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: ComposingClass and TestTrait define the same constant (Constant) in the composition of ComposingClass. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_006.phpt b/Zend/tests/traits/constant_006.phpt
+deleted file mode 100644
+index eabfc6ac..00000000
+--- a/Zend/tests/traits/constant_006.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Conflicting constants in composing classes with different values should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 123;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class ComposingClass {
+-    use TestTrait;
+-    public const Constant = 456;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: ComposingClass and TestTrait define the same constant (Constant) in the composition of ComposingClass. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_007.phpt b/Zend/tests/traits/constant_007.phpt
+deleted file mode 100644
+index a3815d18..00000000
+--- a/Zend/tests/traits/constant_007.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Conflicting constants in composing classes with different finality should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class ComposingClass {
+-    use TestTrait;
+-    public final const Constant = 42;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: ComposingClass and TestTrait define the same constant (Constant) in the composition of ComposingClass. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_008.phpt b/Zend/tests/traits/constant_008.phpt
+deleted file mode 100644
+index a55f448c..00000000
+--- a/Zend/tests/traits/constant_008.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Conflicting constants in another traits in same composing classes with different visibility modifiers should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait Trait1 {
+-  public const Constant = 42;
+-}
+-
+-trait Trait2 {
+-  private const Constant = 42;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class TraitsTest {
+-    use Trait1;
+-    use Trait2;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: Trait1 and Trait2 define the same constant (Constant) in the composition of TraitsTest. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_009.phpt b/Zend/tests/traits/constant_009.phpt
+deleted file mode 100644
+index 530fa997..00000000
+--- a/Zend/tests/traits/constant_009.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Conflicting constants in another traits in same composing classes with different values should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait Trait1 {
+-  public const Constant = 123;
+-}
+-
+-trait Trait2 {
+-  public const Constant = 456;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class TraitsTest {
+-    use Trait1;
+-    use Trait2;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: Trait1 and Trait2 define the same constant (Constant) in the composition of TraitsTest. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_010.phpt b/Zend/tests/traits/constant_010.phpt
+deleted file mode 100644
+index f74711ba..00000000
+--- a/Zend/tests/traits/constant_010.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Conflicting constants in another traits in same composing classes with different finality should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-echo "PRE-CLASS-GUARD\n";
+-
+-class ComposingClass {
+-    use TestTrait;
+-    public final const Constant = 42;
+-}
+-
+-echo "POST-CLASS-GUARD\n";
+-?>
+---EXPECTF--
+-PRE-CLASS-GUARD
+-
+-Fatal error: ComposingClass and TestTrait define the same constant (Constant) in the composition of ComposingClass. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_011.phpt b/Zend/tests/traits/constant_011.phpt
+deleted file mode 100644
+index b4e15a4e..00000000
+--- a/Zend/tests/traits/constant_011.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Conflicting constants in a trait and another trait using it with different visibility modifiers should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait Trait1 {
+-    public const Constant = 42;
+-}
+-
+-trait Trait2 {
+-    use Trait1;
+-    private const Constant = 42;
+-}
+-?>
+---EXPECTF--
+-Fatal error: Trait2 and Trait1 define the same constant (Constant) in the composition of Trait2. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_012.phpt b/Zend/tests/traits/constant_012.phpt
+deleted file mode 100644
+index b7369e58..00000000
+--- a/Zend/tests/traits/constant_012.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Conflicting constants in a trait and another trait using it with different values should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait Trait1 {
+-    public const Constant = 123;
+-}
+-
+-trait Trait2 {
+-    use Trait1;
+-    public const Constant = 456;
+-}
+-?>
+---EXPECTF--
+-Fatal error: Trait2 and Trait1 define the same constant (Constant) in the composition of Trait2. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_013.phpt b/Zend/tests/traits/constant_013.phpt
+deleted file mode 100644
+index ef560c52..00000000
+--- a/Zend/tests/traits/constant_013.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Conflicting constants in a trait and another trait using it with different finality should result in a fatal error, since this indicates that the code is incompatible.
+---FILE--
+-<?php
+-
+-trait Trait1 {
+-    public const Constant = 123;
+-}
+-
+-trait Trait2 {
+-    use Trait1;
+-    public const Constant = 456;
+-}
+-?>
+---EXPECTF--
+-Fatal error: Trait2 and Trait1 define the same constant (Constant) in the composition of Trait2. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_014.phpt b/Zend/tests/traits/constant_014.phpt
+deleted file mode 100644
+index 5597a8b8..00000000
+--- a/Zend/tests/traits/constant_014.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Cannot override a final trait constant in a class derived from the class that uses the trait
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-    public final const Constant = 123;
+-}
+-
+-class ComposingClass {
+-    use TestTrait;
+-    public final const Constant = 123;
+-}
+-
+-class DerivedClass extends ComposingClass {
+-    public final const Constant = 456;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: DerivedClass::Constant cannot override final constant ComposingClass::Constant in %s on line %d
+diff --git a/Zend/tests/traits/constant_015.phpt b/Zend/tests/traits/constant_015.phpt
+deleted file mode 100644
+index 24507ea9..00000000
+--- a/Zend/tests/traits/constant_015.phpt
++++ /dev/null
+@@ -1,32 +0,0 @@
+---TEST--
+-The same name constant of a trait used in a class that inherits a constant defined in a parent can be defined only if they are compatible.
+---FILE--
+-<?php
+-
+-trait TestTrait1 {
+-    public final const Constant = 123;
+-}
+-
+-class BaseClass1 {
+-    public final const Constant = 123;
+-}
+-
+-class DerivedClass1 extends BaseClass1 {
+-    use TestTrait1;
+-}
+-
+-trait TestTrait2 {
+-    public final const Constant = 123;
+-}
+-
+-class BaseClass2 {
+-    public final const Constant = 456;
+-}
+-
+-class DerivedClass2 extends BaseClass2 {
+-    use TestTrait2;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: BaseClass2 and TestTrait2 define the same constant (Constant) in the composition of DerivedClass2. However, the definition differs and is considered incompatible. Class was composed in %s on line %d
+diff --git a/Zend/tests/traits/constant_016.phpt b/Zend/tests/traits/constant_016.phpt
+deleted file mode 100644
+index 0754c157..00000000
+--- a/Zend/tests/traits/constant_016.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Compatibility of values of same name trait constants is checked after their constant expressions are evaluated
+---ENV--
+-ENSURE_CONSTANT_IS_DEFINED_AT_RUNTIME=1
+---INI--
+-variables_order=EGPCS
+---FILE--
+-<?php
+-
+-// Ensure CONSTANT is defined at runtime
+-if ($_ENV['ENSURE_CONSTANT_IS_DEFINED_AT_RUNTIME']) {
+-    define('CONSTANT', 2);
+-}
+-
+-trait TestTrait {
+-  public const Constant = 40 + CONSTANT;
+-}
+-
+-class ComposingClass {
+-    use TestTrait;
+-    public const Constant = 42;
+-}
+-
+-echo ComposingClass::Constant;
+-?>
+---EXPECTF--
+-42
+diff --git a/Zend/tests/traits/constant_017.phpt b/Zend/tests/traits/constant_017.phpt
+deleted file mode 100644
+index 3a1c6ffb..00000000
+--- a/Zend/tests/traits/constant_017.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Referencing trait constants directly on calling \defined() returns false
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-var_dump(\defined('TestTrait::Constant'));
+-?>
+---EXPECTF--
+-bool(false)
+diff --git a/Zend/tests/traits/constant_018.phpt b/Zend/tests/traits/constant_018.phpt
+deleted file mode 100644
+index 9d040dd1..00000000
+--- a/Zend/tests/traits/constant_018.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Referencing trait constants directly on calling \constant() causes a fatal error
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-var_dump(\constant('TestTrait::Constant'));
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot access trait constant TestTrait::Constant directly in %s:%d
+-Stack trace:
+-#0 %s: constant('TestTrait::Cons...')
+-#1 {main}
+-  thrown in %s on line %d

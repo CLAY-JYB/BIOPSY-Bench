@@ -1,0 +1,24 @@
+diff --git a/ref-filter.c b/ref-filter.c
+index 6d8b5919..0f51095b 100644
+--- a/ref-filter.c
++++ b/ref-filter.c
+@@ -2956,6 +3003,19 @@ void ref_array_clear(struct ref_array *array)
+ 		struct used_atom *atom = &used_atom[i];
+ 		if (atom->atom_type == ATOM_HEAD)
+ 			free(atom->u.head);
++		else if (atom->atom_type == ATOM_DESCRIBE)
++			strvec_clear(&atom->u.describe_args);
++		else if (atom->atom_type == ATOM_TRAILERS ||
++			 (atom->atom_type == ATOM_CONTENTS &&
++			  atom->u.contents.option == C_TRAILERS)) {
++			struct ref_trailer_buf *tb = atom->u.contents.trailer_buf;
++			if (tb) {
++				string_list_clear(&tb->filter_list, 0);
++				strbuf_release(&tb->sepbuf);
++				strbuf_release(&tb->kvsepbuf);
++				free(tb);
++			}
++		}
+ 		free((char *)atom->name);
+ 	}
+ 	FREE_AND_NULL(used_atom);

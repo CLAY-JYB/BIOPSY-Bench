@@ -1,0 +1,40 @@
+From f0a22e2a Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0132] sync upstream changes (ext/mysqli/mysqli_priv.h)
+
+---
+diff --git a/ext/mysqli/mysqli_priv.h b/ext/mysqli/mysqli_priv.h
+index f08d66b7..18930efd 100644
+--- a/ext/mysqli/mysqli_priv.h
++++ b/ext/mysqli/mysqli_priv.h
+@@ -52,7 +52,11 @@ extern void php_mysqli_close(MY_MYSQL * mysql, int close_type, int resource_stat
+ extern void php_mysqli_fetch_into_hash(INTERNAL_FUNCTION_PARAMETERS, int override_flag, int into_object);
+ extern void php_clear_stmt_bind(MY_STMT *stmt);
+ extern void php_clear_mysql(MY_MYSQL *);
++#ifdef MYSQLI_USE_MYSQLND
+ extern MYSQLI_WARNING *php_get_warnings(MYSQLND_CONN_DATA * mysql);
++#else
++extern MYSQLI_WARNING *php_get_warnings(MYSQL * mysql);
++#endif
+ 
+ extern void php_clear_warnings(MYSQLI_WARNING *w);
+ extern void php_free_stmt_bind_buffer(BIND_BUFFER bbuf, int type);
+@@ -87,8 +91,14 @@ PHP_MYSQLI_EXPORT(zend_object *) mysqli_objects_new(zend_class_entry *);
+ 
+ #define MYSQLI_STORE_RESULT 0
+ #define MYSQLI_USE_RESULT 	1
++#ifdef MYSQLI_USE_MYSQLND
+ #define MYSQLI_ASYNC	 	8
+ #define MYSQLI_STORE_RESULT_COPY_DATA 16
++#else
++/* libmysql */
++#define MYSQLI_ASYNC	 	0
++#define MYSQLI_STORE_RESULT_COPY_DATA	0
++#endif
+ 
+ /* for mysqli_fetch_assoc */
+ #define MYSQLI_ASSOC	1
+
+-- 
+2.43.0

@@ -1,0 +1,30 @@
+From 2adc0b14 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0103] Fix use-after-free of constant name (part 17/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -3408,14 +3331,14 @@ ZEND_API zend_result zend_disable_class(const char *class_name, size_t class_nam
+ 	INIT_CLASS_ENTRY_INIT_METHODS((*disabled_class), disabled_class_new);
+ 	disabled_class->create_object = display_disabled_class;
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&disabled_class->function_table, fn) {
++	ZEND_HASH_FOREACH_PTR(&disabled_class->function_table, fn) {
+ 		if ((fn->common.fn_flags & (ZEND_ACC_HAS_RETURN_TYPE|ZEND_ACC_HAS_TYPE_HINTS)) &&
+ 			fn->common.scope == disabled_class) {
+ 			zend_free_internal_arg_info(&fn->internal_function);
+ 		}
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_hash_clean(&disabled_class->function_table);
+-	ZEND_HASH_MAP_FOREACH_PTR(&disabled_class->properties_info, prop) {
++	ZEND_HASH_FOREACH_PTR(&disabled_class->properties_info, prop) {
+ 		if (prop->ce == disabled_class) {
+ 			zend_string_release(prop->name);
+ 			zend_type_release(prop->type, /* persistent */ 1);
+
+-- 
+2.43.0

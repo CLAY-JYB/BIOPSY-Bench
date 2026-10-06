@@ -1,0 +1,23 @@
+diff --git a/hw/nvme/ctrl.c b/hw/nvme/ctrl.c
+index 127c3d2383..f7b4e4627d 100644
+--- a/hw/nvme/ctrl.c
++++ b/hw/nvme/ctrl.c
+@@ -5480,14 +5480,14 @@ static uint16_t nvme_identify_sec_ctrl_list(NvmeCtrl *n, NvmeRequest *req)
+     NvmeIdentify *c = (NvmeIdentify *)&req->cmd;
+     uint16_t pri_ctrl_id = le16_to_cpu(n->pri_ctrl_cap.cntlid);
+     uint16_t min_id = le16_to_cpu(c->ctrlid);
+-    uint8_t num_sec_ctrl = n->sec_ctrl_list.numcntl;
++    uint8_t num_sec_ctrl = n->nr_sec_ctrls;
+     NvmeSecCtrlList list = {0};
+     uint8_t i;
+ 
+     for (i = 0; i < num_sec_ctrl; i++) {
+-        if (n->sec_ctrl_list.sec[i].scid >= min_id) {
+-            list.numcntl = num_sec_ctrl - i;
+-            memcpy(&list.sec, n->sec_ctrl_list.sec + i,
++        if (n->sec_ctrl_list[i].scid >= min_id) {
++            list.numcntl = MIN(num_sec_ctrl - i, 127);
++            memcpy(&list.sec, n->sec_ctrl_list + i,
+                    list.numcntl * sizeof(NvmeSecCtrlEntry));
+             break;
+         }

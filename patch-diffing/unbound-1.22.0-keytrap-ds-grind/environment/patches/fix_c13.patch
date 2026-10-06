@@ -1,0 +1,35 @@
+diff --git a/validator/val_sigcrypt.c b/validator/val_sigcrypt.c
+index 37730f1..f4b8663 100644
+--- a/validator/val_sigcrypt.c
++++ b/validator/val_sigcrypt.c
+@@ -617,6 +631,7 @@ dnskeyset_verify_rrset(struct module_env* env, struct val_env* ve,
+ 	/* make sure that for all DNSKEY algorithms there are valid sigs */
+ 	struct algo_needs needs;
+ 	int alg;
++	*verified = 0;
+ 
+ 	num = rrset_get_sigcount(rrset);
+ 	if(num == 0) {
+@@ -641,7 +656,7 @@ dnskeyset_verify_rrset(struct module_env* env, struct val_env* ve,
+ 	for(i=0; i<num; i++) {
+ 		sec = dnskeyset_verify_rrset_sig(env, ve, *env->now, rrset, 
+ 			dnskey, i, &sortree, reason, reason_bogus,
+-			section, qstate);
++			section, qstate, verified);
+ 		/* see which algorithm has been fixed up */
+ 		if(sec == sec_status_secure) {
+ 			if(!sigalg)
+@@ -653,6 +668,13 @@ dnskeyset_verify_rrset(struct module_env* env, struct val_env* ve,
+ 			algo_needs_set_bogus(&needs,
+ 				(uint8_t)rrset_get_sig_algo(rrset, i));
+ 		}
++		if(*verified > MAX_VALIDATE_RRSIGS) {
++			verbose(VERB_QUERY, "rrset failed to verify, too many RRSIG validations");
++			*reason = "too many RRSIG validations";
++			if(reason_bogus)
++				*reason_bogus = LDNS_EDE_DNSSEC_BOGUS;
++			return sec_status_bogus;
++		}
+ 	}
+ 	if(sigalg && (alg=algo_needs_missing(&needs)) != 0) {
+ 		verbose(VERB_ALGO, "rrset failed to verify: "

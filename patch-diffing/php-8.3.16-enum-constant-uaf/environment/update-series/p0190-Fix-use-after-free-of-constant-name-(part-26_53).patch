@@ -1,0 +1,51 @@
+From b9eab2b7 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0190] Fix use-after-free of constant name (part 26/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -4199,7 +4120,7 @@ ZEND_API zend_property_info *zend_declare_typed_property(zend_class_entry *ce, z
+ 		    (property_info_ptr->flags & ZEND_ACC_STATIC) != 0) {
+ 			property_info->offset = property_info_ptr->offset;
+ 			zval_ptr_dtor(&ce->default_static_members_table[property_info->offset]);
+-			if (property_info_ptr->doc_comment) {
++			if (property_info_ptr->doc_comment && property_info_ptr->ce == ce) {
+ 				zend_string_release(property_info_ptr->doc_comment);
+ 			}
+ 			zend_hash_del(&ce->properties_info, name);
+@@ -4212,6 +4133,10 @@ ZEND_API zend_property_info *zend_declare_typed_property(zend_class_entry *ce, z
+ 			if (ce->type == ZEND_INTERNAL_CLASS &&
+ 					ce->info.internal.module->type == MODULE_PERSISTENT) {
+ 				ZEND_MAP_PTR_NEW(ce->static_members_table);
++			} else {
++				ZEND_MAP_PTR_INIT(ce->static_members_table,
++					zend_arena_alloc(&CG(arena), sizeof(zval **)));
++				ZEND_MAP_PTR_SET(ce->static_members_table, NULL);
+ 			}
+ 		}
+ 	} else {
+@@ -4220,7 +4145,7 @@ ZEND_API zend_property_info *zend_declare_typed_property(zend_class_entry *ce, z
+ 		    (property_info_ptr->flags & ZEND_ACC_STATIC) == 0) {
+ 			property_info->offset = property_info_ptr->offset;
+ 			zval_ptr_dtor(&ce->default_properties_table[OBJ_PROP_TO_NUM(property_info->offset)]);
+-			if (property_info_ptr->doc_comment) {
++			if (property_info_ptr->doc_comment && property_info_ptr->ce == ce) {
+ 				zend_string_release_ex(property_info_ptr->doc_comment, 1);
+ 			}
+ 			zend_hash_del(&ce->properties_info, name);
+@@ -4273,8 +4198,6 @@ ZEND_API zend_property_info *zend_declare_typed_property(zend_class_entry *ce, z
+ 	if (is_persistent_class(ce)) {
+ 		zend_type *single_type;
+ 		ZEND_TYPE_FOREACH(property_info->type, single_type) {
+-			// TODO Add support and test cases when gen_stub support added
+-			ZEND_ASSERT(!ZEND_TYPE_HAS_LIST(*single_type));
+ 			if (ZEND_TYPE_HAS_NAME(*single_type)) {
+ 				zend_string *name = zend_new_interned_string(ZEND_TYPE_NAME(*single_type));
+ 				ZEND_TYPE_SET_PTR(*single_type, name);
+
+-- 
+2.43.0

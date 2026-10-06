@@ -1,0 +1,63 @@
+From bdde5dde Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0041] remote: fix leak in reachability check of a remote-track (part 16/29)
+
+---
+diff --git a/ref-filter.c b/ref-filter.c
+index 6d8b5919..0f51095b 100644
+--- a/ref-filter.c
++++ b/ref-filter.c
+@@ -3060,6 +3120,49 @@ void filter_ahead_behind(struct repository *r,
+ 	free(commits);
+ }
+ 
++void filter_is_base(struct repository *r,
++		    struct ref_format *format,
++		    struct ref_array *array)
++{
++	struct commit **bases;
++	size_t bases_nr = 0;
++	struct ref_array_item **back_index;
++
++	if (!format->is_base_tips.nr || !array->nr)
++		return;
++
++	CALLOC_ARRAY(back_index, array->nr);
++	CALLOC_ARRAY(bases, array->nr);
++
++	for (size_t i = 0; i < array->nr; i++) {
++		const char *name = array->items[i]->refname;
++		struct commit *c = lookup_commit_reference_by_name_gently(name, 1);
++
++		CALLOC_ARRAY(array->items[i]->is_base, format->is_base_tips.nr);
++
++		if (!c)
++			continue;
++
++		back_index[bases_nr] = array->items[i];
++		bases[bases_nr] = c;
++		bases_nr++;
++	}
++
++	for (size_t i = 0; i < format->is_base_tips.nr; i++) {
++		struct commit *tip = format->is_base_tips.items[i].util;
++		int base_index = get_branch_base_for_tip(r, tip, bases, bases_nr);
++
++		if (base_index < 0)
++			continue;
++
++		/* Store the string for use in output later. */
++		back_index[base_index]->is_base[i] = xstrdup(format->is_base_tips.items[i].string);
++	}
++
++	free(back_index);
++	free(bases);
++}
++
+ static int do_filter_refs(struct ref_filter *filter, unsigned int type, each_ref_fn fn, void *cb_data)
+ {
+ 	int ret = 0;
+
+-- 
+2.43.0

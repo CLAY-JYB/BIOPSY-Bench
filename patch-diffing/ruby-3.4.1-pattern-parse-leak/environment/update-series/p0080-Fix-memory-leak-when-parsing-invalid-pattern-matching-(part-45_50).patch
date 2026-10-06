@@ -1,0 +1,34 @@
+From 5e4e7fbd Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0080] Fix memory leak when parsing invalid pattern matching (part 45/50)
+
+---
+diff --git a/ruby_parser.c b/ruby_parser.c
+index 89b2a19d4..9560c66ef 100644
+--- a/ruby_parser.c
++++ b/ruby_parser.c
+@@ -995,6 +1025,20 @@ rb_node_sym_string_val(const NODE *node)
+     return ID2SYM(rb_intern3(str->ptr, str->len, str->enc));
+ }
+ 
++VALUE
++rb_node_dstr_string_val(const NODE *node)
++{
++    rb_parser_string_t *str = RNODE_DSTR(node)->string;
++    return str ? rb_str_new_parser_string(str) : Qnil;
++}
++
++VALUE
++rb_node_dregx_string_val(const NODE *node)
++{
++    rb_parser_string_t *str = RNODE_DREGX(node)->string;
++    return rb_str_new_parser_string(str);
++}
++
+ VALUE
+ rb_node_line_lineno_val(const NODE *node)
+ {
+
+-- 
+2.43.0

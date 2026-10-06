@@ -1,0 +1,1995 @@
+From e610403c Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0008] sync upstream changes
+
+---
+diff --git a/Zend/tests/traits/constant_019.phpt b/Zend/tests/traits/constant_019.phpt
+deleted file mode 100644
+index abbe9d11..00000000
+--- a/Zend/tests/traits/constant_019.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Flattened trait constants are retrieved as members of the composing class via Reflection
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getConstant('Constant'));
+-var_dump($reflection->getReflectionConstant('Constant')->getDeclaringClass()->getName());
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getConstant('Constant'));
+-var_dump($reflection->getReflectionConstant('Constant')->getDeclaringClass()->getName());
+-
+-?>
+---EXPECTF--
+-int(42)
+-string(9) "TestTrait"
+-int(42)
+-string(9) "TestClass"
+diff --git a/Zend/tests/traits/constant_020.phpt b/Zend/tests/traits/constant_020.phpt
+deleted file mode 100644
+index 1194e2c8..00000000
+--- a/Zend/tests/traits/constant_020.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Attributes can be retrieved from trait constants
+---FILE--
+-<?php
+-
+-class TestAttribute {
+-    public function __construct(public string $value) {}
+-}
+-
+-trait TestTrait {
+-  #[TestAttribute(value: 123)]
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getAttributes('TestAttribute')[0]->getArguments()['value']);
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getAttributes('TestAttribute')[0]->getArguments()['value']);
+-
+-?>
+---EXPECTF--
+-int(123)
+-int(123)
+diff --git a/Zend/tests/traits/constant_021.phpt b/Zend/tests/traits/constant_021.phpt
+deleted file mode 100644
+index 713941a1..00000000
+--- a/Zend/tests/traits/constant_021.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Doc comments can be retrieved from trait constants
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  /** DocComments */
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getDocComment());
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getDocComment());
+-
+-?>
+---EXPECTF--
+-string(18) "/** DocComments */"
+-string(18) "/** DocComments */"
+diff --git a/Zend/tests/traits/error_016.phpt b/Zend/tests/traits/error_016.phpt
+new file mode 100644
+index 00000000..191225dd
+--- /dev/null
++++ b/Zend/tests/traits/error_016.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++Trying to create a constant on Trait
++--FILE--
++<?php
++
++trait foo {
++    const a = 1;
++}
++
++?>
++--EXPECTF--
++Fatal error: Traits cannot have constants in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt b/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt
+deleted file mode 100644
+index 6375c60a..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt
++++ /dev/null
+@@ -1,63 +0,0 @@
+---TEST--
+-Union of two intersection type
+---FILE--
+-<?php
+-
+-interface W {}
+-interface X {}
+-interface Y {}
+-interface Z {}
+-
+-class A implements X, Y {}
+-class B implements W, Z {}
+-class C {}
+-
+-function foo1((X&Y)|(W&Z) $v): (X&Y)|(W&Z) {
+-    return $v;
+-}
+-function foo2((W&Z)|(X&Y) $v): (W&Z)|(X&Y) {
+-    return $v;
+-}
+-
+-function bar1(): (X&Y)|(W&Z) {
+-    return new C();
+-}
+-function bar2(): (W&Z)|(X&Y) {
+-    return new C();
+-}
+-
+-$a = new A();
+-$b = new B();
+-
+-$o = foo1($a);
+-var_dump($o);
+-$o = foo2($a);
+-var_dump($o);
+-$o = foo1($b);
+-var_dump($o);
+-$o = foo2($b);
+-var_dump($o);
+-
+-try {
+-    bar1();
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    bar2();
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-object(A)#%d (0) {
+-}
+-object(A)#%d (0) {
+-}
+-object(B)#%d (0) {
+-}
+-object(B)#%d (0) {
+-}
+-bar1(): Return value must be of type (X&Y)|(W&Z), C returned
+-bar2(): Return value must be of type (W&Z)|(X&Y), C returned
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt
+deleted file mode 100644
+index 80f19207..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt
++++ /dev/null
+@@ -1,9 +0,0 @@
+---TEST--
+-Union and intersection type leaks
+---FILE--
+-<?php
+-eval('abstract class y {function y(): (y&yy)|t {}}');
+-?>
+-DONE
+---EXPECTF--
+-DONE
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt
+deleted file mode 100644
+index e9089c13..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt
++++ /dev/null
+@@ -1,74 +0,0 @@
+---TEST--
+-Union of null and intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A implements X, Y {}
+-class C {}
+-
+-class Test {
+-    public (X&Y)|null $prop1;
+-    public null|(X&Y) $prop2;
+-
+-    public function foo1((X&Y)|null $v): (X&Y)|null {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function foo2(null|(X&Y) $v): null|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-}
+-
+-$test = new Test();
+-$a = new A();
+-$n = null;
+-
+-$test->foo1($a);
+-$test->foo2($a);
+-$test->foo1($n);
+-$test->foo2($n);
+-$test->prop1 = $a;
+-$test->prop1 = $n;
+-$test->prop2 = $a;
+-$test->prop2 = $n;
+-
+-$c = new C();
+-try {
+-    $test->foo1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->foo2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop1 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop2 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-NULL
+-NULL
+-Test::foo1(): Argument #1 ($v) must be of type (X&Y)|null, C given, called in %s on line %d
+-Test::foo2(): Argument #1 ($v) must be of type (X&Y)|null, C given, called in %s on line %d
+-Cannot assign C to property Test::$prop1 of type (X&Y)|null
+-Cannot assign C to property Test::$prop2 of type (X&Y)|null
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt
+deleted file mode 100644
+index 4c9a5f95..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt
++++ /dev/null
+@@ -1,127 +0,0 @@
+---TEST--
+-Union of a simple and intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A implements X, Y {}
+-class B {}
+-class C {}
+-
+-class Test {
+-    public (X&Y)|int $prop1;
+-    public int|(X&Y) $prop2;
+-    public (X&Y)|B $prop3;
+-    public B|(X&Y) $prop4;
+-
+-    public function foo1((X&Y)|int $v): (X&Y)|int {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function foo2(int|(X&Y) $v): int|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function bar1(B|(X&Y) $v): B|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function bar2((X&Y)|B $v): (X&Y)|B {
+-        var_dump($v);
+-        return $v;
+-    }
+-}
+-
+-$test = new Test();
+-$a = new A();
+-$b = new B();
+-$i = 10;
+-
+-$test->foo1($a);
+-$test->foo2($a);
+-$test->foo1($i);
+-$test->foo2($i);
+-$test->prop1 = $a;
+-$test->prop1 = $i;
+-$test->prop2 = $a;
+-$test->prop2 = $i;
+-
+-$test->bar1($a);
+-$test->bar2($a);
+-$test->bar1($b);
+-$test->bar2($b);
+-$test->prop3 = $a;
+-$test->prop4 = $b;
+-$test->prop3 = $a;
+-$test->prop4 = $b;
+-
+-$c = new C();
+-try {
+-    $test->foo1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->foo2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->bar1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->bar2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop1 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop2 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop3 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop4 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-int(10)
+-int(10)
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-object(B)#3 (0) {
+-}
+-object(B)#3 (0) {
+-}
+-Test::foo1(): Argument #1 ($v) must be of type (X&Y)|int, C given, called in %s on line %d
+-Test::foo2(): Argument #1 ($v) must be of type (X&Y)|int, C given, called in %s on line %d
+-Test::bar1(): Argument #1 ($v) must be of type B|(X&Y), C given, called in %s on line %d
+-Test::bar2(): Argument #1 ($v) must be of type (X&Y)|B, C given, called in %s on line %d
+-Cannot assign C to property Test::$prop1 of type (X&Y)|int
+-Cannot assign C to property Test::$prop2 of type (X&Y)|int
+-Cannot assign C to property Test::$prop3 of type (X&Y)|B
+-Cannot assign C to property Test::$prop4 of type B|(X&Y)
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/gh9516.phpt b/Zend/tests/type_declarations/dnf_types/gh9516.phpt
+deleted file mode 100644
+index 3d91932e..00000000
+--- a/Zend/tests/type_declarations/dnf_types/gh9516.phpt
++++ /dev/null
+@@ -1,157 +0,0 @@
+---TEST--
+-GH-9516: (A&B)|D as a param should allow AB or D. Not just A.
+---FILE--
+-<?php
+-
+-interface A { }
+-interface B { }
+-interface D { }
+-
+-class A_ implements A {}
+-class B_ implements B {}
+-class AB_ implements A, B {}
+-class D_ implements D {}
+-
+-class T {
+-    public function method1((A&B)|D $arg): void {}
+-    public function method2((B&A)|D $arg): void {}
+-    public function method3(D|(A&B) $arg): void {}
+-    public function method4(D|(B&A) $arg): void {}
+-}
+-
+-$t = new T;
+-
+-try {
+-    $t->method1(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-// Lets try in reverse?
+-try {
+-    $t->method2(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-/* Single before intersection */
+-try {
+-    $t->method3(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-// Lets try in reverse?
+-try {
+-    $t->method4(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-
+-?>
+---EXPECTF--
+-T::method1(): Argument #1 ($arg) must be of type (A&B)|D, A_ given, called in %s on line %d
+-T::method1(): Argument #1 ($arg) must be of type (A&B)|D, B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method2(): Argument #1 ($arg) must be of type (B&A)|D, A_ given, called in %s on line %d
+-T::method2(): Argument #1 ($arg) must be of type (B&A)|D, B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method3(): Argument #1 ($arg) must be of type D|(A&B), A_ given, called in %s on line %d
+-T::method3(): Argument #1 ($arg) must be of type D|(A&B), B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method4(): Argument #1 ($arg) must be of type D|(B&A), A_ given, called in %s on line %d
+-T::method4(): Argument #1 ($arg) must be of type D|(B&A), B_ given, called in %s on line %d
+-Pass
+-Pass
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt
+deleted file mode 100644
+index 93ff6385..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Duplicate class alias type
+---FILE--
+-<?php
+-
+-interface X {}
+-
+-use A as B;
+-function foo(): (X&A)|(X&B) {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type X&A is redundant with type X&A in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt
+deleted file mode 100644
+index 0b2e2a13..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Duplicate class alias type at runtime
+---FILE--
+-<?php
+-
+-class A {}
+-interface X {}
+-
+-class_alias('A', 'B');
+-function foo(): (X&A)|(X&B) {}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt
+deleted file mode 100644
+index ef57adf0..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Intersection with child class
+---FILE--
+-<?php
+-
+-interface  X {}
+-class A {}
+-class B extends A {}
+-
+-function test(): (A&X)|(B&X) {}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt
+deleted file mode 100644
+index b0753313..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-A less restrictive type constrain is part of the DNF type 001
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-
+-function test(): (A&B)|A {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type A&B is redundant as it is more restrictive than type A in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present002.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present002.phpt
+deleted file mode 100644
+index 6aa7ce16..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present002.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-A less restrictive type constrain is part of the DNF type 002
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-
+-function test(): A|(A&B) {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type A&B is redundant as it is more restrictive than type A in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present003.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present003.phpt
+deleted file mode 100644
+index 55f248bc..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present003.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A less restrictive type constrain is part of the DNF type 003
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface C {}
+-
+-function test(): (A&B)|(A&B&C) {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type A&B&C is redundant as it is more restrictive than type A&B in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present004.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present004.phpt
+deleted file mode 100644
+index ab69ebe9..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present004.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A less restrictive type constrain is part of the DNF type 004
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface C {}
+-
+-function test(): (A&B&C)|(A&B) {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type A&B&C is redundant as it is more restrictive than type A&B in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type.phpt
+deleted file mode 100644
+index 3a99d3a5..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-A DNF type which contains object is redundant
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-
+-function test(): (A&B)|object {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type (A&B)|object contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type2.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type2.phpt
+deleted file mode 100644
+index c37f08d6..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/object_and_dnf_type2.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-A DNF type which contains object is redundant 2
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-
+-function test(): object|(A&B) {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type (A&B)|object contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid1.phpt
+deleted file mode 100644
+index 5e90cc7a..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid1.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Co-variance check failure for intersection type where child replace one of intersection type members with a supertype
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B extends A {}
+-interface C {}
+-interface X {}
+-
+-class Test implements B, C {}
+-
+-class Foo {
+-    public function foo(): (B&C)|X {
+-        return new Test();
+-    }
+-}
+-
+-/* This fails because A is a parent type for B */
+-class FooChild extends Foo {
+-    public function foo(): (A&C)|X {
+-        return new Test();
+-    }
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of FooChild::foo(): (A&C)|X must be compatible with Foo::foo(): (B&C)|X in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type1.phpt
+deleted file mode 100644
+index 9aaf44ca..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type1.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Co-variance check failure for intersection type where child removes one of intersection type members
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface X {}
+-
+-class Test implements A, B {}
+-
+-class Foo {
+-    public function foo(): (A&B)|X {
+-        return new Test();
+-    }
+-}
+-
+-/* This fails because just A larger than A&B */
+-class FooChild extends Foo {
+-    public function foo(): A|X {
+-        return new Test();
+-    }
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of FooChild::foo(): A|X must be compatible with Foo::foo(): (A&B)|X in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt
+deleted file mode 100644
+index 67cd8130..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Co-variance check failure for intersection type where child removes one of intersection type members
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface C {}
+-interface X {}
+-
+-class Test implements A, B, C {}
+-
+-class Foo {
+-    public function foo(): (A&B&C)|X {
+-        return new Test();
+-    }
+-}
+-
+-/* This fails because just (A&B) larger than ((A&B)&C) */
+-class FooChild extends Foo {
+-    public function foo(): (A&B)|X {
+-        return new Test();
+-    }
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of FooChild::foo(): (A&B)|X must be compatible with Foo::foo(): (A&B&C)|X in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt
+deleted file mode 100644
+index 273bbcf1..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 1
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-interface L {}
+-
+-class TestOne implements X, Y {}
+-class TestTwo implements X {}
+-
+-interface A
+-{
+-    public function foo(): (X&Y)|L;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|TestTwo;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|TestTwo must be compatible with A::foo(): (X&Y)|L in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt
+deleted file mode 100644
+index 1eafcb5d..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 2
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class TestOne implements X, Y {}
+-
+-interface A
+-{
+-    public function foo(): X&Y;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|int;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|int must be compatible with A::foo(): X&Y in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt
+deleted file mode 100644
+index c4dd3449..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 2
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-interface Z extends Y {}
+-
+-class TestOne implements X, Z {}
+-class TestTwo implements X, Y {}
+-
+-interface A
+-{
+-    public function foo(): X&Z;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|TestTwo;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|TestTwo must be compatible with A::foo(): X&Z in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt
+deleted file mode 100644
+index 65d3d203..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property types must be invariant
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A {
+-    public (X&Y)|L $prop;
+-}
+-class B extends A {
+-    public (X&Y&Z)|L $prop;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type of B::$prop must be (X&Y)|L (as in class A) in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt
+deleted file mode 100644
+index 1a8a31f0..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property types must be invariant
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A {
+-    public (X&Y&Z)|L $prop;
+-}
+-class B extends A {
+-    public (X&Y)|L $prop;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type of B::$prop must be (X&Y&Z)|L (as in class A) in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt
+deleted file mode 100644
+index 3b82afa8..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Intersection type reduction invalid invariant type check
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-class A implements X, Y {}
+-class B {}
+-
+-class Test {
+-    public (X&Y)|B $prop;
+-}
+-class Test2 extends Test {
+-    public A|B $prop;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type of Test2::$prop must be (X&Y)|B (as in class Test) in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid1.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid1.phpt
+deleted file mode 100644
+index 3282b0f9..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid1.phpt
++++ /dev/null
+@@ -1,40 +0,0 @@
+---TEST--
+-Valid inheritence - co-variance
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface C {}
+-
+-class Test implements A, B, C {}
+-
+-class Foo {
+-    public function foo(): A {
+-        return new Test();
+-    }
+-}
+-
+-class FooChild extends Foo {
+-    public function foo(): A&B {
+-        return new Test();
+-    }
+-}
+-
+-class FooSecondChild extends FooChild {
+-    public function foo(): A&B&C {
+-        return new Test();
+-    }
+-}
+-
+-$o = new FooChild();
+-var_dump($o->foo());
+-$o = new FooSecondChild();
+-var_dump($o->foo());
+-
+-?>
+---EXPECTF--
+-object(Test)#%d (0) {
+-}
+-object(Test)#%d (0) {
+-}
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid2.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid2.phpt
+deleted file mode 100644
+index f7738032..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Commutative intersection types
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface X {}
+-
+-class Foo {
+-    public X|(A&B) $prop;
+-    public function foo(X|(A&B) $v): X|(A&B) {}
+-}
+-
+-class FooChild extends Foo {
+-    public (B&A)|X $prop;
+-    public function foo((B&A)|X $v): (B&A)|X {}
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid4.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid4.phpt
+deleted file mode 100644
+index 78691715..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid4.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Intersection type reduction valid invariant type check
+---FILE--
+-<?php
+-
+-class A {}
+-class B extends A {}
+-interface X {}
+-
+-class Test {
+-    public (A&B)|X $prop;
+-}
+-class Test2 extends Test {
+-    public B|X $prop;
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid5.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid5.phpt
+deleted file mode 100644
+index ca75aeb5..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid5.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Replacing union of classes respecting intersection type by intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class TestOne implements X, Y {}
+-class TestTwo implements X, Y {}
+-class Foo {}
+-
+-interface A
+-{
+-    public function foo(TestOne|TestTwo|Foo $param): (X&Y)|Foo;
+-}
+-
+-interface B extends A
+-{
+-    public function foo((X&Y)|Foo $param): TestOne|TestTwo|Foo;
+-}
+-
+-interface C extends A
+-{
+-    public function foo(X|Foo $param): TestTwo;
+-}
+-
+-interface D extends A
+-{
+-    public function foo(Y|Foo $param): TestOne;
+-}
+-
+-interface E extends B
+-{
+-    public function foo(X|Foo $param): TestTwo;
+-}
+-
+-interface F extends B
+-{
+-    public function foo(Y|Foo $param): TestOne;
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid6.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid6.phpt
+deleted file mode 100644
+index faf63748..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid6.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Replacing union type by intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-interface Z {}
+-
+-class A {
+-    public function test(): X|Z {}
+-}
+-class B extends A {
+-    public function test(): (X&Y)|Z {}
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid7.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid7.phpt
+deleted file mode 100644
+index 3d9a5863..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid7.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Replacing object type with intersection type
+---FILE--
+-<?php
+-
+-// It's sufficient that Y is loadable.
+-interface Y {}
+-
+-class Test {
+-    function method1(): object {}
+-    function method2(): object|int {}
+-    function method3(): Y|int {}
+-}
+-class Test2 extends Test {
+-    function method1(): (X&Y)|Countable {}
+-    function method2(): (X&Y)|int {}
+-    function method3(): (X&Y)|int {}
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid8.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid8.phpt
+deleted file mode 100644
+index dda2fa94..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid8.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Covariant replacement of iterable type with intersection type in DNF type
+---FILE--
+-<?php
+-
+-abstract class MyIterator implements Traversable {}
+-
+-class Test {
+-    function method1(): iterable|string {}
+-    function method2(): iterable|int {}
+-}
+-class Test2 extends Test {
+-    function method1(): (X&Traversable)|string {}
+-    function method2(): (X&MyIterator)|int {}
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt
+deleted file mode 100644
+index 1061ca21..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Covariant replacement of iterable type with unregistered intersection type in DNF type
+---FILE--
+-<?php
+-
+-class Test {
+-    function method1(): iterable|string {}
+-    function method2(): iterable|int {}
+-}
+-class Test2 extends Test {
+-    function method1(): (X&Traversable)|string {}
+-    function method2(): int|(X&MyIterator) {}
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Could not check compatibility between Test2::method2(): (X&MyIterator)|int and Test::method2(): Traversable|array|int, because class X is not available in %s
+diff --git a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
+index d3dab0d7..fdac7576 100644
+--- a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
++++ b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
+@@ -1,14 +1,10 @@
+ --TEST--
+-Intersection types can be implicitly nullable
++Intersection types cannot be implicitly nullable
+ --FILE--
+ <?php
+ 
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-foo(null);
++function foo(X&Y $foo = null) {}
+ 
+ ?>
+---EXPECT--
+-NULL
++--EXPECTF--
++Fatal error: Cannot use null as default value for parameter $foo of type X&Y in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt
+deleted file mode 100644
+index 65fc16e6..00000000
+--- a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Verify type rendering in type error for implicitly nullable intersection types
+---FILE--
+-<?php
+-
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-try {
+-    foo(5);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-foo(): Argument #1 ($foo) must be of type (X&Y)|null, int given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
+index 3fd321d3..fc4ee2d5 100644
+--- a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
++++ b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
+@@ -7,4 +7,4 @@ function foo(): iterable&Iterator {}
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Type Traversable|array cannot be part of an intersection type in %s on line %d
++Fatal error: Type iterable cannot be part of an intersection type in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt
+deleted file mode 100644
+index 6a184cf6..00000000
+--- a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-true type cannot take part in an intersection type
+---FILE--
+-<?php
+-
+-function foo(): true&Iterator {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type true cannot be part of an intersection type in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt b/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
+index ce3a20fb..b704f89b 100644
+--- a/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
++++ b/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
+@@ -15,4 +15,4 @@ class Test2 extends Test {
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Declaration of Test2::method(): X&Y must be compatible with Test::method(): Traversable|array in %s on line %d
++Fatal error: Declaration of Test2::method(): X&Y must be compatible with Test::method(): iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_1.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_1.phpt
+deleted file mode 100644
+index b11671bc..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_1.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with array should be redundant
+---FILE--
+-<?php
+-
+-function bar(): array|iterable|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Duplicate type array is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_2.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_2.phpt
+deleted file mode 100644
+index 6973901c..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_array_2.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with array should be redundant
+---FILE--
+-<?php
+-
+-function bar(): iterable|array|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Duplicate type array is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_iterable.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_iterable.phpt
+deleted file mode 100644
+index e8fa3c04..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_iterable.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with second iterable should be redundant
+---FILE--
+-<?php
+-
+-function bar(): iterable|iterable|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Duplicate type array is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_1.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_1.phpt
+deleted file mode 100644
+index b7a70191..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_1.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-iterable type with object should NOT be redundant 1
+---FILE--
+-<?php
+-
+-function bar(): iterable|object|null {
+-    return null;
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_2.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_2.phpt
+deleted file mode 100644
+index 07a66682..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_2.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-iterable type with object should NOT be redundant 2
+---FILE--
+-<?php
+-
+-function bar(): object|iterable|null {
+-    return null;
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_3.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_3.phpt
+deleted file mode 100644
+index eedf16fd..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_3.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with object and class T should be redundant
+---FILE--
+-<?php
+-
+-function bar(): object|iterable|T|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type Traversable|T|object|array|null contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_4.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_4.phpt
+deleted file mode 100644
+index acad7871..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_4.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with object and class T should be redundant
+---FILE--
+-<?php
+-
+-function bar(): iterable|object|T|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type Traversable|T|object|array|null contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_5.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_5.phpt
+deleted file mode 100644
+index 84ba505a..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_5.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with object and class T should be redundant
+---FILE--
+-<?php
+-
+-function bar(): T|object|iterable|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type T|Traversable|object|array|null contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_6.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_6.phpt
+deleted file mode 100644
+index 541317d1..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_6.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-iterable type with object and class T should be redundant
+---FILE--
+-<?php
+-
+-function bar(): T|iterable|object|null {
+-    return null;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type T|Traversable|object|array|null contains both object and a class type, which is redundant in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_variance.phpt b/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_variance.phpt
+deleted file mode 100644
+index 158b6c22..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_alias_redundancy_object_variance.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-iterable type with object should be allowed in variance checks
+---FILE--
+-<?php
+-
+-class A {
+-    public object|iterable $x;
+-    public object|array $y;
+-}
+-class B extends A {
+-    public object|array $x;
+-    public object|iterable $y;
+-}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/iterable/or_null.phpt b/Zend/tests/type_declarations/iterable/or_null.phpt
+deleted file mode 100644
+index 286f1e29..00000000
+--- a/Zend/tests/type_declarations/iterable/or_null.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Test "or null"/"or be null" in type-checking errors for userland functions with iterable
+---FILE--
+-<?php
+-
+-// This should test every branch in zend_execute.c's `zend_verify_arg_type`, `zend_verify_return_type` and `zend_verify_missing_return_type` functions which produces an "or null"/"or be null" part in its error message
+-
+-function iterableF(?iterable $param) {}
+-try {
+-    iterableF(1);
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-
+-function returnIterable(): ?iterable {
+-    return 1;
+-}
+-
+-try {
+-    returnIterable();
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-
+-function returnMissingIterable(): ?iterable {
+-}
+-
+-try {
+-    returnMissingIterable();
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-?>
+---EXPECTF--
+-TypeError: iterableF(): Argument #1 ($param) must be of type Traversable|array|null, int given, called in %s on line %d and defined in %s:%d
+-Stack trace:
+-#0 %s(%d): iterableF(1)
+-#1 {main}
+-TypeError: returnIterable(): Return value must be of type Traversable|array|null, int returned in %s:%d
+-Stack trace:
+-#0 %s(%d): returnIterable()
+-#1 {main}
+-TypeError: returnMissingIterable(): Return value must be of type Traversable|array|null, none returned in %s:%d
+-Stack trace:
+-#0 %s(%d): returnMissingIterable()
+-#1 {main}
+diff --git a/Zend/tests/type_declarations/iterable/iterable_001.phpt b/Zend/tests/type_declarations/iterable_001.phpt
+similarity index 84%
+rename from Zend/tests/type_declarations/iterable/iterable_001.phpt
+rename to Zend/tests/type_declarations/iterable_001.phpt
+index f7541800..10a001de 100644
+--- a/Zend/tests/type_declarations/iterable/iterable_001.phpt
++++ b/Zend/tests/type_declarations/iterable_001.phpt
+@@ -45,4 +45,4 @@ object(ArrayIterator)#1 (1) {
+     int(3)
+   }
+ }
+-test(): Argument #1 ($iterable) must be of type Traversable|array, int given, called in %s on line %d
++test(): Argument #1 ($iterable) must be of type iterable, int given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_002.phpt b/Zend/tests/type_declarations/iterable_002.phpt
+similarity index 89%
+rename from Zend/tests/type_declarations/iterable/iterable_002.phpt
+rename to Zend/tests/type_declarations/iterable_002.phpt
+index d1e1b09d..fdc3b20d 100644
+--- a/Zend/tests/type_declarations/iterable/iterable_002.phpt
++++ b/Zend/tests/type_declarations/iterable_002.phpt
+@@ -17,4 +17,4 @@ function baz(iterable $iterable = 1) {
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Cannot use int as default value for parameter $iterable of type Traversable|array in %s on line %d
++Fatal error: Cannot use int as default value for parameter $iterable of type iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_003.phpt b/Zend/tests/type_declarations/iterable_003.phpt
+similarity index 84%
+rename from Zend/tests/type_declarations/iterable/iterable_003.phpt
+rename to Zend/tests/type_declarations/iterable_003.phpt
+index d7c5b206..d2a3bcb3 100644
+--- a/Zend/tests/type_declarations/iterable/iterable_003.phpt
++++ b/Zend/tests/type_declarations/iterable_003.phpt
+@@ -29,4 +29,4 @@ array(0) {
+ }
+ object(Generator)#2 (0) {
+ }
+-baz(): Return value must be of type Traversable|array, int returned
++baz(): Return value must be of type iterable, int returned
+diff --git a/Zend/tests/type_declarations/iterable/iterable_004.phpt b/Zend/tests/type_declarations/iterable_004.phpt
+similarity index 74%
+rename from Zend/tests/type_declarations/iterable/iterable_004.phpt
+rename to Zend/tests/type_declarations/iterable_004.phpt
+index 8b544826..fe9d4461 100644
+--- a/Zend/tests/type_declarations/iterable/iterable_004.phpt
++++ b/Zend/tests/type_declarations/iterable_004.phpt
+@@ -21,4 +21,4 @@ class Bar extends Foo {
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Declaration of Bar::testScalar(Traversable|array $iterable) must be compatible with Foo::testScalar(int $int) in %s on line %d
++Fatal error: Declaration of Bar::testScalar(iterable $iterable) must be compatible with Foo::testScalar(int $int) in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_005.phpt b/Zend/tests/type_declarations/iterable_005.phpt
+similarity index 88%
+rename from Zend/tests/type_declarations/iterable/iterable_005.phpt
+rename to Zend/tests/type_declarations/iterable_005.phpt
+index 2f5fb83f..39dede3b 100644
+--- a/Zend/tests/type_declarations/iterable/iterable_005.phpt
++++ b/Zend/tests/type_declarations/iterable_005.phpt
+@@ -29,4 +29,4 @@ class TestScalar extends Test {
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Declaration of TestScalar::method(): int must be compatible with Test::method(): Traversable|array in %s on line %d
++Fatal error: Declaration of TestScalar::method(): int must be compatible with Test::method(): iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt b/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
+deleted file mode 100644
+index 61900f99..00000000
+--- a/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-No coercion should be applied to type false
+---FILE--
+-<?php
+-
+-function test(false $v) { var_dump($v); }
+-
+-try {
+-    test(0);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test('');
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test([]);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-test(): Argument #1 ($v) must be of type false, int given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type false, string given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type false, array given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/literal_types/false_no_coercion_on_overload.phpt b/Zend/tests/type_declarations/literal_types/false_no_coercion_on_overload.phpt
+deleted file mode 100644
+index 8ee291cd..00000000
+--- a/Zend/tests/type_declarations/literal_types/false_no_coercion_on_overload.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-No coercion should be applied to type false even if it's an overide
+---FILE--
+-<?php
+-
+-class P {
+-    public function foo($v): array|bool {
+-        return $v;
+-    }
+-}
+-
+-class C {
+-    public function foo($v): array|false {
+-        return $v;
+-    }
+-}
+-
+-$p = new P();
+-$c = new C();
+-
+-var_dump($p->foo(0));
+-try {
+-    var_dump($c->foo(0));
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-bool(false)
+-C::foo(): Return value must be of type array|false, int returned
+diff --git a/Zend/tests/type_declarations/literal_types/false_standalone.phpt b/Zend/tests/type_declarations/literal_types/false_standalone.phpt
+deleted file mode 100644
+index f7dd4ad3..00000000
+--- a/Zend/tests/type_declarations/literal_types/false_standalone.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-False can be used as a standalone type
+---FILE--
+-<?php
+-
+-function test(false $v): false {
+-    return $v;
+-}
+-
+-var_dump(test(false));
+-
+-?>
+---EXPECT--
+-bool(false)
+diff --git a/Zend/tests/type_declarations/literal_types/false_standalone_implicit_nullability.phpt b/Zend/tests/type_declarations/literal_types/false_standalone_implicit_nullability.phpt
+deleted file mode 100644
+index c5fe5f76..00000000
+--- a/Zend/tests/type_declarations/literal_types/false_standalone_implicit_nullability.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-False can be used as a standalone type even with implicit nullability
+---FILE--
+-<?php
+-
+-function test(false $v = null) { return $v; }
+-
+-var_dump(test(false));
+-var_dump(test(null));
+-?>
+---EXPECT--
+-bool(false)
+-NULL
+diff --git a/Zend/tests/type_declarations/literal_types/true_no_coercion.phpt b/Zend/tests/type_declarations/literal_types/true_no_coercion.phpt
+deleted file mode 100644
+index 85d6c90c..00000000
+--- a/Zend/tests/type_declarations/literal_types/true_no_coercion.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-No coercion should be applied to type true
+---FILE--
+-<?php
+-
+-function test(true $v) { var_dump($v); }
+-
+-try {
+-    test(1);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test('1');
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test([1]);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test(new stdClass());
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-test(): Argument #1 ($v) must be of type true, int given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type true, string given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type true, array given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type true, stdClass given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/literal_types/true_no_coercion_on_overload.phpt b/Zend/tests/type_declarations/literal_types/true_no_coercion_on_overload.phpt
+deleted file mode 100644
+index 93f2a8a9..00000000
+--- a/Zend/tests/type_declarations/literal_types/true_no_coercion_on_overload.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-No coercion should be applied to type true even if it's an overide
+---FILE--
+-<?php
+-
+-class P {
+-    public function foo($v): array|bool {
+-        return $v;
+-    }
+-}
+-
+-class C {
+-    public function foo($v): array|true {
+-        return $v;
+-    }
+-}
+-
+-$p = new P();
+-$c = new C();
+-
+-var_dump($p->foo(1));
+-try {
+-    var_dump($c->foo(1));
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-bool(true)
+-C::foo(): Return value must be of type array|true, int returned
+diff --git a/Zend/tests/type_declarations/literal_types/true_standalone.phpt b/Zend/tests/type_declarations/literal_types/true_standalone.phpt
+deleted file mode 100644
+index d2db891d..00000000
+--- a/Zend/tests/type_declarations/literal_types/true_standalone.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-true can be used as a standalone type
+---FILE--
+-<?php
+-
+-function test(true $v): true {
+-    return $v;
+-}
+-
+-var_dump(test(true));
+-
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/Zend/tests/type_declarations/literal_types/true_standalone_implicit_nullability.phpt b/Zend/tests/type_declarations/literal_types/true_standalone_implicit_nullability.phpt
+deleted file mode 100644
+index d4607426..00000000
+--- a/Zend/tests/type_declarations/literal_types/true_standalone_implicit_nullability.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-true can be used as a standalone type even with implicit nullability
+---FILE--
+-<?php
+-
+-function test(true $v = null) { return $v; }
+-
+-var_dump(test(true));
+-var_dump(test(null));
+-?>
+---EXPECT--
+-bool(true)
+-NULL
+diff --git a/Zend/tests/type_declarations/standalone_null.phpt b/Zend/tests/type_declarations/standalone_null.phpt
+deleted file mode 100644
+index d96a1f47..00000000
+--- a/Zend/tests/type_declarations/standalone_null.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-Null can be used as a standalone type
+---FILE--
+-<?php
+-
+-function test(null $v): null {
+-    return $v;
+-}
+-
+-var_dump(test(null));
+-
+-?>
+---EXPECT--
+-NULL
+diff --git a/Zend/tests/type_declarations/typed_properties_086.phpt b/Zend/tests/type_declarations/typed_properties_086.phpt
+index 5a6b19ad..7c160dd9 100644
+--- a/Zend/tests/type_declarations/typed_properties_086.phpt
++++ b/Zend/tests/type_declarations/typed_properties_086.phpt
+@@ -3,7 +3,6 @@ Test typed properties with integer keys
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class T {
+     // Class must have at least one property. Property must have a type.
+     // Empty class or untyped property removes segfault
+diff --git a/Zend/tests/type_declarations/typed_properties_095.phpt b/Zend/tests/type_declarations/typed_properties_095.phpt
+index 5caf862e..a03bcf95 100644
+--- a/Zend/tests/type_declarations/typed_properties_095.phpt
++++ b/Zend/tests/type_declarations/typed_properties_095.phpt
+@@ -2,7 +2,6 @@
+ Typed properties in internal classes
+ --EXTENSIONS--
+ zend_test
+-spl
+ --FILE--
+ <?php
+ 
+@@ -71,8 +70,6 @@ object(_ZendTestClass)#1 (3) {
+   }
+   ["classUnionProp"]=>
+   NULL
+-  ["classIntersectionProp"]=>
+-  uninitialized(Traversable&Countable)
+   ["readonlyProp"]=>
+   uninitialized(int)
+ }
+@@ -87,8 +84,6 @@ object(Test)#4 (3) {
+   }
+   ["classUnionProp"]=>
+   NULL
+-  ["classIntersectionProp"]=>
+-  uninitialized(Traversable&Countable)
+   ["readonlyProp"]=>
+   uninitialized(int)
+ }
+diff --git a/Zend/tests/type_declarations/typed_properties_110.phpt b/Zend/tests/type_declarations/typed_properties_110.phpt
+deleted file mode 100644
+index 6a108b45..00000000
+--- a/Zend/tests/type_declarations/typed_properties_110.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Test typed properties allow null
+---FILE--
+-<?php
+-class Foo {
+-    public null $value;
+-}
+-
+-$foo = new Foo();
+-$foo->value = null;
+-
+-try {
+-    $foo->value = 1;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage();
+-}
+-
+-?>
+---EXPECT--
+-Cannot assign int to property Foo::$value of type null
+
+-- 
+2.43.0

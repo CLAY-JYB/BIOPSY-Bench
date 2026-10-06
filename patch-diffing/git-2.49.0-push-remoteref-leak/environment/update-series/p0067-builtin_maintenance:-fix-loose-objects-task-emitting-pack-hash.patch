@@ -1,0 +1,474 @@
+From cf3ad4cb Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0067] builtin/maintenance: fix loose objects task emitting pack hash
+
+---
+diff --git a/t/t7900-maintenance.sh b/t/t7900-maintenance.sh
+index 8595489c..abae7a97 100755
+--- a/t/t7900-maintenance.sh
++++ b/t/t7900-maintenance.sh
+@@ -49,22 +49,47 @@ test_expect_success 'run [--auto|--quiet]' '
+ 		git maintenance run --auto 2>/dev/null &&
+ 	GIT_TRACE2_EVENT="$(pwd)/run-no-quiet.txt" \
+ 		git maintenance run --no-quiet 2>/dev/null &&
+-	test_subcommand git gc --quiet <run-no-auto.txt &&
+-	test_subcommand ! git gc --auto --quiet <run-auto.txt &&
+-	test_subcommand git gc --no-quiet <run-no-quiet.txt
++	test_subcommand git gc --quiet --no-detach <run-no-auto.txt &&
++	test_subcommand ! git gc --auto --quiet --no-detach <run-auto.txt &&
++	test_subcommand git gc --no-quiet --no-detach <run-no-quiet.txt
+ '
+ 
+ test_expect_success 'maintenance.auto config option' '
+ 	GIT_TRACE2_EVENT="$(pwd)/default" git commit --quiet --allow-empty -m 1 &&
+-	test_subcommand git maintenance run --auto --quiet <default &&
++	test_subcommand git maintenance run --auto --quiet --detach <default &&
+ 	GIT_TRACE2_EVENT="$(pwd)/true" \
+ 		git -c maintenance.auto=true \
+ 		commit --quiet --allow-empty -m 2 &&
+-	test_subcommand git maintenance run --auto --quiet  <true &&
++	test_subcommand git maintenance run --auto --quiet --detach <true &&
+ 	GIT_TRACE2_EVENT="$(pwd)/false" \
+ 		git -c maintenance.auto=false \
+ 		commit --quiet --allow-empty -m 3 &&
+-	test_subcommand ! git maintenance run --auto --quiet  <false
++	test_subcommand ! git maintenance run --auto --quiet --detach <false
++'
++
++for cfg in maintenance.autoDetach gc.autoDetach
++do
++	test_expect_success "$cfg=true config option" '
++		test_when_finished "rm -f trace" &&
++		test_config $cfg true &&
++		GIT_TRACE2_EVENT="$(pwd)/trace" git commit --quiet --allow-empty -m 1 &&
++		test_subcommand git maintenance run --auto --quiet --detach <trace
++	'
++
++	test_expect_success "$cfg=false config option" '
++		test_when_finished "rm -f trace" &&
++		test_config $cfg false &&
++		GIT_TRACE2_EVENT="$(pwd)/trace" git commit --quiet --allow-empty -m 1 &&
++		test_subcommand git maintenance run --auto --quiet --no-detach <trace
++	'
++done
++
++test_expect_success "maintenance.autoDetach overrides gc.autoDetach" '
++	test_when_finished "rm -f trace" &&
++	test_config maintenance.autoDetach false &&
++	test_config gc.autoDetach true &&
++	GIT_TRACE2_EVENT="$(pwd)/trace" git commit --quiet --allow-empty -m 1 &&
++	test_subcommand git maintenance run --auto --quiet --no-detach <trace
+ '
+ 
+ test_expect_success 'register uses XDG_CONFIG_HOME config if it exists' '
+@@ -129,9 +154,9 @@ test_expect_success 'run --task=<task>' '
+ 		git maintenance run --task=commit-graph 2>/dev/null &&
+ 	GIT_TRACE2_EVENT="$(pwd)/run-both.txt" \
+ 		git maintenance run --task=commit-graph --task=gc 2>/dev/null &&
+-	test_subcommand ! git gc --quiet <run-commit-graph.txt &&
+-	test_subcommand git gc --quiet <run-gc.txt &&
+-	test_subcommand git gc --quiet <run-both.txt &&
++	test_subcommand ! git gc --quiet --no-detach <run-commit-graph.txt &&
++	test_subcommand git gc --quiet --no-detach <run-gc.txt &&
++	test_subcommand git gc --quiet --no-detach <run-both.txt &&
+ 	test_subcommand git commit-graph write --split --reachable --no-progress <run-commit-graph.txt &&
+ 	test_subcommand ! git commit-graph write --split --reachable --no-progress <run-gc.txt &&
+ 	test_subcommand git commit-graph write --split --reachable --no-progress <run-both.txt
+@@ -908,4 +933,62 @@ test_expect_success 'failed schedule prevents config change' '
+ 	done
+ '
+ 
++test_expect_success '--no-detach causes maintenance to not run in background' '
++	test_when_finished "rm -rf repo" &&
++	git init repo &&
++	(
++		cd repo &&
++
++		# Prepare the repository such that git-maintenance(1) ends up
++		# outputting something.
++		test_commit something &&
++		git config set maintenance.gc.enabled false &&
++		git config set maintenance.loose-objects.enabled true &&
++		git config set maintenance.loose-objects.auto 1 &&
++		git config set maintenance.incremental-repack.enabled true &&
++
++		GIT_TRACE2_EVENT="$(pwd)/trace.txt" \
++			git maintenance run --no-detach >out 2>&1 &&
++		! test_region maintenance detach trace.txt
++	)
++'
++
++test_expect_success '--detach causes maintenance to run in background' '
++	test_when_finished "rm -rf repo" &&
++	git init repo &&
++	(
++		cd repo &&
++
++		test_commit something &&
++		git config set maintenance.gc.enabled false &&
++		git config set maintenance.loose-objects.enabled true &&
++		git config set maintenance.loose-objects.auto 1 &&
++		git config set maintenance.incremental-repack.enabled true &&
++
++		# The extra file descriptor gets inherited to the child
++		# process, and by reading stdout we thus essentially wait for
++		# that descriptor to get closed, which indicates that the child
++		# is done, too.
++		does_not_matter=$(GIT_TRACE2_EVENT="$(pwd)/trace.txt" \
++			git maintenance run --detach 9>&1) &&
++		test_region maintenance detach trace.txt
++	)
++'
++
++test_expect_success 'repacking loose objects is quiet' '
++	test_when_finished "rm -rf repo" &&
++	git init repo &&
++	(
++		cd repo &&
++
++		test_commit something &&
++		git config set maintenance.gc.enabled false &&
++		git config set maintenance.loose-objects.enabled true &&
++		git config set maintenance.loose-objects.auto 1 &&
++
++		git maintenance run --quiet >out 2>&1 &&
++		test_must_be_empty out
++	)
++'
++
+ test_done
+diff --git a/t/t9001-send-email.sh b/t/t9001-send-email.sh
+index 64a4ab37..df5336bb 100755
+--- a/t/t9001-send-email.sh
++++ b/t/t9001-send-email.sh
+@@ -2084,22 +2084,24 @@ test_dump_aliases '--dump-aliases mailrc format' \
+ 	'bob' \
+ 	'chloe' \
+ 	'eve' <<-\EOF
+-	alias alice   Alice W Land <awol@example.com>
+-	alias eve     Eve <eve@example.com>
+-	alias bob     Robert Bobbyton <bob@example.com>
++	alias alice   "Alice W Land <awol@example.com>"
++	alias eve     "Eve <eve@example.com>"
++	alias bob     "Robert Bobbyton <bob@example.com>"
+ 	alias chloe   chloe@example.com
+ 	EOF
+ 
+ test_dump_aliases '--dump-aliases pine format' \
+ 	'pine' \
+ 	'alice' \
++	'bcgrp' \
+ 	'bob' \
+ 	'chloe' \
+ 	'eve' <<-\EOF
+-	alice	Alice W Land	<awol@example.com>
+-	eve	Eve	<eve@example.com>
+-	bob	Robert	Bobbyton <bob@example.com>
++	alice	Alice W Land	awol@example.com		Friend
++	eve	Eve	eve@example.com
++	bob	Robert Bobbyton	bob@example.com
+ 	chloe		chloe@example.com
++	bcgrp		(bob, chloe, Other <o@example.com>)
+ 	EOF
+ 
+ test_dump_aliases '--dump-aliases gnus format' \
+@@ -2118,6 +2120,110 @@ test_expect_success '--dump-aliases must be used alone' '
+ 	test_must_fail git send-email --dump-aliases --to=janice@example.com -1 refs/heads/accounting
+ '
+ 
++test_translate_aliases () {
++	msg="$1" && shift &&
++	filetype="$1" && shift &&
++	aliases="$1" && shift &&
++	printf '%s\n' "$@" >expect &&
++	cat >.tmp-email-aliases &&
++	printf '%s\n' "$aliases" >aliases &&
++
++	test_expect_success $PREREQ "$msg" '
++		clean_fake_sendmail && rm -fr outdir &&
++		git config --replace-all sendemail.aliasesfile \
++			"$(pwd)/.tmp-email-aliases" &&
++		git config sendemail.aliasfiletype "$filetype" &&
++		git send-email --translate-aliases <aliases 2>errors >actual &&
++		test_cmp expect actual
++	'
++}
++
++test_translate_aliases '--translate-aliases sendmail format' \
++	'sendmail' \
++	'alice bcgrp' \
++	'Alice W Land <awol@example.com>' \
++	'Robert Bobbyton <bob@example.com>' \
++	'chloe@example.com' \
++	'Other <o@example.com>' <<-\EOF
++	alice: Alice W Land <awol@example.com>
++	bob: Robert Bobbyton <bob@example.com>
++	chloe: chloe@example.com
++	abgroup: alice, bob
++	bcgrp: bob, chloe, Other <o@example.com>
++	EOF
++
++test_translate_aliases '--translate-aliases mutt format' \
++	'mutt' \
++	'donald bob' \
++	'Donald C Carlton <donc@example.com>' \
++	'Robert Bobbyton <bob@example.com>' <<-\EOF
++	alias alice Alice W Land <awol@example.com>
++	alias donald Donald C Carlton <donc@example.com>
++	alias bob Robert Bobbyton <bob@example.com>
++	alias chloe chloe@example.com
++	EOF
++
++test_translate_aliases '--translate-aliases mailrc format' \
++	'mailrc' \
++	'chloe eve alice' \
++	'chloe@example.com' \
++	'Eve <eve@example.com>' \
++	'Alice W Land <awol@example.com>' <<-\EOF
++	alias alice   "Alice W Land <awol@example.com>"
++	alias eve     "Eve <eve@example.com>"
++	alias bob     "Robert Bobbyton <bob@example.com>"
++	alias chloe   chloe@example.com
++	EOF
++
++test_translate_aliases '--translate-aliases pine format' \
++	'pine' \
++	'eve bob bcgrp' \
++	'eve@example.com' \
++	'bob@example.com' \
++	'bob@example.com' \
++	'chloe@example.com' \
++	'Other <o@example.com>' <<-\EOF
++	alice	Alice W Land	awol@example.com		Friend
++	eve	Eve	eve@example.com
++	bob	Robert Bobbyton	bob@example.com
++	chloe		chloe@example.com
++	bcgrp		(bob, chloe, Other <o@example.com>)
++	EOF
++
++test_translate_aliases '--translate-aliases gnus format' \
++	'gnus' \
++	'alice chloe eve' \
++	'awol@example.com' \
++	'chloe@example.com' \
++	'eve@example.com' <<-\EOF
++	(define-mail-alias "alice" "awol@example.com")
++	(define-mail-alias "eve" "eve@example.com")
++	(define-mail-alias "bob" "bob@example.com")
++	(define-mail-alias "chloe" "chloe@example.com")
++	EOF
++
++test_expect_success $PREREQ '--translate-aliases passes valid addresses through' '
++	cat >expect <<-\EOF &&
++	Other <o@example.com>
++	EOF
++	cat >aliases <<-\EOF &&
++	Other <o@example.com>
++	EOF
++	git send-email --translate-aliases <aliases >actual &&
++	test_cmp expect actual
++'
++
++test_expect_success $PREREQ '--translate-aliases passes unknown aliases through' '
++	cat >expect <<-\EOF &&
++	blargh
++	EOF
++	cat >aliases <<-\EOF &&
++	blargh
++	EOF
++	git send-email --translate-aliases <aliases >actual &&
++	test_cmp expect actual
++'
++
+ test_expect_success $PREREQ 'aliases and sendemail.identity' '
+ 	test_must_fail git \
+ 		-c sendemail.identity=cloud \
+@@ -2379,6 +2485,128 @@ test_expect_success $PREREQ 'leading and trailing whitespaces are removed' '
+ 	test_cmp expected-list actual-list
+ '
+ 
++test_expect_success $PREREQ 'mailmap support with --to' '
++	clean_fake_sendmail &&
++	test_config mailmap.file "mailmap.test" &&
++	cat >mailmap.test <<-EOF &&
++	Some Body <someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--to=someone@example.org \
++		--mailmap \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
++test_expect_success $PREREQ 'sendemail.mailmap configuration' '
++	clean_fake_sendmail &&
++	test_config mailmap.file "mailmap.test" &&
++	test_config sendemail.mailmap "true" &&
++	cat >mailmap.test <<-EOF &&
++	Some Body <someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--to=someone@example.org \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
++test_expect_success $PREREQ 'sendemail.mailmap.file configuration' '
++	clean_fake_sendmail &&
++	test_config sendemail.mailmap.file "mailmap.test" &&
++	test_config sendemail.mailmap "true" &&
++	cat >mailmap.test <<-EOF &&
++	Some Body <someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--to=someone@example.org \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
++test_expect_success $PREREQ 'sendemail.mailmap identity overrides configuration' '
++	clean_fake_sendmail &&
++	test_config sendemail.cloud.mailmap.file "mailmap.test" &&
++	test_config sendemail.mailmap "false" &&
++	test_config sendemail.cloud.mailmap "true" &&
++	cat >mailmap.test <<-EOF &&
++	Some Body <someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--identity=cloud \
++		--to=someone@example.org \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
++test_expect_success $PREREQ '--no-mailmap overrides configuration' '
++	clean_fake_sendmail &&
++	test_config sendemail.cloud.mailmap.file "mailmap.test" &&
++	test_config sendemail.mailmap "false" &&
++	test_config sendemail.cloud.mailmap "true" &&
++	cat >mailmap.test <<-EOF &&
++	Some Body <someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--identity=cloud \
++		--to=someone@example.org \
++		--no-mailmap \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.org!$" commandline1
++'
++
++test_expect_success $PREREQ 'mailmap support in To header' '
++	clean_fake_sendmail &&
++	test_config mailmap.file "mailmap.test" &&
++	cat >mailmap.test <<-EOF &&
++	<someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 --to=someone@example.org >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--mailmap \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
++test_expect_success $PREREQ 'mailmap support in Cc header' '
++	clean_fake_sendmail &&
++	test_config mailmap.file "mailmap.test" &&
++	cat >mailmap.test <<-EOF &&
++	<someone@example.com> <someone@example.org>
++	EOF
++	git format-patch --stdout -1 --cc=someone@example.org >a.patch &&
++	git send-email \
++		--from="Example <nobody@example.com>" \
++		--smtp-server="$(pwd)/fake.sendmail" \
++		--mailmap \
++		a.patch \
++		2>errors >out &&
++	grep "^!someone@example\.com!$" commandline1
++'
++
+ test_expect_success $PREREQ 'test using command name with --sendmail-cmd' '
+ 	clean_fake_sendmail &&
+ 	PATH="$PWD:$PATH" \
+diff --git a/t/test-lib.sh b/t/test-lib.sh
+index 64bd3653..54247604 100644
+--- a/t/test-lib.sh
++++ b/t/test-lib.sh
+@@ -1558,16 +1558,8 @@ then
+ 		passes_sanitize_leak=t
+ 	fi
+ 
+-	if test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check" ||
+-	   test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check-failing"
++	if test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check"
+ 	then
+-		if test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check-failing" &&
+-		   test -n "$passes_sanitize_leak"
+-		then
+-			skip_all="skipping leak-free $this_test under GIT_TEST_PASSING_SANITIZE_LEAK=check-failing"
+-			test_done
+-		fi
+-
+ 		sanitize_leak_check=t
+ 		if test -n "$invert_exit_code"
+ 		then
+@@ -1605,7 +1597,6 @@ then
+ 	export LSAN_OPTIONS
+ 
+ elif test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check" ||
+-     test "$GIT_TEST_PASSING_SANITIZE_LEAK" = "check-failing" ||
+      test_bool_env GIT_TEST_PASSING_SANITIZE_LEAK false
+ then
+ 	BAIL_OUT_ENV_NEEDS_SANITIZE_LEAK "GIT_TEST_PASSING_SANITIZE_LEAK=true"
+diff --git a/t/unit-tests/t-ctype.c b/t/unit-tests/t-ctype.c
+index e28a7f50..6043f0d9 100644
+--- a/t/unit-tests/t-ctype.c
++++ b/t/unit-tests/t-ctype.c
+@@ -31,7 +31,7 @@
+ 	"\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f" \
+ 	"\x7f"
+ 
+-int cmd_main(int argc, const char **argv) {
++int cmd_main(int argc UNUSED, const char **argv UNUSED) {
+ 	TEST_CHAR_CLASS(isspace, " \n\r\t");
+ 	TEST_CHAR_CLASS(isdigit, DIGIT);
+ 	TEST_CHAR_CLASS(isalpha, LOWER UPPER);
+diff --git a/t/unit-tests/t-hash.c b/t/unit-tests/t-hash.c
+index e9a78bf2..e6264701 100644
+--- a/t/unit-tests/t-hash.c
++++ b/t/unit-tests/t-hash.c
+@@ -38,7 +38,7 @@ static void check_hash_data(const void *data, size_t data_length,
+ 		     "SHA1 and SHA256 (%s) works", #literal); \
+ 	} while (0)
+ 
+-int cmd_main(int argc, const char **argv)
++int cmd_main(int argc UNUSED, const char **argv UNUSED)
+ {
+ 	struct strbuf aaaaaaaaaa_100000 = STRBUF_INIT;
+ 	struct strbuf alphabet_100000 = STRBUF_INIT;
+
+-- 
+2.43.0

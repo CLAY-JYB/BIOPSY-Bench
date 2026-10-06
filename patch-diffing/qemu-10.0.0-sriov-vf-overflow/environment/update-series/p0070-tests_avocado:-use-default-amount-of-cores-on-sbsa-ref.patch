@@ -1,0 +1,547 @@
+From f528a812 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0070] tests/avocado: use default amount of cores on sbsa-ref
+
+---
+diff --git a/tests/avocado/machine_aarch64_sbsaref.py b/tests/avocado/machine_aarch64_sbsaref.py
+index 6bb82f2a03..e920bbf08c 100644
+--- a/tests/avocado/machine_aarch64_sbsaref.py
++++ b/tests/avocado/machine_aarch64_sbsaref.py
+@@ -37,18 +37,18 @@ class Aarch64SbsarefMachine(QemuSystemTest):
+ 
+         Used components:
+ 
+-        - Trusted Firmware 2.11.0
+-        - Tianocore EDK2 stable202405
+-        - Tianocore EDK2-platforms commit 4bbd0ed
++        - Trusted Firmware         v2.11.0
++        - Tianocore EDK2           4d4f569924
++        - Tianocore EDK2-platforms 3f08401
+ 
+         """
+ 
+         # Secure BootRom (TF-A code)
+         fs0_xz_url = (
+             "https://artifacts.codelinaro.org/artifactory/linaro-419-sbsa-ref/"
+-            "20240528-140808/edk2/SBSA_FLASH0.fd.xz"
++            "20240619-148232/edk2/SBSA_FLASH0.fd.xz"
+         )
+-        fs0_xz_hash = "fa6004900b67172914c908b78557fec4d36a5f784f4c3dd08f49adb75e1892a9"
++        fs0_xz_hash = "0c954842a590988f526984de22e21ae0ab9cb351a0c99a8a58e928f0c7359cf7"
+         tar_xz_path = self.fetch_asset(fs0_xz_url, asset_hash=fs0_xz_hash,
+                                       algorithm='sha256')
+         archive.extract(tar_xz_path, self.workdir)
+@@ -57,9 +57,9 @@ class Aarch64SbsarefMachine(QemuSystemTest):
+         # Non-secure rom (UEFI and EFI variables)
+         fs1_xz_url = (
+             "https://artifacts.codelinaro.org/artifactory/linaro-419-sbsa-ref/"
+-            "20240528-140808/edk2/SBSA_FLASH1.fd.xz"
++            "20240619-148232/edk2/SBSA_FLASH1.fd.xz"
+         )
+-        fs1_xz_hash = "5f3747d4000bc416d9641e33ff4ac60c3cc8cb74ca51b6e932e58531c62eb6f7"
++        fs1_xz_hash = "c6ec39374c4d79bb9e9cdeeb6db44732d90bb4a334cec92002b3f4b9cac4b5ee"
+         tar_xz_path = self.fetch_asset(fs1_xz_url, asset_hash=fs1_xz_hash,
+                                       algorithm='sha256')
+         archive.extract(tar_xz_path, self.workdir)
+@@ -75,8 +75,6 @@ class Aarch64SbsarefMachine(QemuSystemTest):
+             f"if=pflash,file={fs0_path},format=raw",
+             "-drive",
+             f"if=pflash,file={fs1_path},format=raw",
+-            "-smp",
+-            "1",
+             "-machine",
+             "sbsa-ref",
+         )
+diff --git a/tests/avocado/machine_aspeed.py b/tests/avocado/machine_aspeed.py
+index 3a20644fb2..29e6b388a9 100644
+--- a/tests/avocado/machine_aspeed.py
++++ b/tests/avocado/machine_aspeed.py
+@@ -313,14 +313,14 @@ class AST2x00MachineSDK(QemuSystemTest, LinuxSSHMixIn):
+ 
+     def do_test_aarch64_aspeed_sdk_start(self, image):
+         self.vm.set_console()
+-        self.vm.add_args('-drive', 'file=' + image + ',if=mtd,format=raw')
++        self.vm.add_args('-drive', 'file=' + image + ',if=mtd,format=raw',
++                         '-net', 'nic', '-net', 'user,hostfwd=:127.0.0.1:0-:22')
+ 
+         self.vm.launch()
+ 
+         self.wait_for_console_pattern('U-Boot 2023.10')
+         self.wait_for_console_pattern('## Loading kernel from FIT Image')
+         self.wait_for_console_pattern('Starting kernel ...')
+-        self.wait_for_console_pattern("systemd[1]: Hostname set to")
+ 
+     @skipUnless(os.getenv('QEMU_TEST_FLAKY_TESTS'), 'Test is unstable on GitLab')
+ 
+@@ -387,15 +387,15 @@ class AST2x00MachineSDK(QemuSystemTest, LinuxSSHMixIn):
+         year = time.strftime("%Y")
+         self.ssh_command_output_contains('/sbin/hwclock -f /dev/rtc1', year);
+ 
+-    def test_aarch64_ast2700_evb_sdk_v09_01(self):
++    def test_aarch64_ast2700_evb_sdk_v09_02(self):
+         """
+         :avocado: tags=arch:aarch64
+         :avocado: tags=machine:ast2700-evb
+         """
+ 
+         image_url = ('https://github.com/AspeedTech-BMC/openbmc/releases/'
+-                     'download/v09.01/ast2700-default-obmc.tar.gz')
+-        image_hash = 'b1cc0fd73c7650d34c9c8459a243f52a91e9e27144b8608b2645ab19461d1e07'
++                     'download/v09.02/ast2700-default-obmc.tar.gz')
++        image_hash = 'ac969c2602f4e6bdb69562ff466b89ae3fe1d86e1f6797bb7969d787f82116a7'
+         image_path = self.fetch_asset(image_url, asset_hash=image_hash,
+                                       algorithm='sha256')
+         archive.extract(image_path, self.workdir)
+@@ -436,4 +436,45 @@ class AST2x00MachineSDK(QemuSystemTest, LinuxSSHMixIn):
+ 
+         self.vm.add_args('-smp', str(num_cpu))
+         self.do_test_aarch64_aspeed_sdk_start(image_dir + 'image-bmc')
++        self.wait_for_console_pattern('nodistro.0 ast2700-default ttyS12')
++        self.ssh_connect('root', '0penBmc', False)
++
++class AST2x00MachineMMC(QemuSystemTest):
++
++    timeout = 240
++
++    def wait_for_console_pattern(self, success_message, vm=None):
++        wait_for_console_pattern(self, success_message,
++                                 failure_message='Kernel panic - not syncing',
++                                 vm=vm)
+ 
++    def test_arm_aspeed_emmc_boot(self):
++        """
++        :avocado: tags=arch:arm
++        :avocado: tags=machine:rainier-bmc
++        :avocado: tags=device:emmc
++        """
++
++        image_url = ('https://fileserver.linaro.org/s/B6pJTwWEkzSDi36/download/'
++                     'mmc-p10bmc-20240617.qcow2')
++        image_hash = ('d523fb478d2b84d5adc5658d08502bc64b1486955683814f89c6137518acd90b')
++        image_path = self.fetch_asset(image_url, asset_hash=image_hash,
++                                      algorithm='sha256')
++
++        self.require_netdev('user')
++
++        self.vm.set_console()
++        self.vm.add_args('-drive',
++                         'file=' + image_path + ',if=sd,id=sd2,index=2',
++                         '-net', 'nic', '-net', 'user')
++        self.vm.launch()
++
++        self.wait_for_console_pattern('U-Boot SPL 2019.04')
++        self.wait_for_console_pattern('Trying to boot from MMC1')
++        self.wait_for_console_pattern('U-Boot 2019.04')
++        self.wait_for_console_pattern('eMMC 2nd Boot')
++        self.wait_for_console_pattern('## Loading kernel from FIT Image')
++        self.wait_for_console_pattern('Starting kernel ...')
++        self.wait_for_console_pattern('Booting Linux on physical CPU 0xf00')
++        self.wait_for_console_pattern('mmcblk0: p1 p2 p3 p4 p5 p6 p7')
++        self.wait_for_console_pattern('IBM eBMC (OpenBMC for IBM Enterprise')
+diff --git a/tests/avocado/virtio_check_params.py b/tests/avocado/virtio_check_params.py
+deleted file mode 100644
+index 5fe370a179..0000000000
+--- a/tests/avocado/virtio_check_params.py
++++ /dev/null
+@@ -1,143 +0,0 @@
+-#
+-# Test virtio-scsi and virtio-blk queue settings for all machine types
+-#
+-# Copyright (c) 2019 Virtuozzo International GmbH
+-#
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-#
+-
+-import sys
+-import os
+-import re
+-import logging
+-
+-from qemu.machine import QEMUMachine
+-from avocado_qemu import QemuSystemTest
+-from avocado import skip
+-
+-#list of machine types and virtqueue properties to test
+-VIRTIO_SCSI_PROPS = {'seg_max_adjust': 'seg_max_adjust'}
+-VIRTIO_BLK_PROPS = {'seg_max_adjust': 'seg-max-adjust'}
+-
+-DEV_TYPES = {'virtio-scsi-pci': VIRTIO_SCSI_PROPS,
+-             'virtio-blk-pci': VIRTIO_BLK_PROPS}
+-
+-VM_DEV_PARAMS = {'virtio-scsi-pci': ['-device', 'virtio-scsi-pci,id=scsi0'],
+-                 'virtio-blk-pci': ['-device',
+-                                    'virtio-blk-pci,id=scsi0,drive=drive0',
+-                                    '-drive',
+-                                    'driver=null-co,id=drive0,if=none']}
+-
+-
+-class VirtioMaxSegSettingsCheck(QemuSystemTest):
+-    @staticmethod
+-    def make_pattern(props):
+-        pattern_items = [r'{0} = \w+'.format(prop) for prop in props]
+-        return '|'.join(pattern_items)
+-
+-    def query_virtqueue(self, vm, dev_type_name):
+-        query_ok = False
+-        error = None
+-        props = None
+-
+-        output = vm.cmd('human-monitor-command',
+-                        command_line = 'info qtree')
+-        props_list = DEV_TYPES[dev_type_name].values();
+-        pattern = self.make_pattern(props_list)
+-        res = re.findall(pattern, output)
+-
+-        if len(res) != len(props_list):
+-            props_list = set(props_list)
+-            res = set(res)
+-            not_found = props_list.difference(res)
+-            not_found = ', '.join(not_found)
+-            error = '({0}): The following properties not found: {1}'\
+-                     .format(dev_type_name, not_found)
+-        else:
+-            query_ok = True
+-            props = dict()
+-            for prop in res:
+-                p = prop.split(' = ')
+-                props[p[0]] = p[1]
+-        return query_ok, props, error
+-
+-    def check_mt(self, mt, dev_type_name):
+-        mt['device'] = dev_type_name # Only for the debug() call.
+-        logger = logging.getLogger('machine')
+-        logger.debug(mt)
+-        with QEMUMachine(self.qemu_bin) as vm:
+-            vm.set_machine(mt["name"])
+-            vm.add_args('-nodefaults')
+-            for s in VM_DEV_PARAMS[dev_type_name]:
+-                vm.add_args(s)
+-            try:
+-                vm.launch()
+-                query_ok, props, error = self.query_virtqueue(vm, dev_type_name)
+-            except:
+-                query_ok = False
+-                error = sys.exc_info()[0]
+-
+-        if not query_ok:
+-            self.fail('machine type {0}: {1}'.format(mt['name'], error))
+-
+-        for prop_name, prop_val in props.items():
+-            expected_val = mt[prop_name]
+-            self.assertEqual(expected_val, prop_val)
+-
+-    @staticmethod
+-    def seg_max_adjust_enabled(mt):
+-        # machine types >= 5.0 should have seg_max_adjust = true
+-        # others seg_max_adjust = false
+-        mt = mt.split("-")
+-
+-        # machine types with one line name and name like pc-x.x
+-        if len(mt) <= 2:
+-            return False
+-
+-        # machine types like pc-<chip_name>-x.x[.x]
+-        ver = mt[2]
+-        ver = ver.split(".");
+-
+-        # versions >= 5.0 goes with seg_max_adjust enabled
+-        major = int(ver[0])
+-
+-        if major >= 5:
+-            return True
+-        return False
+-
+-    @skip("break multi-arch CI")
+-    def test_machine_types(self):
+-        # collect all machine types except 'none', 'isapc', 'microvm'
+-        with QEMUMachine(self.qemu_bin) as vm:
+-            vm.launch()
+-            machines = [m['name'] for m in vm.cmd('query-machines')]
+-            vm.shutdown()
+-        machines.remove('none')
+-        machines.remove('isapc')
+-        machines.remove('microvm')
+-
+-        for dev_type in DEV_TYPES:
+-            # create the list of machine types and their parameters.
+-            mtypes = list()
+-            for m in machines:
+-                if self.seg_max_adjust_enabled(m):
+-                    enabled = 'true'
+-                else:
+-                    enabled = 'false'
+-                mtypes.append({'name': m,
+-                               DEV_TYPES[dev_type]['seg_max_adjust']: enabled})
+-
+-            # test each machine type for a device type
+-            for mt in mtypes:
+-                self.check_mt(mt, dev_type)
+diff --git a/tests/docker/Makefile.include b/tests/docker/Makefile.include
+index 8df50a0ca0..708e3a72fb 100644
+--- a/tests/docker/Makefile.include
++++ b/tests/docker/Makefile.include
+@@ -207,7 +207,12 @@ docker-run: docker-qemu-src
+ 	$(call quiet-command,						\
+ 		$(RUNC) run 						\
+ 			--rm						\
+-			$(if $(NOUSER),,-u $(UID)) 			\
++			$(if $(NOUSER),,				\
++				$(if $(filter docker,$(RUNC)),		\
++					-u $(UID),			\
++					--userns keep-id		\
++				)					\
++			) 						\
+ 			--security-opt seccomp=unconfined		\
+ 			$(if $(DEBUG),-ti,)				\
+ 			$(if $(NETWORK),$(if $(subst $(NETWORK),,1),--net=$(NETWORK)),--net=none) \
+diff --git a/tests/docker/dockerfiles/debian-i686-cross.docker b/tests/docker/dockerfiles/debian-i686-cross.docker
+index f1e5b0b877..f4ef054a2e 100644
+--- a/tests/docker/dockerfiles/debian-i686-cross.docker
++++ b/tests/docker/dockerfiles/debian-i686-cross.docker
+@@ -169,7 +169,7 @@ endian = 'little'\n" > /usr/local/share/meson/cross/i686-linux-gnu && \
+ 
+ ENV ABI "i686-linux-gnu"
+ ENV MESON_OPTS "--cross-file=i686-linux-gnu"
+-ENV QEMU_CONFIGURE_OPTS --cross-prefix=x86_64-linux-gnu-
++ENV QEMU_CONFIGURE_OPTS --cross-prefix=i686-linux-gnu-
+ ENV DEF_TARGET_LIST x86_64-softmmu,x86_64-linux-user,i386-softmmu,i386-linux-user
+ # As a final step configure the user (if env is defined)
+ ARG USER
+diff --git a/tests/docker/dockerfiles/python.docker b/tests/docker/dockerfiles/python.docker
+index a3c1321190..8f0af9ef25 100644
+--- a/tests/docker/dockerfiles/python.docker
++++ b/tests/docker/dockerfiles/python.docker
+@@ -14,6 +14,7 @@ ENV PACKAGES \
+     python3.10 \
+     python3.11 \
+     python3.12 \
++    python3.13 \
+     python3.8 \
+     python3.9
+ 
+diff --git a/tests/lcitool/refresh b/tests/lcitool/refresh
+index b25e3ac4dd..ac803e34f1 100755
+--- a/tests/lcitool/refresh
++++ b/tests/lcitool/refresh
+@@ -167,7 +167,7 @@ try:
+ 
+     generate_dockerfile("debian-i686-cross", "debian-11",
+                         cross="i686",
+-                        trailer=cross_build("x86_64-linux-gnu-",
++                        trailer=cross_build("i686-linux-gnu-",
+                                             "x86_64-softmmu,"
+                                             "x86_64-linux-user,"
+                                             "i386-softmmu,i386-linux-user"))
+diff --git a/tests/plugin/insn.c b/tests/plugin/insn.c
+index 5e0aa03223..baf2d07205 100644
+--- a/tests/plugin/insn.c
++++ b/tests/plugin/insn.c
+@@ -20,6 +20,7 @@ static qemu_plugin_u64 insn_count;
+ 
+ static bool do_inline;
+ static bool do_size;
++static bool do_trace;
+ static GArray *sizes;
+ 
+ typedef struct {
+@@ -42,6 +43,44 @@ typedef struct {
+     char *disas;
+ } Instruction;
+ 
++/* A hash table to hold matched instructions */
++static GHashTable *match_insn_records;
++static GMutex match_hash_lock;
++
++
++static Instruction * get_insn_record(const char *disas, uint64_t vaddr, Match *m)
++{
++    g_autofree char *str_hash = g_strdup_printf("%"PRIx64" %s", vaddr, disas);
++    Instruction *record;
++
++    g_mutex_lock(&match_hash_lock);
++
++    if (!match_insn_records) {
++        match_insn_records = g_hash_table_new(g_str_hash, g_str_equal);
++    }
++
++    record = g_hash_table_lookup(match_insn_records, str_hash);
++
++    if (!record) {
++        g_autoptr(GString) ts = g_string_new(str_hash);
++
++        record = g_new0(Instruction, 1);
++        record->disas = g_strdup(disas);
++        record->vaddr = vaddr;
++        record->match = m;
++
++        g_hash_table_insert(match_insn_records, str_hash, record);
++
++        g_string_prepend(ts, "Created record for: ");
++        g_string_append(ts, "\n");
++        qemu_plugin_outs(ts->str);
++    }
++
++    g_mutex_unlock(&match_hash_lock);
++
++    return record;
++}
++
+ /*
+  * Initialise a new vcpu with reading the register list
+  */
+@@ -73,30 +112,30 @@ static void vcpu_insn_matched_exec_before(unsigned int cpu_index, void *udata)
+     MatchCount *match = qemu_plugin_scoreboard_find(insn_match->counts,
+                                                     cpu_index);
+ 
+-    g_autoptr(GString) ts = g_string_new("");
+-
+     insn->hits++;
+-    g_string_append_printf(ts, "0x%" PRIx64 ", '%s', %"PRId64 " hits",
+-                           insn->vaddr, insn->disas, insn->hits);
+ 
+     uint64_t icount = qemu_plugin_u64_get(insn_count, cpu_index);
+     uint64_t delta = icount - match->last_hit;
+ 
+     match->hits++;
+     match->total_delta += delta;
+-
+-    g_string_append_printf(ts,
+-                           " , cpu %u,"
+-                           " %"PRId64" match hits,"
+-                           " Δ+%"PRId64 " since last match,"
+-                           " %"PRId64 " avg insns/match\n",
+-                           cpu_index,
+-                           match->hits, delta,
+-                           match->total_delta / match->hits);
+-
+     match->last_hit = icount;
+ 
+-    qemu_plugin_outs(ts->str);
++    if (do_trace) {
++        g_autoptr(GString) ts = g_string_new("");
++        g_string_append_printf(ts, "0x%" PRIx64 ", '%s', %"PRId64 " hits",
++                               insn->vaddr, insn->disas, insn->hits);
++        g_string_append_printf(ts,
++                               " , cpu %u,"
++                               " %"PRId64" match hits,"
++                               " Δ+%"PRId64 " since last match,"
++                               " %"PRId64 " avg insns/match\n",
++                               cpu_index,
++                               match->hits, delta,
++                               match->total_delta / match->hits);
++
++        qemu_plugin_outs(ts->str);
++    }
+ }
+ 
+ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
+@@ -130,16 +169,19 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
+          * If we are tracking certain instructions we will need more
+          * information about the instruction which we also need to
+          * save if there is a hit.
++         *
++         * We only want one record for each occurrence of the matched
++         * instruction.
+          */
+         if (matches->len) {
+             char *insn_disas = qemu_plugin_insn_disas(insn);
+             for (int j = 0; j < matches->len; j++) {
+                 Match *m = &g_array_index(matches, Match, j);
+                 if (g_str_has_prefix(insn_disas, m->match_string)) {
+-                    Instruction *rec = g_new0(Instruction, 1);
+-                    rec->disas = g_strdup(insn_disas);
+-                    rec->vaddr = qemu_plugin_insn_vaddr(insn);
+-                    rec->match = m;
++                    Instruction *rec = get_insn_record(insn_disas,
++                                                       qemu_plugin_insn_vaddr(insn),
++                                                       m);
++
+                     qemu_plugin_register_vcpu_insn_exec_cb(
+                         insn, vcpu_insn_matched_exec_before,
+                         QEMU_PLUGIN_CB_NO_REGS, rec);
+@@ -172,13 +214,38 @@ static void plugin_exit(qemu_plugin_id_t id, void *p)
+                                qemu_plugin_u64_sum(insn_count));
+     }
+     qemu_plugin_outs(out->str);
+-
+     qemu_plugin_scoreboard_free(insn_count.score);
++
++    g_mutex_lock(&match_hash_lock);
++
+     for (i = 0; i < matches->len; ++i) {
+         Match *m = &g_array_index(matches, Match, i);
++        GHashTableIter iter;
++        Instruction *record;
++        qemu_plugin_u64 hit_e = qemu_plugin_scoreboard_u64_in_struct(m->counts, MatchCount, hits);
++        uint64_t hits = qemu_plugin_u64_sum(hit_e);
++
++        g_string_printf(out, "Match: %s, hits %"PRId64"\n", m->match_string, hits);
++        qemu_plugin_outs(out->str);
++
++        g_hash_table_iter_init(&iter, match_insn_records);
++        while (g_hash_table_iter_next(&iter, NULL, (void **)&record)) {
++            if (record->match == m) {
++                g_string_printf(out,
++                                "  %"PRIx64": %s (hits %"PRId64")\n",
++                                record->vaddr,
++                                record->disas,
++                                record->hits);
++                qemu_plugin_outs(out->str);
++            }
++        }
++
+         g_free(m->match_string);
+         qemu_plugin_scoreboard_free(m->counts);
+     }
++
++    g_mutex_unlock(&match_hash_lock);
++
+     g_array_free(matches, TRUE);
+     g_array_free(sizes, TRUE);
+ }
+@@ -216,6 +283,11 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
+             }
+         } else if (g_strcmp0(tokens[0], "match") == 0) {
+             parse_match(tokens[1]);
++        } else if (g_strcmp0(tokens[0], "trace") == 0) {
++            if (!qemu_plugin_bool_parse(tokens[0], tokens[1], &do_trace)) {
++                fprintf(stderr, "boolean argument parsing failed: %s\n", opt);
++                return -1;
++            }
+         } else {
+             fprintf(stderr, "option parsing failed: %s\n", opt);
+             return -1;
+diff --git a/tests/qapi-schema/doc-empty-section.err b/tests/qapi-schema/doc-empty-section.err
+index 5f03a6d733..711a0d629c 100644
+--- a/tests/qapi-schema/doc-empty-section.err
++++ b/tests/qapi-schema/doc-empty-section.err
+@@ -1 +1 @@
+-doc-empty-section.json:6: text required after 'Note:'
++doc-empty-section.json:6: text required after 'Errors:'
+diff --git a/tests/qapi-schema/doc-empty-section.json b/tests/qapi-schema/doc-empty-section.json
+index f3384e9a3b..f179d3eff6 100644
+--- a/tests/qapi-schema/doc-empty-section.json
++++ b/tests/qapi-schema/doc-empty-section.json
+@@ -3,6 +3,6 @@
+ ##
+ # @foo:
+ #
+-# Note:
++# Errors:
+ ##
+ { 'command': 'foo', 'data': {'a': 'int'} }
+
+-- 
+2.43.0

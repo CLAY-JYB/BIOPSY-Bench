@@ -1,0 +1,28 @@
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -15155,12 +15584,18 @@ warn_duplicate_keys(struct parser_params *p, NODE *hash)
+         if (!head) {
+             key = (st_data_t)value;
+         }
+-        else if (nd_type_st_key_enable_p(head) &&
+-                 st_delete(literal_keys, (key = (st_data_t)nd_st_key(p, head), &key), &data)) {
+-            rb_compile_warn(p->ruby_sourcefile, nd_line((NODE *)data),
+-                            "key %+"PRIsVALUE" is duplicated and overwritten on line %d",
+-                            nd_st_key(p, head), nd_line(head));
++        else if (nd_type_st_key_enable_p(head)) {
++            warn_duplicate_keys_check_key(p, (st_data_t)head, literal_keys);
++
++            key = (st_data_t)nd_st_key(p, head);
++            if (st_delete(literal_keys, &key, &data)) {
++                rb_compile_warn(p->ruby_sourcefile, nd_line((NODE *)data),
++                                "key %+"PRIsVALUE" is duplicated and overwritten on line %d",
++                                nd_value(p, head), nd_line(head));
++            }
+         }
++
++        warn_duplicate_keys_check_key(p, key, literal_keys);
+         st_insert(literal_keys, (st_data_t)key, (st_data_t)hash);
+         hash = next;
+     }

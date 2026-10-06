@@ -1,0 +1,45 @@
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -69,13 +89,37 @@ void pcie_sriov_pf_init(PCIDevice *dev, uint16_t offset,
+     pci_set_word(wmask + PCI_SRIOV_SYS_PGSIZE, 0x553);
+ 
+     qdev_prop_set_bit(&dev->qdev, "multifunction", true);
++
++    dev->exp.sriov_pf.vf = g_new(PCIDevice *, total_vfs);
++
++    for (uint16_t i = 0; i < total_vfs; i++) {
++        PCIDevice *vf = pci_new(devfn, vfname);
++        vf->exp.sriov_vf.pf = dev;
++        vf->exp.sriov_vf.vf_number = i;
++
++        if (!qdev_realize(&vf->qdev, bus, errp)) {
++            object_unparent(OBJECT(vf));
++            object_unref(vf);
++            unparent_vfs(dev, i);
++            return false;
++        }
++
++        /* set vid/did according to sr/iov spec - they are not used */
++        pci_config_set_vendor_id(vf->config, 0xffff);
++        pci_config_set_device_id(vf->config, 0xffff);
++
++        dev->exp.sriov_pf.vf[i] = vf;
++        devfn += vf_stride;
++    }
++
++    return true;
+ }
+ 
+ void pcie_sriov_pf_exit(PCIDevice *dev)
+ {
+-    unregister_vfs(dev);
+-    g_free((char *)dev->exp.sriov_pf.vfname);
+-    dev->exp.sriov_pf.vfname = NULL;
++    uint8_t *cfg = dev->config + dev->exp.sriov_cap;
++
++    unparent_vfs(dev, pci_get_word(cfg + PCI_SRIOV_TOTAL_VF));
+ }
+ 
+ void pcie_sriov_pf_init_vf_bar(PCIDevice *dev, int region_num,

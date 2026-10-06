@@ -1,0 +1,42 @@
+From 3cf2e755 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0066] pcie_sriov: Ensure VF function number does not overflow (part 21/26)
+
+---
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -231,15 +241,21 @@ void pcie_sriov_config_write(PCIDevice *dev, uint32_t address,
+                              PCI_FUNC(dev->devfn), off, val, len);
+ 
+     if (range_covers_byte(off, len, PCI_SRIOV_CTRL)) {
+-        if (dev->exp.sriov_pf.num_vfs) {
+-            if (!(val & PCI_SRIOV_CTRL_VFE)) {
+-                unregister_vfs(dev);
+-            }
++        if (val & PCI_SRIOV_CTRL_VFE) {
++            register_vfs(dev);
+         } else {
+-            if (val & PCI_SRIOV_CTRL_VFE) {
+-                register_vfs(dev);
+-            }
++            unregister_vfs(dev);
+         }
++    } else if (range_covers_byte(off, len, PCI_SRIOV_NUM_VF)) {
++        clear_ctrl_vfe(dev);
++        unregister_vfs(dev);
++    }
++}
++
++void pcie_sriov_pf_post_load(PCIDevice *dev)
++{
++    if (dev->exp.sriov_cap) {
++        register_vfs(dev);
+     }
+ }
+ 
+
+-- 
+2.43.0

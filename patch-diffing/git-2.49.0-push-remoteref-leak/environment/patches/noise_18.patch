@@ -1,0 +1,463 @@
+diff --git a/reftable/blocksource.c b/reftable/blocksource.c
+index eeed254b..e93cac9b 100644
+--- a/reftable/blocksource.c
++++ b/reftable/blocksource.c
+@@ -13,14 +13,14 @@ https://developers.google.com/open-source/licenses/bsd
+ #include "reftable-blocksource.h"
+ #include "reftable-error.h"
+ 
+-static void strbuf_return_block(void *b, struct reftable_block *dest)
++static void strbuf_return_block(void *b UNUSED, struct reftable_block *dest)
+ {
+ 	if (dest->len)
+ 		memset(dest->data, 0xff, dest->len);
+ 	reftable_free(dest->data);
+ }
+ 
+-static void strbuf_close(void *b)
++static void strbuf_close(void *b UNUSED)
+ {
+ }
+ 
+@@ -55,26 +55,6 @@ void block_source_from_strbuf(struct reftable_block_source *bs,
+ 	bs->arg = buf;
+ }
+ 
+-static void malloc_return_block(void *b, struct reftable_block *dest)
+-{
+-	if (dest->len)
+-		memset(dest->data, 0xff, dest->len);
+-	reftable_free(dest->data);
+-}
+-
+-static struct reftable_block_source_vtable malloc_vtable = {
+-	.return_block = &malloc_return_block,
+-};
+-
+-static struct reftable_block_source malloc_block_source_instance = {
+-	.ops = &malloc_vtable,
+-};
+-
+-struct reftable_block_source malloc_block_source(void)
+-{
+-	return malloc_block_source_instance;
+-}
+-
+ struct file_block_source {
+ 	uint64_t size;
+ 	unsigned char *data;
+@@ -85,7 +65,7 @@ static uint64_t file_size(void *b)
+ 	return ((struct file_block_source *)b)->size;
+ }
+ 
+-static void file_return_block(void *b, struct reftable_block *dest)
++static void file_return_block(void *b UNUSED, struct reftable_block *dest UNUSED)
+ {
+ }
+ 
+diff --git a/reftable/blocksource.h b/reftable/blocksource.h
+index 072e2727..659a27b4 100644
+--- a/reftable/blocksource.h
++++ b/reftable/blocksource.h
+@@ -17,6 +17,4 @@ struct reftable_block_source;
+ void block_source_from_strbuf(struct reftable_block_source *bs,
+ 			      struct strbuf *buf);
+ 
+-struct reftable_block_source malloc_block_source(void);
+-
+ #endif
+diff --git a/reftable/dump.c b/reftable/dump.c
+deleted file mode 100644
+index dd65d9e8..00000000
+--- a/reftable/dump.c
++++ /dev/null
+@@ -1,111 +0,0 @@
+-/*
+-Copyright 2020 Google LLC
+-
+-Use of this source code is governed by a BSD-style
+-license that can be found in the LICENSE file or at
+-https://developers.google.com/open-source/licenses/bsd
+-*/
+-
+-#include "git-compat-util.h"
+-#include "hash.h"
+-
+-#include "reftable-blocksource.h"
+-#include "reftable-error.h"
+-#include "reftable-record.h"
+-#include "reftable-tests.h"
+-#include "reftable-writer.h"
+-#include "reftable-iterator.h"
+-#include "reftable-reader.h"
+-#include "reftable-stack.h"
+-
+-#include <stddef.h>
+-#include <stdio.h>
+-#include <stdlib.h>
+-#include <unistd.h>
+-#include <string.h>
+-
+-static int compact_stack(const char *stackdir)
+-{
+-	struct reftable_stack *stack = NULL;
+-	struct reftable_write_options opts = { 0 };
+-
+-	int err = reftable_new_stack(&stack, stackdir, &opts);
+-	if (err < 0)
+-		goto done;
+-
+-	err = reftable_stack_compact_all(stack, NULL);
+-	if (err < 0)
+-		goto done;
+-done:
+-	if (stack) {
+-		reftable_stack_destroy(stack);
+-	}
+-	return err;
+-}
+-
+-static void print_help(void)
+-{
+-	printf("usage: dump [-cst] arg\n\n"
+-	       "options: \n"
+-	       "  -c compact\n"
+-	       "  -b dump blocks\n"
+-	       "  -t dump table\n"
+-	       "  -s dump stack\n"
+-	       "  -6 sha256 hash format\n"
+-	       "  -h this help\n"
+-	       "\n");
+-}
+-
+-int reftable_dump_main(int argc, char *const *argv)
+-{
+-	int err = 0;
+-	int opt_dump_blocks = 0;
+-	int opt_dump_table = 0;
+-	int opt_dump_stack = 0;
+-	int opt_compact = 0;
+-	uint32_t opt_hash_id = GIT_SHA1_FORMAT_ID;
+-	const char *arg = NULL, *argv0 = argv[0];
+-
+-	for (; argc > 1; argv++, argc--)
+-		if (*argv[1] != '-')
+-			break;
+-		else if (!strcmp("-b", argv[1]))
+-			opt_dump_blocks = 1;
+-		else if (!strcmp("-t", argv[1]))
+-			opt_dump_table = 1;
+-		else if (!strcmp("-6", argv[1]))
+-			opt_hash_id = GIT_SHA256_FORMAT_ID;
+-		else if (!strcmp("-s", argv[1]))
+-			opt_dump_stack = 1;
+-		else if (!strcmp("-c", argv[1]))
+-			opt_compact = 1;
+-		else if (!strcmp("-?", argv[1]) || !strcmp("-h", argv[1])) {
+-			print_help();
+-			return 2;
+-		}
+-
+-	if (argc != 2) {
+-		fprintf(stderr, "need argument\n");
+-		print_help();
+-		return 2;
+-	}
+-
+-	arg = argv[1];
+-
+-	if (opt_dump_blocks) {
+-		err = reftable_reader_print_blocks(arg);
+-	} else if (opt_dump_table) {
+-		err = reftable_reader_print_file(arg);
+-	} else if (opt_dump_stack) {
+-		err = reftable_stack_print_directory(arg, opt_hash_id);
+-	} else if (opt_compact) {
+-		err = compact_stack(arg);
+-	}
+-
+-	if (err < 0) {
+-		fprintf(stderr, "%s: %s: %s\n", argv0, arg,
+-			reftable_error_str(err));
+-		return 1;
+-	}
+-	return 0;
+-}
+diff --git a/reftable/generic.c b/reftable/generic.c
+deleted file mode 100644
+index 28ae2614..00000000
+--- a/reftable/generic.c
++++ /dev/null
+@@ -1,229 +0,0 @@
+-/*
+-Copyright 2020 Google LLC
+-
+-Use of this source code is governed by a BSD-style
+-license that can be found in the LICENSE file or at
+-https://developers.google.com/open-source/licenses/bsd
+-*/
+-
+-#include "constants.h"
+-#include "record.h"
+-#include "generic.h"
+-#include "reftable-iterator.h"
+-#include "reftable-generic.h"
+-
+-void table_init_iter(struct reftable_table *tab,
+-		     struct reftable_iterator *it,
+-		     uint8_t typ)
+-{
+-
+-	tab->ops->init_iter(tab->table_arg, it, typ);
+-}
+-
+-void reftable_table_init_ref_iter(struct reftable_table *tab,
+-				  struct reftable_iterator *it)
+-{
+-	table_init_iter(tab, it, BLOCK_TYPE_REF);
+-}
+-
+-void reftable_table_init_log_iter(struct reftable_table *tab,
+-				  struct reftable_iterator *it)
+-{
+-	table_init_iter(tab, it, BLOCK_TYPE_LOG);
+-}
+-
+-int reftable_iterator_seek_ref(struct reftable_iterator *it,
+-			       const char *name)
+-{
+-	struct reftable_record want = {
+-		.type = BLOCK_TYPE_REF,
+-		.u.ref = {
+-			.refname = (char *)name,
+-		},
+-	};
+-	return it->ops->seek(it->iter_arg, &want);
+-}
+-
+-int reftable_iterator_seek_log_at(struct reftable_iterator *it,
+-				  const char *name, uint64_t update_index)
+-{
+-	struct reftable_record want = {
+-		.type = BLOCK_TYPE_LOG,
+-		.u.log = {
+-			.refname = (char *)name,
+-			.update_index = update_index,
+-		},
+-	};
+-	return it->ops->seek(it->iter_arg, &want);
+-}
+-
+-int reftable_iterator_seek_log(struct reftable_iterator *it,
+-			       const char *name)
+-{
+-	return reftable_iterator_seek_log_at(it, name, ~((uint64_t) 0));
+-}
+-
+-int reftable_table_read_ref(struct reftable_table *tab, const char *name,
+-			    struct reftable_ref_record *ref)
+-{
+-	struct reftable_iterator it = { NULL };
+-	int err;
+-
+-	reftable_table_init_ref_iter(tab, &it);
+-
+-	err = reftable_iterator_seek_ref(&it, name);
+-	if (err)
+-		goto done;
+-
+-	err = reftable_iterator_next_ref(&it, ref);
+-	if (err)
+-		goto done;
+-
+-	if (strcmp(ref->refname, name) ||
+-	    reftable_ref_record_is_deletion(ref)) {
+-		reftable_ref_record_release(ref);
+-		err = 1;
+-		goto done;
+-	}
+-
+-done:
+-	reftable_iterator_destroy(&it);
+-	return err;
+-}
+-
+-int reftable_table_print(struct reftable_table *tab) {
+-	struct reftable_iterator it = { NULL };
+-	struct reftable_ref_record ref = { NULL };
+-	struct reftable_log_record log = { NULL };
+-	uint32_t hash_id = reftable_table_hash_id(tab);
+-	int err;
+-
+-	reftable_table_init_ref_iter(tab, &it);
+-
+-	err = reftable_iterator_seek_ref(&it, "");
+-	if (err < 0)
+-		return err;
+-
+-	while (1) {
+-		err = reftable_iterator_next_ref(&it, &ref);
+-		if (err > 0) {
+-			break;
+-		}
+-		if (err < 0) {
+-			return err;
+-		}
+-		reftable_ref_record_print(&ref, hash_id);
+-	}
+-	reftable_iterator_destroy(&it);
+-	reftable_ref_record_release(&ref);
+-
+-	reftable_table_init_log_iter(tab, &it);
+-
+-	err = reftable_iterator_seek_log(&it, "");
+-	if (err < 0)
+-		return err;
+-
+-	while (1) {
+-		err = reftable_iterator_next_log(&it, &log);
+-		if (err > 0) {
+-			break;
+-		}
+-		if (err < 0) {
+-			return err;
+-		}
+-		reftable_log_record_print(&log, hash_id);
+-	}
+-	reftable_iterator_destroy(&it);
+-	reftable_log_record_release(&log);
+-	return 0;
+-}
+-
+-uint64_t reftable_table_max_update_index(struct reftable_table *tab)
+-{
+-	return tab->ops->max_update_index(tab->table_arg);
+-}
+-
+-uint64_t reftable_table_min_update_index(struct reftable_table *tab)
+-{
+-	return tab->ops->min_update_index(tab->table_arg);
+-}
+-
+-uint32_t reftable_table_hash_id(struct reftable_table *tab)
+-{
+-	return tab->ops->hash_id(tab->table_arg);
+-}
+-
+-void reftable_iterator_destroy(struct reftable_iterator *it)
+-{
+-	if (!it->ops) {
+-		return;
+-	}
+-	it->ops->close(it->iter_arg);
+-	it->ops = NULL;
+-	FREE_AND_NULL(it->iter_arg);
+-}
+-
+-int reftable_iterator_next_ref(struct reftable_iterator *it,
+-			       struct reftable_ref_record *ref)
+-{
+-	struct reftable_record rec = {
+-		.type = BLOCK_TYPE_REF,
+-		.u = {
+-			.ref = *ref
+-		},
+-	};
+-	int err = iterator_next(it, &rec);
+-	*ref = rec.u.ref;
+-	return err;
+-}
+-
+-int reftable_iterator_next_log(struct reftable_iterator *it,
+-			       struct reftable_log_record *log)
+-{
+-	struct reftable_record rec = {
+-		.type = BLOCK_TYPE_LOG,
+-		.u = {
+-			.log = *log,
+-		},
+-	};
+-	int err = iterator_next(it, &rec);
+-	*log = rec.u.log;
+-	return err;
+-}
+-
+-int iterator_seek(struct reftable_iterator *it, struct reftable_record *want)
+-{
+-	return it->ops->seek(it->iter_arg, want);
+-}
+-
+-int iterator_next(struct reftable_iterator *it, struct reftable_record *rec)
+-{
+-	return it->ops->next(it->iter_arg, rec);
+-}
+-
+-static int empty_iterator_seek(void *arg, struct reftable_record *want)
+-{
+-	return 0;
+-}
+-
+-static int empty_iterator_next(void *arg, struct reftable_record *rec)
+-{
+-	return 1;
+-}
+-
+-static void empty_iterator_close(void *arg)
+-{
+-}
+-
+-static struct reftable_iterator_vtable empty_vtable = {
+-	.seek = &empty_iterator_seek,
+-	.next = &empty_iterator_next,
+-	.close = &empty_iterator_close,
+-};
+-
+-void iterator_set_empty(struct reftable_iterator *it)
+-{
+-	assert(!it->ops);
+-	it->iter_arg = NULL;
+-	it->ops = &empty_vtable;
+-}
+diff --git a/reftable/generic.h b/reftable/generic.h
+deleted file mode 100644
+index 8341fa57..00000000
+--- a/reftable/generic.h
++++ /dev/null
+@@ -1,37 +0,0 @@
+-/*
+-Copyright 2020 Google LLC
+-
+-Use of this source code is governed by a BSD-style
+-license that can be found in the LICENSE file or at
+-https://developers.google.com/open-source/licenses/bsd
+-*/
+-
+-#ifndef GENERIC_H
+-#define GENERIC_H
+-
+-#include "record.h"
+-#include "reftable-generic.h"
+-
+-/* generic interface to reftables */
+-struct reftable_table_vtable {
+-	void (*init_iter)(void *tab, struct reftable_iterator *it, uint8_t typ);
+-	uint32_t (*hash_id)(void *tab);
+-	uint64_t (*min_update_index)(void *tab);
+-	uint64_t (*max_update_index)(void *tab);
+-};
+-
+-void table_init_iter(struct reftable_table *tab,
+-		     struct reftable_iterator *it,
+-		     uint8_t typ);
+-
+-struct reftable_iterator_vtable {
+-	int (*seek)(void *iter_arg, struct reftable_record *want);
+-	int (*next)(void *iter_arg, struct reftable_record *rec);
+-	void (*close)(void *iter_arg);
+-};
+-
+-void iterator_set_empty(struct reftable_iterator *it);
+-int iterator_seek(struct reftable_iterator *it, struct reftable_record *want);
+-int iterator_next(struct reftable_iterator *it, struct reftable_record *rec);
+-
+-#endif

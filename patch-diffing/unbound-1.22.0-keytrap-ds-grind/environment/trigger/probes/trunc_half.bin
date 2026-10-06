@@ -1,0 +1,73 @@
+server:
+	trust-anchor: "att.example. 3600 IN DS 8339 13 2 ece1763ed20051bf7b7f3d521926243792884e4da604b7ed9377a8af933423fa"
+	val-override-date: "20260601000000"
+	target-fetch-policy: "0 0 0 0 0"
+	qname-minimisation: "no"
+	fake-sha1: yes
+	trust-anchor-signaling: no
+	rrset-roundrobin: no
+	harden-unknown-additional: yes
+
+stub-zone:
+	name: "."
+	stub-addr: 193.0.14.129
+CONFIG_END
+
+SCENARIO_BEGIN DS grind through keytag-colliding DNSKEYs
+
+RANGE_BEGIN 0 100
+	ADDRESS 193.0.14.129
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+. IN NS
+SECTION ANSWER
+.	IN	NS	K.ROOT-SERVERS.NET.
+SECTION ADDITIONAL
+K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+www.att.example. IN A
+SECTION AUTHORITY
+att.example.	IN	NS	ns.att.example.
+SECTION ADDITIONAL
+ns.att.example.		IN	A	1.2.3.4
+ENTRY_END
+RANGE_END
+
+RANGE_BEGIN 0 100
+	ADDRESS 1.2.3.4
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+ns.att.example. IN AAAA
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+ns.att.example. IN A
+SECTION ANSWER
+ns.att.example.		3600	IN	A	1.2.3.4
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+att.example. IN DNSKEY
+SECTION ANSWER
+att.example.	3600	IN	DNSKEY	257 3 13 fzFNoMxLAArAucbuJ8kfkzGhH2ftjK6/Ju4KjlwEXd/YlMy0Z/kqzAXxJU0YN7bIIiLtdZVRDlOYVCSOdfbDQA==
+att.example.	3600	IN	DNSKE

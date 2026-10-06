@@ -1,0 +1,2308 @@
+From 8a6fd97f Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0004] Fix bug #67440: append_node of a DOMDocumentFragment does not reconcil
+
+---
+diff --git a/Zend/tests/flexible-heredoc-complex-test4.phpt b/Zend/tests/flexible-heredoc-complex-test4.phpt
+index 3ffff0b6..5be0f442 100644
+--- a/Zend/tests/flexible-heredoc-complex-test4.phpt
++++ b/Zend/tests/flexible-heredoc-complex-test4.phpt
+@@ -28,10 +28,7 @@ the same delimiter name as the heredoc
+ }
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
+-
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ string(8) "Test
+ FOO"
+ string(16) "    Test
+diff --git a/Zend/tests/foreach_004.phpt b/Zend/tests/foreach_004.phpt
+new file mode 100644
+index 00000000..afb98a99
+--- /dev/null
++++ b/Zend/tests/foreach_004.phpt
+@@ -0,0 +1,65 @@
++--TEST--
++Iterator exceptions in foreach by reference
++--FILE--
++<?php
++class IT extends ArrayIterator {
++    private $n = 0;
++
++    function __construct($trap = null) {
++        parent::__construct([0, 1]);
++        $this->trap = $trap;
++    }
++
++    function trap($trap) {
++        if ($trap === $this->trap) {
++            throw new Exception($trap);
++        }
++    }
++
++    function rewind(): void  {$this->trap(__FUNCTION__); parent::rewind();}
++    function valid(): bool   {$this->trap(__FUNCTION__); return parent::valid();}
++    function key(): string|int|null { $this->trap(__FUNCTION__); return parent::key(); }
++    function next(): void    {$this->trap(__FUNCTION__); parent::next();}
++}
++
++foreach(['rewind', 'valid', 'key', 'next'] as $trap) {
++    $obj = new IT($trap);
++    try {
++        // IS_CV
++        foreach ($obj as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++    unset($obj);
++
++    try {
++        // IS_VAR
++        foreach (new IT($trap) as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++
++    try {
++        // IS_TMP_VAR
++        foreach ((object)new IT($trap) as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++}
++?>
++--EXPECT--
++rewind
++rewind
++rewind
++valid
++valid
++valid
++key
++key
++key
++0
++next
++0
++next
++0
++next
+diff --git a/Zend/tests/foreach_shadowed_dyn_property.phpt b/Zend/tests/foreach_shadowed_dyn_property.phpt
+index 7445c7ae..acbd05bf 100644
+--- a/Zend/tests/foreach_shadowed_dyn_property.phpt
++++ b/Zend/tests/foreach_shadowed_dyn_property.phpt
+@@ -13,8 +13,6 @@ class Test {
+         var_dump(get_object_vars($this));
+     }
+ }
+-
+-#[AllowDynamicProperties]
+ class Test2 extends Test {
+ }
+ 
+diff --git a/Zend/tests/function_arguments/sensitive_parameter.phpt b/Zend/tests/function_arguments/sensitive_parameter.phpt
+deleted file mode 100644
+index 8a76db66..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument.
+---FILE--
+-<?php
+-
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter.php(10): test(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt b/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt
+deleted file mode 100644
+index da57bc55..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument for arrow functions.
+---FILE--
+-<?php
+-
+-$test = fn (#[SensitiveParameter] $sensitive) => (new Exception)->getTrace();
+-
+-var_dump($test('sensitive'));
+-
+-?>
+---EXPECTF--
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_arrow_function.php"
+-    ["line"]=>
+-    int(5)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_closure.phpt b/Zend/tests/function_arguments/sensitive_parameter_closure.phpt
+deleted file mode 100644
+index f2b038ce..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_closure.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument for closures.
+---FILE--
+-<?php
+-
+-$test = function (#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-};
+-
+-$test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_closure.php(10): {closure}(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_closure.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_closure.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt b/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt
+deleted file mode 100644
+index 1a6dc97d..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt
++++ /dev/null
+@@ -1,70 +0,0 @@
+---TEST--
+-The SensitiveParameterValue replacement value correctly captures the original value.
+---FILE--
+-<?php
+-
+-function test(
+-    $foo,
+-    #[SensitiveParameter] $bar,
+-    $baz
+-) {
+-    throw new Exception('Error');
+-}
+-
+-try {
+-    test('foo', 'bar', 'baz');
+-    echo 'Not reached';
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-    $testFrame = $e->getTrace()[0];
+-    var_dump($testFrame['function']);
+-    var_dump(count($testFrame['args']));
+-    var_dump($testFrame['args'][0]);
+-    assert($testFrame['args'][1] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][1]->getValue());
+-    var_dump($testFrame['args'][2]);
+-    echo "Success", PHP_EOL;
+-}
+-
+-function test2(
+-    $foo,
+-    #[SensitiveParameter] ...$variadic,
+-) {
+-    throw new Exception('Error 2');
+-}
+-
+-try {
+-    test2('foo', 'variadic1', 'variadic2', 'variadic3');
+-    echo 'Not reached';
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-    $testFrame = $e->getTrace()[0];
+-    var_dump($testFrame['function']);
+-    var_dump(count($testFrame['args']));
+-    var_dump($testFrame['args'][0]);
+-    assert($testFrame['args'][1] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][1]->getValue());
+-    assert($testFrame['args'][2] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][2]->getValue());
+-    assert($testFrame['args'][3] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][3]->getValue());
+-    echo "Success", PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-Error
+-string(4) "test"
+-int(3)
+-string(3) "foo"
+-string(3) "bar"
+-string(3) "baz"
+-Success
+-Error 2
+-string(5) "test2"
+-int(4)
+-string(3) "foo"
+-string(9) "variadic1"
+-string(9) "variadic2"
+-string(9) "variadic3"
+-Success
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt b/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt
+deleted file mode 100644
+index 8bb8bc73..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt
++++ /dev/null
+@@ -1,72 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument in a function called in eval().
+---FILE--
+-<?php
+-
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-eval(<<<'EOT'
+-test('sensitive');
+-EOT);
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_eval_call.php(11) : eval()'d code(1): test(Object(SensitiveParameterValue))
+-#1 %ssensitive_parameter_eval_call.php(11): eval()
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php(11) : eval()'d code"
+-    ["line"]=>
+-    int(1)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(3) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php"
+-    ["line"]=>
+-    int(11)
+-    ["function"]=>
+-    string(4) "eval"
+-  }
+-}
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php(11) : eval()'d code"
+-    ["line"]=>
+-    int(1)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(3) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php"
+-    ["line"]=>
+-    int(11)
+-    ["function"]=>
+-    string(4) "eval"
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt b/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt
+deleted file mode 100644
+index 29fdbc95..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt
++++ /dev/null
+@@ -1,53 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument in a function created in eval().
+---FILE--
+-<?php
+-
+-eval(<<<'EOT'
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-EOT);
+-
+-test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_eval_define.php(12): test(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_define.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_define.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt
+deleted file mode 100644
+index 823e13f2..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt
++++ /dev/null
+@@ -1,62 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute does not suppress superfluous arguments if the last parameter is sensitive.
+---FILE--
+-<?php
+-
+-function test(
+-    $non_sensitive,
+-    #[SensitiveParameter] $sensitive,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_extra_arguments.php(13): test('foo', Object(SensitiveParameterValue), 'baz')
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_extra_arguments.php"
+-    ["line"]=>
+-    int(13)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      string(3) "baz"
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_extra_arguments.php"
+-    ["line"]=>
+-    int(13)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      string(3) "baz"
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt
+deleted file mode 100644
+index f0962d88..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the correct sensitive arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('sensitive1', 'non_sensitive', 'sensitive2');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_multiple_arguments.php(14): test(Object(SensitiveParameterValue), 'non_sensitive', Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_multiple_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_multiple_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt
+deleted file mode 100644
+index 24e2268e..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute handles named arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test(non_sensitive: 'non_sensitive', sensitive2: 'sensitive2');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_named_arguments.php(14): test(Object(SensitiveParameterValue), 'non_sensitive', Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_named_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_named_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt b/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt
+deleted file mode 100644
+index 6f481b72..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt
++++ /dev/null
+@@ -1,115 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute handles nested function calls correctly.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-function wrapper(
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive1 = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    test($non_sensitive, $sensitive1, $sensitive2);
+-}
+-
+-wrapper('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_nested_calls.php(20): test(Object(SensitiveParameterValue), 'bar', Object(SensitiveParameterValue))
+-#1 %ssensitive_parameter_nested_calls.php(23): wrapper('foo', Object(SensitiveParameterValue), Object(SensitiveParameterValue))
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(20)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(3) "bar"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(23)
+-    ["function"]=>
+-    string(7) "wrapper"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(20)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(3) "bar"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(23)
+-    ["function"]=>
+-    string(7) "wrapper"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value.phpt b/Zend/tests/function_arguments/sensitive_parameter_value.phpt
+deleted file mode 100644
+index accf1933..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value.phpt
++++ /dev/null
+@@ -1,45 +0,0 @@
+---TEST--
+-A SensitiveParameterValue keeps the inner value secret.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-echo "# var_dump() / debug_zval_dump() / print_r()", PHP_EOL;
+-var_dump($v);
+-debug_zval_dump($v);
+-print_r($v);
+-echo PHP_EOL;
+-
+-echo "# var_export()", PHP_EOL;
+-echo var_export($v, true), PHP_EOL;
+-echo PHP_EOL;
+-
+-echo "# (array) / json_encode()", PHP_EOL;
+-var_dump((array)$v);
+-var_dump(json_encode($v));
+-echo PHP_EOL;
+-
+-echo "# ->getValue()", PHP_EOL;
+-var_dump($v->getValue());
+-
+-?>
+---EXPECTF--
+-# var_dump() / debug_zval_dump() / print_r()
+-object(SensitiveParameterValue)#%d (0) {
+-}
+-object(SensitiveParameterValue)#%d (%d) refcount(%d){
+-}
+-SensitiveParameterValue Object
+-
+-# var_export()
+-\SensitiveParameterValue::__set_state(array(
+-))
+-
+-# (array) / json_encode()
+-array(0) {
+-}
+-string(2) "{}"
+-
+-# ->getValue()
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt
+deleted file mode 100644
+index 5170e62e..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue is clonable.
+---FILE--
+-<?php
+-
+-$v1 = new SensitiveParameterValue('secret');
+-$v2 = clone $v1;
+-
+-var_dump($v1->getValue());
+-var_dump($v2->getValue());
+-
+-?>
+---EXPECTF--
+-string(6) "secret"
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt
+deleted file mode 100644
+index e7b0de51..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt
++++ /dev/null
+@@ -1,74 +0,0 @@
+---TEST--
+-A SensitiveParameterValue keeps inner objects alive.
+---FILE--
+-<?php
+-
+-class CustomDestructor
+-{
+-  public function __construct(private int $id)
+-  {
+-    echo __METHOD__, " - ", $this->id, PHP_EOL;
+-  }
+-
+-  public function __destruct()
+-  {
+-    echo __METHOD__, " - ", $this->id, PHP_EOL;
+-  }
+-
+-  public function getId(): int
+-  {
+-    return $this->id;
+-  }
+-}
+-
+-function test(#[SensitiveParameter] CustomDestructor $o, bool $throw)
+-{
+-  if ($throw) {
+-    throw new Exception('Error');
+-  }
+-}
+-
+-function wrapper(int $id, bool $throw)
+-{
+-  $o = new CustomDestructor($id);
+-  test($o, $throw);
+-}
+-
+-function main(): SensitiveParameterValue
+-{
+-  try {
+-    echo "Before 1", PHP_EOL;
+-    wrapper(1, false);
+-    echo "After 1", PHP_EOL;
+-    echo "Before 2", PHP_EOL;
+-    wrapper(2, true);
+-    echo "Not Reached: After 2", PHP_EOL;
+-  } catch (Exception $e) {
+-    echo "catch", PHP_EOL;
+-    return $e->getTrace()[0]['args'][0];
+-  }
+-}
+-
+-$v = main();
+-
+-var_dump($v->getValue()->getId());
+-
+-echo "Before unset", PHP_EOL;
+-
+-unset($v);
+-
+-echo "After unset", PHP_EOL;
+-
+-?>
+---EXPECT--
+-Before 1
+-CustomDestructor::__construct - 1
+-CustomDestructor::__destruct - 1
+-After 1
+-Before 2
+-CustomDestructor::__construct - 2
+-catch
+-int(2)
+-Before unset
+-CustomDestructor::__destruct - 2
+-After unset
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt
+deleted file mode 100644
+index 86cbc2a1..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue does not allow dynamic properties.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-$v->foo = 'bar';
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot create dynamic property SensitiveParameterValue::$foo in %ssensitive_parameter_value_no_dynamic_property.php:5
+-Stack trace:
+-#0 {main}
+-  thrown in %ssensitive_parameter_value_no_dynamic_property.php on line 5
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt
+deleted file mode 100644
+index 020cbef3..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue's value is accessible using reflection.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-$r = new ReflectionClass($v);
+-$p = $r->getProperty('value');
+-
+-var_dump($p->getValue($v));
+-
+-?>
+---EXPECTF--
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt
+deleted file mode 100644
+index 79a2e359..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-A SensitiveParameterValue may not be serialized.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-var_dump(serialize($v));
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception: Serialization of 'SensitiveParameterValue' is not allowed in %ssensitive_parameter_value_serialize.php:5
+-Stack trace:
+-#0 %ssensitive_parameter_value_serialize.php(5): serialize(Object(SensitiveParameterValue))
+-#1 {main}
+-  thrown in %ssensitive_parameter_value_serialize.php on line 5
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt
+deleted file mode 100644
+index 59452592..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue may not be converted to a string.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-var_dump((string)$v);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class SensitiveParameterValue could not be converted to string in %ssensitive_parameter_value_to_string.php:5
+-Stack trace:
+-#0 {main}
+-  thrown in %ssensitive_parameter_value_to_string.php on line 5
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt
+deleted file mode 100644
+index 3d9bf20a..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses all variadic arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] ...$args
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_variadic_arguments.php(12): test(Object(SensitiveParameterValue), Object(SensitiveParameterValue), Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_variadic_arguments.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_variadic_arguments.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/gc_038.phpt b/Zend/tests/gc_038.phpt
+index 5e3c4114..91f22bf1 100644
+--- a/Zend/tests/gc_038.phpt
++++ b/Zend/tests/gc_038.phpt
+@@ -126,14 +126,13 @@ function test_pow() {
+ test_pow();
+ 
+ class Y {
+-    public $x;
+     function __toString() {
+         return "y";
+     }
+ }
+ function test_concat() {
+     $x = new Y;
+-    $x->x = $x;
++    $x->x= $x;
+     @$x .= "x";
+     $n = gc_collect_cycles();
+     echo ".=\t$n\n";
+diff --git a/Zend/tests/gc_042.phpt b/Zend/tests/gc_042.phpt
+index b56309f1..c8dfc0ef 100644
+--- a/Zend/tests/gc_042.phpt
++++ b/Zend/tests/gc_042.phpt
+@@ -3,7 +3,6 @@ Object properties HT may need to be removed from nested data
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public function __destruct() {
+         $GLOBALS['x'] = $this;
+diff --git a/Zend/tests/gc_043.phpt b/Zend/tests/gc_043.phpt
+index 37906a02..06b64de3 100644
+--- a/Zend/tests/gc_043.phpt
++++ b/Zend/tests/gc_043.phpt
+@@ -8,8 +8,7 @@ STR;
+ var_dump(unserialize($s));
+ gc_collect_cycles();
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property RegexIterator::$5 is deprecated in %s on line %d
++--EXPECT--
+ object(stdClass)#1 (2) {
+   ["5"]=>
+   object(SplStack)#2 (2) {
+diff --git a/Zend/tests/gc_046.phpt b/Zend/tests/gc_046.phpt
+index d5024737..74481fb7 100644
+--- a/Zend/tests/gc_046.phpt
++++ b/Zend/tests/gc_046.phpt
+@@ -5,7 +5,6 @@ zend.enable_gc=1
+ --FILE--
+ <?php
+ class Action {
+-    private $iterator;
+     function __construct() {
+         $this->iterator = new ArrayIterator($this);
+     }
+diff --git a/Zend/tests/generators/iterator_wrapper_leak.phpt b/Zend/tests/generators/iterator_wrapper_leak.phpt
+index 366702e8..bc0f34e9 100644
+--- a/Zend/tests/generators/iterator_wrapper_leak.phpt
++++ b/Zend/tests/generators/iterator_wrapper_leak.phpt
+@@ -4,8 +4,6 @@ A generator iterator wrapper involved in a cycle should not leak
+ <?php
+ 
+ class Test {
+-    private $gen1;
+-    private $gen2;
+     public function method() {
+         $this->gen1 = (function () {
+             yield 1;
+diff --git a/Zend/tests/get_mangled_object_vars.phpt b/Zend/tests/get_mangled_object_vars.phpt
+index d8a885e1..f9ad008a 100644
+--- a/Zend/tests/get_mangled_object_vars.phpt
++++ b/Zend/tests/get_mangled_object_vars.phpt
+@@ -3,7 +3,6 @@ get_mangled_object_vars() function
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class A {
+     public $pub = 1;
+     protected $prot = 2;
+@@ -20,7 +19,6 @@ $obj->{"6"} = 6;
+ var_export(get_mangled_object_vars($obj));
+ echo "\n";
+ 
+-#[AllowDynamicProperties]
+ class AO extends ArrayObject {
+     private $priv = 1;
+ }
+diff --git a/Zend/tests/gh10251.phpt b/Zend/tests/gh10251.phpt
+index da8d8767..eb942824 100644
+--- a/Zend/tests/gh10251.phpt
++++ b/Zend/tests/gh10251.phpt
+@@ -2,7 +2,6 @@
+ GH-10251 (Assertion `(flag & (1<<3)) == 0' failed.)
+ --FILE--
+ <?php
+-#[\AllowDynamicProperties]
+ class A
+ {
+     function __set($o, $l)
+diff --git a/Zend/tests/gh10346.phpt b/Zend/tests/gh10346.phpt
+deleted file mode 100644
+index 74fce28e..00000000
+--- a/Zend/tests/gh10346.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-GH-10346 (Observer: enum tryFrom() run_time_cache properly assigned)
+---CREDITS--
+-Florian Sowade
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+---FILE--
+-<?php
+-enum Card : string
+-{
+-    case HEART = 'H';
+-}
+-
+-var_dump(Card::tryFrom('H'));
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Card::tryFrom() -->
+-  <Card::tryFrom>
+-  </Card::tryFrom>
+-  <!-- init var_dump() -->
+-  <var_dump>
+-enum(Card::HEART)
+-  </var_dump>
+-</file '%s'>
+diff --git a/Zend/tests/gh11152.phpt b/Zend/tests/gh11152.phpt
+deleted file mode 100644
+index 4f0b7d9c..00000000
+--- a/Zend/tests/gh11152.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-GH-11152: Allow aliasing namespaces containing reserved class names
+---FILE--
+-<?php
+-
+-namespace string;
+-
+-use string as StringAlias;
+-
+-class C {}
+-
+-function test(StringAlias\C $o) {
+-    var_dump($o::class);
+-}
+-
+-test(new C());
+-
+-?>
+---EXPECT--
+-string(8) "string\C"
+diff --git a/Zend/tests/gh11735_1.phpt b/Zend/tests/gh11735_1.phpt
+deleted file mode 100644
+index 3ddf0185..00000000
+--- a/Zend/tests/gh11735_1.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-GH-11735: Use-after-free when unregistering user stream wrapper from user stream wrapper
+---FILE--
+-<?php
+-class FooWrapper {
+-    public $context;
+-    public function stream_open($path, $mode, $options, &$opened_path) {
+-        stream_wrapper_unregister('foo');
+-        return true;
+-    }
+-}
+-stream_wrapper_register('foo', 'FooWrapper');
+-var_dump(fopen('foo://bar', 'r'));
+-?>
+---EXPECTF--
+-resource(%d) of type (stream)
+diff --git a/Zend/tests/gh11735_2.phpt b/Zend/tests/gh11735_2.phpt
+deleted file mode 100644
+index b568b6f6..00000000
+--- a/Zend/tests/gh11735_2.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-GH-11735: Use-after-free when unregistering user stream wrapper from user stream wrapper
+---FILE--
+-<?php
+-class FooWrapper {
+-    public $context;
+-    public function stream_open($path, $mode, $options, &$opened_path) {
+-        stream_wrapper_unregister('foo');
+-        return false;
+-    }
+-}
+-stream_wrapper_register('foo', 'FooWrapper');
+-var_dump(fopen('foo://bar', 'r'));
+-?>
+---EXPECTF--
+-Warning: fopen(foo://bar): Failed to open stream: "FooWrapper::stream_open" call failed in %s on line %d
+-bool(false)
+diff --git a/Zend/tests/gh12468_1.phpt b/Zend/tests/gh12468_1.phpt
+new file mode 100644
+index 00000000..a02a28c3
+--- /dev/null
++++ b/Zend/tests/gh12468_1.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++GH-12468: Double-free of doc_comment when overriding static property via trait
++--FILE--
++<?php
++trait T {
++	/** some doc */
++	static protected $a = 0;
++}
++class A {
++	use T;
++}
++class B extends A {
++	use T;
++}
++?>
++===DONE===
++--EXPECT--
++===DONE===
+diff --git a/Zend/tests/gh12468_2.phpt b/Zend/tests/gh12468_2.phpt
+new file mode 100644
+index 00000000..3097cf53
+--- /dev/null
++++ b/Zend/tests/gh12468_2.phpt
+@@ -0,0 +1,19 @@
++--TEST--
++GH-12468: Double-free of doc_comment when overriding static property via trait
++--FILE--
++<?php
++trait T {
++	/** some doc */
++	static protected $a = 0;
++}
++class A {
++	/** some doc */
++	static protected $a = 0;
++}
++class B extends A {
++	use T;
++}
++?>
++===DONE===
++--EXPECT--
++===DONE===
+diff --git a/Zend/tests/gh7771_1.phpt b/Zend/tests/gh7771_1.phpt
+deleted file mode 100644
+index dc24b404..00000000
+--- a/Zend/tests/gh7771_1.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-GH-7771 (Incorrect file/line for class constant expression exceptions)
+---FILE--
+-<?php
+-
+-include __DIR__ . '/gh7771_1_definition.inc';
+-
+-new Foo();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Class "NonExistent" not found in %sgh7771_1_definition.inc:4
+-Stack trace:
+-#0 {main}
+-  thrown in %sgh7771_1_definition.inc on line 4
+diff --git a/Zend/tests/gh7771_1_definition.inc b/Zend/tests/gh7771_1_definition.inc
+deleted file mode 100644
+index 16e94f41..00000000
+--- a/Zend/tests/gh7771_1_definition.inc
++++ /dev/null
+@@ -1,5 +0,0 @@
+-<?php
+-
+-class Foo {
+-	public const BAR = NonExistent::CLASS_CONSTANT;
+-}
+diff --git a/Zend/tests/gh7771_2.phpt b/Zend/tests/gh7771_2.phpt
+deleted file mode 100644
+index 780c9704..00000000
+--- a/Zend/tests/gh7771_2.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-GH-7771 (Incorrect file/line for class constant expression exceptions)
+---FILE--
+-<?php
+-
+-include __DIR__ . '/gh7771_2_definition.inc';
+-
+-new Foo();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Class "NonExistent" not found in %sgh7771_2_definition.inc:6
+-Stack trace:
+-#0 {main}
+-  thrown in %sgh7771_2_definition.inc on line 6
+diff --git a/Zend/tests/gh7771_2_definition.inc b/Zend/tests/gh7771_2_definition.inc
+deleted file mode 100644
+index 0162a9c8..00000000
+--- a/Zend/tests/gh7771_2_definition.inc
++++ /dev/null
+@@ -1,8 +0,0 @@
+-<?php
+-
+-class Foo {
+-	public const BAR = 
+-		self::BAZ
+-		+ NonExistent::CLASS_CONSTANT;
+-	public const BAZ = 42;
+-}
+diff --git a/Zend/tests/gh7771_3.phpt b/Zend/tests/gh7771_3.phpt
+deleted file mode 100644
+index f6780814..00000000
+--- a/Zend/tests/gh7771_3.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-GH-7771.3 (Incorrect file/line for class constant expression exceptions)
+---FILE--
+-<?php
+-$classlist = [
+-    'space1\C' => 'class y{const y="$y";}',
+-    'D' => 'class D{const HW=space1\C::y;}'
+-];
+-spl_autoload_register(function($class) use ($classlist) {
+-    eval($classlist[$class]);
+-});
+-var_dump(D::HW);
+-?>
+---EXPECTF--
+-Fatal error: Constant expression contains invalid operations in %sgh7771_3.php(7) : eval()'d code(1) : eval()'d code on line 1
+-
+diff --git a/Zend/tests/gh7792_1.phpt b/Zend/tests/gh7792_1.phpt
+deleted file mode 100644
+index a342f169..00000000
+--- a/Zend/tests/gh7792_1.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-interface A {
+-    public function a(): void;
+-}
+-
+-enum B implements A {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum B must implement 1 abstract private method (A::a) in %s on line %d
+diff --git a/Zend/tests/gh7792_2.phpt b/Zend/tests/gh7792_2.phpt
+deleted file mode 100644
+index 41f47a6e..00000000
+--- a/Zend/tests/gh7792_2.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-enum Foo implements Throwable {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo cannot implement interface Throwable in %s on line %d
+diff --git a/Zend/tests/gh7792_3.phpt b/Zend/tests/gh7792_3.phpt
+deleted file mode 100644
+index 67e2c1c9..00000000
+--- a/Zend/tests/gh7792_3.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-interface A {
+-    const FOO = 'foo';
+-}
+-
+-interface B {
+-    const FOO = 'foo';
+-}
+-
+-enum Foo implements A, B {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo inherits both A::FOO and B::FOO, which is ambiguous in %s on line %d
+diff --git a/Zend/tests/gh7792_4.phpt b/Zend/tests/gh7792_4.phpt
+deleted file mode 100644
+index 0d09835d..00000000
+--- a/Zend/tests/gh7792_4.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-interface A {}
+-
+-enum Foo implements A, A {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo cannot implement previously implemented interface A in %s on line %d
+diff --git a/Zend/tests/gh7792_5.phpt b/Zend/tests/gh7792_5.phpt
+deleted file mode 100644
+index 824ed9ed..00000000
+--- a/Zend/tests/gh7792_5.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-enum Foo implements Traversable {}
+-
+-?>
+---EXPECT--
+-Fatal error: Enum Foo must implement interface Traversable as part of either Iterator or IteratorAggregate in Unknown on line 0
+diff --git a/Zend/tests/gh7900.phpt b/Zend/tests/gh7900.phpt
+deleted file mode 100644
+index a4170fb1..00000000
+--- a/Zend/tests/gh7900.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-GH-7900: Arrow function with never return type compile-time errors
+---INI--
+-zend.assertions=1
+-assert.exception=1
+---FILE--
+-<?php
+-
+-$x = fn(): never => throw new \Exception('Here');
+-
+-try {
+-    var_dump($x());
+-} catch (\Exception $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-try {
+-    assert((fn(): never => 42) && false);
+-} catch (\Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-Here
+-assert(fn(): never => 42 && false)
+diff --git a/Zend/tests/gh8083.phpt b/Zend/tests/gh8083.phpt
+index b3bcfa45..a98de47c 100644
+--- a/Zend/tests/gh8083.phpt
++++ b/Zend/tests/gh8083.phpt
+@@ -13,9 +13,7 @@ var_dump($x);
+ 
+ ?>
+ --EXPECT--
+-object(Closure)#1 (2) {
+-  ["function"]=>
+-  string(4) "func"
++object(Closure)#1 (1) {
+   ["static"]=>
+   array(1) {
+     ["i"]=>
+diff --git a/Zend/tests/gh8548.phpt b/Zend/tests/gh8548.phpt
+deleted file mode 100644
+index 89354f6e..00000000
+--- a/Zend/tests/gh8548.phpt
++++ /dev/null
+@@ -1,56 +0,0 @@
+---TEST--
+-GH-8548: stream_wrapper_unregister() leaks memory
+---FILE--
+-<?php
+-
+-class Wrapper
+-{
+-    public $context;
+-
+-    public function stream_open(string $path, string $mode, int $options): bool
+-    {
+-        return true;
+-    }
+-
+-    public function stream_eof(): bool
+-    {
+-        return true;
+-    }
+-}
+-
+-function test() {
+-    if (!stream_wrapper_register('foo', \Wrapper::class)) {
+-        throw new \Exception('Could not register stream wrapper');
+-    }
+-
+-    $file = fopen('foo://bar', 'r');
+-
+-    if (!stream_wrapper_unregister('foo')) {
+-        throw new \Exception('Could not unregister stream wrapper');
+-    }
+-
+-    $wrapper = stream_get_meta_data($file)['wrapper_data'];
+-    if (!$wrapper instanceof Wrapper) {
+-        throw new \Exception('Wrapper is not of expected type');
+-    }
+-
+-    fclose($file);
+-    unset($file);
+-}
+-
+-// The first iterations will allocate space for things like the resource list
+-for ($i = 0; $i < 10; $i++) {
+-    test();
+-}
+-
+-$before = memory_get_usage();
+-for ($i = 0; $i < 1000; $i++) {
+-    test();
+-}
+-$after = memory_get_usage();
+-
+-var_dump($before === $after);
+-
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/Zend/tests/gh8548_2.phpt b/Zend/tests/gh8548_2.phpt
+deleted file mode 100644
+index 75cc871d..00000000
+--- a/Zend/tests/gh8548_2.phpt
++++ /dev/null
+@@ -1,56 +0,0 @@
+---TEST--
+-GH-8548: Test stream_wrapper_unregister() for directories
+---FILE--
+-<?php
+-
+-class Wrapper
+-{
+-    public $context;
+-
+-    public function dir_opendir(string $path, int $options): bool
+-    {
+-        return true;
+-    }
+-
+-    public function stream_eof(): bool
+-    {
+-        return true;
+-    }
+-}
+-
+-function test() {
+-    if (!stream_wrapper_register('foo', \Wrapper::class)) {
+-        throw new \Exception('Could not register stream wrapper');
+-    }
+-
+-    $dir = opendir('foo://bar');
+-
+-    if (!stream_wrapper_unregister('foo')) {
+-        throw new \Exception('Could not unregister stream wrapper');
+-    }
+-
+-    $wrapper = stream_get_meta_data($dir)['wrapper_data'];
+-    if (!$wrapper instanceof Wrapper) {
+-        throw new \Exception('Wrapper is not of expected type');
+-    }
+-
+-    closedir($dir);
+-    unset($dir);
+-}
+-
+-// The first iterations will allocate space for things like the resource list
+-for ($i = 0; $i < 10; $i++) {
+-    test();
+-}
+-
+-$before = memory_get_usage();
+-for ($i = 0; $i < 1000; $i++) {
+-    test();
+-}
+-$after = memory_get_usage();
+-
+-var_dump($before === $after);
+-
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/Zend/tests/gh8810_1.phpt b/Zend/tests/gh8810_1.phpt
+deleted file mode 100644
+index ec48d4df..00000000
+--- a/Zend/tests/gh8810_1.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line function call
+---FILE--
+-<?php
+-
+-function foo($bar, $baz) {
+-    throw new Exception();
+-}
+-
+-foo
+-(
+-    'bar',
+-    'baz',
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(7): foo('bar', 'baz')
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_2.phpt b/Zend/tests/gh8810_2.phpt
+deleted file mode 100644
+index df37057c..00000000
+--- a/Zend/tests/gh8810_2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line method call
+---FILE--
+-<?php
+-
+-class A {
+-    public function b() {
+-        throw new Exception();
+-    }
+-}
+-
+-(new A())
+-    ->
+-    b
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:5
+-Stack trace:
+-#0 %s(11): A->b()
+-#1 {main}
+-  thrown in %s on line 5
+diff --git a/Zend/tests/gh8810_3.phpt b/Zend/tests/gh8810_3.phpt
+deleted file mode 100644
+index 99fb449c..00000000
+--- a/Zend/tests/gh8810_3.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line closure call
+---FILE--
+-<?php
+-
+-(function () {
+-    throw new Exception();
+-})
+-(
+-    'foo',
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(6): {closure}('foo')
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_4.phpt b/Zend/tests/gh8810_4.phpt
+deleted file mode 100644
+index 9abb317f..00000000
+--- a/Zend/tests/gh8810_4.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line dynamic call
+---FILE--
+-<?php
+-
+-function foo() {
+-    throw new Exception();
+-}
+-
+-'foo'
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(8): foo()
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_5.phpt b/Zend/tests/gh8810_5.phpt
+deleted file mode 100644
+index 1b3a9831..00000000
+--- a/Zend/tests/gh8810_5.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line assert call
+---FILE--
+-<?php
+-
+-assert(
+-    false,
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught AssertionError: assert(false) in %s:3
+-Stack trace:
+-#0 %s(3): assert(false, 'assert(false)')
+-#1 {main}
+-  thrown in %s on line 3
+diff --git a/Zend/tests/gh8810_6.phpt b/Zend/tests/gh8810_6.phpt
+deleted file mode 100644
+index 452a859d..00000000
+--- a/Zend/tests/gh8810_6.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line static call
+---FILE--
+-<?php
+-
+-class A {
+-    public static function b() {
+-        throw new Exception();
+-    }
+-}
+-
+-A
+-    ::
+-    b
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:5
+-Stack trace:
+-#0 %s(11): A::b()
+-#1 {main}
+-  thrown in %s on line 5
+diff --git a/Zend/tests/gh8810_7.phpt b/Zend/tests/gh8810_7.phpt
+deleted file mode 100644
+index b435b25d..00000000
+--- a/Zend/tests/gh8810_7.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line new call
+---FILE--
+-<?php
+-
+-class A {
+-    public function __construct() {
+-        throw new Exception();
+-    }
+-}
+-
+-new
+-    A
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:5
+-Stack trace:
+-#0 %s(10): A->__construct()
+-#1 {main}
+-  thrown in %s on line 5
+diff --git a/Zend/tests/gh8962.phpt b/Zend/tests/gh8962.phpt
+deleted file mode 100644
+index ea963e19..00000000
+--- a/Zend/tests/gh8962.phpt
++++ /dev/null
+@@ -1,40 +0,0 @@
+---TEST--
+-GH-8962: Display function name when var_dumping fake closure
+---FILE--
+-<?php
+-
+-namespace Foo {
+-    class Bar {
+-        public function baz() {}
+-        public static function qux() {}
+-    }
+-
+-    function quux() {}
+-
+-    var_dump(\Closure::fromCallable([new Bar(), 'baz']));
+-    var_dump(\Closure::fromCallable([Bar::class, 'qux']));
+-    var_dump(\Closure::fromCallable('Foo\Bar::qux'));
+-    var_dump(quux(...));
+-}
+-
+-?>
+---EXPECT--
+-object(Closure)#2 (2) {
+-  ["function"]=>
+-  string(12) "Foo\Bar::baz"
+-  ["this"]=>
+-  object(Foo\Bar)#1 (0) {
+-  }
+-}
+-object(Closure)#2 (1) {
+-  ["function"]=>
+-  string(12) "Foo\Bar::qux"
+-}
+-object(Closure)#2 (1) {
+-  ["function"]=>
+-  string(12) "Foo\Bar::qux"
+-}
+-object(Closure)#2 (1) {
+-  ["function"]=>
+-  string(8) "Foo\quux"
+-}
+diff --git a/Zend/tests/gh9136.phpt b/Zend/tests/gh9136.phpt
+deleted file mode 100644
+index 22c4a056..00000000
+--- a/Zend/tests/gh9136.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-9136: Assertion when fetching property of magic constant in constant expression
+---FILE--
+-<?php
+-
+-const C = __file__->foo;
+-
+-?>
+---EXPECTF--
+-Warning: Attempt to read property "foo" on string in %s on line %d
+diff --git a/Zend/tests/gh9136_2.phpt b/Zend/tests/gh9136_2.phpt
+deleted file mode 100644
+index 23673e69..00000000
+--- a/Zend/tests/gh9136_2.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-9136: Assertion when fetching property of magic constant in constant expression with nullsafe operator
+---FILE--
+-<?php
+-
+-const C = __file__?->foo;
+-
+-?>
+---EXPECTF--
+-Warning: Attempt to read property "foo" on string in %s on line %d
+diff --git a/Zend/tests/gh9138.phpt b/Zend/tests/gh9138.phpt
+deleted file mode 100644
+index 33550580..00000000
+--- a/Zend/tests/gh9138.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-GH-9138: NULL pointer dereference when fetching property of "bad" list in constant expression
+---FILE--
+-<?php
+-
+-#[Attribute([,]->e)]
+-class Foo {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Cannot use empty array elements in arrays in %s on line %d
+diff --git a/Zend/tests/gh9138_2.phpt b/Zend/tests/gh9138_2.phpt
+deleted file mode 100644
+index cbc35022..00000000
+--- a/Zend/tests/gh9138_2.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-GH-9138: NULL pointer dereference when fetching property of "bad" list in constant expression with nullsafe operator
+---FILE--
+-<?php
+-
+-#[Attribute([,]?->e)]
+-class Foo {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Cannot use empty array elements in arrays in %s on line %d
+diff --git a/Zend/tests/gh9500.phpt b/Zend/tests/gh9500.phpt
+deleted file mode 100644
+index 4afc8c57..00000000
+--- a/Zend/tests/gh9500.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Bug GH-9500: Disjunctive Normal Form Types - readonly property followed by (
+---FILE--
+-<?php
+-class Dnf
+-{
+-    var A|(B&C) $a;
+-    var (B&C)|A $b;
+-    private A|(B&C) $c;
+-    private (B&C)|A $d;
+-    static A|(B&C) $e;
+-    static (B&C)|A $f;
+-    private static A|(B&C) $g;
+-    private static (B&C)|A $h;
+-    readonly private A|(B&C) $i;
+-    readonly private (B&C)|A $j;
+-    readonly A|(B&C) $k;
+-    readonly (B&C)|A $l;
+-    private readonly A|(B&C) $m;
+-    private readonly (B&C)|A $n;
+-}
+-?>
+-DONE
+---EXPECT--
+-DONE
+diff --git a/Zend/tests/include_stat_is_quiet.phpt b/Zend/tests/include_stat_is_quiet.phpt
+index 75ba8f3d..ef8240f9 100644
+--- a/Zend/tests/include_stat_is_quiet.phpt
++++ b/Zend/tests/include_stat_is_quiet.phpt
+@@ -4,7 +4,6 @@ Stats executed during include path resolution should be silent
+ <?php
+ 
+ class StreamWrapper {
+-    public $context;
+     public function url_stat($path, $flags) {
+         $path = str_replace('test://', 'file://', $path);
+         if ($flags & STREAM_URL_STAT_QUIET) {
+diff --git a/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt b/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt
+deleted file mode 100644
+index fc853e47..00000000
+--- a/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-is_callable() with trampoline should not caused UAF [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-class B {}
+-class A extends B {
+-    public function bar($func) {
+-        var_dump(is_callable(array('parent', 'foo')));
+-    }
+-
+-    public function __call($func, $args) {
+-    }
+-}
+-
+-class X {
+-    public static function __callStatic($func, $args) {
+-    }
+-}
+-
+-$a = new A();
+-// Extra X::foo() wrapper to force use of allocated trampoline.
+-X::foo($a->bar('foo'));
+-
+-?>
+---EXPECTF--
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(false)
+diff --git a/Zend/tests/is_callable_trampoline_uaf.phpt b/Zend/tests/is_callable_trampoline_uaf.phpt
+index a36a995b..24108644 100644
+--- a/Zend/tests/is_callable_trampoline_uaf.phpt
++++ b/Zend/tests/is_callable_trampoline_uaf.phpt
+@@ -6,7 +6,7 @@ is_callable() with trampoline should not caused UAF
+ class B {}
+ class A extends B {
+     public function bar($func) {
+-        var_dump(is_callable(array('B', 'foo')));
++        var_dump(is_callable(array('parent', 'foo')));
+     }
+ 
+     public function __call($func, $args) {
+diff --git a/Zend/tests/iterable_or_null.phpt b/Zend/tests/iterable_or_null.phpt
+index a44e858b..3585e449 100644
+--- a/Zend/tests/iterable_or_null.phpt
++++ b/Zend/tests/iterable_or_null.phpt
+@@ -40,8 +40,8 @@ try {
+ 
+ ?>
+ --EXPECT--
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, string given
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, int given
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, null given
+-zend_iterable(): Argument #2 ($arg2) must be of type Traversable|array|null, string given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, string given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, int given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, null given
++zend_iterable(): Argument #2 ($arg2) must be of type ?iterable, string given
+ 
+diff --git a/Zend/tests/lc_ctype_inheritance.phpt b/Zend/tests/lc_ctype_inheritance.phpt
+new file mode 100644
+index 00000000..8c968f06
+--- /dev/null
++++ b/Zend/tests/lc_ctype_inheritance.phpt
+@@ -0,0 +1,25 @@
++--TEST--
++Do not inherit LC_CTYPE from environment
++--SKIPIF--
++<?php
++if (!setlocale(LC_CTYPE, "de_DE", "de-DE")) die("skip requires de_DE locale");
++?>
++--ENV--
++LC_CTYPE=de_DE
++--FILE--
++<?php
++
++var_dump(setlocale(LC_CTYPE, "0"));
++var_dump(bin2hex(strtoupper("\xe4")));
++var_dump(preg_match('/\w/', "\xe4"));
++var_dump(setlocale(LC_CTYPE, "de_DE", "de-DE") !== false);
++var_dump(bin2hex(strtoupper("\xe4")));
++var_dump(preg_match('/\w/', "\xe4"));
++?>
++--EXPECTF--
++string(%d) "C%r(\.UTF-8)?%r"
++string(2) "e4"
++int(0)
++bool(true)
++string(2) "c4"
++int(1)
+diff --git a/Zend/tests/lsb_011.phpt b/Zend/tests/lsb_011.phpt
+index 0d0faeda..206f0cb9 100644
+--- a/Zend/tests/lsb_011.phpt
++++ b/Zend/tests/lsb_011.phpt
+@@ -19,6 +19,5 @@ class Test2 extends Test1 {
+ }
+ Test2::test();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ ok
+diff --git a/Zend/tests/lsb_012.phpt b/Zend/tests/lsb_012.phpt
+index bf959a30..21ddff35 100644
+--- a/Zend/tests/lsb_012.phpt
++++ b/Zend/tests/lsb_012.phpt
+@@ -19,6 +19,5 @@ class Test2 extends Test1 {
+ }
+ Test2::test();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ ok
+diff --git a/Zend/tests/lsb_013.phpt b/Zend/tests/lsb_013.phpt
+index c973db90..3af7f1be 100644
+--- a/Zend/tests/lsb_013.phpt
++++ b/Zend/tests/lsb_013.phpt
+@@ -17,15 +17,8 @@ class Test2 extends Test1 {
+ Test1::test();
+ Test2::test();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ bool(false)
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ bool(false)
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ bool(true)
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ bool(true)
+diff --git a/Zend/tests/lsb_021.phpt b/Zend/tests/lsb_021.phpt
+index 5583a9de..5694537a 100644
+--- a/Zend/tests/lsb_021.phpt
++++ b/Zend/tests/lsb_021.phpt
+@@ -39,20 +39,12 @@ C::testForward();
+ C::testNoForward();
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ C
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+ C
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+ C
+ C
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ C
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ C
+ A
+ A
+diff --git a/Zend/tests/lsb_022.phpt b/Zend/tests/lsb_022.phpt
+index 6053c94f..e2a405c5 100644
+--- a/Zend/tests/lsb_022.phpt
++++ b/Zend/tests/lsb_022.phpt
+@@ -24,24 +24,9 @@ class B extends A {
+ }
+ B::foo();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ B
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ B
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ B
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ B
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+ B
+diff --git a/Zend/tests/magic_get_destroy_object.phpt b/Zend/tests/magic_get_destroy_object.phpt
+deleted file mode 100644
+index 9c1a7b1c..00000000
+--- a/Zend/tests/magic_get_destroy_object.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Destroy object in magic __get()
+---FILE--
+-<?php
+-class Test {
+-    function __get($name) {
+-        $GLOBALS["x"] = null;
+-    }
+-}
+-$x = new Test;
+-var_dump($x->prop);
+-
+-?>
+---EXPECT--
+-NULL
+diff --git a/Zend/tests/memory_reset_peak_usage.phpt b/Zend/tests/memory_reset_peak_usage.phpt
+deleted file mode 100644
+index 0599e7c3..00000000
+--- a/Zend/tests/memory_reset_peak_usage.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-void memory_reset_peak_usage();
+---SKIPIF--
+-<?php
+-if (getenv("USE_ZEND_ALLOC") === "0") {
+-    die("skip Zend MM disabled");
+-}
+-?>
+---INI--
+-memory_limit=-1
+---FILE--
+-<?php
+-$array0 = range(1, 1024 * 1024);
+-$m0 = memory_get_peak_usage();
+-$array1 = range(1, 1024 * 1024);
+-var_dump(($m1 = memory_get_peak_usage()) > $m0);
+-unset($array0, $array1);
+-memory_reset_peak_usage();
+-var_dump(memory_get_peak_usage() < $m1);
+-?>
+---EXPECT--
+-bool(true)
+-bool(true)
+
+-- 
+2.43.0

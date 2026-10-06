@@ -1,0 +1,38 @@
+From f730a615 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0008] remote: fix leak in reachability check of a remote-track (part 3/29)
+
+---
+diff --git a/ref-filter.c b/ref-filter.c
+index 6d8b5919..0f51095b 100644
+--- a/ref-filter.c
++++ b/ref-filter.c
+@@ -200,6 +201,7 @@ static struct used_atom {
+ 			enum { C_BARE, C_BODY, C_BODY_DEP, C_LENGTH, C_LINES,
+ 			       C_SIG, C_SUB, C_SUB_SANITIZE, C_TRAILERS } option;
+ 			struct process_trailer_options trailer_opts;
++			struct ref_trailer_buf *trailer_buf;
+ 			unsigned int nlines;
+ 		} contents;
+ 		struct {
+@@ -231,7 +233,7 @@ static struct used_atom {
+ 			enum { S_BARE, S_GRADE, S_SIGNER, S_KEY,
+ 			       S_FINGERPRINT, S_PRI_KEY_FP, S_TRUST_LEVEL } option;
+ 		} signature;
+-		const char **describe_args;
++		struct strvec describe_args;
+ 		struct refname_atom refname;
+ 		char *head;
+ 	} u;
+@@ -956,6 +988,7 @@ static struct {
+ 	[ATOM_ELSE] = { "else", SOURCE_NONE },
+ 	[ATOM_REST] = { "rest", SOURCE_NONE, FIELD_STR, rest_atom_parser },
+ 	[ATOM_AHEADBEHIND] = { "ahead-behind", SOURCE_OTHER, FIELD_STR, ahead_behind_atom_parser },
++	[ATOM_ISBASE] = { "is-base", SOURCE_OTHER, FIELD_STR, is_base_atom_parser },
+ 	/*
+ 	 * Please update $__git_ref_fieldlist in git-completion.bash
+ 	 * when you add new atoms
+
+-- 
+2.43.0

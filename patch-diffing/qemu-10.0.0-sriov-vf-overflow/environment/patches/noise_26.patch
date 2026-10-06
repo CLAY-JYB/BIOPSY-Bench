@@ -1,0 +1,968 @@
+diff --git a/python/qemu/utils/qemu_ga_client.py b/python/qemu/utils/qemu_ga_client.py
+index 9a665e6e99..cf0fcf9a8b 100644
+--- a/python/qemu/utils/qemu_ga_client.py
++++ b/python/qemu/utils/qemu_ga_client.py
+@@ -174,7 +174,7 @@ class QemuGuestAgentClient:
+             # On error exception will raise
+         except asyncio.TimeoutError:
+             # On success command will timed out
+-            return
++            pass
+ 
+     def shutdown(self, mode: str = 'powerdown') -> None:
+         if mode not in ['powerdown', 'halt', 'reboot']:
+diff --git a/python/setup.cfg b/python/setup.cfg
+index 48668609d3..3b4e2cc550 100644
+--- a/python/setup.cfg
++++ b/python/setup.cfg
+@@ -19,6 +19,7 @@ classifiers =
+     Programming Language :: Python :: 3.10
+     Programming Language :: Python :: 3.11
+     Programming Language :: Python :: 3.12
++    Programming Language :: Python :: 3.13
+     Typing :: Typed
+ 
+ [options]
+@@ -41,6 +42,7 @@ devel =
+     isort >= 5.1.2
+     mypy >= 1.4.0
+     pylint >= 2.17.3
++    pylint != 3.2.4; python_version<"3.9"
+     tox >= 3.18.0
+     urwid >= 2.1.2
+     urwid-readline >= 0.13
+@@ -183,7 +185,7 @@ multi_line_output=3
+ # of python available on your system to run this test.
+ 
+ [tox:tox]
+-envlist = py38, py39, py310, py311, py312
++envlist = py38, py39, py310, py311, py312, py313
+ skip_missing_interpreters = true
+ 
+ [testenv]
+diff --git a/pythondeps.toml b/pythondeps.toml
+index 9c16602d30..f6e590fdd8 100644
+--- a/pythondeps.toml
++++ b/pythondeps.toml
+@@ -19,11 +19,11 @@
+ 
+ [meson]
+ # The install key should match the version in python/wheels/
+-meson = { accepted = ">=0.63.0", installed = "1.2.3", canary = "meson" }
++meson = { accepted = ">=1.1.0", installed = "1.2.3", canary = "meson" }
+ 
+ [docs]
+ # Please keep the installed versions in sync with docs/requirements.txt
+-sphinx = { accepted = ">=1.6", installed = "5.3.0", canary = "sphinx-build" }
++sphinx = { accepted = ">=3.4.3", installed = "5.3.0", canary = "sphinx-build" }
+ sphinx_rtd_theme = { accepted = ">=0.5", installed = "1.1.1" }
+ 
+ [avocado]
+diff --git a/qapi/acpi.json b/qapi/acpi.json
+index aa4dbe5794..045dab6228 100644
+--- a/qapi/acpi.json
++++ b/qapi/acpi.json
+@@ -111,7 +111,7 @@
+ #
+ # Since: 2.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-acpi-ospm-status" }
+ #     <- { "return": [ { "device": "d1", "slot": "0", "slot-type": "DIMM", "source": 1, "status": 0},
+@@ -131,7 +131,7 @@
+ #
+ # Since: 2.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "ACPI_DEVICE_OST",
+ #          "data": { "info": { "device": "d1", "slot": "0",
+diff --git a/qapi/block-core.json b/qapi/block-core.json
+index df5e07debd..f400b334c8 100644
+--- a/qapi/block-core.json
++++ b/qapi/block-core.json
+@@ -764,7 +764,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-block" }
+ #     <- {
+@@ -1168,7 +1168,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-blockstats" }
+ #     <- {
+@@ -1461,7 +1461,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block_resize",
+ #          "arguments": { "device": "scratch", "size": 1073741824 } }
+@@ -1619,9 +1619,9 @@
+ #
+ # @unstable: Member @x-perf is experimental.
+ #
+-# Note: @on-source-error and @on-target-error only affect background
+-#     I/O.  If an error occurs during a guest write request, the
+-#     device's rerror/werror actions will be used.
++# .. note:: @on-source-error and @on-target-error only affect background
++#    I/O.  If an error occurs during a guest write request, the device's
++#    rerror/werror actions will be used.
+ #
+ # Since: 4.2
+ ##
+@@ -1675,14 +1675,12 @@
+ #
+ # Takes a synchronous snapshot of a block device.
+ #
+-# For the arguments, see the documentation of BlockdevSnapshotSync.
+-#
+ # Errors:
+ #     - If @device is not a valid block device, DeviceNotFound
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-snapshot-sync",
+ #          "arguments": { "device": "ide-hd0",
+@@ -1705,8 +1703,6 @@
+ # device, the block device changes to using 'overlay' as its new
+ # active image.
+ #
+-# For the arguments, see the documentation of BlockdevSnapshot.
+-#
+ # Features:
+ #
+ # @allow-write-only-overlay: If present, the check whether this
+@@ -1715,7 +1711,7 @@
+ #
+ # Since: 2.5
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": { "driver": "qcow2",
+@@ -1861,7 +1857,7 @@
+ #
+ # Since: 1.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-commit",
+ #          "arguments": { "device": "virtio0",
+@@ -1899,7 +1895,7 @@
+ #
+ # Since: 1.6
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "drive-backup",
+ #          "arguments": { "device": "drive0",
+@@ -1925,7 +1921,7 @@
+ #
+ # Since: 2.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-backup",
+ #          "arguments": { "device": "src-id",
+@@ -1949,7 +1945,7 @@
+ #
+ # Since: 2.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-named-block-nodes" }
+ #     <- { "return": [ { "ro":false,
+@@ -2130,7 +2126,7 @@
+ #
+ # Since: 1.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "drive-mirror",
+ #          "arguments": { "device": "ide-hd0",
+@@ -2307,7 +2303,7 @@
+ #
+ # Since: 2.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-add",
+ #          "arguments": { "node": "drive0", "name": "bitmap0" } }
+@@ -2331,7 +2327,7 @@
+ #
+ # Since: 2.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-remove",
+ #          "arguments": { "node": "drive0", "name": "bitmap0" } }
+@@ -2354,7 +2350,7 @@
+ #
+ # Since: 2.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-clear",
+ #          "arguments": { "node": "drive0", "name": "bitmap0" } }
+@@ -2375,7 +2371,7 @@
+ #
+ # Since: 4.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-enable",
+ #          "arguments": { "node": "drive0", "name": "bitmap0" } }
+@@ -2396,7 +2392,7 @@
+ #
+ # Since: 4.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-disable",
+ #          "arguments": { "node": "drive0", "name": "bitmap0" } }
+@@ -2428,7 +2424,7 @@
+ #
+ # Since: 4.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-dirty-bitmap-merge",
+ #          "arguments": { "node": "drive0", "target": "bitmap0",
+@@ -2537,7 +2533,7 @@
+ #
+ # Since: 2.6
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-mirror",
+ #          "arguments": { "device": "ide-hd0",
+@@ -2862,7 +2858,7 @@
+ #
+ # Since: 1.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-stream",
+ #          "arguments": { "device": "virtio0",
+@@ -4801,7 +4797,7 @@
+ #
+ # Since: 2.9
+ #
+-# Examples:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": {
+@@ -4815,6 +4811,8 @@
+ #         }
+ #     <- { "return": {} }
+ #
++# .. qmp-example::
++#
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": {
+ #               "driver": "qcow2",
+@@ -4899,7 +4897,7 @@
+ #
+ # Since: 2.9
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": {
+@@ -5545,10 +5543,10 @@
+ #     after this event and must be repaired (Since 2.2; before, every
+ #     BLOCK_IMAGE_CORRUPTED event was fatal)
+ #
+-# Note: If action is "stop", a STOP event will eventually follow the
+-#     BLOCK_IO_ERROR event.
++# .. note:: If action is "stop", a STOP event will eventually follow the
++#    BLOCK_IO_ERROR event.
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_IMAGE_CORRUPTED",
+ #          "data": { "device": "", "node-name": "drive", "fatal": false,
+@@ -5592,12 +5590,12 @@
+ #     field is a debugging aid for humans, it should not be parsed by
+ #     applications) (since: 2.2)
+ #
+-# Note: If action is "stop", a STOP event will eventually follow the
+-#     BLOCK_IO_ERROR event
++# .. note:: If action is "stop", a STOP event will eventually follow the
++#    BLOCK_IO_ERROR event.
+ #
+ # Since: 0.13
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_IO_ERROR",
+ #          "data": { "device": "ide0-hd1",
+@@ -5637,7 +5635,7 @@
+ #
+ # Since: 1.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_JOB_COMPLETED",
+ #          "data": { "type": "stream", "device": "virtio-disk0",
+@@ -5672,7 +5670,7 @@
+ #
+ # Since: 1.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_JOB_CANCELLED",
+ #          "data": { "type": "stream", "device": "virtio-disk0",
+@@ -5701,7 +5699,7 @@
+ #
+ # Since: 1.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_JOB_ERROR",
+ #          "data": { "device": "ide0-hd1",
+@@ -5731,12 +5729,12 @@
+ #
+ # @speed: rate limit, bytes per second
+ #
+-# Note: The "ready to complete" status is always reset by a
+-#     @BLOCK_JOB_ERROR event
++# .. note:: The "ready to complete" status is always reset by a
++#    @BLOCK_JOB_ERROR event.
+ #
+ # Since: 1.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_JOB_READY",
+ #          "data": { "device": "drive0", "type": "mirror", "speed": 0,
+@@ -5764,7 +5762,7 @@
+ #
+ # Since: 2.12
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "BLOCK_JOB_PENDING",
+ #          "data": { "type": "mirror", "id": "backup_1" },
+@@ -5838,7 +5836,7 @@
+ #
+ # Since: 2.3
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block-set-write-threshold",
+ #          "arguments": { "node-name": "mydev",
+@@ -5883,9 +5881,8 @@
+ #
+ # Since: 2.7
+ #
+-# Examples:
+-#
+-#     1. Add a new node to a quorum
++# .. qmp-example::
++#    :title: Add a new node to a quorum
+ #
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": {
+@@ -5899,7 +5896,8 @@
+ #                         "node": "new_node" } }
+ #     <- { "return": {} }
+ #
+-#     2. Delete a quorum's node
++# .. qmp-example::
++#    :title: Delete a quorum's node
+ #
+ #     -> { "execute": "x-blockdev-change",
+ #          "arguments": { "parent": "disk1",
+@@ -5935,16 +5933,16 @@
+ #
+ # Since: 2.12
+ #
+-# Examples:
+-#
+-#     1. Move a node into an IOThread
++# .. qmp-example::
++#    :title: Move a node into an IOThread
+ #
+ #     -> { "execute": "x-blockdev-set-iothread",
+ #          "arguments": { "node-name": "disk1",
+ #                         "iothread": "iothread0" } }
+ #     <- { "return": {} }
+ #
+-#     2. Move a node into the main loop
++# .. qmp-example::
++#    :title: Move a node into the main loop
+ #
+ #     -> { "execute": "x-blockdev-set-iothread",
+ #          "arguments": { "node-name": "disk1",
+@@ -5985,11 +5983,11 @@
+ #
+ # @sectors-count: failed read operation sector count
+ #
+-# Note: This event is rate-limited.
++# .. note:: This event is rate-limited.
+ #
+ # Since: 2.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "QUORUM_FAILURE",
+ #          "data": { "reference": "usr1", "sector-num": 345435, "sectors-count": 5 },
+@@ -6016,20 +6014,20 @@
+ #
+ # @sectors-count: failed read operation sector count
+ #
+-# Note: This event is rate-limited.
++# .. note:: This event is rate-limited.
+ #
+ # Since: 2.0
+ #
+-# Examples:
+-#
+-#     1. Read operation
++# .. qmp-example::
++#    :title: Read operation
+ #
+ #     <- { "event": "QUORUM_REPORT_BAD",
+ #          "data": { "node-name": "node0", "sector-num": 345435, "sectors-count": 5,
+ #                    "type": "read" },
+ #          "timestamp": { "seconds": 1344522075, "microseconds": 745528 } }
+ #
+-#     2. Flush operation
++# .. qmp-example::
++#    :title: Flush operation
+ #
+ #     <- { "event": "QUORUM_REPORT_BAD",
+ #          "data": { "node-name": "node0", "sector-num": 0, "sectors-count": 2097120,
+@@ -6048,9 +6046,9 @@
+ #
+ # @name: the name of the internal snapshot to be created
+ #
+-# Notes: In transaction, if @name is empty, or any snapshot matching
+-#     @name exists, the operation will fail.  Only some image formats
+-#     support it, for example, qcow2, and rbd.
++# .. note:: In a transaction, if @name is empty or any snapshot matching
++#    @name exists, the operation will fail.  Only some image formats
++#    support it; for example, qcow2, and rbd.
+ #
+ # Since: 1.7
+ ##
+@@ -6065,9 +6063,6 @@
+ # string, or a snapshot with name already exists, the operation will
+ # fail.
+ #
+-# For the arguments, see the documentation of
+-# BlockdevSnapshotInternal.
+-#
+ # Errors:
+ #     - If @device is not a valid block device, GenericError
+ #     - If any snapshot matching @name exists, or @name is empty,
+@@ -6077,7 +6072,7 @@
+ #
+ # Since: 1.7
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-snapshot-internal-sync",
+ #          "arguments": { "device": "ide-hd0",
+@@ -6116,7 +6111,7 @@
+ #
+ # Since: 1.7
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-snapshot-delete-internal-sync",
+ #          "arguments": { "device": "ide-hd0",
+diff --git a/qapi/block.json b/qapi/block.json
+index 5de99fe09d..ce9490a367 100644
+--- a/qapi/block.json
++++ b/qapi/block.json
+@@ -113,11 +113,11 @@
+ # Errors:
+ #     - If @device is not a valid block device, DeviceNotFound
+ #
+-# Notes: Ejecting a device with no media results in success
++# .. note:: Ejecting a device with no media results in success.
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "eject", "arguments": { "id": "ide1-0-1" } }
+ #     <- { "return": {} }
+@@ -161,7 +161,7 @@
+ #
+ # Since: 2.5
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-open-tray",
+ #          "arguments": { "id": "ide0-1-0" } }
+@@ -199,7 +199,7 @@
+ #
+ # Since: 2.5
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-close-tray",
+ #          "arguments": { "id": "ide0-1-0" } }
+@@ -231,7 +231,7 @@
+ #
+ # Since: 2.12
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-remove-medium",
+ #          "arguments": { "id": "ide0-1-0" } }
+@@ -272,7 +272,7 @@
+ #
+ # Since: 2.12
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "blockdev-add",
+ #          "arguments": {
+@@ -342,9 +342,8 @@
+ #
+ # Since: 2.5
+ #
+-# Examples:
+-#
+-#     1. Change a removable medium
++# .. qmp-example::
++#    :title: Change a removable medium
+ #
+ #     -> { "execute": "blockdev-change-medium",
+ #          "arguments": { "id": "ide0-1-0",
+@@ -352,7 +351,8 @@
+ #                         "format": "raw" } }
+ #     <- { "return": {} }
+ #
+-#     2. Load a read-only medium into a writable drive
++# .. qmp-example::
++#    :title: Load a read-only medium into a writable drive
+ #
+ #     -> { "execute": "blockdev-change-medium",
+ #          "arguments": { "id": "floppyA",
+@@ -397,7 +397,7 @@
+ #
+ # Since: 1.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "DEVICE_TRAY_MOVED",
+ #          "data": { "device": "ide1-cd0",
+@@ -421,7 +421,7 @@
+ #
+ # Since: 3.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "PR_MANAGER_STATUS_CHANGED",
+ #          "data": { "id": "pr-helper0",
+@@ -463,7 +463,7 @@
+ #
+ # Since: 1.1
+ #
+-# Examples:
++# .. qmp-example::
+ #
+ #     -> { "execute": "block_set_io_throttle",
+ #          "arguments": { "id": "virtio-blk-pci0/virtio-backend",
+@@ -483,6 +483,8 @@
+ #                         "iops_size": 0 } }
+ #     <- { "return": {} }
+ #
++# .. qmp-example::
++#
+ #     -> { "execute": "block_set_io_throttle",
+ #          "arguments": { "id": "ide0-1-0",
+ #                         "bps": 1000000,
+@@ -543,31 +545,37 @@
+ #
+ # Since: 4.0
+ #
+-# Example:
++# .. qmp-example::
++#    :annotated:
+ #
+-#     Set new histograms for all io types with intervals
+-#     [0, 10), [10, 50), [50, 100), [100, +inf):
++#    Set new histograms for all io types with intervals
++#    [0, 10), [10, 50), [50, 100), [100, +inf)::
+ #
+ #     -> { "execute": "block-latency-histogram-set",
+ #          "arguments": { "id": "drive0",
+ #                         "boundaries": [10, 50, 100] } }
+ #     <- { "return": {} }
+ #
+-# Example:
++# .. qmp-example::
++#    :annotated:
+ #
+-#     Set new histogram only for write, other histograms will remain
+-#     not changed (or not created):
++#    Set new histogram only for write, other histograms will remain
++#    not changed (or not created)::
+ #
+ #     -> { "execute": "block-latency-histogram-set",
+ #          "arguments": { "id": "drive0",
+ #                         "boundaries-write": [10, 50, 100] } }
+ #     <- { "return": {} }
+ #
+-# Example:
++# .. qmp-example::
++#    :annotated:
++#
++#    Set new histograms with the following intervals:
++#
++#    - read, flush: [0, 10), [10, 50), [50, 100), [100, +inf)
++#    - write: [0, 1000), [1000, 5000), [5000, +inf)
+ #
+-#     Set new histograms with the following intervals:
+-#       read, flush: [0, 10), [10, 50), [50, 100), [100, +inf)
+-#       write: [0, 1000), [1000, 5000), [5000, +inf)
++#    ::
+ #
+ #     -> { "execute": "block-latency-histogram-set",
+ #          "arguments": { "id": "drive0",
+@@ -575,9 +583,10 @@
+ #                         "boundaries-write": [1000, 5000] } }
+ #     <- { "return": {} }
+ #
+-# Example:
++# .. qmp-example::
++#    :annotated:
+ #
+-#     Remove all latency histograms:
++#    Remove all latency histograms::
+ #
+ #     -> { "execute": "block-latency-histogram-set",
+ #          "arguments": { "id": "drive0" } }
+diff --git a/qapi/char.json b/qapi/char.json
+index 777dde55d9..5e4aeb9799 100644
+--- a/qapi/char.json
++++ b/qapi/char.json
+@@ -21,8 +21,8 @@
+ #     backend (e.g. with the chardev=... option) is in open or closed
+ #     state (since 2.1)
+ #
+-# Notes: @filename is encoded using the QEMU command line character
+-#     device encoding.  See the QEMU man page for details.
++# .. note:: @filename is encoded using the QEMU command line character
++#    device encoding.  See the QEMU man page for details.
+ #
+ # Since: 0.14
+ ##
+@@ -40,7 +40,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-chardev" }
+ #     <- {
+@@ -86,7 +86,7 @@
+ #
+ # Since: 2.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-chardev-backends" }
+ #     <- {
+@@ -141,7 +141,7 @@
+ #
+ # Since: 1.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "ringbuf-write",
+ #          "arguments": { "device": "foo",
+@@ -177,7 +177,7 @@
+ #
+ # Since: 1.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "ringbuf-read",
+ #          "arguments": { "device": "foo",
+@@ -388,9 +388,9 @@
+ #
+ # @rows: console height, in chars
+ #
+-# Note: the options are only effective when the VNC or SDL graphical
+-#     display backend is active.  They are ignored with the GTK,
+-#     Spice, VNC and D-Bus display backends.
++# .. note:: The options are only effective when the VNC or SDL graphical
++#    display backend is active.  They are ignored with the GTK, Spice,
++#    VNC and D-Bus display backends.
+ #
+ # Since: 1.5
+ ##
+@@ -699,19 +699,23 @@
+ #
+ # Since: 1.4
+ #
+-# Examples:
++# .. qmp-example::
+ #
+ #     -> { "execute" : "chardev-add",
+ #          "arguments" : { "id" : "foo",
+ #                          "backend" : { "type" : "null", "data" : {} } } }
+ #     <- { "return": {} }
+ #
++# .. qmp-example::
++#
+ #     -> { "execute" : "chardev-add",
+ #          "arguments" : { "id" : "bar",
+ #                          "backend" : { "type" : "file",
+ #                                        "data" : { "out" : "/tmp/bar.log" } } } }
+ #     <- { "return": {} }
+ #
++# .. qmp-example::
++#
+ #     -> { "execute" : "chardev-add",
+ #          "arguments" : { "id" : "baz",
+ #                          "backend" : { "type" : "pty", "data" : {} } } }
+@@ -735,13 +739,15 @@
+ #
+ # Since: 2.10
+ #
+-# Examples:
++# .. qmp-example::
+ #
+ #     -> { "execute" : "chardev-change",
+ #          "arguments" : { "id" : "baz",
+ #                          "backend" : { "type" : "pty", "data" : {} } } }
+ #     <- { "return": { "pty" : "/dev/pty/42" } }
+ #
++# .. qmp-example::
++#
+ #     -> {"execute" : "chardev-change",
+ #         "arguments" : {
+ #             "id" : "charchannel2",
+@@ -772,7 +778,7 @@
+ #
+ # Since: 1.4
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "chardev-remove", "arguments": { "id" : "foo" } }
+ #     <- { "return": {} }
+@@ -789,7 +795,7 @@
+ #
+ # Since: 2.10
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "chardev-send-break", "arguments": { "id" : "foo" } }
+ #     <- { "return": {} }
+@@ -806,11 +812,11 @@
+ #
+ # @open: true if the guest has opened the virtio-serial port
+ #
+-# Note: This event is rate-limited.
++# .. note:: This event is rate-limited.
+ #
+ # Since: 2.1
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "VSERPORT_CHANGE",
+ #          "data": { "id": "channel0", "open": true },
+diff --git a/qapi/control.json b/qapi/control.json
+index 6bdbf077c2..950443df9d 100644
+--- a/qapi/control.json
++++ b/qapi/control.json
+@@ -16,20 +16,19 @@
+ #     the QMP greeting message.  If the field is not provided, it
+ #     means no QMP capabilities will be enabled.  (since 2.12)
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "qmp_capabilities",
+ #          "arguments": { "enable": [ "oob" ] } }
+ #     <- { "return": {} }
+ #
+-# Notes: This command is valid exactly when first connecting: it must
+-#     be issued before any other command will be accepted, and will
+-#     fail once the monitor is accepting other commands.  (see qemu
+-#     docs/interop/qmp-spec.rst)
++# .. note:: This command is valid exactly when first connecting: it must
++#    be issued before any other command will be accepted, and will fail
++#    once the monitor is accepting other commands.
++#    (see :doc:`/interop/qmp-spec`)
+ #
+-#     The QMP client needs to explicitly enable QMP capabilities,
+-#     otherwise all the QMP capabilities will be turned off by
+-#     default.
++# .. note:: The QMP client needs to explicitly enable QMP capabilities,
++#    otherwise all the QMP capabilities will be turned off by default.
+ #
+ # Since: 0.13
+ ##
+@@ -98,7 +97,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-version" }
+ #     <- {
+@@ -135,7 +134,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-commands" }
+ #     <- {
+@@ -145,12 +144,13 @@
+ #             },
+ #             {
+ #                "name":"system_powerdown"
+-#             }
++#             },
++#             ...
+ #          ]
+ #        }
+ #
+-# Note: This example has been shortened as the real response is too
+-#     long.
++# This example has been shortened as the real response is too long.
++#
+ ##
+ { 'command': 'query-commands', 'returns': ['CommandInfo'],
+   'allow-preconfig': true }
+@@ -165,7 +165,7 @@
+ #
+ # Since: 0.14
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "quit" }
+ #     <- { "return": {} }
+diff --git a/qapi/dump.json b/qapi/dump.json
+index 2fa9504d86..d8145dad97 100644
+--- a/qapi/dump.json
++++ b/qapi/dump.json
+@@ -90,11 +90,11 @@
+ #     and @length is not allowed to be specified with non-elf @format
+ #     at the same time (since 2.0)
+ #
+-# Note: All boolean arguments default to false
++# .. note:: All boolean arguments default to false.
+ #
+ # Since: 1.2
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "dump-guest-memory",
+ #          "arguments": { "paging": false, "protocol": "fd:dump" } }
+@@ -150,7 +150,7 @@
+ #
+ # Since: 2.6
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-dump" }
+ #     <- { "return": { "status": "active", "completed": 1024000,
+@@ -171,7 +171,7 @@
+ #
+ # Since: 2.6
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     <- { "event": "DUMP_COMPLETED",
+ #          "data": { "result": { "total": 1090650112, "status": "completed",
+@@ -202,7 +202,7 @@
+ #
+ # Since: 2.0
+ #
+-# Example:
++# .. qmp-example::
+ #
+ #     -> { "execute": "query-dump-guest-memory-capability" }
+ #     <- { "return": { "formats":
+diff --git a/qapi/introspect.json b/qapi/introspect.json
+index b041b02ba8..b15052ec21 100644
+--- a/qapi/introspect.json
++++ b/qapi/introspect.json
+@@ -41,9 +41,9 @@
+ #     names are guaranteed to be unique (no name will be duplicated
+ #     with different meta-types).
+ #
+-# Note: the QAPI schema is also used to help define *internal*
+-#     interfaces, by defining QAPI types.  These are not part of the
+-#     QMP wire ABI, and therefore not returned by this command.
++# .. note:: The QAPI schema is also used to help define *internal*
++#    interfaces, by defining QAPI types.  These are not part of the QMP
++#    wire ABI, and therefore not returned by this command.
+ #
+ # Since: 2.5
+ ##

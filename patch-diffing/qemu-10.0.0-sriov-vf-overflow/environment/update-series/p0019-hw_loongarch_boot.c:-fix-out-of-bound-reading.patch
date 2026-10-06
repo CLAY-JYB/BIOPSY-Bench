@@ -1,0 +1,547 @@
+From f9377ed6 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0019] hw/loongarch/boot.c: fix out-of-bound reading
+
+---
+diff --git a/hw/loongarch/boot.c b/hw/loongarch/boot.c
+index b8e1aa18d5..cb668703bd 100644
+--- a/hw/loongarch/boot.c
++++ b/hw/loongarch/boot.c
+@@ -163,7 +163,7 @@ static void init_cmdline(struct loongarch_boot_info *info, void *p, void *start)
+     info->a0 = 1;
+     info->a1 = cmdline_addr;
+ 
+-    memcpy(p, info->kernel_cmdline, COMMAND_LINE_SIZE);
++    g_strlcpy(p, info->kernel_cmdline, COMMAND_LINE_SIZE);
+ }
+ 
+ static uint64_t cpu_loongarch_virt_to_phys(void *opaque, uint64_t addr)
+diff --git a/hw/loongarch/virt.c b/hw/loongarch/virt.c
+index 8be2d2ff6a..e592b1b6b7 100644
+--- a/hw/loongarch/virt.c
++++ b/hw/loongarch/virt.c
+@@ -1054,7 +1054,6 @@ static void fw_cfg_add_memory(MachineState *ms)
+         memmap_add_entry(base, gap, 1);
+         size -= gap;
+         base = VIRT_HIGHMEM_BASE;
+-        gap = ram_size - VIRT_LOWMEM_SIZE;
+     }
+ 
+     if (size) {
+@@ -1067,17 +1066,17 @@ static void fw_cfg_add_memory(MachineState *ms)
+     }
+ 
+     /* add fw_cfg memory map of other nodes */
+-    size = ram_size - numa_info[0].node_mem;
+-    gap  = VIRT_LOWMEM_BASE + VIRT_LOWMEM_SIZE;
+-    if (base < gap && (base + size) > gap) {
++    if (numa_info[0].node_mem < gap && ram_size > gap) {
+         /*
+          * memory map for the maining nodes splited into two part
+-         *   lowram:  [base, +(gap - base))
+-         *   highram: [VIRT_HIGHMEM_BASE, +(size - (gap - base)))
++         * lowram:  [base, +(gap - numa_info[0].node_mem))
++         * highram: [VIRT_HIGHMEM_BASE, +(ram_size - gap))
+          */
+-        memmap_add_entry(base, gap - base, 1);
+-        size -= gap - base;
++        memmap_add_entry(base, gap - numa_info[0].node_mem, 1);
++        size = ram_size - gap;
+         base = VIRT_HIGHMEM_BASE;
++    } else {
++        size = ram_size - numa_info[0].node_mem;
+     }
+ 
+    if (size)
+diff --git a/hw/m68k/virt.c b/hw/m68k/virt.c
+index 09bc9bdfef..cda199af8f 100644
+--- a/hw/m68k/virt.c
++++ b/hw/m68k/virt.c
+@@ -335,99 +335,108 @@ static void virt_machine_register_types(void)
+ 
+ type_init(virt_machine_register_types)
+ 
+-#define DEFINE_VIRT_MACHINE(major, minor, latest) \
+-    static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
+-                                                    void *data) \
++#define DEFINE_VIRT_MACHINE_IMPL(latest, ...) \
++    static void MACHINE_VER_SYM(class_init, virt, __VA_ARGS__)( \
++        ObjectClass *oc, \
++        void *data) \
+     { \
+         MachineClass *mc = MACHINE_CLASS(oc); \
+-        virt_machine_##major##_##minor##_options(mc); \
+-        mc->desc = "QEMU " # major "." # minor " M68K Virtual Machine"; \
++        MACHINE_VER_SYM(options, virt, __VA_ARGS__)(mc); \
++        mc->desc = "QEMU " MACHINE_VER_STR(__VA_ARGS__) " M68K Virtual Machine"; \
++        MACHINE_VER_DEPRECATION(__VA_ARGS__); \
+         if (latest) { \
+             mc->alias = "virt"; \
+         } \
+     } \
+-    static const TypeInfo machvirt_##major##_##minor##_info = { \
+-        .name = MACHINE_TYPE_NAME("virt-" # major "." # minor), \
++    static const TypeInfo MACHINE_VER_SYM(info, virt, __VA_ARGS__) = \
++    { \
++        .name = MACHINE_VER_TYPE_NAME("virt", __VA_ARGS__), \
+         .parent = MACHINE_TYPE_NAME("virt"), \
+-        .class_init = virt_##major##_##minor##_class_init, \
++        .class_init = MACHINE_VER_SYM(class_init, virt, __VA_ARGS__), \
+     }; \
+-    static void machvirt_machine_##major##_##minor##_init(void) \
++    static void MACHINE_VER_SYM(register, virt, __VA_ARGS__)(void) \
+     { \
+-        type_register_static(&machvirt_##major##_##minor##_info); \
++        MACHINE_VER_DELETION(__VA_ARGS__); \
++        type_register_static(&MACHINE_VER_SYM(info, virt, __VA_ARGS__)); \
+     } \
+-    type_init(machvirt_machine_##major##_##minor##_init);
++    type_init(MACHINE_VER_SYM(register, virt, __VA_ARGS__));
++
++#define DEFINE_VIRT_MACHINE_AS_LATEST(major, minor) \
++    DEFINE_VIRT_MACHINE_IMPL(true, major, minor)
++#define DEFINE_VIRT_MACHINE(major, minor) \
++    DEFINE_VIRT_MACHINE_IMPL(false, major, minor)
+ 
+ static void virt_machine_9_1_options(MachineClass *mc)
+ {
+ }
+-DEFINE_VIRT_MACHINE(9, 1, true)
++DEFINE_VIRT_MACHINE_AS_LATEST(9, 1)
+ 
+ static void virt_machine_9_0_options(MachineClass *mc)
+ {
+     virt_machine_9_1_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_9_0, hw_compat_9_0_len);
+ }
+-DEFINE_VIRT_MACHINE(9, 0, false)
++DEFINE_VIRT_MACHINE(9, 0)
+ 
+ static void virt_machine_8_2_options(MachineClass *mc)
+ {
+     virt_machine_9_0_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_8_2, hw_compat_8_2_len);
+ }
+-DEFINE_VIRT_MACHINE(8, 2, false)
++DEFINE_VIRT_MACHINE(8, 2)
+ 
+ static void virt_machine_8_1_options(MachineClass *mc)
+ {
+     virt_machine_8_2_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_8_1, hw_compat_8_1_len);
+ }
+-DEFINE_VIRT_MACHINE(8, 1, false)
++DEFINE_VIRT_MACHINE(8, 1)
+ 
+ static void virt_machine_8_0_options(MachineClass *mc)
+ {
+     virt_machine_8_1_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_8_0, hw_compat_8_0_len);
+ }
+-DEFINE_VIRT_MACHINE(8, 0, false)
++DEFINE_VIRT_MACHINE(8, 0)
+ 
+ static void virt_machine_7_2_options(MachineClass *mc)
+ {
+     virt_machine_8_0_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_7_2, hw_compat_7_2_len);
+ }
+-DEFINE_VIRT_MACHINE(7, 2, false)
++DEFINE_VIRT_MACHINE(7, 2)
+ 
+ static void virt_machine_7_1_options(MachineClass *mc)
+ {
+     virt_machine_7_2_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_7_1, hw_compat_7_1_len);
+ }
+-DEFINE_VIRT_MACHINE(7, 1, false)
++DEFINE_VIRT_MACHINE(7, 1)
+ 
+ static void virt_machine_7_0_options(MachineClass *mc)
+ {
+     virt_machine_7_1_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_7_0, hw_compat_7_0_len);
+ }
+-DEFINE_VIRT_MACHINE(7, 0, false)
++DEFINE_VIRT_MACHINE(7, 0)
+ 
+ static void virt_machine_6_2_options(MachineClass *mc)
+ {
+     virt_machine_7_0_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_6_2, hw_compat_6_2_len);
+ }
+-DEFINE_VIRT_MACHINE(6, 2, false)
++DEFINE_VIRT_MACHINE(6, 2)
+ 
+ static void virt_machine_6_1_options(MachineClass *mc)
+ {
+     virt_machine_6_2_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_6_1, hw_compat_6_1_len);
+ }
+-DEFINE_VIRT_MACHINE(6, 1, false)
++DEFINE_VIRT_MACHINE(6, 1)
+ 
+ static void virt_machine_6_0_options(MachineClass *mc)
+ {
+     virt_machine_6_1_options(mc);
+     compat_props_add(mc->compat_props, hw_compat_6_0, hw_compat_6_0_len);
+ }
+-DEFINE_VIRT_MACHINE(6, 0, false)
++DEFINE_VIRT_MACHINE(6, 0)
+diff --git a/hw/mips/fuloong2e.c b/hw/mips/fuloong2e.c
+index a45aac368c..6e4303ba47 100644
+--- a/hw/mips/fuloong2e.c
++++ b/hw/mips/fuloong2e.c
+@@ -299,7 +299,7 @@ static void mips_fuloong2e_init(MachineState *machine)
+                               object_resolve_path_component(OBJECT(pci_dev),
+                                                             "rtc"),
+                               "date");
+-    qdev_connect_gpio_out(DEVICE(pci_dev), 0, env->irq[5]);
++    qdev_connect_gpio_out_named(DEVICE(pci_dev), "intr", 0, env->irq[5]);
+ 
+     dev = DEVICE(object_resolve_path_component(OBJECT(pci_dev), "ide"));
+     pci_ide_create_devs(PCI_DEVICE(dev));
+diff --git a/hw/misc/aspeed_sdmc.c b/hw/misc/aspeed_sdmc.c
+index 93e2e29ead..ebf139cb5c 100644
+--- a/hw/misc/aspeed_sdmc.c
++++ b/hw/misc/aspeed_sdmc.c
+@@ -271,6 +271,12 @@ static void aspeed_sdmc_realize(DeviceState *dev, Error **errp)
+     AspeedSDMCClass *asc = ASPEED_SDMC_GET_CLASS(s);
+ 
+     assert(asc->max_ram_size < 4 * GiB || asc->is_bus64bit);
++
++    if (!s->ram_size) {
++        error_setg(errp, "RAM size is not set");
++        return;
++    }
++
+     s->max_ram_size = asc->max_ram_size;
+ 
+     memory_region_init_io(&s->iomem, OBJECT(s), &aspeed_sdmc_ops, s,
+@@ -589,7 +595,6 @@ static void aspeed_2700_sdmc_write(AspeedSDMCState *s, uint32_t reg,
+     case R_INT_STATUS:
+     case R_INT_CLEAR:
+     case R_INT_MASK:
+-    case R_MAIN_STATUS:
+     case R_ERR_STATUS:
+     case R_ECC_FAIL_STATUS:
+     case R_ECC_FAIL_ADDR:
+diff --git a/hw/misc/bcm2835_property.c b/hw/misc/bcm2835_property.c
+index bdd9a6bbce..63de3db621 100644
+--- a/hw/misc/bcm2835_property.c
++++ b/hw/misc/bcm2835_property.c
+@@ -32,6 +32,7 @@ static void bcm2835_property_mbox_push(BCM2835PropertyState *s, uint32_t value)
+     uint32_t tmp;
+     int n;
+     uint32_t offset, length, color;
++    uint32_t start_num, number, otp_row;
+ 
+     /*
+      * Copy the current state of the framebuffer config; we will update
+@@ -322,6 +323,89 @@ static void bcm2835_property_mbox_push(BCM2835PropertyState *s, uint32_t value)
+                         0);
+             resplen = VCHI_BUSADDR_SIZE;
+             break;
++
++        /* Customer OTP */
++
++        case RPI_FWREQ_GET_CUSTOMER_OTP:
++            start_num = ldl_le_phys(&s->dma_as, value + 12);
++            number = ldl_le_phys(&s->dma_as, value + 16);
++
++            resplen = 8 + 4 * number;
++
++            for (n = start_num; n < start_num + number &&
++                 n < BCM2835_OTP_CUSTOMER_OTP_LEN; n++) {
++                otp_row = bcm2835_otp_get_row(s->otp,
++                                              BCM2835_OTP_CUSTOMER_OTP + n);
++                stl_le_phys(&s->dma_as,
++                            value + 20 + ((n - start_num) << 2), otp_row);
++            }
++            break;
++        case RPI_FWREQ_SET_CUSTOMER_OTP:
++            start_num = ldl_le_phys(&s->dma_as, value + 12);
++            number = ldl_le_phys(&s->dma_as, value + 16);
++
++            resplen = 4;
++
++            /* Magic numbers to permanently lock customer OTP */
++            if (start_num == BCM2835_OTP_LOCK_NUM1 &&
++                number == BCM2835_OTP_LOCK_NUM2) {
++                bcm2835_otp_set_row(s->otp,
++                                    BCM2835_OTP_ROW_32,
++                                    BCM2835_OTP_ROW_32_LOCK);
++                break;
++            }
++
++            /* If row 32 has the lock bit, don't allow further writes */
++            if (bcm2835_otp_get_row(s->otp, BCM2835_OTP_ROW_32) &
++                                    BCM2835_OTP_ROW_32_LOCK) {
++                break;
++            }
++
++            for (n = start_num; n < start_num + number &&
++                 n < BCM2835_OTP_CUSTOMER_OTP_LEN; n++) {
++                otp_row = ldl_le_phys(&s->dma_as,
++                                      value + 20 + ((n - start_num) << 2));
++                bcm2835_otp_set_row(s->otp,
++                                    BCM2835_OTP_CUSTOMER_OTP + n, otp_row);
++            }
++            break;
++
++        /* Device-specific private key */
++
++        case RPI_FWREQ_GET_PRIVATE_KEY:
++            start_num = ldl_le_phys(&s->dma_as, value + 12);
++            number = ldl_le_phys(&s->dma_as, value + 16);
++
++            resplen = 8 + 4 * number;
++
++            for (n = start_num; n < start_num + number &&
++                 n < BCM2835_OTP_PRIVATE_KEY_LEN; n++) {
++                otp_row = bcm2835_otp_get_row(s->otp,
++                                              BCM2835_OTP_PRIVATE_KEY + n);
++                stl_le_phys(&s->dma_as,
++                            value + 20 + ((n - start_num) << 2), otp_row);
++            }
++            break;
++        case RPI_FWREQ_SET_PRIVATE_KEY:
++            start_num = ldl_le_phys(&s->dma_as, value + 12);
++            number = ldl_le_phys(&s->dma_as, value + 16);
++
++            resplen = 4;
++
++            /* If row 32 has the lock bit, don't allow further writes */
++            if (bcm2835_otp_get_row(s->otp, BCM2835_OTP_ROW_32) &
++                                    BCM2835_OTP_ROW_32_LOCK) {
++                break;
++            }
++
++            for (n = start_num; n < start_num + number &&
++                 n < BCM2835_OTP_PRIVATE_KEY_LEN; n++) {
++                otp_row = ldl_le_phys(&s->dma_as,
++                                      value + 20 + ((n - start_num) << 2));
++                bcm2835_otp_set_row(s->otp,
++                                    BCM2835_OTP_PRIVATE_KEY + n, otp_row);
++            }
++            break;
+         default:
+             qemu_log_mask(LOG_UNIMP,
+                           "bcm2835_property: unhandled tag 0x%08x\n", tag);
+@@ -449,6 +533,9 @@ static void bcm2835_property_realize(DeviceState *dev, Error **errp)
+     s->dma_mr = MEMORY_REGION(obj);
+     address_space_init(&s->dma_as, s->dma_mr, TYPE_BCM2835_PROPERTY "-memory");
+ 
++    obj = object_property_get_link(OBJECT(dev), "otp", &error_abort);
++    s->otp = BCM2835_OTP(obj);
++
+     /* TODO: connect to MAC address of USB NIC device, once we emulate it */
+     qemu_macaddr_default_if_unset(&s->macaddr);
+ 
+diff --git a/hw/misc/bcm2835_thermal.c b/hw/misc/bcm2835_thermal.c
+index ee7816b8a5..0c49c088a7 100644
+--- a/hw/misc/bcm2835_thermal.c
++++ b/hw/misc/bcm2835_thermal.c
+@@ -80,8 +80,10 @@ static void bcm2835_thermal_write(void *opaque, hwaddr addr,
+ static const MemoryRegionOps bcm2835_thermal_ops = {
+     .read = bcm2835_thermal_read,
+     .write = bcm2835_thermal_write,
++    .impl.min_access_size = 4,
+     .impl.max_access_size = 4,
+     .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
+     .endianness = DEVICE_NATIVE_ENDIAN,
+ };
+ 
+diff --git a/hw/misc/edu.c b/hw/misc/edu.c
+index fa052c44db..504178b4a2 100644
+--- a/hw/misc/edu.c
++++ b/hw/misc/edu.c
+@@ -26,7 +26,6 @@
+ #include "qemu/log.h"
+ #include "qemu/units.h"
+ #include "hw/pci/pci.h"
+-#include "hw/hw.h"
+ #include "hw/pci/msi.h"
+ #include "qemu/timer.h"
+ #include "qom/object.h"
+diff --git a/hw/misc/stm32l4x5_exti.c b/hw/misc/stm32l4x5_exti.c
+index 495a0004ab..e281841dcf 100644
+--- a/hw/misc/stm32l4x5_exti.c
++++ b/hw/misc/stm32l4x5_exti.c
+@@ -42,7 +42,6 @@
+ #define EXTI_SWIER2 0x30
+ #define EXTI_PR2    0x34
+ 
+-#define EXTI_NUM_GPIO_EVENT_IN_LINES 16
+ #define EXTI_MAX_IRQ_PER_BANK 32
+ #define EXTI_IRQS_BANK0  32
+ #define EXTI_IRQS_BANK1  8
+@@ -88,6 +87,7 @@ static void stm32l4x5_exti_reset_hold(Object *obj, ResetType type)
+         s->ftsr[bank] = 0x00000000;
+         s->swier[bank] = 0x00000000;
+         s->pr[bank] = 0x00000000;
++        s->irq_levels[bank] = 0x00000000;
+     }
+ }
+ 
+@@ -102,27 +102,30 @@ static void stm32l4x5_exti_set_irq(void *opaque, int irq, int level)
+     /* Shift the value to enable access in x2 registers. */
+     irq %= EXTI_MAX_IRQ_PER_BANK;
+ 
++    if (level == extract32(s->irq_levels[bank], irq, 1)) {
++        /* No change in IRQ line state: do nothing */
++        return;
++    }
++    s->irq_levels[bank] = deposit32(s->irq_levels[bank], irq, 1, level);
++
+     /* If the interrupt is masked, pr won't be raised */
+     if (!extract32(s->imr[bank], irq, 1)) {
+         return;
+     }
+ 
+-    if (((1 << irq) & s->rtsr[bank]) && level) {
+-        /* Rising Edge */
+-        s->pr[bank] |= 1 << irq;
+-        qemu_irq_pulse(s->irq[oirq]);
+-    } else if (((1 << irq) & s->ftsr[bank]) && !level) {
+-        /* Falling Edge */
++    /* In case of a direct line interrupt */
++    if (extract32(exti_romask[bank], irq, 1)) {
++        qemu_set_irq(s->irq[oirq], level);
++        return;
++    }
++
++    /* In case of a configurable interrupt */
++    if ((level && extract32(s->rtsr[bank], irq, 1)) ||
++        (!level && extract32(s->ftsr[bank], irq, 1))) {
++
+         s->pr[bank] |= 1 << irq;
+         qemu_irq_pulse(s->irq[oirq]);
+     }
+-    /*
+-     * In the following situations :
+-     * - falling edge but rising trigger selected
+-     * - rising edge but falling trigger selected
+-     * - no trigger selected
+-     * No action is required
+-     */
+ }
+ 
+ static uint64_t stm32l4x5_exti_read(void *opaque, hwaddr addr,
+@@ -241,7 +244,7 @@ static void stm32l4x5_exti_init(Object *obj)
+ {
+     Stm32l4x5ExtiState *s = STM32L4X5_EXTI(obj);
+ 
+-    for (size_t i = 0; i < EXTI_NUM_INTERRUPT_OUT_LINES; i++) {
++    for (size_t i = 0; i < EXTI_NUM_LINES; i++) {
+         sysbus_init_irq(SYS_BUS_DEVICE(obj), &s->irq[i]);
+     }
+ 
+@@ -249,14 +252,13 @@ static void stm32l4x5_exti_init(Object *obj)
+                           TYPE_STM32L4X5_EXTI, 0x400);
+     sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->mmio);
+ 
+-    qdev_init_gpio_in(DEVICE(obj), stm32l4x5_exti_set_irq,
+-                      EXTI_NUM_GPIO_EVENT_IN_LINES);
++    qdev_init_gpio_in(DEVICE(obj), stm32l4x5_exti_set_irq, EXTI_NUM_LINES);
+ }
+ 
+ static const VMStateDescription vmstate_stm32l4x5_exti = {
+     .name = TYPE_STM32L4X5_EXTI,
+-    .version_id = 1,
+-    .minimum_version_id = 1,
++    .version_id = 2,
++    .minimum_version_id = 2,
+     .fields = (VMStateField[]) {
+         VMSTATE_UINT32_ARRAY(imr, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
+         VMSTATE_UINT32_ARRAY(emr, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
+@@ -264,6 +266,7 @@ static const VMStateDescription vmstate_stm32l4x5_exti = {
+         VMSTATE_UINT32_ARRAY(ftsr, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
+         VMSTATE_UINT32_ARRAY(swier, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
+         VMSTATE_UINT32_ARRAY(pr, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
++        VMSTATE_UINT32_ARRAY(irq_levels, Stm32l4x5ExtiState, EXTI_NUM_REGISTER),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+diff --git a/hw/misc/zynq_slcr.c b/hw/misc/zynq_slcr.c
+index 3412ff099e..ad814c3a79 100644
+--- a/hw/misc/zynq_slcr.c
++++ b/hw/misc/zynq_slcr.c
+@@ -24,6 +24,8 @@
+ #include "hw/registerfields.h"
+ #include "hw/qdev-clock.h"
+ #include "qom/object.h"
++#include "hw/qdev-properties.h"
++#include "qapi/error.h"
+ 
+ #ifndef ZYNQ_SLCR_ERR_DEBUG
+ #define ZYNQ_SLCR_ERR_DEBUG 0
+@@ -121,6 +123,7 @@ REG32(RST_REASON, 0x250)
+ 
+ REG32(REBOOT_STATUS, 0x258)
+ REG32(BOOT_MODE, 0x25c)
++    FIELD(BOOT_MODE, BOOT_MODE, 0, 4)
+ 
+ REG32(APU_CTRL, 0x300)
+ REG32(WDT_CLK_SEL, 0x304)
+@@ -195,6 +198,7 @@ struct ZynqSLCRState {
+     Clock *ps_clk;
+     Clock *uart0_ref_clk;
+     Clock *uart1_ref_clk;
++    uint8_t boot_mode;
+ };
+ 
+ /*
+@@ -371,7 +375,7 @@ static void zynq_slcr_reset_init(Object *obj, ResetType type)
+     s->regs[R_FPGA_RST_CTRL]  = 0x01F33F0F;
+     s->regs[R_RST_REASON]     = 0x00000040;
+ 
+-    s->regs[R_BOOT_MODE]      = 0x00000001;
++    s->regs[R_BOOT_MODE]      = s->boot_mode & R_BOOT_MODE_BOOT_MODE_MASK;
+ 
+     /* 0x700 - 0x7D4 */
+     for (i = 0; i < 54; i++) {
+@@ -588,6 +592,15 @@ static const ClockPortInitArray zynq_slcr_clocks = {
+     QDEV_CLOCK_END
+ };
+ 
++static void zynq_slcr_realize(DeviceState *dev, Error **errp)
++{
++    ZynqSLCRState *s = ZYNQ_SLCR(dev);
++
++    if (s->boot_mode > 0xF) {
++        error_setg(errp, "Invalid boot mode %d specified", s->boot_mode);
++    }
++}
++
+ static void zynq_slcr_init(Object *obj)
+ {
+     ZynqSLCRState *s = ZYNQ_SLCR(obj);
+@@ -610,15 +623,22 @@ static const VMStateDescription vmstate_zynq_slcr = {
+     }
+ };
+ 
++static Property zynq_slcr_props[] = {
++    DEFINE_PROP_UINT8("boot-mode", ZynqSLCRState, boot_mode, 1),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
+ static void zynq_slcr_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     ResettableClass *rc = RESETTABLE_CLASS(klass);
+ 
+     dc->vmsd = &vmstate_zynq_slcr;
++    dc->realize = zynq_slcr_realize;
+     rc->phases.enter = zynq_slcr_reset_init;
+     rc->phases.hold  = zynq_slcr_reset_hold;
+     rc->phases.exit  = zynq_slcr_reset_exit;
++    device_class_set_props(dc, zynq_slcr_props);
+ }
+ 
+ static const TypeInfo zynq_slcr_info = {
+
+-- 
+2.43.0

@@ -1,0 +1,140 @@
+From b4726cbf Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0077] trace2: implement trace2_printf() for event target
+
+---
+diff --git a/trace2/tr2_tgt_event.c b/trace2/tr2_tgt_event.c
+index 59910a1a..45b0850a 100644
+--- a/trace2/tr2_tgt_event.c
++++ b/trace2/tr2_tgt_event.c
+@@ -24,7 +24,7 @@ static struct tr2_dst tr2dst_event = {
+  * a new field to an existing event, do not require an increment to the EVENT
+  * format version.
+  */
+-#define TR2_EVENT_VERSION "3"
++#define TR2_EVENT_VERSION "4"
+ 
+ /*
+  * Region nesting limit for messages written to the event target.
+@@ -622,6 +622,24 @@ static void fn_data_json_fl(const char *file, int line,
+ 	}
+ }
+ 
++static void fn_printf_va_fl(const char *file, int line,
++			    uint64_t us_elapsed_absolute,
++			    const char *fmt, va_list ap)
++{
++	const char *event_name = "printf";
++	struct json_writer jw = JSON_WRITER_INIT;
++	double t_abs = (double)us_elapsed_absolute / 1000000.0;
++
++	jw_object_begin(&jw, 0);
++	event_fmt_prepare(event_name, file, line, NULL, &jw);
++	jw_object_double(&jw, "t_abs", 6, t_abs);
++	maybe_add_string_va(&jw, "msg", fmt, ap);
++	jw_end(&jw);
++
++	tr2_dst_write_line(&tr2dst_event, &jw.json);
++	jw_release(&jw);
++}
++
+ static void fn_timer(const struct tr2_timer_metadata *meta,
+ 		     const struct tr2_timer *timer,
+ 		     int is_final_data)
+@@ -694,7 +712,7 @@ struct tr2_tgt tr2_tgt_event = {
+ 	.pfn_region_leave_printf_va_fl = fn_region_leave_printf_va_fl,
+ 	.pfn_data_fl = fn_data_fl,
+ 	.pfn_data_json_fl = fn_data_json_fl,
+-	.pfn_printf_va_fl = NULL,
++	.pfn_printf_va_fl = fn_printf_va_fl,
+ 	.pfn_timer = fn_timer,
+ 	.pfn_counter = fn_counter,
+ };
+diff --git a/transport.c b/transport.c
+index bab28965..3c471458 100644
+--- a/transport.c
++++ b/transport.c
+@@ -189,6 +189,8 @@ static int fetch_refs_from_bundle(struct transport *transport,
+ 		       &extra_index_pack_args,
+ 		       fetch_pack_fsck_objects() ? VERIFY_BUNDLE_FSCK : 0);
+ 	transport->hash_algo = data->header.hash_algo;
++
++	strvec_clear(&extra_index_pack_args);
+ 	return ret;
+ }
+ 
+@@ -945,7 +947,13 @@ static int disconnect_git(struct transport *transport)
+ 		finish_connect(data->conn);
+ 	}
+ 
++	if (data->options.negotiation_tips) {
++		oid_array_clear(data->options.negotiation_tips);
++		free(data->options.negotiation_tips);
++	}
+ 	list_objects_filter_release(&data->options.filter_options);
++	oid_array_clear(&data->extra_have);
++	oid_array_clear(&data->shallow);
+ 	free(data);
+ 	return 0;
+ }
+diff --git a/upload-pack.c b/upload-pack.c
+index c84c3c3b..f03ba3e9 100644
+--- a/upload-pack.c
++++ b/upload-pack.c
+@@ -709,13 +709,10 @@ static int get_reachable_list(struct upload_pack_data *data,
+ 	struct object *o;
+ 	char namebuf[GIT_MAX_HEXSZ + 2]; /* ^ + hash + LF */
+ 	const unsigned hexsz = the_hash_algo->hexsz;
+-	int ret;
+ 
+ 	if (do_reachable_revlist(&cmd, &data->shallows, reachable,
+-				 data->allow_uor) < 0) {
+-		ret = -1;
+-		goto out;
+-	}
++				 data->allow_uor) < 0)
++		return -1;
+ 
+ 	while ((i = read_in_full(cmd.out, namebuf, hexsz + 1)) == hexsz + 1) {
+ 		struct object_id oid;
+@@ -739,16 +736,10 @@ static int get_reachable_list(struct upload_pack_data *data,
+ 	}
+ 	close(cmd.out);
+ 
+-	if (finish_command(&cmd)) {
+-		ret = -1;
+-		goto out;
+-	}
+-
+-	ret = 0;
++	if (finish_command(&cmd))
++		return -1;
+ 
+-out:
+-	child_process_clear(&cmd);
+-	return ret;
++	return 0;
+ }
+ 
+ static int has_unreachable(struct object_array *src, enum allow_uor allow_uor)
+@@ -758,7 +749,7 @@ static int has_unreachable(struct object_array *src, enum allow_uor allow_uor)
+ 	int i;
+ 
+ 	if (do_reachable_revlist(&cmd, src, NULL, allow_uor) < 0)
+-		goto error;
++		return 1;
+ 
+ 	/*
+ 	 * The commits out of the rev-list are not ancestors of
+@@ -784,7 +775,6 @@ static int has_unreachable(struct object_array *src, enum allow_uor allow_uor)
+ error:
+ 	if (cmd.out >= 0)
+ 		close(cmd.out);
+-	child_process_clear(&cmd);
+ 	return 1;
+ }
+ 
+
+-- 
+2.43.0

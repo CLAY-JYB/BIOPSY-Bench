@@ -1,0 +1,294 @@
+From c5e43b98 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0021] diff-lib: drop unused index argument from get_stat_data()
+
+---
+diff --git a/diff-lib.c b/diff-lib.c
+index 7a1eb637..a680768e 100644
+--- a/diff-lib.c
++++ b/diff-lib.c
+@@ -308,8 +308,7 @@ static void diff_index_show_file(struct rev_info *revs,
+ 		       oid, oid_valid, ce->name, dirty_submodule);
+ }
+ 
+-static int get_stat_data(const struct index_state *istate,
+-			 const struct cache_entry *ce,
++static int get_stat_data(const struct cache_entry *ce,
+ 			 const struct object_id **oidp,
+ 			 unsigned int *modep,
+ 			 int cached, int match_missing,
+@@ -352,7 +351,6 @@ static void show_new_file(struct rev_info *revs,
+ 	const struct object_id *oid;
+ 	unsigned int mode;
+ 	unsigned dirty_submodule = 0;
+-	struct index_state *istate = revs->diffopt.repo->index;
+ 
+ 	if (new_file && S_ISSPARSEDIR(new_file->ce_mode)) {
+ 		diff_tree_oid(NULL, &new_file->oid, new_file->name, &revs->diffopt);
+@@ -363,7 +361,7 @@ static void show_new_file(struct rev_info *revs,
+ 	 * New file in the index: it might actually be different in
+ 	 * the working tree.
+ 	 */
+-	if (get_stat_data(istate, new_file, &oid, &mode, cached, match_missing,
++	if (get_stat_data(new_file, &oid, &mode, cached, match_missing,
+ 	    &dirty_submodule, &revs->diffopt) < 0)
+ 		return;
+ 
+@@ -379,7 +377,6 @@ static int show_modified(struct rev_info *revs,
+ 	unsigned int mode, oldmode;
+ 	const struct object_id *oid;
+ 	unsigned dirty_submodule = 0;
+-	struct index_state *istate = revs->diffopt.repo->index;
+ 
+ 	assert(S_ISSPARSEDIR(old_entry->ce_mode) ==
+ 	       S_ISSPARSEDIR(new_entry->ce_mode));
+@@ -395,7 +392,7 @@ static int show_modified(struct rev_info *revs,
+ 		return 0;
+ 	}
+ 
+-	if (get_stat_data(istate, new_entry, &oid, &mode, cached, match_missing,
++	if (get_stat_data(new_entry, &oid, &mode, cached, match_missing,
+ 			  &dirty_submodule, &revs->diffopt) < 0) {
+ 		if (report_missing)
+ 			diff_index_show_file(revs, "-", old_entry,
+diff --git a/exec-cmd.c b/exec-cmd.c
+index 909777f6..507e67d5 100644
+--- a/exec-cmd.c
++++ b/exec-cmd.c
+@@ -150,6 +150,25 @@ static int git_get_exec_path_darwin(struct strbuf *buf)
+ }
+ #endif /* HAVE_NS_GET_EXECUTABLE_PATH */
+ 
++#ifdef HAVE_ZOS_GET_EXECUTABLE_PATH
++/*
++ * Resolves the executable path from current program's directory and name.
++ *
++ * Returns 0 on success, -1 on failure.
++ */
++static int git_get_exec_path_zos(struct strbuf *buf)
++{
++	char *dir = __getprogramdir();
++	char *exe = getprogname();
++	if (dir && exe) {
++		strbuf_addf(buf, "%s/%s", dir, exe);
++		return 0;
++	}
++	return -1;
++}
++
++#endif /* HAVE_ZOS_GET_EXECUTABLE_PATH */
++
+ #ifdef HAVE_WPGMPTR
+ /*
+  * Resolves the executable path by using the global variable _wpgmptr.
+@@ -206,6 +225,10 @@ static int git_get_exec_path(struct strbuf *buf, const char *argv0)
+ 		git_get_exec_path_wpgmptr(buf) &&
+ #endif /* HAVE_WPGMPTR */
+ 
++#ifdef HAVE_ZOS_GET_EXECUTABLE_PATH
++		git_get_exec_path_zos(buf) &&
++#endif /*HAVE_ZOS_GET_EXECUTABLE_PATH */
++
+ 		git_get_exec_path_from_argv0(buf, argv0)) {
+ 		return -1;
+ 	}
+diff --git a/fetch-pack.c b/fetch-pack.c
+index 0ed82fed..58b4581a 100644
+--- a/fetch-pack.c
++++ b/fetch-pack.c
+@@ -2227,10 +2227,7 @@ void negotiate_using_fetch(const struct oid_array *negotiation_tips,
+ 	trace2_region_leave("fetch-pack", "negotiate_using_fetch", the_repository);
+ 	trace2_data_intmax("negotiate_using_fetch", the_repository,
+ 			   "total_rounds", negotiation_round);
+-
+ 	clear_common_flag(acked_commits);
+-	object_array_clear(&nt_object_array);
+-	negotiator.release(&negotiator);
+ 	strbuf_release(&req_buf);
+ }
+ 
+diff --git a/git-compat-util.h b/git-compat-util.h
+index 71b4d23f..e4a306dd 100644
+--- a/git-compat-util.h
++++ b/git-compat-util.h
+@@ -195,6 +195,19 @@ struct strbuf;
+ #define _NETBSD_SOURCE 1
+ #define _SGI_SOURCE 1
+ 
++/*
++ * UNUSED marks a function parameter that is always unused.  It also
++ * can be used to annotate a function, a variable, or a type that is
++ * always unused.
++ *
++ * A callback interface may dictate that a function accepts a
++ * parameter at that position, but the implementation of the function
++ * may not need to use the parameter.  In such a case, mark the parameter
++ * with UNUSED.
++ *
++ * When a parameter may be used or unused, depending on conditional
++ * compilation, consider using MAYBE_UNUSED instead.
++ */
+ #if GIT_GNUC_PREREQ(4, 5)
+ #define UNUSED __attribute__((unused)) \
+ 	__attribute__((deprecated ("parameter declared as UNUSED")))
+@@ -649,6 +662,17 @@ static inline int git_has_dir_sep(const char *path)
+ #define RESULT_MUST_BE_USED
+ #endif
+ 
++/*
++ * MAYBE_UNUSED marks a function parameter that may be unused, but
++ * whose use is not an error.  It also can be used to annotate a
++ * function, a variable, or a type that may be unused.
++ *
++ * Depending on a configuration, all uses of such a thing may become
++ * #ifdef'ed away.  Marking it with UNUSED would give a warning in a
++ * compilation where it is indeed used, and not marking it at all
++ * would give a warning in a compilation where it is unused.  In such
++ * a case, MAYBE_UNUSED is the appropriate annotation to use.
++ */
+ #define MAYBE_UNUSED __attribute__((__unused__))
+ 
+ #include "compat/bswap.h"
+diff --git a/git-send-email.perl b/git-send-email.perl
+index 72044e5e..c835d4c1 100755
+--- a/git-send-email.perl
++++ b/git-send-email.perl
+@@ -31,6 +31,7 @@ sub usage {
+ git send-email [<options>] <file|directory>
+ git send-email [<options>] <format-patch options>
+ git send-email --dump-aliases
++git send-email --translate-aliases
+ 
+   Composing:
+     --from                  <str>  * Email From:
+@@ -46,6 +47,8 @@ git send-email --dump-aliases
+     --compose-encoding      <str>  * Encoding to assume for introduction.
+     --8bit-encoding         <str>  * Encoding to assume 8bit mails if undeclared
+     --transfer-encoding     <str>  * Transfer encoding to use (quoted-printable, 8bit, base64)
++    --[no-]mailmap                 * Use mailmap file to map all email addresses to canonical
++                                     real names and email addresses.
+ 
+   Sending:
+     --envelope-sender       <str>  * Email envelope sender.
+@@ -99,6 +102,10 @@ git send-email --dump-aliases
+ 
+   Information:
+     --dump-aliases                 * Dump configured aliases and exit.
++    --translate-aliases            * Translate aliases read from standard
++                                     input according to the configured email
++                                     alias file(s), outputting the result to
++                                     standard output.
+ 
+ EOT
+ 	exit(1);
+@@ -212,6 +219,7 @@ my $format_patch;
+ my $compose_filename;
+ my $force = 0;
+ my $dump_aliases = 0;
++my $translate_aliases = 0;
+ 
+ # Variables to prevent short format-patch options from being captured
+ # as abbreviated send-email options
+@@ -272,12 +280,14 @@ my (@suppress_cc);
+ my ($auto_8bit_encoding);
+ my ($compose_encoding);
+ my ($sendmail_cmd);
++my ($mailmap_file, $mailmap_blob);
+ # Variables with corresponding config settings & hardcoded defaults
+ my ($debug_net_smtp) = 0;		# Net::SMTP, see send_message()
+ my $thread = 1;
+ my $chain_reply_to = 0;
+ my $use_xmailer = 1;
+ my $validate = 1;
++my $mailmap = 0;
+ my $target_xfer_encoding = 'auto';
+ my $forbid_sendmail_variables = 1;
+ 
+@@ -294,6 +304,7 @@ my %config_bool_settings = (
+     "annotate" => \$annotate,
+     "xmailer" => \$use_xmailer,
+     "forbidsendmailvariables" => \$forbid_sendmail_variables,
++    "mailmap" => \$mailmap,
+ );
+ 
+ my %config_settings = (
+@@ -327,6 +338,8 @@ my %config_settings = (
+ my %config_path_settings = (
+     "aliasesfile" => \@alias_files,
+     "smtpsslcertpath" => \$smtp_ssl_cert_path,
++    "mailmap.file" => \$mailmap_file,
++    "mailmap.blob" => \$mailmap_blob,
+ );
+ 
+ # Handle Uncouth Termination
+@@ -476,11 +489,14 @@ my $git_completion_helper;
+ my %dump_aliases_options = (
+ 	"h" => \$help,
+ 	"dump-aliases" => \$dump_aliases,
++	"translate-aliases" => \$translate_aliases,
+ );
+ $rc = GetOptions(%dump_aliases_options);
+ usage() unless $rc;
+ die __("--dump-aliases incompatible with other options\n")
+-    if !$help and $dump_aliases and @ARGV;
++    if !$help and ($dump_aliases or $translate_aliases) and @ARGV;
++die __("--dump-aliases and --translate-aliases are mutually exclusive\n")
++    if !$help and $dump_aliases and $translate_aliases;
+ my %options = (
+ 		    "sender|from=s" => \$sender,
+ 		    "in-reply-to=s" => \$initial_in_reply_to,
+@@ -524,6 +540,8 @@ my %options = (
+ 		    "thread!" => \$thread,
+ 		    "validate!" => \$validate,
+ 		    "transfer-encoding=s" => \$target_xfer_encoding,
++		    "mailmap!" => \$mailmap,
++		    "use-mailmap!" => \$mailmap,
+ 		    "format-patch!" => \$format_patch,
+ 		    "8bit-encoding=s" => \$auto_8bit_encoding,
+ 		    "compose-encoding=s" => \$compose_encoding,
+@@ -724,6 +742,16 @@ if ($dump_aliases) {
+     exit(0);
+ }
+ 
++if ($translate_aliases) {
++	while (<STDIN>) {
++		my @addr_list = parse_address_line($_);
++		@addr_list = expand_aliases(@addr_list);
++		@addr_list = sanitize_address_list(@addr_list);
++		print "$_\n" for @addr_list;
++	}
++	exit(0);
++}
++
+ # is_format_patch_arg($f) returns 0 if $f names a patch, or 1 if
+ # $f is a revision list specification to be passed to format-patch.
+ sub is_format_patch_arg {
+@@ -1085,6 +1113,16 @@ if ($compose && $compose > 0) {
+ our ($message_id, %mail, $subject, $in_reply_to, $references, $message,
+ 	$needs_confirm, $message_num, $ask_default);
+ 
++sub mailmap_address_list {
++	return @_ unless @_ and $mailmap;
++	my @options = ();
++	push(@options, "--mailmap-file=$mailmap_file") if $mailmap_file;
++	push(@options, "--mailmap-blob=$mailmap_blob") if $mailmap_blob;
++	my @addr_list = Git::command('check-mailmap', @options, @_);
++	s/^<(.*)>$/$1/ for @addr_list;
++	return @addr_list;
++}
++
+ sub extract_valid_address {
+ 	my $address = shift;
+ 	my $local_part_regexp = qr/[^<>"\s@]+/;
+@@ -1294,6 +1332,7 @@ sub process_address_list {
+ 	@addr_list = expand_aliases(@addr_list);
+ 	@addr_list = sanitize_address_list(@addr_list);
+ 	@addr_list = validate_address_list(@addr_list);
++	@addr_list = mailmap_address_list(@addr_list);
+ 	return @addr_list;
+ }
+ 
+
+-- 
+2.43.0

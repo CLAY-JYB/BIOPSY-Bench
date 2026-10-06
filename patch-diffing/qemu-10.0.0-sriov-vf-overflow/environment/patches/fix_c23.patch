@@ -1,0 +1,16 @@
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -310,5 +326,10 @@ PCIDevice *pcie_sriov_get_vf_at_index(PCIDevice *dev, int n)
+ 
+ uint16_t pcie_sriov_num_vfs(PCIDevice *dev)
+ {
+-    return dev->exp.sriov_pf.num_vfs;
++    uint16_t sriov_cap = dev->exp.sriov_cap;
++    uint8_t *cfg = dev->config + sriov_cap;
++
++    return sriov_cap &&
++           (pci_get_word(cfg + PCI_SRIOV_CTRL) & PCI_SRIOV_CTRL_VFE) ?
++           pci_get_word(cfg + PCI_SRIOV_NUM_VF) : 0;
+ }

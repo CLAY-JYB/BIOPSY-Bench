@@ -1,0 +1,741 @@
+diff --git a/string.c b/string.c
+index 9ed5de5a3..36e09b589 100644
+--- a/string.c
++++ b/string.c
+@@ -78,24 +78,39 @@
+ VALUE rb_cString;
+ VALUE rb_cSymbol;
+ 
+-/* FLAGS of RString
++/* Flags of RString
+  *
+  * 1:     RSTRING_NOEMBED
+- * 2:     STR_SHARED (== ELTS_SHARED)
+- * 5:     STR_SHARED_ROOT (RSTRING_NOEMBED==1 && STR_SHARED == 0, there may be
+- *                         other strings that rely on this string's buffer)
+- * 6:     STR_BORROWED (when RSTRING_NOEMBED==1 && klass==0, unsafe to recycle
+- *                      early, specific to rb_str_tmp_frozen_{acquire,release})
+- * 7:     STR_TMPLOCK (set when a pointer to the buffer is passed to syscall
+- *                     such as read(2). Any modification and realloc is prohibited)
+- *
+- * 8-9:   ENC_CODERANGE (2 bits)
+- * 10-16: ENCODING (7 bits == 128)
++ *            The string is not embedded. When a string is embedded, the contents
++ *            follow the header. When a string is not embedded, the contents is
++ *            on a separately allocated buffer.
++ * 2:     STR_SHARED (equal to ELTS_SHARED)
++ *            The string is shared. The buffer this string points to is owned by
++ *            another string (the shared root).
++ * 5:     STR_SHARED_ROOT
++ *            Other strings may point to the contents of this string. When this
++ *            flag is set, STR_SHARED must not be set.
++ * 6:     STR_BORROWED
++ *            When RSTRING_NOEMBED is set and klass is 0, this string is unsafe
++ *            to be unshared by rb_str_tmp_frozen_release.
++ * 7:     STR_TMPLOCK
++ *            The pointer to the buffer is passed to a system call such as
++ *            read(2). Any modification and realloc is prohibited.
++ * 8-9:   ENC_CODERANGE
++ *            Stores the coderange of the string.
++ * 10-16: ENCODING
++ *            Stores the encoding of the string.
+  * 17:    RSTRING_FSTR
+- * 18:    STR_NOFREE (do not free this string's buffer when a String is freed.
+- *                    used for a string object based on C string literal)
+- * 19:    STR_FAKESTR (when RVALUE is not managed by GC. Typically, the string
+- *                     object header is temporarily allocated on C stack)
++ *            The string is a fstring. The string is deduplicated in the fstring
++ *            table.
++ * 18:    STR_NOFREE
++ *            Do not free this string's buffer when the string is reclaimed
++ *            by the garbage collector. Used for when the string buffer is a C
++ *            string literal.
++ * 19:    STR_FAKESTR
++ *            The string is not allocated or managed by the garbage collector.
++ *            Typically, the string object header (struct RString) is temporarily
++ *            allocated on C stack.
+  */
+ 
+ #define RUBY_MAX_CHAR_LEN 16
+@@ -155,7 +170,7 @@ str_enc_fastpath(VALUE str)
+         }\
+     }\
+     else {\
+-        assert(!FL_TEST((str), STR_SHARED)); \
++        RUBY_ASSERT(!FL_TEST((str), STR_SHARED)); \
+         SIZED_REALLOC_N(RSTRING(str)->as.heap.ptr, char, \
+                         (size_t)(capacity) + (termlen), STR_HEAP_SIZE(str)); \
+         RSTRING(str)->as.heap.aux.capa = (capacity);\
+@@ -164,8 +179,8 @@ str_enc_fastpath(VALUE str)
+ 
+ #define STR_SET_SHARED(str, shared_str) do { \
+     if (!FL_TEST(str, STR_FAKESTR)) { \
+-        assert(RSTRING_PTR(shared_str) <= RSTRING_PTR(str)); \
+-        assert(RSTRING_PTR(str) <= RSTRING_PTR(shared_str) + RSTRING_LEN(shared_str)); \
++        RUBY_ASSERT(RSTRING_PTR(shared_str) <= RSTRING_PTR(str)); \
++        RUBY_ASSERT(RSTRING_PTR(str) <= RSTRING_PTR(shared_str) + RSTRING_LEN(shared_str)); \
+         RB_OBJ_WRITE((str), &RSTRING(str)->as.heap.aux.shared, (shared_str)); \
+         FL_SET((str), STR_SHARED); \
+         FL_SET((shared_str), STR_SHARED_ROOT); \
+@@ -370,7 +385,7 @@ fstr_update_callback(st_data_t *key, st_data_t *value, st_data_t data, int exist
+             if (STR_SHARED_P(str)) { /* str should not be shared */
+                 /* shared substring  */
+                 str_make_independent(str);
+-                assert(OBJ_FROZEN(str));
++                RUBY_ASSERT(OBJ_FROZEN(str));
+             }
+             if (!BARE_STRING_P(str)) {
+                 str = str_new_frozen(rb_cString, str);
+@@ -403,7 +418,7 @@ rb_fstring(VALUE str)
+         }
+ 
+         if (FL_TEST_RAW(str, STR_SHARED_ROOT | STR_SHARED) == STR_SHARED_ROOT) {
+-            assert(OBJ_FROZEN(str));
++            RUBY_ASSERT(OBJ_FROZEN(str));
+             return str;
+         }
+     }
+@@ -437,10 +452,11 @@ register_fstring(VALUE str, bool copy)
+     }
+     RB_VM_LOCK_LEAVE();
+ 
+-    assert(OBJ_FROZEN(args.fstr));
+-    assert(!FL_TEST_RAW(args.fstr, STR_FAKESTR));
+-    assert(!FL_TEST_RAW(args.fstr, FL_EXIVAR));
+-    assert(RBASIC_CLASS(args.fstr) == rb_cString);
++    RUBY_ASSERT(OBJ_FROZEN(args.fstr));
++    RUBY_ASSERT(!FL_TEST_RAW(args.fstr, STR_FAKESTR));
++    RUBY_ASSERT(!FL_TEST_RAW(args.fstr, FL_EXIVAR));
++    RUBY_ASSERT(RBASIC_CLASS(args.fstr) == rb_cString);
++
+     return args.fstr;
+ }
+ 
+@@ -829,8 +845,8 @@ static inline VALUE
+ str_alloc_embed(VALUE klass, size_t capa)
+ {
+     size_t size = rb_str_embed_size(capa);
+-    assert(size > 0);
+-    assert(rb_gc_size_allocatable_p(size));
++    RUBY_ASSERT(size > 0);
++    RUBY_ASSERT(rb_gc_size_allocatable_p(size));
+ 
+     NEWOBJ_OF(str, struct RString, klass,
+             T_STRING | (RGENGC_WB_PROTECTED_STRING ? FL_WB_PROTECTED : 0), size, 0);
+@@ -1280,7 +1296,8 @@ str_replace_shared_without_enc(VALUE str2, VALUE str)
+             root = rb_str_new_frozen(str);
+             RSTRING_GETMEM(root, ptr, len);
+         }
+-        assert(OBJ_FROZEN(root));
++        RUBY_ASSERT(OBJ_FROZEN(root));
++
+         if (!STR_EMBED_P(str2) && !FL_TEST_RAW(str2, STR_SHARED|STR_NOFREE)) {
+             if (FL_TEST_RAW(str2, STR_SHARED_ROOT)) {
+                 rb_fatal("about to free a possible shared root");
+@@ -1384,21 +1401,21 @@ rb_str_tmp_frozen_release(VALUE orig, VALUE tmp)
+         return;
+ 
+     if (STR_EMBED_P(tmp)) {
+-        assert(OBJ_FROZEN_RAW(tmp));
++        RUBY_ASSERT(OBJ_FROZEN_RAW(tmp));
+     }
+     else if (FL_TEST_RAW(orig, STR_SHARED) &&
+             !FL_TEST_RAW(orig, STR_TMPLOCK|RUBY_FL_FREEZE)) {
+         VALUE shared = RSTRING(orig)->as.heap.aux.shared;
+ 
+         if (shared == tmp && !FL_TEST_RAW(tmp, STR_BORROWED)) {
+-            assert(RSTRING(orig)->as.heap.ptr == RSTRING(tmp)->as.heap.ptr);
+-            assert(RSTRING_LEN(orig) == RSTRING_LEN(tmp));
++            RUBY_ASSERT(RSTRING(orig)->as.heap.ptr == RSTRING(tmp)->as.heap.ptr);
++            RUBY_ASSERT(RSTRING_LEN(orig) == RSTRING_LEN(tmp));
+ 
+             /* Unshare orig since the root (tmp) only has this one child. */
+             FL_UNSET_RAW(orig, STR_SHARED);
+             RSTRING(orig)->as.heap.aux.capa = RSTRING(tmp)->as.heap.aux.capa;
+             RBASIC(orig)->flags |= RBASIC(tmp)->flags & STR_NOFREE;
+-            assert(OBJ_FROZEN_RAW(tmp));
++            RUBY_ASSERT(OBJ_FROZEN_RAW(tmp));
+ 
+             /* Make tmp embedded and empty so it is safe for sweeping. */
+             STR_SET_EMBED(tmp);
+@@ -1416,8 +1433,8 @@ str_new_frozen(VALUE klass, VALUE orig)
+ static VALUE
+ heap_str_make_shared(VALUE klass, VALUE orig)
+ {
+-    assert(!STR_EMBED_P(orig));
+-    assert(!STR_SHARED_P(orig));
++    RUBY_ASSERT(!STR_EMBED_P(orig));
++    RUBY_ASSERT(!STR_SHARED_P(orig));
+ 
+     VALUE str = str_alloc_heap(klass);
+     STR_SET_LEN(str, RSTRING_LEN(orig));
+@@ -1441,23 +1458,23 @@ str_new_frozen_buffer(VALUE klass, VALUE orig, int copy_encoding)
+ 
+     if (STR_EMBED_P(orig) || STR_EMBEDDABLE_P(len, termlen)) {
+         str = str_new0(klass, RSTRING_PTR(orig), len, termlen);
+-        assert(STR_EMBED_P(str));
++        RUBY_ASSERT(STR_EMBED_P(str));
+     }
+     else {
+         if (FL_TEST_RAW(orig, STR_SHARED)) {
+             VALUE shared = RSTRING(orig)->as.heap.aux.shared;
+             long ofs = RSTRING(orig)->as.heap.ptr - RSTRING_PTR(shared);
+             long rest = RSTRING_LEN(shared) - ofs - RSTRING_LEN(orig);
+-            assert(ofs >= 0);
+-            assert(rest >= 0);
+-            assert(ofs + rest <= RSTRING_LEN(shared));
+-            assert(OBJ_FROZEN(shared));
++            RUBY_ASSERT(ofs >= 0);
++            RUBY_ASSERT(rest >= 0);
++            RUBY_ASSERT(ofs + rest <= RSTRING_LEN(shared));
++            RUBY_ASSERT(OBJ_FROZEN(shared));
+ 
+             if ((ofs > 0) || (rest > 0) ||
+                 (klass != RBASIC(shared)->klass) ||
+                 ENCODING_GET(shared) != ENCODING_GET(orig)) {
+                 str = str_new_shared(klass, shared);
+-                assert(!STR_EMBED_P(str));
++                RUBY_ASSERT(!STR_EMBED_P(str));
+                 RSTRING(str)->as.heap.ptr += ofs;
+                 STR_SET_LEN(str, RSTRING_LEN(str) - (ofs + rest));
+             }
+@@ -1610,9 +1627,9 @@ str_shared_replace(VALUE str, VALUE str2)
+     }
+     else {
+         if (STR_EMBED_P(str2)) {
+-            assert(!FL_TEST(str2, STR_SHARED));
++            RUBY_ASSERT(!FL_TEST(str2, STR_SHARED));
+             long len = RSTRING_LEN(str2);
+-            assert(len + termlen <= str_embed_capa(str2));
++            RUBY_ASSERT(len + termlen <= str_embed_capa(str2));
+ 
+             char *new_ptr = ALLOC_N(char, len + termlen);
+             memcpy(new_ptr, RSTRING(str2)->as.embed.ary, len + termlen);
+@@ -1671,7 +1688,7 @@ str_replace(VALUE str, VALUE str2)
+     len = RSTRING_LEN(str2);
+     if (STR_SHARED_P(str2)) {
+         VALUE shared = RSTRING(str2)->as.heap.aux.shared;
+-        assert(OBJ_FROZEN(shared));
++        RUBY_ASSERT(OBJ_FROZEN(shared));
+         STR_SET_NOEMBED(str);
+         STR_SET_LEN(str, len);
+         RSTRING(str)->as.heap.ptr = RSTRING_PTR(str2);
+@@ -1689,8 +1706,8 @@ static inline VALUE
+ ec_str_alloc_embed(struct rb_execution_context_struct *ec, VALUE klass, size_t capa)
+ {
+     size_t size = rb_str_embed_size(capa);
+-    assert(size > 0);
+-    assert(rb_gc_size_allocatable_p(size));
++    RUBY_ASSERT(size > 0);
++    RUBY_ASSERT(rb_gc_size_allocatable_p(size));
+ 
+     NEWOBJ_OF(str, struct RString, klass,
+             T_STRING | (RGENGC_WB_PROTECTED_STRING ? FL_WB_PROTECTED : 0), size, ec);
+@@ -1719,8 +1736,8 @@ str_duplicate_setup(VALUE klass, VALUE str, VALUE dup)
+     if (STR_EMBED_P(str)) {
+         long len = RSTRING_LEN(str);
+ 
+-        assert(STR_EMBED_P(dup));
+-        assert(str_embed_capa(dup) >= len + 1);
++        RUBY_ASSERT(STR_EMBED_P(dup));
++        RUBY_ASSERT(str_embed_capa(dup) >= len + 1);
+         MEMCPY(RSTRING(dup)->as.embed.ary, RSTRING(str)->as.embed.ary, char, len + 1);
+     }
+     else {
+@@ -1732,8 +1749,8 @@ str_duplicate_setup(VALUE klass, VALUE str, VALUE dup)
+             root = str = str_new_frozen(klass, str);
+             flags = FL_TEST_RAW(str, flag_mask);
+         }
+-        assert(!STR_SHARED_P(root));
+-        assert(RB_OBJ_FROZEN_RAW(root));
++        RUBY_ASSERT(!STR_SHARED_P(root));
++        RUBY_ASSERT(RB_OBJ_FROZEN_RAW(root));
+ 
+         RSTRING(dup)->as.heap.ptr = RSTRING_PTR(str);
+         FL_SET(root, STR_SHARED_ROOT);
+@@ -1862,7 +1879,7 @@ rb_str_init(int argc, VALUE *argv, VALUE str)
+             str_modifiable(str);
+             if (STR_EMBED_P(str)) { /* make noembed always */
+                 char *new_ptr = ALLOC_N(char, (size_t)capa + termlen);
+-                assert(RSTRING_LEN(str) + 1 <= str_embed_capa(str));
++                RUBY_ASSERT(RSTRING_LEN(str) + 1 <= str_embed_capa(str));
+                 memcpy(new_ptr, RSTRING(str)->as.embed.ary, RSTRING_LEN(str) + 1);
+                 RSTRING(str)->as.heap.ptr = new_ptr;
+             }
+@@ -2291,8 +2308,8 @@ rb_str_plus(VALUE str1, VALUE str2)
+ VALUE
+ rb_str_opt_plus(VALUE str1, VALUE str2)
+ {
+-    assert(RBASIC_CLASS(str1) == rb_cString);
+-    assert(RBASIC_CLASS(str2) == rb_cString);
++    RUBY_ASSERT(RBASIC_CLASS(str1) == rb_cString);
++    RUBY_ASSERT(RBASIC_CLASS(str2) == rb_cString);
+     long len1, len2;
+     MAYBE_UNUSED(char) *ptr1, *ptr2;
+     RSTRING_GETMEM(str1, ptr1, len1);
+@@ -2608,7 +2625,7 @@ rb_str_change_terminator_length(VALUE str, const int oldtermlen, const int terml
+     long capa = str_capacity(str, oldtermlen) + oldtermlen;
+     long len = RSTRING_LEN(str);
+ 
+-    assert(capa >= len);
++    RUBY_ASSERT(capa >= len);
+     if (capa - len < termlen) {
+         rb_check_lockedtmp(str);
+         str_make_independent_expand(str, len, 0L, termlen);
+@@ -2620,7 +2637,7 @@ rb_str_change_terminator_length(VALUE str, const int oldtermlen, const int terml
+     else {
+         if (!STR_EMBED_P(str)) {
+             /* modify capa instead of realloc */
+-            assert(!FL_TEST((str), STR_SHARED));
++            RUBY_ASSERT(!FL_TEST((str), STR_SHARED));
+             RSTRING(str)->as.heap.aux.capa = capa - termlen;
+         }
+         if (termlen > oldtermlen) {
+@@ -2853,9 +2870,9 @@ str_subseq(VALUE str, long beg, long len)
+ {
+     VALUE str2;
+ 
+-    assert(beg >= 0);
+-    assert(len >= 0);
+-    assert(beg+len <= RSTRING_LEN(str));
++    RUBY_ASSERT(beg >= 0);
++    RUBY_ASSERT(len >= 0);
++    RUBY_ASSERT(beg+len <= RSTRING_LEN(str));
+ 
+     const int termlen = TERM_LEN(str);
+     if (!SHARABLE_SUBSTRING_P(beg, len, RSTRING_LEN(str))) {
+@@ -2876,7 +2893,7 @@ str_subseq(VALUE str, long beg, long len)
+     }
+     else {
+         str_replace_shared(str2, str);
+-        assert(!STR_EMBED_P(str2));
++        RUBY_ASSERT(!STR_EMBED_P(str2));
+         ENC_CODERANGE_CLEAR(str2);
+         RSTRING(str2)->as.heap.ptr += beg;
+         if (RSTRING_LEN(str2) > len) {
+@@ -5393,8 +5410,9 @@ rb_str_update(VALUE str, long beg, long len, VALUE val)
+     if (beg < 0) {
+         beg += slen;
+     }
+-    assert(beg >= 0);
+-    assert(beg <= slen);
++    RUBY_ASSERT(beg >= 0);
++    RUBY_ASSERT(beg <= slen);
++
+     if (len > slen - beg) {
+         len = slen - beg;
+     }
+@@ -6348,8 +6366,9 @@ str_check_beg_len(VALUE str, long *beg, long *len)
+     if (*beg < 0) {
+         *beg += slen;
+     }
+-    assert(*beg >= 0);
+-    assert(*beg <= slen);
++    RUBY_ASSERT(*beg >= 0);
++    RUBY_ASSERT(*beg <= slen);
++
+     if (*len > slen - *beg) {
+         *len = slen - *beg;
+     }
+@@ -12118,7 +12137,7 @@ void
+ Init_String(void)
+ {
+     rb_cString  = rb_define_class("String", rb_cObject);
+-    assert(rb_vm_fstring_table());
++    RUBY_ASSERT(rb_vm_fstring_table());
+     st_foreach(rb_vm_fstring_table(), fstring_set_class_i, rb_cString);
+     rb_include_module(rb_cString, rb_mComparable);
+     rb_define_alloc_func(rb_cString, empty_str_alloc);
+diff --git a/symbol.c b/symbol.c
+index 2c2ab4380..bdbfbae83 100644
+--- a/symbol.c
++++ b/symbol.c
+@@ -581,11 +581,14 @@ register_static_symid_str(ID id, VALUE str)
+ }
+ 
+ static int
+-sym_check_asciionly(VALUE str)
++sym_check_asciionly(VALUE str, bool fake_str)
+ {
+     if (!rb_enc_asciicompat(rb_enc_get(str))) return FALSE;
+     switch (rb_enc_str_coderange(str)) {
+       case ENC_CODERANGE_BROKEN:
++        if (fake_str) {
++            str = rb_enc_str_new(RSTRING_PTR(str), RSTRING_LEN(str), rb_enc_get(str));
++        }
+         rb_raise(rb_eEncodingError, "invalid symbol in encoding %s :%+"PRIsVALUE,
+                  rb_enc_name(rb_enc_get(str)), str);
+       case ENC_CODERANGE_7BIT:
+@@ -778,7 +781,7 @@ intern_str(VALUE str, int mutable)
+ 
+     id = rb_str_symname_type(str, IDSET_ATTRSET_FOR_INTERN);
+     if (id == (ID)-1) id = ID_JUNK;
+-    if (sym_check_asciionly(str)) {
++    if (sym_check_asciionly(str, false)) {
+         if (!mutable) str = rb_str_dup(str);
+         rb_enc_associate(str, rb_usascii_encoding());
+     }
+@@ -869,7 +872,7 @@ rb_str_intern(VALUE str)
+         else if (USE_SYMBOL_GC) {
+             rb_encoding *enc = rb_enc_get(str);
+             rb_encoding *ascii = rb_usascii_encoding();
+-            if (enc != ascii && sym_check_asciionly(str)) {
++            if (enc != ascii && sym_check_asciionly(str, false)) {
+                 str = rb_str_dup(str);
+                 rb_enc_associate(str, ascii);
+                 OBJ_FREEZE(str);
+@@ -1116,7 +1119,7 @@ rb_check_id(volatile VALUE *namep)
+         *namep = name;
+     }
+ 
+-    sym_check_asciionly(name);
++    sym_check_asciionly(name, false);
+ 
+     return lookup_str_id(name);
+ }
+@@ -1175,7 +1178,7 @@ rb_check_symbol(volatile VALUE *namep)
+         *namep = name;
+     }
+ 
+-    sym_check_asciionly(name);
++    sym_check_asciionly(name, false);
+ 
+     if ((sym = lookup_str_sym(name)) != 0) {
+         return sym;
+@@ -1190,7 +1193,7 @@ rb_check_id_cstr(const char *ptr, long len, rb_encoding *enc)
+     struct RString fake_str;
+     const VALUE name = rb_setup_fake_str(&fake_str, ptr, len, enc);
+ 
+-    sym_check_asciionly(name);
++    sym_check_asciionly(name, true);
+ 
+     return lookup_str_id(name);
+ }
+@@ -1202,7 +1205,7 @@ rb_check_symbol_cstr(const char *ptr, long len, rb_encoding *enc)
+     struct RString fake_str;
+     const VALUE name = rb_setup_fake_str(&fake_str, ptr, len, enc);
+ 
+-    sym_check_asciionly(name);
++    sym_check_asciionly(name, true);
+ 
+     if ((sym = lookup_str_sym(name)) != 0) {
+         return sym;
+diff --git a/test/.excludes-prism/TestSetTraceFunc.rb b/test/.excludes-prism/TestSetTraceFunc.rb
+deleted file mode 100644
+index 3999fd388..000000000
+--- a/test/.excludes-prism/TestSetTraceFunc.rb
++++ /dev/null
+@@ -1,3 +0,0 @@
+-exclude(:test_tracepoint_nested_enabled_with_target, "unknown")
+-exclude(:test_allow_reentry, "unknown")
+-exclude(:test_tp_rescue, "unknown")
+diff --git a/test/irb/cmd/test_force_exit.rb b/test/irb/cmd/test_force_exit.rb
+new file mode 100644
+index 000000000..9e86c644d
+--- /dev/null
++++ b/test/irb/cmd/test_force_exit.rb
+@@ -0,0 +1,63 @@
++# frozen_string_literal: false
++require 'irb'
++
++require_relative "../helper"
++
++module TestIRB
++  class ForceExitTest < IntegrationTestCase
++    def test_forced_exit_finishes_process_immediately
++      write_ruby <<~'ruby'
++        puts "First line"
++        puts "Second line"
++        binding.irb
++        puts "Third line"
++        binding.irb
++        puts "Fourth line"
++      ruby
++
++      output = run_ruby_file do
++        type "123"
++        type "456"
++        type "exit!"
++      end
++
++      assert_match(/First line\r\n/, output)
++      assert_match(/Second line\r\n/, output)
++      assert_match(/irb\(main\):001> 123/, output)
++      assert_match(/irb\(main\):002> 456/, output)
++      refute_match(/Third line\r\n/, output)
++      refute_match(/Fourth line\r\n/, output)
++    end
++
++    def test_forced_exit_in_nested_sessions
++      write_ruby <<~'ruby'
++        def foo
++          binding.irb
++        end
++
++        binding.irb
++        binding.irb
++      ruby
++
++      output = run_ruby_file do
++        type "123"
++        type "foo"
++        type "exit!"
++      end
++
++      assert_match(/irb\(main\):001> 123/, output)
++    end
++
++    def test_forced_exit_out_of_irb_session
++      write_ruby <<~'ruby'
++        at_exit { puts 'un' + 'reachable' }
++        binding.irb
++        exit! # this will call exit! method overrided by command
++      ruby
++      output = run_ruby_file do
++        type "exit"
++      end
++      assert_not_include(output, 'unreachable')
++    end
++  end
++end
+diff --git a/test/irb/cmd/test_show_source.rb b/test/irb/cmd/test_show_source.rb
+index c2608926e..2b1c203da 100644
+--- a/test/irb/cmd/test_show_source.rb
++++ b/test/irb/cmd/test_show_source.rb
+@@ -52,6 +52,19 @@ module TestIRB
+       assert_match(%r[Couldn't locate a definition for foo], out)
+     end
+ 
++    def test_show_source_with_missing_constant
++      write_ruby <<~'RUBY'
++        binding.irb
++      RUBY
++
++      out = run_ruby_file do
++        type "show_source Foo"
++        type "exit"
++      end
++
++      assert_match(%r[Couldn't locate a definition for Foo], out)
++    end
++
+     def test_show_source_string
+       write_ruby <<~'RUBY'
+         binding.irb
+@@ -301,7 +314,37 @@ module TestIRB
+       assert_match(%r[#{@ruby_file.to_path}:5\s+class Bar\r\n  end], out)
+     end
+ 
+-    def test_show_source_ignores_binary_source_file
++    def test_show_source_keep_script_lines
++      pend unless defined?(RubyVM.keep_script_lines)
++
++      write_ruby <<~RUBY
++        binding.irb
++      RUBY
++
++      out = run_ruby_file do
++        type "def foo; end"
++        type "show_source foo"
++        type "exit"
++      end
++
++      assert_match(%r[#{@ruby_file.to_path}\(irb\):1\s+def foo; end], out)
++    end
++
++    def test_show_source_unavailable_source
++      write_ruby <<~RUBY
++        binding.irb
++      RUBY
++
++      out = run_ruby_file do
++        type "RubyVM.keep_script_lines = false if defined?(RubyVM.keep_script_lines)"
++        type "def foo; end"
++        type "show_source foo"
++        type "exit"
++      end
++      assert_match(%r[#{@ruby_file.to_path}\(irb\):2\s+Source not available], out)
++    end
++
++    def test_show_source_shows_binary_source
+       write_ruby <<~RUBY
+         # io-console is an indirect dependency of irb
+         require "io/console"
+@@ -317,7 +360,7 @@ module TestIRB
+ 
+       # A safeguard to make sure the test subject is actually defined
+       refute_match(/NameError/, out)
+-      assert_match(%r[Error: Couldn't locate a definition for IO::ConsoleMode], out)
++      assert_match(%r[Defined in binary file:.+io/console], out)
+     end
+   end
+ end
+diff --git a/test/irb/test_cmd.rb b/test/irb/test_cmd.rb
+index d99ac05c5..bc6358733 100644
+--- a/test/irb/test_cmd.rb
++++ b/test/irb/test_cmd.rb
+@@ -34,17 +34,17 @@ module TestIRB
+     end
+ 
+     def execute_lines(*lines, conf: {}, main: self, irb_path: nil)
+-      IRB.init_config(nil)
+-      IRB.conf[:VERBOSE] = false
+-      IRB.conf[:PROMPT_MODE] = :SIMPLE
+-      IRB.conf[:USE_PAGER] = false
+-      IRB.conf.merge!(conf)
+-      input = TestInputMethod.new(lines)
+-      irb = IRB::Irb.new(IRB::WorkSpace.new(main), input)
+-      irb.context.return_format = "=> %s\n"
+-      irb.context.irb_path = irb_path if irb_path
+-      IRB.conf[:MAIN_CONTEXT] = irb.context
+       capture_output do
++        IRB.init_config(nil)
++        IRB.conf[:VERBOSE] = false
++        IRB.conf[:PROMPT_MODE] = :SIMPLE
++        IRB.conf[:USE_PAGER] = false
++        IRB.conf.merge!(conf)
++        input = TestInputMethod.new(lines)
++        irb = IRB::Irb.new(IRB::WorkSpace.new(main), input)
++        irb.context.return_format = "=> %s\n"
++        irb.context.irb_path = irb_path if irb_path
++        IRB.conf[:MAIN_CONTEXT] = irb.context
+         irb.eval_input
+       end
+     end
+@@ -58,7 +58,7 @@ module TestIRB
+         "irb_info",
+         main: main
+       )
+-      assert_empty err
++      assert_empty(err)
+       assert_match(/RUBY_PLATFORM/, out)
+     end
+   end
+@@ -848,6 +848,16 @@ module TestIRB
+       assert_match("command: ': code'", out)
+     end
+ 
++    def test_edit_without_arg_and_non_existing_irb_path
++      out, err = execute_lines(
++        "edit",
++        irb_path: '/path/to/file.rb(irb)'
++      )
++
++      assert_empty err
++      assert_match(/Can not find file: \/path\/to\/file\.rb\(irb\)/, out)
++    end
++
+     def test_edit_with_path
+       out, err = execute_lines(
+         "edit #{__FILE__}"
+diff --git a/test/irb/test_context.rb b/test/irb/test_context.rb
+index a76152169..adf472baa 100644
+--- a/test/irb/test_context.rb
++++ b/test/irb/test_context.rb
+@@ -666,6 +666,18 @@ module TestIRB
+         ], out)
+     end
+ 
++    def test_irb_path_setter
++      @context.irb_path = __FILE__
++      assert_equal(__FILE__, @context.irb_path)
++      assert_equal("#{__FILE__}(irb)", @context.instance_variable_get(:@eval_path))
++      @context.irb_path = 'file/does/not/exist'
++      assert_equal('file/does/not/exist', @context.irb_path)
++      assert_equal('file/does/not/exist', @context.instance_variable_get(:@eval_path))
++      @context.irb_path = "#{__FILE__}(irb)"
++      assert_equal("#{__FILE__}(irb)", @context.irb_path)
++      assert_equal("#{__FILE__}(irb)", @context.instance_variable_get(:@eval_path))
++    end
++
+     def test_build_completor
+       verbose, $VERBOSE = $VERBOSE, nil
+       original_completor = IRB.conf[:COMPLETOR]
+diff --git a/test/irb/test_history.rb b/test/irb/test_history.rb
+index e6448ada3..2601bcad8 100644
+--- a/test/irb/test_history.rb
++++ b/test/irb/test_history.rb
+@@ -379,6 +379,62 @@ module TestIRB
+       HISTORY
+     end
+ 
++    def test_nested_history_saving_from_inner_session_with_exit!
++      write_history ""
++
++      write_ruby <<~'RUBY'
++        def foo
++          binding.irb
++        end
++
++        binding.irb
++      RUBY
++
++      run_ruby_file do
++        type "'outer session'"
++        type "foo"
++        type "'inner session'"
++        type "exit!"
++      end
++
++      assert_equal <<~HISTORY, @history_file.open.read
++        'outer session'
++        foo
++        'inner session'
++        exit!
++      HISTORY
++    end
++
++    def test_nested_history_saving_from_outer_session_with_exit!
++      write_history ""
++
++      write_ruby <<~'RUBY'
++        def foo
++          binding.irb
++        end
++
++        binding.irb
++      RUBY
++
++      run_ruby_file do
++        type "'outer session'"
++        type "foo"
++        type "'inner session'"
++        type "exit"
++        type "'outer session again'"
++        type "exit!"
++      end
++
++      assert_equal <<~HISTORY, @history_file.open.read
++        'outer session'
++        foo
++        'inner session'
++        exit
++        'outer session again'
++        exit!
++      HISTORY
++    end
++
+     def test_history_saving_with_nested_sessions_and_prior_history
+       write_history <<~HISTORY
+         old_history_1
+diff --git a/test/optparse/test_acceptable.rb b/test/optparse/test_acceptable.rb
+index 12f532272..c7ea2152f 100644
+--- a/test/optparse/test_acceptable.rb
++++ b/test/optparse/test_acceptable.rb
+@@ -8,6 +8,7 @@ class TestOptionParserAcceptable < TestOptionParser
+     @opt.def_option("--integer VAL", Integer) { |v| @integer = v }
+     @opt.def_option("--float VAL",   Float)   { |v| @float   = v }
+     @opt.def_option("--numeric VAL", Numeric) { |v| @numeric = v }
++    @opt.def_option("--array VAL", Array) { |v| @array = v }
+ 
+     @opt.def_option("--decimal-integer VAL",
+                     OptionParser::DecimalInteger) { |i| @decimal_integer = i }
+@@ -195,4 +196,8 @@ class TestOptionParserAcceptable < TestOptionParser
+     end
+   end
+ 
++  def test_array
++    assert_equal(%w"", no_error {@opt.parse!(%w"--array a,b,c")})
++    assert_equal(%w"a b c", @array)
++  end
+ end

@@ -1,0 +1,56 @@
+From a244d235 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0050] sync upstream changes (t/perf/p1500-graph-walks.sh)
+
+---
+diff --git a/t/perf/p1500-graph-walks.sh b/t/perf/p1500-graph-walks.sh
+index e14e7620..5b23ce5d 100755
+--- a/t/perf/p1500-graph-walks.sh
++++ b/t/perf/p1500-graph-walks.sh
+@@ -20,6 +20,21 @@ test_expect_success 'setup' '
+ 		echo tag-$ref ||
+ 		return 1
+ 	done >tags &&
++
++	echo "A:HEAD" >test-tool-refs &&
++	for line in $(cat refs)
++	do
++		echo "X:$line" >>test-tool-refs || return 1
++	done &&
++	echo "A:HEAD" >test-tool-tags &&
++	for line in $(cat tags)
++	do
++		echo "X:$line" >>test-tool-tags || return 1
++	done &&
++
++	commit=$(git commit-tree $(git rev-parse HEAD^{tree})) &&
++	git update-ref refs/heads/disjoint-base $commit &&
++
+ 	git commit-graph write --reachable
+ '
+ 
+@@ -47,4 +62,20 @@ test_perf 'contains: git tag --merged' '
+ 	xargs git tag --merged=HEAD <tags
+ '
+ 
++test_perf 'is-base check: test-tool reach (refs)' '
++	test-tool reach get_branch_base_for_tip <test-tool-refs
++'
++
++test_perf 'is-base check: test-tool reach (tags)' '
++	test-tool reach get_branch_base_for_tip <test-tool-tags
++'
++
++test_perf 'is-base check: git for-each-ref' '
++	git for-each-ref --format="%(is-base:HEAD)" --stdin <refs
++'
++
++test_perf 'is-base check: git for-each-ref (disjoint-base)' '
++	git for-each-ref --format="%(is-base:refs/heads/disjoint-base)" --stdin <refs
++'
++
+ test_done
+
+-- 
+2.43.0

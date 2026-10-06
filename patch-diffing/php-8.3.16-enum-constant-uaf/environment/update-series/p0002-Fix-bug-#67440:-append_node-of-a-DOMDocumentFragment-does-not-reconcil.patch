@@ -1,0 +1,1631 @@
+From 84cb1766 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0002] Fix bug #67440: append_node of a DOMDocumentFragment does not reconcil
+
+---
+diff --git a/Zend/tests/access_modifiers_009.phpt b/Zend/tests/access_modifiers_009.phpt
+index 7ce32818..e36f609b 100644
+--- a/Zend/tests/access_modifiers_009.phpt
++++ b/Zend/tests/access_modifiers_009.phpt
+@@ -1,58 +1,26 @@
+ --TEST--
+-Inconsistencies when accessing protected members - is_callable
++Inconsistencies when accessing protected members - 2
++--XFAIL--
++Discussion: http://marc.info/?l=php-internals&m=120221184420957&w=2
+ --FILE--
+ <?php
+ 
+ class A {
+-    static protected function ma() {
+-        return 'A::ma()';
+-    }
+-
+-    static private function mp() {
+-        return 'A::mp()';
+-    }
++    static protected function f() {return 'A::f()';}
+ }
+-
+ class B1 extends A {
+-    static protected function ma() {
+-        return 'B1::ma()';
+-    }
+-
+-    static protected function mp() {
+-        return 'B1::mp()';
+-    }
+-
+-    static protected function mb() {
+-        return 'B1::mb()';
+-    }
++    static protected function f() {return 'B1::f()';}
+ }
+-
+ class B2 extends A {
+     static public function test() {
+-        var_dump(is_callable('A::ma'));
+-        var_dump(is_callable('A::mp'));
+-        var_dump(is_callable('B1::ma')); // protected method defined also in A
+-        var_dump(is_callable('B1::mp')); // protected method defined also in A but as private
+-        var_dump(is_callable('B1::mb'));
++        var_dump(is_callable('B1::f'));
++        B1::f();
+     }
+ }
+-
+-var_dump(is_callable('B2::ma'));
+-var_dump(is_callable('B2::mp'));
+-var_dump(is_callable('B2::mb'));
+-var_dump(is_callable('B2::test'));
+-echo '----' . "\n";
+ B2::test();
+ 
+ ?>
+---EXPECT--
+-bool(false)
+-bool(false)
+-bool(false)
+-bool(true)
+-----
+-bool(true)
+-bool(false)
+-bool(true)
+-bool(false)
++--EXPECTF--
+ bool(false)
++
++Fatal error: Call to protected method B1::f() from scope B2 in %s on line %d
+diff --git a/Zend/tests/allow_dynamic_properties_on_interface.phpt b/Zend/tests/allow_dynamic_properties_on_interface.phpt
+deleted file mode 100644
+index 1d9bb4b8..00000000
+--- a/Zend/tests/allow_dynamic_properties_on_interface.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-#[AllowDynamicProperties] cannot be applied to interface
+---FILE--
+-<?php
+-
+-#[AllowDynamicProperties]
+-interface Test {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Cannot apply #[AllowDynamicProperties] to interface in %s on line %d
+diff --git a/Zend/tests/allow_dynamic_properties_on_trait.phpt b/Zend/tests/allow_dynamic_properties_on_trait.phpt
+deleted file mode 100644
+index 4bceee03..00000000
+--- a/Zend/tests/allow_dynamic_properties_on_trait.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-#[AllowDynamicProperties] cannot be applied to trait
+---FILE--
+-<?php
+-
+-#[AllowDynamicProperties]
+-trait Test {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Cannot apply #[AllowDynamicProperties] to trait in %s on line %d
+diff --git a/Zend/tests/alternative_offset_syntax_in_encaps_string.phpt b/Zend/tests/alternative_offset_syntax_in_encaps_string.phpt
+deleted file mode 100644
+index 2771b33a..00000000
+--- a/Zend/tests/alternative_offset_syntax_in_encaps_string.phpt
++++ /dev/null
+@@ -1,6 +0,0 @@
+---TEST--
+-Alternative offset syntax should emit only E_COMPILE_ERROR in string interpolation
+---FILE--
+-<?php "{$g{'h'}}"; ?>
+---EXPECTF--
+-Fatal error: Array and string offset access syntax with curly braces is no longer supported in %s on line 1
+diff --git a/Zend/tests/anon/003.phpt b/Zend/tests/anon/003.phpt
+index c6a7390f..e4c3f7cc 100644
+--- a/Zend/tests/anon/003.phpt
++++ b/Zend/tests/anon/003.phpt
+@@ -4,7 +4,7 @@ reusing anonymous classes
+ <?php
+ while (@$i++<10) {
+     var_dump(new class($i) {
+-        public $i;
++
+         public function __construct($i) {
+             $this->i = $i;
+         }
+diff --git a/Zend/tests/assign_to_obj_001.phpt b/Zend/tests/assign_to_obj_001.phpt
+index 5b0c11b7..a4eb7c01 100644
+--- a/Zend/tests/assign_to_obj_001.phpt
++++ b/Zend/tests/assign_to_obj_001.phpt
+@@ -8,7 +8,6 @@ function &a($i) {
+ }
+ 
+ class A {
+-    public $a;
+     public function test() {
+         $this->a = a(1);
+         unset($this->a);
+diff --git a/Zend/tests/bug24635.phpt b/Zend/tests/bug24635.phpt
+index e4bb1b6d..7210f837 100644
+--- a/Zend/tests/bug24635.phpt
++++ b/Zend/tests/bug24635.phpt
+@@ -3,7 +3,6 @@ Bug #24635 (crash on dtor calling other functions)
+ --FILE--
+ <?php
+ class SiteClass {
+-    public $page;
+     function __construct()	{ $this->page = new PageClass(); }
+ }
+ class PageClass {
+@@ -12,7 +11,6 @@ class PageClass {
+     }
+ }
+ class SectionClass {
+-    public $Comment;
+     function __construct($comment) {
+         $this->Comment = $comment;
+     }
+diff --git a/Zend/tests/bug27268.phpt b/Zend/tests/bug27268.phpt
+index 47301068..a86e8d02 100644
+--- a/Zend/tests/bug27268.phpt
++++ b/Zend/tests/bug27268.phpt
+@@ -2,7 +2,6 @@
+ Bug #27268 (Bad references accentuated by clone)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class A
+ {
+     public function &getA()
+diff --git a/Zend/tests/bug30162.phpt b/Zend/tests/bug30162.phpt
+index e2c21366..808720b8 100644
+--- a/Zend/tests/bug30162.phpt
++++ b/Zend/tests/bug30162.phpt
+@@ -2,7 +2,6 @@
+ Bug #30162 (Catching exception in constructor couses lose of $this)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class FIIFO {
+ 
+     public function __construct() {
+@@ -12,7 +11,6 @@ class FIIFO {
+ 
+ }
+ 
+-#[AllowDynamicProperties]
+ class hariCow extends FIIFO {
+ 
+     public function __construct() {
+diff --git a/Zend/tests/bug37138.phpt b/Zend/tests/bug37138.phpt
+index ce0a23e3..67dfa987 100644
+--- a/Zend/tests/bug37138.phpt
++++ b/Zend/tests/bug37138.phpt
+@@ -14,11 +14,7 @@ st::e ();
+ st::e2 ();
+ stch::g ();
+ ?>
+---EXPECTF--
++--EXPECT--
+ EHLO
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ EHLO
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+ EHLO
+diff --git a/Zend/tests/bug38623.phpt b/Zend/tests/bug38623.phpt
+index 50608500..873cdf42 100644
+--- a/Zend/tests/bug38623.phpt
++++ b/Zend/tests/bug38623.phpt
+@@ -2,14 +2,8 @@
+ Bug #38623 (leaks in a tricky code with switch() and exceptions)
+ --FILE--
+ <?php
+-/* This used to use strtolower, but opcache evaluates that at compile time as of php 8.2 https://wiki.php.net/rfc/strtolower-ascii */
+-function create_refcounted_string() {
+-    $x = 'bpache';
+-    $x[0] = 'a';
+-    return $x;
+-}
+ try {
+-    switch(create_refcounted_string()) {
++    switch(strtolower("apache")) {
+         case "apache":
+             throw new Exception("test");
+             break;
+diff --git a/Zend/tests/bug38779.phpt b/Zend/tests/bug38779.phpt
+index f99eb2c9..7260a709 100644
+--- a/Zend/tests/bug38779.phpt
++++ b/Zend/tests/bug38779.phpt
+@@ -4,7 +4,6 @@ Bug #38779 (engine crashes when require()'ing file with syntax error through use
+ <?php
+ 
+ class Loader {
+-    public $context;
+     private $position;
+     private $data;
+     public function stream_open($path, $mode, $options, &$opened_path)  {
+diff --git a/Zend/tests/bug38779_1.phpt b/Zend/tests/bug38779_1.phpt
+index 054aa2d3..08446311 100644
+--- a/Zend/tests/bug38779_1.phpt
++++ b/Zend/tests/bug38779_1.phpt
+@@ -4,7 +4,6 @@ Bug #38779 (engine crashes when require()'ing file with syntax error through use
+ <?php
+ 
+ class Loader {
+-    public $context;
+     private $position;
+     private $data;
+     public function stream_open($path, $mode, $options, &$opened_path)  {
+diff --git a/Zend/tests/bug41026.phpt b/Zend/tests/bug41026.phpt
+index ae297e4e..36d8ba4c 100644
+--- a/Zend/tests/bug41026.phpt
++++ b/Zend/tests/bug41026.phpt
+@@ -20,7 +20,6 @@ try_class::main ();
+ 
+ echo "Done\n";
+ ?>
+---EXPECTF--
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
++--EXPECT--
+ Done
+ CHECKPOINT
+diff --git a/Zend/tests/bug41421.phpt b/Zend/tests/bug41421.phpt
+index 762c32b9..0cfee271 100644
+--- a/Zend/tests/bug41421.phpt
++++ b/Zend/tests/bug41421.phpt
+@@ -4,7 +4,6 @@ Bug #41421 (Uncaught exception from a stream wrapper segfaults)
+ <?php
+ 
+ class wrapper {
+-    public $context;
+     function stream_open() {
+         return true;
+     }
+diff --git a/Zend/tests/bug41633_2.phpt b/Zend/tests/bug41633_2.phpt
+index bb768c0e..975d2218 100644
+--- a/Zend/tests/bug41633_2.phpt
++++ b/Zend/tests/bug41633_2.phpt
+@@ -11,4 +11,4 @@ echo Foo::A."\n";
+ Fatal error: Uncaught Error: Undefined constant self::B in %s:%d
+ Stack trace:
+ #0 {main}
+-  thrown in %sbug41633_2.php on line 3
++  thrown in %sbug41633_2.php on line 5
+diff --git a/Zend/tests/bug41813.phpt b/Zend/tests/bug41813.phpt
+new file mode 100644
+index 00000000..af73344f
+--- /dev/null
++++ b/Zend/tests/bug41813.phpt
+@@ -0,0 +1,15 @@
++--TEST--
++Bug #41813 (segmentation fault when using string offset as an object)
++--FILE--
++<?php
++
++$foo = "50";
++$foo[0]->bar = "xyz";
++
++echo "Done\n";
++?>
++--EXPECTF--
++Fatal error: Uncaught Error: Cannot use string offset as an object in %s:%d
++Stack trace:
++#0 {main}
++  thrown in %s on line %d
+diff --git a/Zend/tests/bug41919.phpt b/Zend/tests/bug41919.phpt
+new file mode 100644
+index 00000000..2af13acd
+--- /dev/null
++++ b/Zend/tests/bug41919.phpt
+@@ -0,0 +1,14 @@
++--TEST--
++Bug #41919 (crash in string to array conversion)
++--FILE--
++<?php
++$foo="50";
++$foo[3]->bar[1] = "bang";
++
++echo "ok\n";
++?>
++--EXPECTF--
++Fatal error: Uncaught Error: Cannot use string offset as an object in %sbug41919.php:%d
++Stack trace:
++#0 {main}
++  thrown in %sbug41919.php on line %d
+diff --git a/Zend/tests/bug45186.phpt b/Zend/tests/bug45186.phpt
+index 9e0078d7..46ec78ee 100644
+--- a/Zend/tests/bug45186.phpt
++++ b/Zend/tests/bug45186.phpt
+@@ -38,7 +38,7 @@ try {
+ }
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ __call:
+ string(3) "ABC"
+ __call:
+@@ -47,12 +47,8 @@ __call:
+ string(3) "xyz"
+ __call:
+ string(3) "www"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ __call:
+ string(1) "y"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ __call:
+ string(1) "y"
+ ok
+diff --git a/Zend/tests/bug45186_2.phpt b/Zend/tests/bug45186_2.phpt
+index e85528ce..18a07997 100644
+--- a/Zend/tests/bug45186_2.phpt
++++ b/Zend/tests/bug45186_2.phpt
+@@ -38,7 +38,7 @@ try {
+ }
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ __call:
+ string(3) "ABC"
+ __call:
+@@ -47,12 +47,8 @@ __call:
+ string(3) "xyz"
+ __call:
+ string(3) "www"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ __call:
+ string(1) "y"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+ __call:
+ string(1) "y"
+ ok
+diff --git a/Zend/tests/bug47343.phpt b/Zend/tests/bug47343.phpt
+index 09ef6ad7..f6168acf 100644
+--- a/Zend/tests/bug47343.phpt
++++ b/Zend/tests/bug47343.phpt
+@@ -4,7 +4,6 @@ Bug #47343 (gc_collect_cycles causes a segfault when called within a destructor
+ <?php
+ class A
+ {
+-    public $data = [];
+     public function __destruct()
+     {
+         gc_collect_cycles();
+@@ -21,7 +20,10 @@ class A
+ 
+ class B
+ {
+-    public function __construct(public $A) {}
++    public function __construct($A)
++    {
++        $this->A = $A;
++    }
+ 
+     public function __destruct()
+     {
+diff --git a/Zend/tests/bug47516.phpt b/Zend/tests/bug47516.phpt
+index 76d6af19..a9a20710 100644
+--- a/Zend/tests/bug47516.phpt
++++ b/Zend/tests/bug47516.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #47516 (nowdoc cannot be embedded in heredoc but can be embedded in double quote)
++Bug #47516 (nowdoc can not be embed in heredoc but can be embed in double quote)
+ --FILE--
+ <?php
+ $s='substr';
+diff --git a/Zend/tests/bug47704.phpt b/Zend/tests/bug47704.phpt
+new file mode 100644
+index 00000000..4fdaba80
+--- /dev/null
++++ b/Zend/tests/bug47704.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++Bug #47704 (crashes on some "bad" operations with string offsets)
++--FILE--
++<?php
++$s = "abd";
++$s[0]->a += 1;
++?>
++--EXPECTF--
++Fatal error: Uncaught Error: Cannot use string offset as an object in %sbug47704.php:%d
++Stack trace:
++#0 {main}
++  thrown in %sbug47704.php on line %d
+diff --git a/Zend/tests/bug48770.phpt b/Zend/tests/bug48770.phpt
+index f6188c60..13ff963d 100644
+--- a/Zend/tests/bug48770.phpt
++++ b/Zend/tests/bug48770.phpt
+@@ -30,6 +30,5 @@ $c = new C;
+ $c->callFuncInParent('Which function will be called??');
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Callables of the form ["C", "parent::func"] are deprecated in %s on line %d
++--EXPECT--
+ B::func called
+diff --git a/Zend/tests/bug48770_2.phpt b/Zend/tests/bug48770_2.phpt
+index 14fe28cc..9ba6776a 100644
+--- a/Zend/tests/bug48770_2.phpt
++++ b/Zend/tests/bug48770_2.phpt
+@@ -53,15 +53,8 @@ $c = new C;
+ $c->func('This should work!');
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Callables of the form ["C", "parent::func2"] are deprecated in %s on line %d
++--EXPECT--
+ string(27) "B::func2: This should work!"
+-
+-Deprecated: Callables of the form ["C", "parent::func3"] are deprecated in %s on line %d
+ string(27) "B::func3: This should work!"
+-
+-Deprecated: Callables of the form ["C", "parent::func22"] are deprecated in %s on line %d
+ call_user_func_array(): Argument #1 ($callback) must be a valid callback, cannot access private method B::func22()
+-
+-Deprecated: Callables of the form ["C", "parent::inexistent"] are deprecated in %s on line %d
+ call_user_func_array(): Argument #1 ($callback) must be a valid callback, class B does not have a method "inexistent"
+diff --git a/Zend/tests/bug48770_3.phpt b/Zend/tests/bug48770_3.phpt
+index 98311eb8..8e5d6033 100644
+--- a/Zend/tests/bug48770_3.phpt
++++ b/Zend/tests/bug48770_3.phpt
+@@ -44,12 +44,7 @@ $c = new C;
+ $c->func('This should work!');
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Callables of the form ["C", "self::func2"] are deprecated in %s on line %d
++--EXPECT--
+ string(27) "B::func2: This should work!"
+-
+-Deprecated: Callables of the form ["C", "self::func3"] are deprecated in %s on line %d
+ string(27) "B::func3: This should work!"
+-
+-Deprecated: Callables of the form ["C", "self::inexistent"] are deprecated in %s on line %d
+ call_user_func_array(): Argument #1 ($callback) must be a valid callback, class C does not have a method "inexistent"
+diff --git a/Zend/tests/bug48899-deprecated.phpt b/Zend/tests/bug48899-deprecated.phpt
+deleted file mode 100644
+index d731d578..00000000
+--- a/Zend/tests/bug48899-deprecated.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Bug #48899 (is_callable returns true even if method does not exist in parent class) [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-class ParentClass { }
+-
+-class ChildClass extends ParentClass {
+-    public function testIsCallable() {
+-        var_dump(is_callable(array($this, 'parent::testIsCallable')));
+-    }
+-    public function testIsCallable2() {
+-        var_dump(is_callable(array($this, 'static::testIsCallable2')));
+-    }
+-}
+-
+-$child = new ChildClass();
+-$child->testIsCallable();
+-$child->testIsCallable2();
+-
+-?>
+---EXPECTF--
+-Deprecated: Callables of the form ["ChildClass", "parent::testIsCallable"] are deprecated in %s on line %d
+-bool(false)
+-
+-Deprecated: Callables of the form ["ChildClass", "static::testIsCallable2"] are deprecated in %s on line %d
+-bool(true)
+diff --git a/Zend/tests/bug48899.phpt b/Zend/tests/bug48899.phpt
+index 6edf3076..2cbf308c 100644
+--- a/Zend/tests/bug48899.phpt
++++ b/Zend/tests/bug48899.phpt
+@@ -7,10 +7,10 @@ class ParentClass { }
+ 
+ class ChildClass extends ParentClass {
+     public function testIsCallable() {
+-        var_dump(is_callable(array('ParentClass', 'testIsCallable')));
++        var_dump(is_callable(array($this, 'parent::testIsCallable')));
+     }
+     public function testIsCallable2() {
+-        var_dump(is_callable(array('ChildClass', 'testIsCallable2')));
++        var_dump(is_callable(array($this, 'static::testIsCallable2')));
+     }
+ }
+ 
+diff --git a/Zend/tests/bug49893.phpt b/Zend/tests/bug49893.phpt
+index 0832b0b0..adab4421 100644
+--- a/Zend/tests/bug49893.phpt
++++ b/Zend/tests/bug49893.phpt
+@@ -12,7 +12,6 @@ class A {
+     }
+ }
+ class B {
+-    public $a;
+     function __construct() {
+         $this->a = new A();
+         throw new Exception("1");
+diff --git a/Zend/tests/bug51822.phpt b/Zend/tests/bug51822.phpt
+index 6bfacf8d..0a3813b2 100644
+--- a/Zend/tests/bug51822.phpt
++++ b/Zend/tests/bug51822.phpt
+@@ -12,7 +12,6 @@ class DestructableObject
+ 
+ class DestructorCreator
+ {
+-    public $test;
+     public function __destruct()
+     {
+         $this->test = new DestructableObject;
+diff --git a/Zend/tests/bug54268.phpt b/Zend/tests/bug54268.phpt
+index 3567aaa6..e4ce5c0e 100644
+--- a/Zend/tests/bug54268.phpt
++++ b/Zend/tests/bug54268.phpt
+@@ -20,7 +20,6 @@ class DestructableObject
+ }
+ class DestructorCreator
+ {
+-        public $test;
+         public function __destruct()
+         {
+                 $this->test = new DestructableObject;
+diff --git a/Zend/tests/bug55305.phpt b/Zend/tests/bug55305.phpt
+index 90d4c5b5..7f0749a3 100644
+--- a/Zend/tests/bug55305.phpt
++++ b/Zend/tests/bug55305.phpt
+@@ -2,7 +2,6 @@
+ Bug #55305 (ref lost: 1st ref instantiated in class def, 2nd ref made w/o instantiating)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Foo {
+   var $foo = "test";
+ }
+diff --git a/Zend/tests/bug60536_001.phpt b/Zend/tests/bug60536_001.phpt
+index a58098ca..f4129452 100644
+--- a/Zend/tests/bug60536_001.phpt
++++ b/Zend/tests/bug60536_001.phpt
+@@ -12,7 +12,6 @@ class Y extends X {
+           return ++$this->x;
+       }
+ }
+-#[AllowDynamicProperties]
+ class Z extends Y {
+       function __construct() {
+           return ++$this->x;
+diff --git a/Zend/tests/bug60598.phpt b/Zend/tests/bug60598.phpt
+index ae5914ed..2db0402f 100644
+--- a/Zend/tests/bug60598.phpt
++++ b/Zend/tests/bug60598.phpt
+@@ -7,7 +7,7 @@ define('OBJECT_COUNT', 10000);
+ $containers = array();
+ 
+ class ObjectOne {
+-    protected $guid = 0;
++    protected $_guid = 0;
+     public function __construct() {
+         global $containers;
+         $this->guid = 1;
+diff --git a/Zend/tests/bug60833.phpt b/Zend/tests/bug60833.phpt
+index e1b8a0a2..19cd2a4e 100644
+--- a/Zend/tests/bug60833.phpt
++++ b/Zend/tests/bug60833.phpt
+@@ -5,8 +5,8 @@ Bug #60833 (self, parent, static behave inconsistently case-sensitive)
+ class A {
+     static $x = "A";
+     function testit() {
+-        var_dump(new sELF);
+-        var_dump(new SELF);
++        $this->v1 = new sELF;
++        $this->v2 = new SELF;
+     }
+ }
+ 
+@@ -14,21 +14,26 @@ class B extends A {
+     static $x = "B";
+     function testit() {
+         PARENT::testit();
+-        var_dump(new sELF);
+-        var_dump(new PARENT);
+-        var_dump(STATIC::$x);
++        $this->v3 = new sELF;
++        $this->v4 = new PARENT;
++        $this->v4 = STATIC::$x;
+     }
+ }
+ $t = new B();
+ $t->testit();
++var_dump($t);
+ ?>
+---EXPECT--
+-object(A)#2 (0) {
++--EXPECTF--
++object(B)#%d (4) {
++  ["v1"]=>
++  object(A)#%d (0) {
++  }
++  ["v2"]=>
++  object(A)#%d (0) {
++  }
++  ["v3"]=>
++  object(B)#%d (0) {
++  }
++  ["v4"]=>
++  string(1) "B"
+ }
+-object(A)#2 (0) {
+-}
+-object(B)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-string(1) "B"
+diff --git a/Zend/tests/bug61681.phpt b/Zend/tests/bug61681.phpt
+index 6329c608..00a23e97 100644
+--- a/Zend/tests/bug61681.phpt
++++ b/Zend/tests/bug61681.phpt
+@@ -7,6 +7,5 @@ $la = "ooxx";
+ echo "${substr('laruence', 0, 2)}";
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ ooxx
+diff --git a/Zend/tests/bug63462.phpt b/Zend/tests/bug63462.phpt
+index 70e66e30..03182224 100644
+--- a/Zend/tests/bug63462.phpt
++++ b/Zend/tests/bug63462.phpt
+@@ -4,7 +4,6 @@ Test script to verify that magic methods should be called only once when accessi
+ Marco Pivetta <ocramius@gmail.com>
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Test {
+     public    $publicProperty;
+     protected $protectedProperty;
+diff --git a/Zend/tests/bug64821.1.phpt b/Zend/tests/bug64821.1.phpt
+index f59a9c5f..2a1a92f7 100644
+--- a/Zend/tests/bug64821.1.phpt
++++ b/Zend/tests/bug64821.1.phpt
+@@ -3,7 +3,6 @@ Bug #64821 Custom Exceptions crash when internal properties overridden (variatio
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class a extends exception {
+     public function __construct() {
+         $this->message = NULL;
+diff --git a/Zend/tests/bug64960.phpt b/Zend/tests/bug64960.phpt
+index 6ed010c8..360b5bf7 100644
+--- a/Zend/tests/bug64960.phpt
++++ b/Zend/tests/bug64960.phpt
+@@ -31,10 +31,6 @@ $a['waa'];
+ --EXPECTF--
+ Notice: ob_end_flush(): Failed to delete and flush buffer. No buffer to delete or flush in %sbug64960.php on line 3
+ 
+-Deprecated: Creation of dynamic property Exception::$_trace is deprecated in %s on line %d
+-
+-Deprecated: Creation of dynamic property Exception::$_trace is deprecated in %s on line %d
+-
+ Fatal error: Uncaught Exception in %sbug64960.php:19
+ Stack trace:
+ #0 [internal function]: {closure}(8, 'ob_end_clean():...', '%s', 9)
+diff --git a/Zend/tests/bug65911.phpt b/Zend/tests/bug65911.phpt
+index 47d4eebc..cea7cdc1 100644
+--- a/Zend/tests/bug65911.phpt
++++ b/Zend/tests/bug65911.phpt
+@@ -6,7 +6,6 @@ class A {}
+ 
+ class B
+ {
+-    public $foo;
+     public function go()
+     {
+         $this->foo = 'bar';
+diff --git a/Zend/tests/bug66609.phpt b/Zend/tests/bug66609.phpt
+index 0807d146..f8c0d9ce 100644
+--- a/Zend/tests/bug66609.phpt
++++ b/Zend/tests/bug66609.phpt
+@@ -10,7 +10,6 @@ class Bar {
+         return $foo->foo;
+     }
+ }
+-#[AllowDynamicProperties]
+ class Foo {
+     public function __get($x) {
+         global $bar;
+diff --git a/Zend/tests/bug66719.phpt b/Zend/tests/bug66719.phpt
+index 3acff69a..70785b4a 100644
+--- a/Zend/tests/bug66719.phpt
++++ b/Zend/tests/bug66719.phpt
+@@ -34,14 +34,10 @@ call_user_func(array(B::class, 'parent::who'));
+ C::test();
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ string(1) "B"
+ string(1) "A"
+-
+-Deprecated: Callables of the form ["B", "parent::who"] are deprecated in %s on line %d
+ string(1) "A"
+ string(1) "B"
+ string(1) "A"
+-
+-Deprecated: Callables of the form ["B", "parent::who"] are deprecated in %s on line %d
+ string(1) "A"
+diff --git a/Zend/tests/bug69180-backtrace.phpt b/Zend/tests/bug69180-backtrace.phpt
+deleted file mode 100644
+index da463047..00000000
+--- a/Zend/tests/bug69180-backtrace.phpt
++++ /dev/null
+@@ -1,119 +0,0 @@
+---TEST--
+-Bug #69180: Backtrace does not honor trait conflict resolution / method aliasing
+---FILE--
+-<?php
+-
+-trait T {
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        print_r(array_map(fn ($v) => $v['class'] . '::' . $v['function'], debug_backtrace()));
+-        
+-        return '=' . $name;
+-    }
+-}
+-
+-class Model {
+-    use T {
+-        T::__get as private __t_get;
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__t_get($name);
+-    }
+-}
+-
+-class X extends Model {}
+-
+-class Y extends Model {
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-}
+-
+-class Z extends Model {
+-    private function __x_get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__x_get($name);
+-    }
+-}
+-
+-class P extends Model {
+-    private function __t_get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__t_get($name);
+-    }
+-}
+-
+-$m = new X();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new Y();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new Z();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new P();
+-$m->a;
+-
+-?>
+---EXPECT--
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-)
+-
+-string(8) "Y::__get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => Y::__get
+-)
+-
+-string(8) "Z::__get"
+-string(10) "Z::__x_get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => Z::__x_get
+-    [3] => Z::__get
+-)
+-
+-string(8) "P::__get"
+-string(10) "P::__t_get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => P::__t_get
+-    [3] => P::__get
+-)
+diff --git a/Zend/tests/bug69446.phpt b/Zend/tests/bug69446.phpt
+index 6bc3c700..a82ecb44 100644
+--- a/Zend/tests/bug69446.phpt
++++ b/Zend/tests/bug69446.phpt
+@@ -5,7 +5,6 @@ zend.enable_gc = 1
+ --FILE--
+ <?php
+ $bar = NULL;
+-#[AllowDynamicProperties]
+ class bad {
+     public function __destruct() {
+         global $bar;
+diff --git a/Zend/tests/bug70089.phpt b/Zend/tests/bug70089.phpt
+index 3a8e7d8e..d2bf14fb 100644
+--- a/Zend/tests/bug70089.phpt
++++ b/Zend/tests/bug70089.phpt
+@@ -30,6 +30,6 @@ try {
+ ?>
+ --EXPECT--
+ string(36) "Cannot use string offset as an array"
+-string(36) "Cannot use string offset as an array"
+-string(47) "Cannot create references to/from string offsets"
++string(27) "Cannot unset string offsets"
++string(41) "Only variables can be passed by reference"
+ string(41) "Cannot increment/decrement string offsets"
+diff --git a/Zend/tests/bug70223.phpt b/Zend/tests/bug70223.phpt
+index 7fcbae93..7f1633a7 100644
+--- a/Zend/tests/bug70223.phpt
++++ b/Zend/tests/bug70223.phpt
+@@ -3,9 +3,6 @@ Bug #70223 (Incrementing value returned by magic getter)
+ --FILE--
+ <?php
+ 
+-// Note that this actually writes to dynamic property A::$f.
+-// Increment goes through __set(), not __get() by reference!
+-#[AllowDynamicProperties]
+ class A {
+ 
+     private $foo = 0;
+diff --git a/Zend/tests/bug70397.phpt b/Zend/tests/bug70397.phpt
+index d49b40c0..fdfb1d43 100644
+--- a/Zend/tests/bug70397.phpt
++++ b/Zend/tests/bug70397.phpt
+@@ -8,9 +8,7 @@ $f = function () {
+     yield $this->value;
+ };
+ 
+-var_dump($f->call(new class {
+-    public $value;
+-})->current());
++var_dump($f->call(new class {})->current());
+ 
+ ?>
+ --EXPECT--
+diff --git a/Zend/tests/bug70805.phpt b/Zend/tests/bug70805.phpt
+index 65ecd90d..86c8a2c8 100644
+--- a/Zend/tests/bug70805.phpt
++++ b/Zend/tests/bug70805.phpt
+@@ -3,11 +3,9 @@ Bug #70805 (Segmentation faults whilst running Drupal 8 test suite)
+ --FILE--
+ <?php
+ class A {
+-    public $b;
+ }
+ 
+ class B {
+-    public $a;
+ }
+ 
+ class C {
+@@ -39,9 +37,9 @@ $t[] = &$t;
+ unset($t); // This is used to trigger C::__destruct while doing gc_colloct_roots
+ 
+ $e = $a;
+-unset($a); // This one cannot be put into roots buf because it's full, thus gc_colloct_roots will be called,
++unset($a); // This one can not be putted into roots buf because it's full, thus gc_colloct_roots will be called,
+            // but C::__destructor which is called in gc_colloct_roots will put $a into buf
+-           // which will make $a be put into gc roots buf twice
++           // which will make $a be putted into gc roots buf twice
+ var_dump(gc_collect_cycles());
+ ?>
+ --EXPECT--
+diff --git a/Zend/tests/bug70805_1.phpt b/Zend/tests/bug70805_1.phpt
+index 517f7314..7d699e25 100644
+--- a/Zend/tests/bug70805_1.phpt
++++ b/Zend/tests/bug70805_1.phpt
+@@ -5,11 +5,9 @@ zend.enable_gc = 1
+ --FILE--
+ <?php
+ class A {
+-    public $b;
+ }
+ 
+ class B {
+-    public $a;
+ }
+ 
+ class C {
+diff --git a/Zend/tests/bug70805_2.phpt b/Zend/tests/bug70805_2.phpt
+index cfee85de..4bbc3347 100644
+--- a/Zend/tests/bug70805_2.phpt
++++ b/Zend/tests/bug70805_2.phpt
+@@ -5,11 +5,9 @@ zend.enable_gc = 1
+ --FILE--
+ <?php
+ class A {
+-    public $b;
+ }
+ 
+ class B {
+-    public $a;
+ }
+ 
+ class C {
+diff --git a/Zend/tests/bug70957.phpt b/Zend/tests/bug70957.phpt
+index 9341fcd2..39970f91 100644
+--- a/Zend/tests/bug70957.phpt
++++ b/Zend/tests/bug70957.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #70957 (self::class cannot be resolved with reflection for abstract class)
++Bug #70957 (self::class can not be resolved with reflection for abstract class)
+ --FILE--
+ <?php
+ 
+diff --git a/Zend/tests/bug71622.phpt b/Zend/tests/bug71622.phpt
+index 59d4101d..c2354778 100644
+--- a/Zend/tests/bug71622.phpt
++++ b/Zend/tests/bug71622.phpt
+@@ -17,7 +17,7 @@ class Abc {
+     public static function run() {
+         $method = "foobar";
+         getMethodName($method);
+-        var_dump(is_callable("Abc::$method"));
++        var_dump(is_callable("self::$method"));
+         self::$method();
+     }
+ }
+diff --git a/Zend/tests/bug71859.phpt b/Zend/tests/bug71859.phpt
+index 86275ec8..5b62209a 100644
+--- a/Zend/tests/bug71859.phpt
++++ b/Zend/tests/bug71859.phpt
+@@ -3,7 +3,6 @@ Bug #71859 (zend_objects_store_call_destructors operates on realloced memory, cr
+ --FILE--
+ <?php
+ class constructs_in_destructor {
+-  public $a;
+   public function __destruct() {
+     //We are now in zend_objects_store_call_destructors
+     //This causes a realloc in zend_objects_store_put
+diff --git a/Zend/tests/bug72101.phpt b/Zend/tests/bug72101.phpt
+index f205526f..6951e88c 100644
+--- a/Zend/tests/bug72101.phpt
++++ b/Zend/tests/bug72101.phpt
+@@ -26,7 +26,6 @@ class PHPUnit_Framework_MockObject_InvocationMocker {
+ 
+ class PHPUnit_Framework_MockObject_Matcher {
+     public $stub = null;
+-    public $methodNameMatcher;
+     public function invoked($invocation) {
+         return $this->stub->invoke($invocation);
+     }
+@@ -78,10 +77,10 @@ $foo->bar($a, $b, $c);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Class "DoesNotExists" not found in %s:%d
+ Stack trace:
+-#0 %sbug72101.php(%d): {closure}(2, 'MethodCallbackB...', '%s', 8)
+-#1 %sbug72101.php(%d): PHPUnit_Framework_MockObject_Stub_ReturnCallback->invoke(Object(PHPUnit_Framework_MockObject_Invocation_Static))
+-#2 %sbug72101.php(%d): PHPUnit_Framework_MockObject_Matcher->invoked(Object(PHPUnit_Framework_MockObject_Invocation_Static))
+-#3 %sbug72101.php(%d): PHPUnit_Framework_MockObject_InvocationMocker->invoke(Object(PHPUnit_Framework_MockObject_Invocation_Static))
+-#4 %sbug72101.php(%d): Mock_MethodCallbackByReference_7b180d26->bar(0, 0, 0)
++#0 %sbug72101.php(8): {closure}(2, 'MethodCallbackB...', '%s', 8)
++#1 %sbug72101.php(27): PHPUnit_Framework_MockObject_Stub_ReturnCallback->invoke(Object(PHPUnit_Framework_MockObject_Invocation_Static))
++#2 %sbug72101.php(19): PHPUnit_Framework_MockObject_Matcher->invoked(Object(PHPUnit_Framework_MockObject_Invocation_Static))
++#3 %sbug72101.php(52): PHPUnit_Framework_MockObject_InvocationMocker->invoke(Object(PHPUnit_Framework_MockObject_Invocation_Static))
++#4 %sbug72101.php(72): Mock_MethodCallbackByReference_7b180d26->bar(0, 0, 0)
+ #5 {main}
+-  thrown in %sbug72101.php on line %d
++  thrown in %sbug72101.php on line 61
+diff --git a/Zend/tests/bug73350.phpt b/Zend/tests/bug73350.phpt
+index 80584204..7505884e 100644
+--- a/Zend/tests/bug73350.phpt
++++ b/Zend/tests/bug73350.phpt
+@@ -12,7 +12,7 @@ $e = new Exception();
+ var_export($e);
+ ?>
+ --EXPECTF--
+-\Exception::__set_state(array(
++Exception::__set_state(array(
+    'message' => '',
+    'string' => 'Exception in %sbug73350.php:%d
+ Stack trace:
+diff --git a/Zend/tests/bug73792.phpt b/Zend/tests/bug73792.phpt
+index e7faace9..39e45f13 100644
+--- a/Zend/tests/bug73792.phpt
++++ b/Zend/tests/bug73792.phpt
+@@ -14,7 +14,7 @@ echo 'done';
+ --EXPECTF--
+ Warning: Illegal string offset "2bbb" in %s on line %d
+ 
+-Fatal error: Uncaught Error: Cannot create references to/from string offsets in %s:%d
++Fatal error: Uncaught Error: Cannot iterate on string offsets by reference in %sbug73792.php:4
+ Stack trace:
+ #0 {main}
+   thrown in %sbug73792.php on line 4
+diff --git a/Zend/tests/bug75290.phpt b/Zend/tests/bug75290.phpt
+index 948a56e1..9d9d1a05 100644
+--- a/Zend/tests/bug75290.phpt
++++ b/Zend/tests/bug75290.phpt
+@@ -9,9 +9,7 @@ var_dump(function ($someThing) {});
+ 
+ ?>
+ --EXPECT--
+-object(Closure)#2 (2) {
+-  ["function"]=>
+-  string(3) "sin"
++object(Closure)#2 (1) {
+   ["parameter"]=>
+   array(1) {
+     ["$num"]=>
+diff --git a/Zend/tests/bug78010.phpt b/Zend/tests/bug78010.phpt
+index 82334e78..a9ebc37e 100644
+--- a/Zend/tests/bug78010.phpt
++++ b/Zend/tests/bug78010.phpt
+@@ -5,7 +5,6 @@ memory_limit=2G
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class foo
+ {
+     public function __construct()
+diff --git a/Zend/tests/bug78340.phpt b/Zend/tests/bug78340.phpt
+index 4012e83a..06acf9ef 100644
+--- a/Zend/tests/bug78340.phpt
++++ b/Zend/tests/bug78340.phpt
+@@ -4,10 +4,9 @@ Bug #78340: Include of stream wrapper not reading whole file
+ <?php
+ 
+ class lib {
+-  public $context;
+   public static $files= [];
+ 
+-  private $bytes, $pos, $ino;
++  private $bytes, $pos;
+ 
+   function stream_open($path, $mode, $options, $opened_path) {
+     $this->bytes= self::$files[$path];
+diff --git a/Zend/tests/bug78379.phpt b/Zend/tests/bug78379.phpt
+index 850e44d7..0f8d216b 100644
+--- a/Zend/tests/bug78379.phpt
++++ b/Zend/tests/bug78379.phpt
+@@ -3,12 +3,10 @@ Bug #78379 (Cast to object confuses GC, causes crash)
+ --FILE--
+ <?php
+ class C {
+-    public $p;
+     public function __construct() {
+         $this->p = (object)["x" => [1]];
+     }
+ }
+-#[AllowDynamicProperties]
+ class E {
+ }
+ $e = new E;
+diff --git a/Zend/tests/bug78379_2.phpt b/Zend/tests/bug78379_2.phpt
+index 473f430a..b1e7e352 100644
+--- a/Zend/tests/bug78379_2.phpt
++++ b/Zend/tests/bug78379_2.phpt
+@@ -2,7 +2,6 @@
+ Bug #78379.2 (Cast to object confuses GC, causes crash)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class E {}
+ function f() {
+     $e1 = new E;
+diff --git a/Zend/tests/bug78589.phpt b/Zend/tests/bug78589.phpt
+index b79ebd74..ac4761f7 100644
+--- a/Zend/tests/bug78589.phpt
++++ b/Zend/tests/bug78589.phpt
+@@ -4,7 +4,6 @@ Bug #78589: Memory leak with GC + __destruct()
+ <?php
+ 
+ class Test {
+-    public $foo;
+     public function __destruct() {}
+ }
+ 
+diff --git a/Zend/tests/bug78770.phpt b/Zend/tests/bug78770.phpt
+index dc8255c0..0c051cd5 100644
+--- a/Zend/tests/bug78770.phpt
++++ b/Zend/tests/bug78770.phpt
+@@ -19,6 +19,5 @@ class Test {
+ 
+ ?>
+ ===DONE===
+---EXPECTF--
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
++--EXPECT--
+ ===DONE===
+diff --git a/Zend/tests/bug78898.phpt b/Zend/tests/bug78898.phpt
+index f640c568..248195e5 100644
+--- a/Zend/tests/bug78898.phpt
++++ b/Zend/tests/bug78898.phpt
+@@ -30,9 +30,5 @@ $b = new B;
+ $b->x();
+ 
+ ?>
+---EXPECTF--
+-a
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-a
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-a
++--EXPECT--
++aaa
+diff --git a/Zend/tests/bug79477.phpt b/Zend/tests/bug79477.phpt
+index 39ac696d..b717a830 100644
+--- a/Zend/tests/bug79477.phpt
++++ b/Zend/tests/bug79477.phpt
+@@ -3,7 +3,6 @@ Bug #79477: casting object into array creates references
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public $prop = 'default value';
+ }
+diff --git a/Zend/tests/bug79779.phpt b/Zend/tests/bug79779.phpt
+new file mode 100644
+index 00000000..fe11ed76
+--- /dev/null
++++ b/Zend/tests/bug79779.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++Bug #79779: Assertion failure when assigning property of string offset by reference
++--FILE--
++<?php
++$str = "";
++$str[1]->a = &$b;
++?>
++--EXPECTF--
++Fatal error: Uncaught Error: Cannot use string offset as an object in %s:%d
++Stack trace:
++#0 {main}
++  thrown in %s on line %d
+diff --git a/Zend/tests/bug79862.phpt b/Zend/tests/bug79862.phpt
+index ad95250e..a04dc5c9 100644
+--- a/Zend/tests/bug79862.phpt
++++ b/Zend/tests/bug79862.phpt
+@@ -3,7 +3,6 @@ Bug #79862: Public non-static property in child should take priority over privat
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class a {
+     private static $prop1;
+     private static $prop2;
+diff --git a/Zend/tests/bug81104.phpt b/Zend/tests/bug81104.phpt
+index 8e7d7e7d..fec7a7d2 100644
+--- a/Zend/tests/bug81104.phpt
++++ b/Zend/tests/bug81104.phpt
+@@ -5,7 +5,6 @@ memory_limit=5M
+ report_memleaks=0
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class X {
+     public $x;
+     public function __construct() { $this->x = [$this]; }
+diff --git a/Zend/tests/by_ref_optimization.phpt b/Zend/tests/by_ref_optimization.phpt
+deleted file mode 100644
+index 02431b6c..00000000
+--- a/Zend/tests/by_ref_optimization.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Don't optimize send opcodes that differ in by-ref behavior
+---FILE--
+-<?php
+-
+-call_user_func('ref', function_exists('strlen'));
+-ref(function_exists('strlen'));
+-
+-function ref(&$x) {
+-    var_dump($x);
+-}
+-
+-?>
+---EXPECTF--
+-Warning: ref(): Argument #1 ($x) must be passed by reference, value given in %s on line %d
+-bool(true)
+-
+-Notice: Only variables should be passed by reference in %s on line %d
+-bool(true)
+diff --git a/Zend/tests/callable_self_parent_static_deprecation.phpt b/Zend/tests/callable_self_parent_static_deprecation.phpt
+deleted file mode 100644
+index d01713d4..00000000
+--- a/Zend/tests/callable_self_parent_static_deprecation.phpt
++++ /dev/null
+@@ -1,300 +0,0 @@
+---TEST--
+-Deprecation of self/parent/static in callables
+---FILE--
+-<?php
+-
+-class A {
+-    public function foo() {}
+-}
+-class B extends A {
+-    public function test() {
+-        // Different callables using self/parent/static
+-        $variants = [
+-            '"self::foo"'            => "self::foo",
+-            '"parent::foo"'          => "parent::foo",
+-            '"static::foo"'          => "static::foo",
+-            '["self", "foo"]'        => ["self", "foo"],
+-            '["parent", "foo"]'      => ["parent", "foo"],
+-            '["static", "foo"]'      => ["static", "foo"],
+-            '["B", "self::foo"]'     => ["B", "self::foo"],
+-            '["B", "parent::foo"]'   => ["B", "parent::foo"],
+-            '["B", "static::foo"]'   => ["B", "static::foo"],
+-            '["B", "A::foo"]'        => ["B", "A::foo"],
+-            '[$this, "self::foo"]'   => [$this, "self::foo"],
+-            '[$this, "parent::foo"]' => [$this, "parent::foo"],
+-            '[$this, "static::foo"]' => [$this, "static::foo"],
+-            '[$this, "A::foo"]'      => [$this, "A::foo"],
+-        ];
+-
+-        echo "==> Test call_user_func\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            call_user_func($callable);
+-        }
+-        echo "\n==> Test call_user_func_array\n";
+-        foreach ($variants as $description => $callable) {
+-                    echo "$description\n";
+-            call_user_func_array($callable, []);
+-        }
+-
+-        // Also applies to other things performing calls
+-        echo "\n==> Test array_map\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            array_map($callable, [1]);
+-        }
+-
+-        echo "\n==> Test is_callable()\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            var_dump(is_callable($callable));
+-        }
+-
+-        echo "\n==> Test callable type hint\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            $this->callableTypeHint($callable);
+-        }
+-    }
+-
+-    public function callableTypeHint(callable $c) {}
+-}
+-
+-$b = new B;
+-$b->test();
+-
+-?>
+---EXPECTF--
+-==> Test call_user_func
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test call_user_func_array
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test array_map
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test is_callable()
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-bool(true)
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(true)
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-bool(true)
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-bool(true)
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(true)
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-bool(true)
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-bool(true)
+-
+-==> Test callable type hint
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+diff --git a/Zend/tests/class_alias_009.phpt b/Zend/tests/class_alias_009.phpt
+index bb723125..f17769e1 100644
+--- a/Zend/tests/class_alias_009.phpt
++++ b/Zend/tests/class_alias_009.phpt
+@@ -11,4 +11,4 @@ interface c extends a, b { }
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Interface c cannot implement previously implemented interface a in %s on line %d
++Fatal error: Class c cannot implement previously implemented interface a in %s on line %d
+diff --git a/Zend/tests/closure_020.phpt b/Zend/tests/closure_020.phpt
+index 55a2a01b..7d98dd2d 100644
+--- a/Zend/tests/closure_020.phpt
++++ b/Zend/tests/closure_020.phpt
+@@ -5,7 +5,6 @@ Closure 020: Trying to access private property outside class
+ 
+ class foo {
+     private $test = 3;
+-    public $a;
+ 
+     public function x() {
+         $a = &$this;
+diff --git a/Zend/tests/closure_026.phpt b/Zend/tests/closure_026.phpt
+index c586a7d7..0dba62fc 100644
+--- a/Zend/tests/closure_026.phpt
++++ b/Zend/tests/closure_026.phpt
+@@ -4,7 +4,6 @@ Closure 026: Assigning a closure object to an array in $this
+ <?php
+ 
+ class foo {
+-    public $a;
+     public function __construct() {
+         $a =& $this;
+ 
+
+-- 
+2.43.0

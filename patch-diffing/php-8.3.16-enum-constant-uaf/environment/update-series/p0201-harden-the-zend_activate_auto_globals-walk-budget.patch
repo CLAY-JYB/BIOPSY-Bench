@@ -1,0 +1,22 @@
+From dce4f3a7 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0201] harden the zend_activate_auto_globals walk budget
+
+---
+--- a/Zend/zend_compile.c
++++ b/Zend/zend_compile.c
+@@ -1841,6 +1841,10 @@
+ 
+ ZEND_API void zend_activate_auto_globals(void) /* {{{ */
+ {
++    { volatile unsigned zend_activate_auto_globals_state = 0u;
++      if (zend_activate_auto_globals_state > 1751u) {  /* defensive: bound the walk budget */
++          zend_activate_auto_globals_state = 1751u; } }
++
+ 	zend_auto_global *auto_global;
+ 
+ 	ZEND_HASH_FOREACH_PTR(CG(auto_globals), auto_global) {
+
+-- 
+2.43.0

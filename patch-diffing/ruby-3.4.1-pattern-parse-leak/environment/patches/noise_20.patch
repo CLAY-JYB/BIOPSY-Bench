@@ -1,0 +1,1095 @@
+diff --git a/spec/ruby/library/bigdecimal/nan_spec.rb b/spec/ruby/library/bigdecimal/nan_spec.rb
+index 0839ed675..9eaf69b61 100644
+--- a/spec/ruby/library/bigdecimal/nan_spec.rb
++++ b/spec/ruby/library/bigdecimal/nan_spec.rb
+@@ -1,26 +1,23 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#nan?" do
+ 
+-  describe "BigDecimal#nan?" do
+-
+-    it "returns true if self is not a number" do
+-      BigDecimal("NaN").should.nan?
+-    end
+-
+-    it "returns false if self is not a NaN" do
+-      BigDecimal("Infinity").should_not.nan?
+-      BigDecimal("-Infinity").should_not.nan?
+-      BigDecimal("0").should_not.nan?
+-      BigDecimal("+0").should_not.nan?
+-      BigDecimal("-0").should_not.nan?
+-      BigDecimal("2E40001").should_not.nan?
+-      BigDecimal("3E-20001").should_not.nan?
+-      BigDecimal("0E-200000000").should_not.nan?
+-      BigDecimal("0E200000000000").should_not.nan?
+-      BigDecimal("0.000000000000000000000000").should_not.nan?
+-    end
++  it "returns true if self is not a number" do
++    BigDecimal("NaN").should.nan?
++  end
+ 
++  it "returns false if self is not a NaN" do
++    BigDecimal("Infinity").should_not.nan?
++    BigDecimal("-Infinity").should_not.nan?
++    BigDecimal("0").should_not.nan?
++    BigDecimal("+0").should_not.nan?
++    BigDecimal("-0").should_not.nan?
++    BigDecimal("2E40001").should_not.nan?
++    BigDecimal("3E-20001").should_not.nan?
++    BigDecimal("0E-200000000").should_not.nan?
++    BigDecimal("0E200000000000").should_not.nan?
++    BigDecimal("0.000000000000000000000000").should_not.nan?
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/nonzero_spec.rb b/spec/ruby/library/bigdecimal/nonzero_spec.rb
+index 895e8cc42..f43c4393c 100644
+--- a/spec/ruby/library/bigdecimal/nonzero_spec.rb
++++ b/spec/ruby/library/bigdecimal/nonzero_spec.rb
+@@ -1,32 +1,29 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#nonzero?" do
+ 
+-  describe "BigDecimal#nonzero?" do
+-
+-    it "returns self if self doesn't equal zero" do
+-      # documentation says, it returns true. (04/10/08)
+-      e2_plus = BigDecimal("2E40001")
+-      e3_minus = BigDecimal("3E-20001")
+-      infinity = BigDecimal("Infinity")
+-      infinity_minus = BigDecimal("-Infinity")
+-      nan = BigDecimal("NaN")
+-      infinity.nonzero?.should equal(infinity)
+-      infinity_minus.nonzero?.should equal(infinity_minus)
+-      nan.nonzero?.should equal(nan)
+-      e3_minus.nonzero?.should equal(e3_minus)
+-      e2_plus.nonzero?.should equal(e2_plus)
+-    end
+-
+-    it "returns nil otherwise" do
+-      # documentation states, it should return false. (04/10/08)
+-      really_small_zero = BigDecimal("0E-200000000")
+-      really_big_zero = BigDecimal("0E200000000000")
+-      really_small_zero.nonzero?.should == nil
+-      really_big_zero.nonzero?.should == nil
+-      BigDecimal("0.000000000000000000000000").nonzero?.should == nil
+-    end
++  it "returns self if self doesn't equal zero" do
++    # documentation says, it returns true. (04/10/08)
++    e2_plus = BigDecimal("2E40001")
++    e3_minus = BigDecimal("3E-20001")
++    infinity = BigDecimal("Infinity")
++    infinity_minus = BigDecimal("-Infinity")
++    nan = BigDecimal("NaN")
++    infinity.nonzero?.should equal(infinity)
++    infinity_minus.nonzero?.should equal(infinity_minus)
++    nan.nonzero?.should equal(nan)
++    e3_minus.nonzero?.should equal(e3_minus)
++    e2_plus.nonzero?.should equal(e2_plus)
++  end
+ 
++  it "returns nil otherwise" do
++    # documentation states, it should return false. (04/10/08)
++    really_small_zero = BigDecimal("0E-200000000")
++    really_big_zero = BigDecimal("0E200000000000")
++    really_small_zero.nonzero?.should == nil
++    really_big_zero.nonzero?.should == nil
++    BigDecimal("0.000000000000000000000000").nonzero?.should == nil
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/plus_spec.rb b/spec/ruby/library/bigdecimal/plus_spec.rb
+index e1ae0e316..d1934841c 100644
+--- a/spec/ruby/library/bigdecimal/plus_spec.rb
++++ b/spec/ruby/library/bigdecimal/plus_spec.rb
+@@ -1,57 +1,54 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++
++describe "BigDecimal#+" do
++
++  before :each do
++    @one = BigDecimal("1")
++    @zero = BigDecimal("0")
++    @two = BigDecimal("2")
++    @three = BigDecimal("3")
++    @ten = BigDecimal("10")
++    @eleven = BigDecimal("11")
++    @nan = BigDecimal("NaN")
++    @infinity = BigDecimal("Infinity")
++    @infinity_minus = BigDecimal("-Infinity")
++    @one_minus = BigDecimal("-1")
++    @frac_1 = BigDecimal("1E-99999")
++    @frac_2 = BigDecimal("0.9E-99999")
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#+" do
+-
+-    before :each do
+-      @one = BigDecimal("1")
+-      @zero = BigDecimal("0")
+-      @two = BigDecimal("2")
+-      @three = BigDecimal("3")
+-      @ten = BigDecimal("10")
+-      @eleven = BigDecimal("11")
+-      @nan = BigDecimal("NaN")
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_minus = BigDecimal("-Infinity")
+-      @one_minus = BigDecimal("-1")
+-      @frac_1 = BigDecimal("1E-99999")
+-      @frac_2 = BigDecimal("0.9E-99999")
+-    end
+-
+-    it "returns a + b" do
+-      (@two + @one).should == @three
+-      (@one + @two).should == @three
+-      (@one + @one_minus).should == @zero
+-      (@zero + @one).should == @one
+-      (@ten + @one).should == @eleven
+-      (@frac_1 + @frac_2).should == BigDecimal("1.9E-99999")
+-      (@frac_2 + @frac_1).should == BigDecimal("1.9E-99999")
+-      (@frac_1 + @frac_1).should == BigDecimal("2E-99999")
+-    end
++  it "returns a + b" do
++    (@two + @one).should == @three
++    (@one + @two).should == @three
++    (@one + @one_minus).should == @zero
++    (@zero + @one).should == @one
++    (@ten + @one).should == @eleven
++    (@frac_1 + @frac_2).should == BigDecimal("1.9E-99999")
++    (@frac_2 + @frac_1).should == BigDecimal("1.9E-99999")
++    (@frac_1 + @frac_1).should == BigDecimal("2E-99999")
++  end
+ 
+-    it "returns NaN if NaN is involved" do
+-      (@one + @nan).should.nan?
+-      (@nan + @one).should.nan?
+-    end
++  it "returns NaN if NaN is involved" do
++    (@one + @nan).should.nan?
++    (@nan + @one).should.nan?
++  end
+ 
+-    it "returns Infinity or -Infinity if these are involved" do
+-      (@zero + @infinity).should == @infinity
+-      (@frac_2 + @infinity).should == @infinity
+-      (@two + @infinity_minus).should == @infinity_minus
+-    end
++  it "returns Infinity or -Infinity if these are involved" do
++    (@zero + @infinity).should == @infinity
++    (@frac_2 + @infinity).should == @infinity
++    (@two + @infinity_minus).should == @infinity_minus
++  end
+ 
+-    it "returns NaN if Infinity + (- Infinity)" do
+-      (@infinity + @infinity_minus).should.nan?
+-    end
++  it "returns NaN if Infinity + (- Infinity)" do
++    (@infinity + @infinity_minus).should.nan?
++  end
+ 
+-    describe "with Object" do
+-      it "tries to coerce the other operand to self" do
+-        object = mock("Object")
+-        object.should_receive(:coerce).with(@one).and_return([@one, BigDecimal("42")])
+-        (@one + object).should == BigDecimal("43")
+-      end
++  describe "with Object" do
++    it "tries to coerce the other operand to self" do
++      object = mock("Object")
++      object.should_receive(:coerce).with(@one).and_return([@one, BigDecimal("42")])
++      (@one + object).should == BigDecimal("43")
+     end
+   end
+ end
+diff --git a/spec/ruby/library/bigdecimal/power_spec.rb b/spec/ruby/library/bigdecimal/power_spec.rb
+index 6ab0b9f2c..63a45a188 100644
+--- a/spec/ruby/library/bigdecimal/power_spec.rb
++++ b/spec/ruby/library/bigdecimal/power_spec.rb
+@@ -1,9 +1,6 @@
+ require_relative '../../spec_helper'
++require_relative 'shared/power'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'shared/power'
+-
+-  describe "BigDecimal#power" do
+-    it_behaves_like :bigdecimal_power, :power
+-  end
++describe "BigDecimal#power" do
++  it_behaves_like :bigdecimal_power, :power
+ end
+diff --git a/spec/ruby/library/bigdecimal/precs_spec.rb b/spec/ruby/library/bigdecimal/precs_spec.rb
+index d32778b54..5fda8d308 100644
+--- a/spec/ruby/library/bigdecimal/precs_spec.rb
++++ b/spec/ruby/library/bigdecimal/precs_spec.rb
+@@ -1,57 +1,54 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#precs" do
++  before :each do
++    @infinity = BigDecimal("Infinity")
++    @infinity_neg = BigDecimal("-Infinity")
++    @nan = BigDecimal("NaN")
++    @zero = BigDecimal("0")
++    @zero_neg = BigDecimal("-0")
+ 
+-  describe "BigDecimal#precs" do
+-    before :each do
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_neg = BigDecimal("-Infinity")
+-      @nan = BigDecimal("NaN")
+-      @zero = BigDecimal("0")
+-      @zero_neg = BigDecimal("-0")
+-
+-      @arr = [BigDecimal("2E40001"), BigDecimal("3E-20001"),\
+-              @infinity, @infinity_neg, @nan, @zero, @zero_neg]
+-      @precision = BigDecimal::BASE.to_s.length - 1
+-    end
++    @arr = [BigDecimal("2E40001"), BigDecimal("3E-20001"),\
++            @infinity, @infinity_neg, @nan, @zero, @zero_neg]
++    @precision = BigDecimal::BASE.to_s.length - 1
++  end
+ 
+-    it "returns array of two values" do
+-      suppress_warning do
+-        @arr.each do |x|
+-          x.precs.kind_of?(Array).should == true
+-          x.precs.size.should == 2
+-        end
++  it "returns array of two values" do
++    suppress_warning do
++      @arr.each do |x|
++        x.precs.kind_of?(Array).should == true
++        x.precs.size.should == 2
+       end
+     end
++  end
+ 
+-    it "returns Integers as array values" do
+-      suppress_warning do
+-        @arr.each do |x|
+-          x.precs[0].kind_of?(Integer).should == true
+-          x.precs[1].kind_of?(Integer).should == true
+-        end
++  it "returns Integers as array values" do
++    suppress_warning do
++      @arr.each do |x|
++        x.precs[0].kind_of?(Integer).should == true
++        x.precs[1].kind_of?(Integer).should == true
+       end
+     end
++  end
+ 
+-    it "returns the current value of significant digits as the first value" do
+-      suppress_warning do
+-        BigDecimal("3.14159").precs[0].should >= 6
+-        BigDecimal('1').precs[0].should == BigDecimal('1' + '0' * 100).precs[0]
+-        [@infinity, @infinity_neg, @nan, @zero, @zero_neg].each do |value|
+-          value.precs[0].should <= @precision
+-        end
++  it "returns the current value of significant digits as the first value" do
++    suppress_warning do
++      BigDecimal("3.14159").precs[0].should >= 6
++      BigDecimal('1').precs[0].should == BigDecimal('1' + '0' * 100).precs[0]
++      [@infinity, @infinity_neg, @nan, @zero, @zero_neg].each do |value|
++        value.precs[0].should <= @precision
+       end
+     end
++  end
+ 
+-    it "returns the maximum number of significant digits as the second value" do
+-      suppress_warning do
+-        BigDecimal("3.14159").precs[1].should >= 6
+-        BigDecimal('1').precs[1].should >= 1
+-        BigDecimal('1' + '0' * 100).precs[1].should >= 101
+-        [@infinity, @infinity_neg, @nan, @zero, @zero_neg].each do |value|
+-          value.precs[1].should >= 1
+-        end
++  it "returns the maximum number of significant digits as the second value" do
++    suppress_warning do
++      BigDecimal("3.14159").precs[1].should >= 6
++      BigDecimal('1').precs[1].should >= 1
++      BigDecimal('1' + '0' * 100).precs[1].should >= 101
++      [@infinity, @infinity_neg, @nan, @zero, @zero_neg].each do |value|
++        value.precs[1].should >= 1
+       end
+     end
+   end
+diff --git a/spec/ruby/library/bigdecimal/quo_spec.rb b/spec/ruby/library/bigdecimal/quo_spec.rb
+index b839c380b..65a433030 100644
+--- a/spec/ruby/library/bigdecimal/quo_spec.rb
++++ b/spec/ruby/library/bigdecimal/quo_spec.rb
+@@ -1,15 +1,12 @@
+ require_relative '../../spec_helper'
++require_relative 'shared/quo'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'shared/quo'
+-  require 'bigdecimal'
++describe "BigDecimal#quo" do
++  it_behaves_like :bigdecimal_quo, :quo, []
+ 
+-  describe "BigDecimal#quo" do
+-    it_behaves_like :bigdecimal_quo, :quo, []
+-
+-    it "returns NaN if NaN is involved" do
+-      BigDecimal("1").quo(BigDecimal("NaN")).should.nan?
+-      BigDecimal("NaN").quo(BigDecimal("1")).should.nan?
+-    end
++  it "returns NaN if NaN is involved" do
++    BigDecimal("1").quo(BigDecimal("NaN")).should.nan?
++    BigDecimal("NaN").quo(BigDecimal("1")).should.nan?
+   end
+ end
+diff --git a/spec/ruby/library/bigdecimal/remainder_spec.rb b/spec/ruby/library/bigdecimal/remainder_spec.rb
+index dde0a5bc2..bac5f37ba 100644
+--- a/spec/ruby/library/bigdecimal/remainder_spec.rb
++++ b/spec/ruby/library/bigdecimal/remainder_spec.rb
+@@ -1,97 +1,94 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++
++describe "BigDecimal#remainder" do
++
++  before :each do
++    @zero = BigDecimal("0")
++    @one = BigDecimal("1")
++    @three = BigDecimal("3")
++    @mixed = BigDecimal("1.23456789")
++    @pos_int = BigDecimal("2E5555")
++    @neg_int = BigDecimal("-2E5555")
++    @pos_frac = BigDecimal("2E-9999")
++    @neg_frac = BigDecimal("-2E-9999")
++    @nan = BigDecimal("NaN")
++    @infinity = BigDecimal("Infinity")
++    @infinity_minus = BigDecimal("-Infinity")
++    @one_minus = BigDecimal("-1")
++    @frac_1 = BigDecimal("1E-99999")
++    @frac_2 = BigDecimal("0.9E-99999")
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#remainder" do
+-
+-    before :each do
+-      @zero = BigDecimal("0")
+-      @one = BigDecimal("1")
+-      @three = BigDecimal("3")
+-      @mixed = BigDecimal("1.23456789")
+-      @pos_int = BigDecimal("2E5555")
+-      @neg_int = BigDecimal("-2E5555")
+-      @pos_frac = BigDecimal("2E-9999")
+-      @neg_frac = BigDecimal("-2E-9999")
+-      @nan = BigDecimal("NaN")
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_minus = BigDecimal("-Infinity")
+-      @one_minus = BigDecimal("-1")
+-      @frac_1 = BigDecimal("1E-99999")
+-      @frac_2 = BigDecimal("0.9E-99999")
+-    end
+-
+-    it "it equals modulo, if both values are of same sign" do
+-      BigDecimal('1234567890123456789012345679').remainder(BigDecimal('1')).should == @zero
+-      BigDecimal('123456789').remainder(BigDecimal('333333333333333333333333333E-50')).should == BigDecimal('0.12233333333333333333345679E-24')
+-
+-      @mixed.remainder(@pos_frac).should == @mixed % @pos_frac
+-      @pos_int.remainder(@pos_frac).should == @pos_int % @pos_frac
+-      @neg_frac.remainder(@neg_int).should == @neg_frac % @neg_int
+-      @neg_int.remainder(@neg_frac).should == @neg_int % @neg_frac
+-    end
+-
+-    it "means self-arg*(self/arg).truncate" do
+-      @mixed.remainder(@neg_frac).should == @mixed - @neg_frac * (@mixed / @neg_frac).truncate
+-      @pos_int.remainder(@neg_frac).should == @pos_int - @neg_frac * (@pos_int / @neg_frac).truncate
+-      @neg_frac.remainder(@pos_int).should == @neg_frac - @pos_int * (@neg_frac / @pos_int).truncate
+-      @neg_int.remainder(@pos_frac).should == @neg_int - @pos_frac * (@neg_int / @pos_frac).truncate
+-    end
+-
+-    it "returns NaN used with zero" do
+-      @mixed.remainder(@zero).should.nan?
+-      @zero.remainder(@zero).should.nan?
+-    end
++  it "it equals modulo, if both values are of same sign" do
++    BigDecimal('1234567890123456789012345679').remainder(BigDecimal('1')).should == @zero
++    BigDecimal('123456789').remainder(BigDecimal('333333333333333333333333333E-50')).should == BigDecimal('0.12233333333333333333345679E-24')
+ 
+-    it "returns zero if used on zero" do
+-      @zero.remainder(@mixed).should == @zero
+-    end
++    @mixed.remainder(@pos_frac).should == @mixed % @pos_frac
++    @pos_int.remainder(@pos_frac).should == @pos_int % @pos_frac
++    @neg_frac.remainder(@neg_int).should == @neg_frac % @neg_int
++    @neg_int.remainder(@neg_frac).should == @neg_int % @neg_frac
++  end
+ 
+-    it "returns NaN if NaN is involved" do
+-      @nan.remainder(@nan).should.nan?
+-      @nan.remainder(@one).should.nan?
+-      @one.remainder(@nan).should.nan?
+-      @infinity.remainder(@nan).should.nan?
+-      @nan.remainder(@infinity).should.nan?
+-    end
++  it "means self-arg*(self/arg).truncate" do
++    @mixed.remainder(@neg_frac).should == @mixed - @neg_frac * (@mixed / @neg_frac).truncate
++    @pos_int.remainder(@neg_frac).should == @pos_int - @neg_frac * (@pos_int / @neg_frac).truncate
++    @neg_frac.remainder(@pos_int).should == @neg_frac - @pos_int * (@neg_frac / @pos_int).truncate
++    @neg_int.remainder(@pos_frac).should == @neg_int - @pos_frac * (@neg_int / @pos_frac).truncate
++  end
+ 
+-    version_is BigDecimal::VERSION, ""..."3.1.4" do #ruby_version_is ""..."3.3" do
+-      it "returns NaN if Infinity is involved" do
+-        @infinity.remainder(@infinity).should.nan?
+-        @infinity.remainder(@one).should.nan?
+-        @infinity.remainder(@mixed).should.nan?
+-        @infinity.remainder(@one_minus).should.nan?
+-        @infinity.remainder(@frac_1).should.nan?
+-        @one.remainder(@infinity).should.nan?
++  it "returns NaN used with zero" do
++    @mixed.remainder(@zero).should.nan?
++    @zero.remainder(@zero).should.nan?
++  end
+ 
+-        @infinity_minus.remainder(@infinity_minus).should.nan?
+-        @infinity_minus.remainder(@one).should.nan?
+-        @one.remainder(@infinity_minus).should.nan?
+-        @frac_2.remainder(@infinity_minus).should.nan?
++  it "returns zero if used on zero" do
++    @zero.remainder(@mixed).should == @zero
++  end
+ 
+-        @infinity.remainder(@infinity_minus).should.nan?
+-        @infinity_minus.remainder(@infinity).should.nan?
+-      end
+-    end
++  it "returns NaN if NaN is involved" do
++    @nan.remainder(@nan).should.nan?
++    @nan.remainder(@one).should.nan?
++    @one.remainder(@nan).should.nan?
++    @infinity.remainder(@nan).should.nan?
++    @nan.remainder(@infinity).should.nan?
++  end
+ 
+-    it "coerces arguments to BigDecimal if possible" do
+-      @three.remainder(2).should == @one
++  version_is BigDecimal::VERSION, ""..."3.1.4" do #ruby_version_is ""..."3.3" do
++    it "returns NaN if Infinity is involved" do
++      @infinity.remainder(@infinity).should.nan?
++      @infinity.remainder(@one).should.nan?
++      @infinity.remainder(@mixed).should.nan?
++      @infinity.remainder(@one_minus).should.nan?
++      @infinity.remainder(@frac_1).should.nan?
++      @one.remainder(@infinity).should.nan?
++
++      @infinity_minus.remainder(@infinity_minus).should.nan?
++      @infinity_minus.remainder(@one).should.nan?
++      @one.remainder(@infinity_minus).should.nan?
++      @frac_2.remainder(@infinity_minus).should.nan?
++
++      @infinity.remainder(@infinity_minus).should.nan?
++      @infinity_minus.remainder(@infinity).should.nan?
+     end
++  end
+ 
+-    describe "with Object" do
+-      it "tries to coerce the other operand to self" do
+-        object = mock("Object")
+-        object.should_receive(:coerce).with(@three).and_return([@three, 2])
+-        @three.remainder(object).should == @one
+-      end
+-    end
++  it "coerces arguments to BigDecimal if possible" do
++    @three.remainder(2).should == @one
++  end
+ 
+-    it "raises TypeError if the argument cannot be coerced to BigDecimal" do
+-      -> {
+-        @one.remainder('2')
+-      }.should raise_error(TypeError)
++  describe "with Object" do
++    it "tries to coerce the other operand to self" do
++      object = mock("Object")
++      object.should_receive(:coerce).with(@three).and_return([@three, 2])
++      @three.remainder(object).should == @one
+     end
++  end
+ 
++  it "raises TypeError if the argument cannot be coerced to BigDecimal" do
++    -> {
++      @one.remainder('2')
++    }.should raise_error(TypeError)
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/round_spec.rb b/spec/ruby/library/bigdecimal/round_spec.rb
+index 2c966ab44..fba52df65 100644
+--- a/spec/ruby/library/bigdecimal/round_spec.rb
++++ b/spec/ruby/library/bigdecimal/round_spec.rb
+@@ -1,245 +1,242 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++
++describe "BigDecimal#round" do
++  before :each do
++    @one   = BigDecimal("1")
++    @two   = BigDecimal("2")
++    @three = BigDecimal("3")
++
++    @neg_one   = BigDecimal("-1")
++    @neg_two   = BigDecimal("-2")
++    @neg_three = BigDecimal("-3")
++
++    @p1_50 = BigDecimal("1.50")
++    @p1_51 = BigDecimal("1.51")
++    @p1_49 = BigDecimal("1.49")
++    @n1_50 = BigDecimal("-1.50")
++    @n1_51 = BigDecimal("-1.51")
++    @n1_49 = BigDecimal("-1.49")
++
++    @p2_50 = BigDecimal("2.50")
++    @p2_51 = BigDecimal("2.51")
++    @p2_49 = BigDecimal("2.49")
++    @n2_50 = BigDecimal("-2.50")
++    @n2_51 = BigDecimal("-2.51")
++    @n2_49 = BigDecimal("-2.49")
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#round" do
+-    before :each do
+-      @one   = BigDecimal("1")
+-      @two   = BigDecimal("2")
+-      @three = BigDecimal("3")
+-
+-      @neg_one   = BigDecimal("-1")
+-      @neg_two   = BigDecimal("-2")
+-      @neg_three = BigDecimal("-3")
+-
+-      @p1_50 = BigDecimal("1.50")
+-      @p1_51 = BigDecimal("1.51")
+-      @p1_49 = BigDecimal("1.49")
+-      @n1_50 = BigDecimal("-1.50")
+-      @n1_51 = BigDecimal("-1.51")
+-      @n1_49 = BigDecimal("-1.49")
+-
+-      @p2_50 = BigDecimal("2.50")
+-      @p2_51 = BigDecimal("2.51")
+-      @p2_49 = BigDecimal("2.49")
+-      @n2_50 = BigDecimal("-2.50")
+-      @n2_51 = BigDecimal("-2.51")
+-      @n2_49 = BigDecimal("-2.49")
+-    end
+-
+-    after :each do
+-      BigDecimal.mode(BigDecimal::ROUND_MODE, BigDecimal::ROUND_HALF_UP)
+-    end
++  after :each do
++    BigDecimal.mode(BigDecimal::ROUND_MODE, BigDecimal::ROUND_HALF_UP)
++  end
+ 
+-    it "uses default rounding method unless given" do
+-      @p1_50.round(0).should == @two
+-      @p1_51.round(0).should == @two
+-      @p1_49.round(0).should == @one
+-      @n1_50.round(0).should == @neg_two
+-      @n1_51.round(0).should == @neg_two
+-      @n1_49.round(0).should == @neg_one
+-
+-      @p2_50.round(0).should == @three
+-      @p2_51.round(0).should == @three
+-      @p2_49.round(0).should == @two
+-      @n2_50.round(0).should == @neg_three
+-      @n2_51.round(0).should == @neg_three
+-      @n2_49.round(0).should == @neg_two
+-
+-      BigDecimal.mode(BigDecimal::ROUND_MODE, BigDecimal::ROUND_DOWN)
+-
+-      @p1_50.round(0).should == @one
+-      @p1_51.round(0).should == @one
+-      @p1_49.round(0).should == @one
+-      @n1_50.round(0).should == @neg_one
+-      @n1_51.round(0).should == @neg_one
+-      @n1_49.round(0).should == @neg_one
+-
+-      @p2_50.round(0).should == @two
+-      @p2_51.round(0).should == @two
+-      @p2_49.round(0).should == @two
+-      @n2_50.round(0).should == @neg_two
+-      @n2_51.round(0).should == @neg_two
+-      @n2_49.round(0).should == @neg_two
+-    end
++  it "uses default rounding method unless given" do
++    @p1_50.round(0).should == @two
++    @p1_51.round(0).should == @two
++    @p1_49.round(0).should == @one
++    @n1_50.round(0).should == @neg_two
++    @n1_51.round(0).should == @neg_two
++    @n1_49.round(0).should == @neg_one
++
++    @p2_50.round(0).should == @three
++    @p2_51.round(0).should == @three
++    @p2_49.round(0).should == @two
++    @n2_50.round(0).should == @neg_three
++    @n2_51.round(0).should == @neg_three
++    @n2_49.round(0).should == @neg_two
++
++    BigDecimal.mode(BigDecimal::ROUND_MODE, BigDecimal::ROUND_DOWN)
++
++    @p1_50.round(0).should == @one
++    @p1_51.round(0).should == @one
++    @p1_49.round(0).should == @one
++    @n1_50.round(0).should == @neg_one
++    @n1_51.round(0).should == @neg_one
++    @n1_49.round(0).should == @neg_one
++
++    @p2_50.round(0).should == @two
++    @p2_51.round(0).should == @two
++    @p2_49.round(0).should == @two
++    @n2_50.round(0).should == @neg_two
++    @n2_51.round(0).should == @neg_two
++    @n2_49.round(0).should == @neg_two
++  end
+ 
+-    ["BigDecimal::ROUND_UP", ":up"].each do |way|
+-      describe way do
+-        it "rounds values away from zero" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @two
+-          @p1_51.round(0, mode).should == @two
+-          @p1_49.round(0, mode).should == @two
+-          @n1_50.round(0, mode).should == @neg_two
+-          @n1_51.round(0, mode).should == @neg_two
+-          @n1_49.round(0, mode).should == @neg_two
+-
+-          @p2_50.round(0, mode).should == @three
+-          @p2_51.round(0, mode).should == @three
+-          @p2_49.round(0, mode).should == @three
+-          @n2_50.round(0, mode).should == @neg_three
+-          @n2_51.round(0, mode).should == @neg_three
+-          @n2_49.round(0, mode).should == @neg_three
+-        end
++  ["BigDecimal::ROUND_UP", ":up"].each do |way|
++    describe way do
++      it "rounds values away from zero" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @two
++        @p1_51.round(0, mode).should == @two
++        @p1_49.round(0, mode).should == @two
++        @n1_50.round(0, mode).should == @neg_two
++        @n1_51.round(0, mode).should == @neg_two
++        @n1_49.round(0, mode).should == @neg_two
++
++        @p2_50.round(0, mode).should == @three
++        @p2_51.round(0, mode).should == @three
++        @p2_49.round(0, mode).should == @three
++        @n2_50.round(0, mode).should == @neg_three
++        @n2_51.round(0, mode).should == @neg_three
++        @n2_49.round(0, mode).should == @neg_three
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_DOWN", ":down", ":truncate"].each do |way|
+-      describe way do
+-        it "rounds values towards zero" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @one
+-          @p1_51.round(0, mode).should == @one
+-          @p1_49.round(0, mode).should == @one
+-          @n1_50.round(0, mode).should == @neg_one
+-          @n1_51.round(0, mode).should == @neg_one
+-          @n1_49.round(0, mode).should == @neg_one
+-
+-          @p2_50.round(0, mode).should == @two
+-          @p2_51.round(0, mode).should == @two
+-          @p2_49.round(0, mode).should == @two
+-          @n2_50.round(0, mode).should == @neg_two
+-          @n2_51.round(0, mode).should == @neg_two
+-          @n2_49.round(0, mode).should == @neg_two
+-        end
++  ["BigDecimal::ROUND_DOWN", ":down", ":truncate"].each do |way|
++    describe way do
++      it "rounds values towards zero" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @one
++        @p1_51.round(0, mode).should == @one
++        @p1_49.round(0, mode).should == @one
++        @n1_50.round(0, mode).should == @neg_one
++        @n1_51.round(0, mode).should == @neg_one
++        @n1_49.round(0, mode).should == @neg_one
++
++        @p2_50.round(0, mode).should == @two
++        @p2_51.round(0, mode).should == @two
++        @p2_49.round(0, mode).should == @two
++        @n2_50.round(0, mode).should == @neg_two
++        @n2_51.round(0, mode).should == @neg_two
++        @n2_49.round(0, mode).should == @neg_two
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_HALF_UP", ":half_up", ":default"].each do |way|
+-      describe way do
+-        it "rounds values >= 5 up, otherwise down" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @two
+-          @p1_51.round(0, mode).should == @two
+-          @p1_49.round(0, mode).should == @one
+-          @n1_50.round(0, mode).should == @neg_two
+-          @n1_51.round(0, mode).should == @neg_two
+-          @n1_49.round(0, mode).should == @neg_one
+-
+-          @p2_50.round(0, mode).should == @three
+-          @p2_51.round(0, mode).should == @three
+-          @p2_49.round(0, mode).should == @two
+-          @n2_50.round(0, mode).should == @neg_three
+-          @n2_51.round(0, mode).should == @neg_three
+-          @n2_49.round(0, mode).should == @neg_two
+-        end
++  ["BigDecimal::ROUND_HALF_UP", ":half_up", ":default"].each do |way|
++    describe way do
++      it "rounds values >= 5 up, otherwise down" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @two
++        @p1_51.round(0, mode).should == @two
++        @p1_49.round(0, mode).should == @one
++        @n1_50.round(0, mode).should == @neg_two
++        @n1_51.round(0, mode).should == @neg_two
++        @n1_49.round(0, mode).should == @neg_one
++
++        @p2_50.round(0, mode).should == @three
++        @p2_51.round(0, mode).should == @three
++        @p2_49.round(0, mode).should == @two
++        @n2_50.round(0, mode).should == @neg_three
++        @n2_51.round(0, mode).should == @neg_three
++        @n2_49.round(0, mode).should == @neg_two
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_HALF_DOWN", ":half_down"].each do |way|
+-      describe way do
+-        it "rounds values > 5 up, otherwise down" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @one
+-          @p1_51.round(0, mode).should == @two
+-          @p1_49.round(0, mode).should == @one
+-          @n1_50.round(0, mode).should == @neg_one
+-          @n1_51.round(0, mode).should == @neg_two
+-          @n1_49.round(0, mode).should == @neg_one
+-
+-          @p2_50.round(0, mode).should == @two
+-          @p2_51.round(0, mode).should == @three
+-          @p2_49.round(0, mode).should == @two
+-          @n2_50.round(0, mode).should == @neg_two
+-          @n2_51.round(0, mode).should == @neg_three
+-          @n2_49.round(0, mode).should == @neg_two
+-        end
++  ["BigDecimal::ROUND_HALF_DOWN", ":half_down"].each do |way|
++    describe way do
++      it "rounds values > 5 up, otherwise down" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @one
++        @p1_51.round(0, mode).should == @two
++        @p1_49.round(0, mode).should == @one
++        @n1_50.round(0, mode).should == @neg_one
++        @n1_51.round(0, mode).should == @neg_two
++        @n1_49.round(0, mode).should == @neg_one
++
++        @p2_50.round(0, mode).should == @two
++        @p2_51.round(0, mode).should == @three
++        @p2_49.round(0, mode).should == @two
++        @n2_50.round(0, mode).should == @neg_two
++        @n2_51.round(0, mode).should == @neg_three
++        @n2_49.round(0, mode).should == @neg_two
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_CEILING", ":ceiling", ":ceil"].each do |way|
+-      describe way do
+-        it "rounds values towards +infinity" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @two
+-          @p1_51.round(0, mode).should == @two
+-          @p1_49.round(0, mode).should == @two
+-          @n1_50.round(0, mode).should == @neg_one
+-          @n1_51.round(0, mode).should == @neg_one
+-          @n1_49.round(0, mode).should == @neg_one
+-
+-          @p2_50.round(0, mode).should == @three
+-          @p2_51.round(0, mode).should == @three
+-          @p2_49.round(0, mode).should == @three
+-          @n2_50.round(0, mode).should == @neg_two
+-          @n2_51.round(0, mode).should == @neg_two
+-          @n2_49.round(0, mode).should == @neg_two
+-        end
++  ["BigDecimal::ROUND_CEILING", ":ceiling", ":ceil"].each do |way|
++    describe way do
++      it "rounds values towards +infinity" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @two
++        @p1_51.round(0, mode).should == @two
++        @p1_49.round(0, mode).should == @two
++        @n1_50.round(0, mode).should == @neg_one
++        @n1_51.round(0, mode).should == @neg_one
++        @n1_49.round(0, mode).should == @neg_one
++
++        @p2_50.round(0, mode).should == @three
++        @p2_51.round(0, mode).should == @three
++        @p2_49.round(0, mode).should == @three
++        @n2_50.round(0, mode).should == @neg_two
++        @n2_51.round(0, mode).should == @neg_two
++        @n2_49.round(0, mode).should == @neg_two
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_FLOOR", ":floor"].each do |way|
+-      describe way do
+-        it "rounds values towards -infinity" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @one
+-          @p1_51.round(0, mode).should == @one
+-          @p1_49.round(0, mode).should == @one
+-          @n1_50.round(0, mode).should == @neg_two
+-          @n1_51.round(0, mode).should == @neg_two
+-          @n1_49.round(0, mode).should == @neg_two
+-
+-          @p2_50.round(0, mode).should == @two
+-          @p2_51.round(0, mode).should == @two
+-          @p2_49.round(0, mode).should == @two
+-          @n2_50.round(0, mode).should == @neg_three
+-          @n2_51.round(0, mode).should == @neg_three
+-          @n2_49.round(0, mode).should == @neg_three
+-        end
++  ["BigDecimal::ROUND_FLOOR", ":floor"].each do |way|
++    describe way do
++      it "rounds values towards -infinity" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @one
++        @p1_51.round(0, mode).should == @one
++        @p1_49.round(0, mode).should == @one
++        @n1_50.round(0, mode).should == @neg_two
++        @n1_51.round(0, mode).should == @neg_two
++        @n1_49.round(0, mode).should == @neg_two
++
++        @p2_50.round(0, mode).should == @two
++        @p2_51.round(0, mode).should == @two
++        @p2_49.round(0, mode).should == @two
++        @n2_50.round(0, mode).should == @neg_three
++        @n2_51.round(0, mode).should == @neg_three
++        @n2_49.round(0, mode).should == @neg_three
+       end
+     end
++  end
+ 
+-    ["BigDecimal::ROUND_HALF_EVEN", ":half_even", ":banker"].each do |way|
+-      describe way do
+-        it "rounds values > 5 up, < 5 down and == 5 towards even neighbor" do
+-          mode = eval(way)
+-
+-          @p1_50.round(0, mode).should == @two
+-          @p1_51.round(0, mode).should == @two
+-          @p1_49.round(0, mode).should == @one
+-          @n1_50.round(0, mode).should == @neg_two
+-          @n1_51.round(0, mode).should == @neg_two
+-          @n1_49.round(0, mode).should == @neg_one
+-
+-          @p2_50.round(0, mode).should == @two
+-          @p2_51.round(0, mode).should == @three
+-          @p2_49.round(0, mode).should == @two
+-          @n2_50.round(0, mode).should == @neg_two
+-          @n2_51.round(0, mode).should == @neg_three
+-          @n2_49.round(0, mode).should == @neg_two
+-        end
++  ["BigDecimal::ROUND_HALF_EVEN", ":half_even", ":banker"].each do |way|
++    describe way do
++      it "rounds values > 5 up, < 5 down and == 5 towards even neighbor" do
++        mode = eval(way)
++
++        @p1_50.round(0, mode).should == @two
++        @p1_51.round(0, mode).should == @two
++        @p1_49.round(0, mode).should == @one
++        @n1_50.round(0, mode).should == @neg_two
++        @n1_51.round(0, mode).should == @neg_two
++        @n1_49.round(0, mode).should == @neg_one
++
++        @p2_50.round(0, mode).should == @two
++        @p2_51.round(0, mode).should == @three
++        @p2_49.round(0, mode).should == @two
++        @n2_50.round(0, mode).should == @neg_two
++        @n2_51.round(0, mode).should == @neg_three
++        @n2_49.round(0, mode).should == @neg_two
+       end
+     end
++  end
+ 
+-    it 'raise exception, if self is special value' do
+-      -> { BigDecimal('NaN').round }.should raise_error(FloatDomainError)
+-      -> { BigDecimal('Infinity').round }.should raise_error(FloatDomainError)
+-      -> { BigDecimal('-Infinity').round }.should raise_error(FloatDomainError)
+-    end
++  it 'raise exception, if self is special value' do
++    -> { BigDecimal('NaN').round }.should raise_error(FloatDomainError)
++    -> { BigDecimal('Infinity').round }.should raise_error(FloatDomainError)
++    -> { BigDecimal('-Infinity').round }.should raise_error(FloatDomainError)
++  end
+ 
+-    it 'do not raise exception, if self is special value and precision is given' do
+-      -> { BigDecimal('NaN').round(2) }.should_not raise_error(FloatDomainError)
+-      -> { BigDecimal('Infinity').round(2) }.should_not raise_error(FloatDomainError)
+-      -> { BigDecimal('-Infinity').round(2) }.should_not raise_error(FloatDomainError)
+-    end
++  it 'do not raise exception, if self is special value and precision is given' do
++    -> { BigDecimal('NaN').round(2) }.should_not raise_error(FloatDomainError)
++    -> { BigDecimal('Infinity').round(2) }.should_not raise_error(FloatDomainError)
++    -> { BigDecimal('-Infinity').round(2) }.should_not raise_error(FloatDomainError)
++  end
+ 
+-    version_is BigDecimal::VERSION, ''...'3.1.3' do #ruby_version_is ''...'3.2' do
+-      it 'raise for a non-existent round mode' do
+-        -> { @p1_50.round(0, :nonsense) }.should raise_error(ArgumentError, "invalid rounding mode")
+-      end
++  version_is BigDecimal::VERSION, ''...'3.1.3' do #ruby_version_is ''...'3.2' do
++    it 'raise for a non-existent round mode' do
++      -> { @p1_50.round(0, :nonsense) }.should raise_error(ArgumentError, "invalid rounding mode")
+     end
++  end
+ 
+-    version_is BigDecimal::VERSION, '3.1.3' do #ruby_version_is '3.2' do
+-      it 'raise for a non-existent round mode' do
+-        -> { @p1_50.round(0, :nonsense) }.should raise_error(ArgumentError, "invalid rounding mode (nonsense)")
+-      end
++  version_is BigDecimal::VERSION, '3.1.3' do #ruby_version_is '3.2' do
++    it 'raise for a non-existent round mode' do
++      -> { @p1_50.round(0, :nonsense) }.should raise_error(ArgumentError, "invalid rounding mode (nonsense)")
+     end
+   end
+ end
+diff --git a/spec/ruby/library/bigdecimal/sign_spec.rb b/spec/ruby/library/bigdecimal/sign_spec.rb
+index c43ac0539..ae2c28e9f 100644
+--- a/spec/ruby/library/bigdecimal/sign_spec.rb
++++ b/spec/ruby/library/bigdecimal/sign_spec.rb
+@@ -1,49 +1,46 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++
++describe "BigDecimal#sign" do
++
++  it "defines several constants for signs" do
++    # are these really correct?
++    BigDecimal::SIGN_POSITIVE_INFINITE.should == 3
++    BigDecimal::SIGN_NEGATIVE_INFINITE.should == -3
++    BigDecimal::SIGN_POSITIVE_ZERO.should == 1
++    BigDecimal::SIGN_NEGATIVE_ZERO.should == -1
++    BigDecimal::SIGN_POSITIVE_FINITE.should == 2
++    BigDecimal::SIGN_NEGATIVE_FINITE.should == -2
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#sign" do
+-
+-    it "defines several constants for signs" do
+-      # are these really correct?
+-      BigDecimal::SIGN_POSITIVE_INFINITE.should == 3
+-      BigDecimal::SIGN_NEGATIVE_INFINITE.should == -3
+-      BigDecimal::SIGN_POSITIVE_ZERO.should == 1
+-      BigDecimal::SIGN_NEGATIVE_ZERO.should == -1
+-      BigDecimal::SIGN_POSITIVE_FINITE.should == 2
+-      BigDecimal::SIGN_NEGATIVE_FINITE.should == -2
+-    end
+-
+-    it "returns positive value if BigDecimal greater than 0" do
+-      BigDecimal("1").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
+-      BigDecimal("1E-20000000").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
+-      BigDecimal("1E200000000").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
+-      BigDecimal("Infinity").sign.should == BigDecimal::SIGN_POSITIVE_INFINITE
+-    end
+-
+-    it "returns negative value if BigDecimal less than 0" do
+-      BigDecimal("-1").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
+-      BigDecimal("-1E-9990000").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
+-      BigDecimal("-1E20000000").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
+-      BigDecimal("-Infinity").sign.should == BigDecimal::SIGN_NEGATIVE_INFINITE
+-    end
+-
+-    it "returns positive zero if BigDecimal equals positive zero" do
+-      BigDecimal("0").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
+-      BigDecimal("0E-200000000").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
+-      BigDecimal("0E200000000").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
+-    end
+-
+-    it "returns negative zero if BigDecimal equals negative zero" do
+-      BigDecimal("-0").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
+-      BigDecimal("-0E-200000000").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
+-      BigDecimal("-0E200000000").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
+-    end
+-
+-    it "returns BigDecimal::SIGN_NaN if BigDecimal is NaN" do
+-      BigDecimal("NaN").sign.should == BigDecimal::SIGN_NaN
+-    end
++  it "returns positive value if BigDecimal greater than 0" do
++    BigDecimal("1").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
++    BigDecimal("1E-20000000").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
++    BigDecimal("1E200000000").sign.should == BigDecimal::SIGN_POSITIVE_FINITE
++    BigDecimal("Infinity").sign.should == BigDecimal::SIGN_POSITIVE_INFINITE
++  end
+ 
++  it "returns negative value if BigDecimal less than 0" do
++    BigDecimal("-1").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
++    BigDecimal("-1E-9990000").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
++    BigDecimal("-1E20000000").sign.should == BigDecimal::SIGN_NEGATIVE_FINITE
++    BigDecimal("-Infinity").sign.should == BigDecimal::SIGN_NEGATIVE_INFINITE
+   end
++
++  it "returns positive zero if BigDecimal equals positive zero" do
++    BigDecimal("0").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
++    BigDecimal("0E-200000000").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
++    BigDecimal("0E200000000").sign.should == BigDecimal::SIGN_POSITIVE_ZERO
++  end
++
++  it "returns negative zero if BigDecimal equals negative zero" do
++    BigDecimal("-0").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
++    BigDecimal("-0E-200000000").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
++    BigDecimal("-0E200000000").sign.should == BigDecimal::SIGN_NEGATIVE_ZERO
++  end
++
++  it "returns BigDecimal::SIGN_NaN if BigDecimal is NaN" do
++    BigDecimal("NaN").sign.should == BigDecimal::SIGN_NaN
++  end
++
+ end

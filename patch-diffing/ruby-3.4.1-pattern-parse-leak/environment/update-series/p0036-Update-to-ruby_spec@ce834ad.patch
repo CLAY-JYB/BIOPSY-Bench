@@ -1,0 +1,401 @@
+From c11bcbbc Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0036] Update to ruby/spec@ce834ad
+
+---
+diff --git a/spec/ruby/core/time/at_spec.rb b/spec/ruby/core/time/at_spec.rb
+index 25056f201..0459589f0 100644
+--- a/spec/ruby/core/time/at_spec.rb
++++ b/spec/ruby/core/time/at_spec.rb
+@@ -32,12 +32,10 @@ describe "Time.at" do
+       t2.nsec.should == t.nsec
+     end
+ 
+-    ruby_version_is ""..."3.4" do
+-      describe "passed BigDecimal" do
+-        it "doesn't round input value" do
+-          require 'bigdecimal'
+-          Time.at(BigDecimal('1.1')).to_f.should == 1.1
+-        end
++    describe "passed BigDecimal" do
++      it "doesn't round input value" do
++        require 'bigdecimal'
++        Time.at(BigDecimal('1.1')).to_f.should == 1.1
+       end
+     end
+ 
+diff --git a/spec/ruby/core/unboundmethod/clone_spec.rb b/spec/ruby/core/unboundmethod/clone_spec.rb
+index 098ee6147..1e7fb1874 100644
+--- a/spec/ruby/core/unboundmethod/clone_spec.rb
++++ b/spec/ruby/core/unboundmethod/clone_spec.rb
+@@ -1,12 +1,13 @@
+ require_relative '../../spec_helper'
+-require_relative 'fixtures/classes'
++require_relative 'shared/dup'
+ 
+ describe "UnboundMethod#clone" do
+-  it "returns a copy of the UnboundMethod" do
+-    um1 = UnboundMethodSpecs::Methods.instance_method(:foo)
+-    um2 = um1.clone
++  it_behaves_like :unboundmethod_dup, :clone
+ 
+-    (um1 == um2).should == true
+-    um1.bind(UnboundMethodSpecs::Methods.new).call.should == um2.bind(UnboundMethodSpecs::Methods.new).call
++  it "preserves frozen status" do
++    method = Class.instance_method(:instance_method)
++    method.freeze
++    method.frozen?.should == true
++    method.clone.frozen?.should == true
+   end
+ end
+diff --git a/spec/ruby/core/unboundmethod/dup_spec.rb b/spec/ruby/core/unboundmethod/dup_spec.rb
+new file mode 100644
+index 000000000..5a78dd8e3
+--- /dev/null
++++ b/spec/ruby/core/unboundmethod/dup_spec.rb
+@@ -0,0 +1,15 @@
++require_relative '../../spec_helper'
++require_relative 'shared/dup'
++
++describe "UnboundMethod#dup" do
++  ruby_version_is "3.4" do
++    it_behaves_like :unboundmethod_dup, :dup
++
++    it "resets frozen status" do
++      method = Class.instance_method(:instance_method)
++      method.freeze
++      method.frozen?.should == true
++      method.dup.frozen?.should == false
++    end
++  end
++end
+diff --git a/spec/ruby/core/unboundmethod/shared/dup.rb b/spec/ruby/core/unboundmethod/shared/dup.rb
+new file mode 100644
+index 000000000..943a7faaa
+--- /dev/null
++++ b/spec/ruby/core/unboundmethod/shared/dup.rb
+@@ -0,0 +1,32 @@
++describe :unboundmethod_dup, shared: true do
++  it "returns a copy of self" do
++    a = Class.instance_method(:instance_method)
++    b = a.send(@method)
++
++    a.should == b
++    a.should_not equal(b)
++  end
++
++  ruby_version_is "3.4" do
++    it "copies instance variables" do
++      method = Class.instance_method(:instance_method)
++      method.instance_variable_set(:@ivar, 1)
++      cl = method.send(@method)
++      cl.instance_variables.should == [:@ivar]
++    end
++
++    it "copies the finalizer" do
++      code = <<-RUBY
++        obj = Class.instance_method(:instance_method)
++
++        ObjectSpace.define_finalizer(obj, Proc.new { STDOUT.write "finalized\n" })
++
++        obj.clone
++
++        exit 0
++      RUBY
++
++      ruby_exe(code).lines.sort.should == ["finalized\n", "finalized\n"]
++    end
++  end
++end
+diff --git a/spec/ruby/library/abbrev/abbrev_spec.rb b/spec/ruby/library/abbrev/abbrev_spec.rb
+index 79045a080..61b092659 100644
+--- a/spec/ruby/library/abbrev/abbrev_spec.rb
++++ b/spec/ruby/library/abbrev/abbrev_spec.rb
+@@ -1,34 +1,31 @@
+ require_relative '../../spec_helper'
++require 'abbrev'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'abbrev'
++#test both Abbrev.abbrev and Array#abbrev in
++#the same manner, as they're more or less aliases
++#of one another
+ 
+-  #test both Abbrev.abbrev and Array#abbrev in
+-  #the same manner, as they're more or less aliases
+-  #of one another
++[["Abbrev.abbrev", -> a { Abbrev.abbrev(a)}],
++ ["Array#abbrev", -> a { a.abbrev}]
++].each do |(name, func)|
+ 
+-  [["Abbrev.abbrev", -> a { Abbrev.abbrev(a)}],
+-   ["Array#abbrev", -> a { a.abbrev}]
+-  ].each do |(name, func)|
++  describe name do
++    it "returns a hash of all unambiguous abbreviations of the array of strings passed in" do
++      func.call(['ruby', 'rules']).should == {"rub" => "ruby",
++                                       "ruby" => "ruby",
++                                       "rul" => "rules",
++                                       "rule" => "rules",
++                                       "rules" => "rules"}
+ 
+-    describe name do
+-      it "returns a hash of all unambiguous abbreviations of the array of strings passed in" do
+-        func.call(['ruby', 'rules']).should == {"rub" => "ruby",
+-                                         "ruby" => "ruby",
+-                                         "rul" => "rules",
+-                                         "rule" => "rules",
+-                                         "rules" => "rules"}
+-
+-        func.call(["car", "cone"]).should == {"ca" => "car",
+-                                         "car" => "car",
+-                                         "co" => "cone",
+-                                         "con" => "cone",
+-                                         "cone" => "cone"}
+-      end
++      func.call(["car", "cone"]).should == {"ca" => "car",
++                                       "car" => "car",
++                                       "co" => "cone",
++                                       "con" => "cone",
++                                       "cone" => "cone"}
++    end
+ 
+-      it "returns an empty hash when called on an empty array" do
+-        func.call([]).should == {}
+-      end
++    it "returns an empty hash when called on an empty array" do
++      func.call([]).should == {}
+     end
+   end
+ end
+diff --git a/spec/ruby/library/base64/decode64_spec.rb b/spec/ruby/library/base64/decode64_spec.rb
+index c587c82d2..6dd33dddf 100644
+--- a/spec/ruby/library/base64/decode64_spec.rb
++++ b/spec/ruby/library/base64/decode64_spec.rb
+@@ -1,32 +1,29 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++require 'base64'
+ 
+-  require 'base64'
+-
+-  describe "Base64#decode64" do
+-    it "returns the Base64-decoded version of the given string" do
+-      Base64.decode64("U2VuZCByZWluZm9yY2VtZW50cw==\n").should == "Send reinforcements"
+-    end
++describe "Base64#decode64" do
++  it "returns the Base64-decoded version of the given string" do
++    Base64.decode64("U2VuZCByZWluZm9yY2VtZW50cw==\n").should == "Send reinforcements"
++  end
+ 
+-    it "returns the Base64-decoded version of the given shared string" do
+-      Base64.decode64("base64: U2VuZCByZWluZm9yY2VtZW50cw==\n".split(" ").last).should == "Send reinforcements"
+-    end
++  it "returns the Base64-decoded version of the given shared string" do
++    Base64.decode64("base64: U2VuZCByZWluZm9yY2VtZW50cw==\n".split(" ").last).should == "Send reinforcements"
++  end
+ 
+-    it "returns the Base64-decoded version of the given string with wrong padding" do
+-      Base64.decode64("XU2VuZCByZWluZm9yY2VtZW50cw===").should == "]M\x95\xB9\x90\x81\xC9\x95\xA5\xB9\x99\xBD\xC9\x8D\x95\xB5\x95\xB9\xD1\xCC".b
+-    end
++  it "returns the Base64-decoded version of the given string with wrong padding" do
++    Base64.decode64("XU2VuZCByZWluZm9yY2VtZW50cw===").should == "]M\x95\xB9\x90\x81\xC9\x95\xA5\xB9\x99\xBD\xC9\x8D\x95\xB5\x95\xB9\xD1\xCC".b
++  end
+ 
+-    it "returns the Base64-decoded version of the given string that contains an invalid character" do
+-      Base64.decode64("%3D").should == "\xDC".b
+-    end
++  it "returns the Base64-decoded version of the given string that contains an invalid character" do
++    Base64.decode64("%3D").should == "\xDC".b
++  end
+ 
+-    it "returns a binary encoded string" do
+-      Base64.decode64("SEk=").encoding.should == Encoding::BINARY
+-    end
++  it "returns a binary encoded string" do
++    Base64.decode64("SEk=").encoding.should == Encoding::BINARY
++  end
+ 
+-    it "decodes without padding suffix ==" do
+-      Base64.decode64("eyJrZXkiOnsibiI6InR0dCJ9fQ").should == "{\"key\":{\"n\":\"ttt\"}}"
+-    end
++  it "decodes without padding suffix ==" do
++    Base64.decode64("eyJrZXkiOnsibiI6InR0dCJ9fQ").should == "{\"key\":{\"n\":\"ttt\"}}"
+   end
+ end
+diff --git a/spec/ruby/library/base64/encode64_spec.rb b/spec/ruby/library/base64/encode64_spec.rb
+index e31c6604f..64de6257b 100644
+--- a/spec/ruby/library/base64/encode64_spec.rb
++++ b/spec/ruby/library/base64/encode64_spec.rb
+@@ -1,26 +1,23 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++require 'base64'
+ 
+-  require 'base64'
+-
+-  describe "Base64#encode64" do
+-    it "returns the Base64-encoded version of the given string" do
+-      Base64.encode64("Now is the time for all good coders\nto learn Ruby").should ==
+-        "Tm93IGlzIHRoZSB0aW1lIGZvciBhbGwgZ29vZCBjb2RlcnMKdG8gbGVhcm4g\nUnVieQ==\n"
+-    end
++describe "Base64#encode64" do
++  it "returns the Base64-encoded version of the given string" do
++    Base64.encode64("Now is the time for all good coders\nto learn Ruby").should ==
++      "Tm93IGlzIHRoZSB0aW1lIGZvciBhbGwgZ29vZCBjb2RlcnMKdG8gbGVhcm4g\nUnVieQ==\n"
++  end
+ 
+-    it "returns the Base64-encoded version of the given string" do
+-      Base64.encode64('Send reinforcements').should == "U2VuZCByZWluZm9yY2VtZW50cw==\n"
+-    end
++  it "returns the Base64-encoded version of the given string" do
++    Base64.encode64('Send reinforcements').should == "U2VuZCByZWluZm9yY2VtZW50cw==\n"
++  end
+ 
+-    it "returns the Base64-encoded version of the given shared string" do
+-      Base64.encode64("Now is the time for all good coders\nto learn Ruby".split("\n").last).should ==
+-        "dG8gbGVhcm4gUnVieQ==\n"
+-    end
++  it "returns the Base64-encoded version of the given shared string" do
++    Base64.encode64("Now is the time for all good coders\nto learn Ruby".split("\n").last).should ==
++      "dG8gbGVhcm4gUnVieQ==\n"
++  end
+ 
+-    it "returns a US_ASCII encoded string" do
+-      Base64.encode64("HI").encoding.should == Encoding::US_ASCII
+-    end
++  it "returns a US_ASCII encoded string" do
++    Base64.encode64("HI").encoding.should == Encoding::US_ASCII
+   end
+ end
+diff --git a/spec/ruby/library/base64/strict_decode64_spec.rb b/spec/ruby/library/base64/strict_decode64_spec.rb
+index f4dd3a60f..d258223c8 100644
+--- a/spec/ruby/library/base64/strict_decode64_spec.rb
++++ b/spec/ruby/library/base64/strict_decode64_spec.rb
+@@ -1,44 +1,41 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
+-
+-  require 'base64'
+-
+-  describe "Base64#strict_decode64" do
+-    it "returns the Base64-decoded version of the given string" do
+-      Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==").should == "Send reinforcements"
+-    end
+-
+-    it "returns the Base64-decoded version of the given shared string" do
+-      Base64.strict_decode64("base64: U2VuZCByZWluZm9yY2VtZW50cw==".split(" ").last).should == "Send reinforcements"
+-    end
+-
+-    it "raises ArgumentError when the given string contains CR" do
+-      -> do
+-        Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==\r")
+-      end.should raise_error(ArgumentError)
+-    end
+-
+-    it "raises ArgumentError when the given string contains LF" do
+-      -> do
+-        Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==\n")
+-      end.should raise_error(ArgumentError)
+-    end
+-
+-    it "raises ArgumentError when the given string has wrong padding" do
+-      -> do
+-        Base64.strict_decode64("=U2VuZCByZWluZm9yY2VtZW50cw==")
+-      end.should raise_error(ArgumentError)
+-    end
+-
+-    it "raises ArgumentError when the given string contains an invalid character" do
+-      -> do
+-        Base64.strict_decode64("%3D")
+-      end.should raise_error(ArgumentError)
+-    end
+-
+-    it "returns a binary encoded string" do
+-      Base64.strict_decode64("SEk=").encoding.should == Encoding::BINARY
+-    end
++require 'base64'
++
++describe "Base64#strict_decode64" do
++  it "returns the Base64-decoded version of the given string" do
++    Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==").should == "Send reinforcements"
++  end
++
++  it "returns the Base64-decoded version of the given shared string" do
++    Base64.strict_decode64("base64: U2VuZCByZWluZm9yY2VtZW50cw==".split(" ").last).should == "Send reinforcements"
++  end
++
++  it "raises ArgumentError when the given string contains CR" do
++    -> do
++      Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==\r")
++    end.should raise_error(ArgumentError)
++  end
++
++  it "raises ArgumentError when the given string contains LF" do
++    -> do
++      Base64.strict_decode64("U2VuZCByZWluZm9yY2VtZW50cw==\n")
++    end.should raise_error(ArgumentError)
++  end
++
++  it "raises ArgumentError when the given string has wrong padding" do
++    -> do
++      Base64.strict_decode64("=U2VuZCByZWluZm9yY2VtZW50cw==")
++    end.should raise_error(ArgumentError)
++  end
++
++  it "raises ArgumentError when the given string contains an invalid character" do
++    -> do
++      Base64.strict_decode64("%3D")
++    end.should raise_error(ArgumentError)
++  end
++
++  it "returns a binary encoded string" do
++    Base64.strict_decode64("SEk=").encoding.should == Encoding::BINARY
+   end
+ end
+diff --git a/spec/ruby/library/base64/strict_encode64_spec.rb b/spec/ruby/library/base64/strict_encode64_spec.rb
+index c7f9f12a9..7cabcf190 100644
+--- a/spec/ruby/library/base64/strict_encode64_spec.rb
++++ b/spec/ruby/library/base64/strict_encode64_spec.rb
+@@ -1,22 +1,19 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++require 'base64'
+ 
+-  require 'base64'
+-
+-  describe "Base64#strict_encode64" do
+-    it "returns the Base64-encoded version of the given string" do
+-      Base64.strict_encode64("Now is the time for all good coders\nto learn Ruby").should ==
+-        "Tm93IGlzIHRoZSB0aW1lIGZvciBhbGwgZ29vZCBjb2RlcnMKdG8gbGVhcm4gUnVieQ=="
+-    end
++describe "Base64#strict_encode64" do
++  it "returns the Base64-encoded version of the given string" do
++    Base64.strict_encode64("Now is the time for all good coders\nto learn Ruby").should ==
++      "Tm93IGlzIHRoZSB0aW1lIGZvciBhbGwgZ29vZCBjb2RlcnMKdG8gbGVhcm4gUnVieQ=="
++  end
+ 
+-    it "returns the Base64-encoded version of the given shared string" do
+-      Base64.strict_encode64("Now is the time for all good coders\nto learn Ruby".split("\n").last).should ==
+-        "dG8gbGVhcm4gUnVieQ=="
+-    end
++  it "returns the Base64-encoded version of the given shared string" do
++    Base64.strict_encode64("Now is the time for all good coders\nto learn Ruby".split("\n").last).should ==
++      "dG8gbGVhcm4gUnVieQ=="
++  end
+ 
+-    it "returns a US_ASCII encoded string" do
+-      Base64.strict_encode64("HI").encoding.should == Encoding::US_ASCII
+-    end
++  it "returns a US_ASCII encoded string" do
++    Base64.strict_encode64("HI").encoding.should == Encoding::US_ASCII
+   end
+ end
+
+-- 
+2.43.0

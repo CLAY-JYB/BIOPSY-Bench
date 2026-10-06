@@ -1,0 +1,611 @@
+From ada9cf77 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0064] target/riscv: Add zcmop extension
+
+---
+diff --git a/target/riscv/insn16.decode b/target/riscv/insn16.decode
+index b96c534e73..3953bcf82d 100644
+--- a/target/riscv/insn16.decode
++++ b/target/riscv/insn16.decode
+@@ -140,6 +140,7 @@ sw                110  ... ... .. ... 00 @cs_w
+ addi              000 .  .....  ..... 01 @ci
+ addi              010 .  .....  ..... 01 @c_li
+ {
++  c_mop_n         011 0 0 n:3 1 00000 01
+   illegal         011 0  -----  00000 01 # c.addi16sp and c.lui, RES nzimm=0
+   addi            011 .  00010  ..... 01 @c_addi16sp
+   lui             011 .  .....  ..... 01 @c_lui
+diff --git a/target/riscv/insn32.decode b/target/riscv/insn32.decode
+index f22df04cfd..c45b8fa1d8 100644
+--- a/target/riscv/insn32.decode
++++ b/target/riscv/insn32.decode
+@@ -38,6 +38,8 @@
+ %imm_bs   30:2                   !function=ex_shift_3
+ %imm_rnum 20:4
+ %imm_z6   26:1 15:5
++%imm_mop5 30:1 26:2 20:2
++%imm_mop3 30:1 26:2
+ 
+ # Argument sets:
+ &empty
+@@ -56,6 +58,8 @@
+ &r2nfvm    vm rd rs1 nf
+ &rnfvm     vm rd rs1 rs2 nf
+ &k_aes     shamt rs2 rs1 rd
++&mop5 imm rd rs1
++&mop3 imm rd rs1 rs2
+ 
+ # Formats 32:
+ @r       .......   ..... ..... ... ..... ....... &r                %rs2 %rs1 %rd
+@@ -98,6 +102,9 @@
+ @k_aes   .. ..... ..... .....  ... ..... ....... &k_aes  shamt=%imm_bs   %rs2 %rs1 %rd
+ @i_aes   .. ..... ..... .....  ... ..... ....... &i      imm=%imm_rnum        %rs1 %rd
+ 
++@mop5 . . .. .. .... .. ..... ... ..... ....... &mop5 imm=%imm_mop5 %rd %rs1
++@mop3 . . .. .. . ..... ..... ... ..... ....... &mop3 imm=%imm_mop3 %rd %rs1 %rs2
++
+ # Formats 64:
+ @sh5     .......  ..... .....  ... ..... ....... &shift  shamt=%sh5      %rs1 %rd
+ 
+@@ -1010,3 +1017,29 @@ amocas_w    00101 . . ..... ..... 010 ..... 0101111 @atom_st
+ amocas_d    00101 . . ..... ..... 011 ..... 0101111 @atom_st
+ # *** RV64 Zacas Standard Extension ***
+ amocas_q    00101 . . ..... ..... 100 ..... 0101111 @atom_st
++
++# *** Zimop may-be-operation extension ***
++mop_r_n     1 . 00 .. 0111 .. ..... 100 ..... 1110011 @mop5
++mop_rr_n    1 . 00 .. 1 ..... ..... 100 ..... 1110011 @mop3
++
++# *** Zabhb Standard Extension ***
++amoswap_b  00001 . . ..... ..... 000 ..... 0101111 @atom_st
++amoadd_b   00000 . . ..... ..... 000 ..... 0101111 @atom_st
++amoxor_b   00100 . . ..... ..... 000 ..... 0101111 @atom_st
++amoand_b   01100 . . ..... ..... 000 ..... 0101111 @atom_st
++amoor_b    01000 . . ..... ..... 000 ..... 0101111 @atom_st
++amomin_b   10000 . . ..... ..... 000 ..... 0101111 @atom_st
++amomax_b   10100 . . ..... ..... 000 ..... 0101111 @atom_st
++amominu_b  11000 . . ..... ..... 000 ..... 0101111 @atom_st
++amomaxu_b  11100 . . ..... ..... 000 ..... 0101111 @atom_st
++amoswap_h  00001 . . ..... ..... 001 ..... 0101111 @atom_st
++amoadd_h   00000 . . ..... ..... 001 ..... 0101111 @atom_st
++amoxor_h   00100 . . ..... ..... 001 ..... 0101111 @atom_st
++amoand_h   01100 . . ..... ..... 001 ..... 0101111 @atom_st
++amoor_h    01000 . . ..... ..... 001 ..... 0101111 @atom_st
++amomin_h   10000 . . ..... ..... 001 ..... 0101111 @atom_st
++amomax_h   10100 . . ..... ..... 001 ..... 0101111 @atom_st
++amominu_h  11000 . . ..... ..... 001 ..... 0101111 @atom_st
++amomaxu_h  11100 . . ..... ..... 001 ..... 0101111 @atom_st
++amocas_b    00101 . . ..... ..... 000 ..... 0101111 @atom_st
++amocas_h    00101 . . ..... ..... 001 ..... 0101111 @atom_st
+diff --git a/target/riscv/insn_trans/trans_rva.c.inc b/target/riscv/insn_trans/trans_rva.c.inc
+index 4a9e4591d1..39bbf60f3c 100644
+--- a/target/riscv/insn_trans/trans_rva.c.inc
++++ b/target/riscv/insn_trans/trans_rva.c.inc
+@@ -96,21 +96,6 @@ static bool gen_sc(DisasContext *ctx, arg_atomic *a, MemOp mop)
+     return true;
+ }
+ 
+-static bool gen_amo(DisasContext *ctx, arg_atomic *a,
+-                    void(*func)(TCGv, TCGv, TCGv, TCGArg, MemOp),
+-                    MemOp mop)
+-{
+-    TCGv dest = dest_gpr(ctx, a->rd);
+-    TCGv src1, src2 = get_gpr(ctx, a->rs2, EXT_NONE);
+-
+-    decode_save_opc(ctx);
+-    src1 = get_address(ctx, a->rs1, 0);
+-    func(dest, src1, src2, ctx->mem_idx, mop);
+-
+-    gen_set_gpr(ctx, a->rd, dest);
+-    return true;
+-}
+-
+ static bool trans_lr_w(DisasContext *ctx, arg_lr_w *a)
+ {
+     REQUIRE_A_OR_ZALRSC(ctx);
+@@ -126,55 +111,55 @@ static bool trans_sc_w(DisasContext *ctx, arg_sc_w *a)
+ static bool trans_amoswap_w(DisasContext *ctx, arg_amoswap_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, MO_TESL);
+ }
+ 
+ static bool trans_amoadd_w(DisasContext *ctx, arg_amoadd_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, MO_TESL);
+ }
+ 
+ static bool trans_amoxor_w(DisasContext *ctx, arg_amoxor_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, MO_TESL);
+ }
+ 
+ static bool trans_amoand_w(DisasContext *ctx, arg_amoand_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, MO_TESL);
+ }
+ 
+ static bool trans_amoor_w(DisasContext *ctx, arg_amoor_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, MO_TESL);
+ }
+ 
+ static bool trans_amomin_w(DisasContext *ctx, arg_amomin_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, MO_TESL);
+ }
+ 
+ static bool trans_amomax_w(DisasContext *ctx, arg_amomax_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, MO_TESL);
+ }
+ 
+ static bool trans_amominu_w(DisasContext *ctx, arg_amominu_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, MO_TESL);
+ }
+ 
+ static bool trans_amomaxu_w(DisasContext *ctx, arg_amomaxu_w *a)
+ {
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, (MO_ALIGN | MO_TESL));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, MO_TESL);
+ }
+ 
+ static bool trans_lr_d(DisasContext *ctx, arg_lr_d *a)
+@@ -195,61 +180,61 @@ static bool trans_amoswap_d(DisasContext *ctx, arg_amoswap_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amoadd_d(DisasContext *ctx, arg_amoadd_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amoxor_d(DisasContext *ctx, arg_amoxor_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amoand_d(DisasContext *ctx, arg_amoand_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amoor_d(DisasContext *ctx, arg_amoor_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amomin_d(DisasContext *ctx, arg_amomin_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amomax_d(DisasContext *ctx, arg_amomax_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amominu_d(DisasContext *ctx, arg_amominu_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, MO_TEUQ);
+ }
+ 
+ static bool trans_amomaxu_d(DisasContext *ctx, arg_amomaxu_d *a)
+ {
+     REQUIRE_64BIT(ctx);
+     REQUIRE_A_OR_ZAAMO(ctx);
+-    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, (MO_ALIGN | MO_TEUQ));
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, MO_TEUQ);
+ }
+diff --git a/target/riscv/insn_trans/trans_rvd.c.inc b/target/riscv/insn_trans/trans_rvd.c.inc
+index d9ce9e407f..1f5fac65a2 100644
+--- a/target/riscv/insn_trans/trans_rvd.c.inc
++++ b/target/riscv/insn_trans/trans_rvd.c.inc
+@@ -42,13 +42,18 @@
+ static bool trans_fld(DisasContext *ctx, arg_fld *a)
+ {
+     TCGv addr;
++    MemOp memop = MO_TEUQ;
+ 
+     REQUIRE_FPU;
+     REQUIRE_EXT(ctx, RVD);
+ 
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
++
+     decode_save_opc(ctx);
+     addr = get_address(ctx, a->rs1, a->imm);
+-    tcg_gen_qemu_ld_i64(cpu_fpr[a->rd], addr, ctx->mem_idx, MO_TEUQ);
++    tcg_gen_qemu_ld_i64(cpu_fpr[a->rd], addr, ctx->mem_idx, memop);
+ 
+     mark_fs_dirty(ctx);
+     return true;
+@@ -57,13 +62,18 @@ static bool trans_fld(DisasContext *ctx, arg_fld *a)
+ static bool trans_fsd(DisasContext *ctx, arg_fsd *a)
+ {
+     TCGv addr;
++    MemOp memop = MO_TEUQ;
+ 
+     REQUIRE_FPU;
+     REQUIRE_EXT(ctx, RVD);
+ 
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
++
+     decode_save_opc(ctx);
+     addr = get_address(ctx, a->rs1, a->imm);
+-    tcg_gen_qemu_st_i64(cpu_fpr[a->rs2], addr, ctx->mem_idx, MO_TEUQ);
++    tcg_gen_qemu_st_i64(cpu_fpr[a->rs2], addr, ctx->mem_idx, memop);
+     return true;
+ }
+ 
+diff --git a/target/riscv/insn_trans/trans_rvf.c.inc b/target/riscv/insn_trans/trans_rvf.c.inc
+index 97a368970b..f771aa1939 100644
+--- a/target/riscv/insn_trans/trans_rvf.c.inc
++++ b/target/riscv/insn_trans/trans_rvf.c.inc
+@@ -43,14 +43,19 @@ static bool trans_flw(DisasContext *ctx, arg_flw *a)
+ {
+     TCGv_i64 dest;
+     TCGv addr;
++    MemOp memop = MO_TEUL;
+ 
+     REQUIRE_FPU;
+     REQUIRE_EXT(ctx, RVF);
+ 
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
++
+     decode_save_opc(ctx);
+     addr = get_address(ctx, a->rs1, a->imm);
+     dest = cpu_fpr[a->rd];
+-    tcg_gen_qemu_ld_i64(dest, addr, ctx->mem_idx, MO_TEUL);
++    tcg_gen_qemu_ld_i64(dest, addr, ctx->mem_idx, memop);
+     gen_nanbox_s(dest, dest);
+ 
+     mark_fs_dirty(ctx);
+@@ -60,13 +65,18 @@ static bool trans_flw(DisasContext *ctx, arg_flw *a)
+ static bool trans_fsw(DisasContext *ctx, arg_fsw *a)
+ {
+     TCGv addr;
++    MemOp memop = MO_TEUL;
+ 
+     REQUIRE_FPU;
+     REQUIRE_EXT(ctx, RVF);
+ 
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
++
+     decode_save_opc(ctx);
+     addr = get_address(ctx, a->rs1, a->imm);
+-    tcg_gen_qemu_st_i64(cpu_fpr[a->rs2], addr, ctx->mem_idx, MO_TEUL);
++    tcg_gen_qemu_st_i64(cpu_fpr[a->rs2], addr, ctx->mem_idx, memop);
+     return true;
+ }
+ 
+diff --git a/target/riscv/insn_trans/trans_rvi.c.inc b/target/riscv/insn_trans/trans_rvi.c.inc
+index ad40d3e87f..98e3806d5e 100644
+--- a/target/riscv/insn_trans/trans_rvi.c.inc
++++ b/target/riscv/insn_trans/trans_rvi.c.inc
+@@ -268,6 +268,9 @@ static bool gen_load(DisasContext *ctx, arg_lb *a, MemOp memop)
+ {
+     bool out;
+ 
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
+     decode_save_opc(ctx);
+     if (get_xl(ctx) == MXL_RV128) {
+         out = gen_load_i128(ctx, a, memop);
+@@ -366,6 +369,9 @@ static bool gen_store_i128(DisasContext *ctx, arg_sb *a, MemOp memop)
+ 
+ static bool gen_store(DisasContext *ctx, arg_sb *a, MemOp memop)
+ {
++    if (ctx->cfg_ptr->ext_zama16b && (ctx->cur_insn_len != 2)) {
++        memop |= MO_ATOM_WITHIN16;
++    }
+     decode_save_opc(ctx);
+     if (get_xl(ctx) == MXL_RV128) {
+         return gen_store_i128(ctx, a, memop);
+diff --git a/target/riscv/insn_trans/trans_rvzabha.c.inc b/target/riscv/insn_trans/trans_rvzabha.c.inc
+new file mode 100644
+index 0000000000..ce8edcba62
+--- /dev/null
++++ b/target/riscv/insn_trans/trans_rvzabha.c.inc
+@@ -0,0 +1,145 @@
++/*
++ * RISC-V translation routines for the Zabha Standard Extension.
++ *
++ * Copyright (c) 2024 Alibaba Group
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2 or later, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#define REQUIRE_ZABHA(ctx) do {           \
++    if (!ctx->cfg_ptr->ext_zabha) {       \
++        return false;                     \
++    }                                     \
++} while (0)
++
++static bool trans_amoswap_b(DisasContext *ctx, arg_amoswap_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, MO_SB);
++}
++
++static bool trans_amoadd_b(DisasContext *ctx, arg_amoadd_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, MO_SB);
++}
++
++static bool trans_amoxor_b(DisasContext *ctx, arg_amoxor_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, MO_SB);
++}
++
++static bool trans_amoand_b(DisasContext *ctx, arg_amoand_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, MO_SB);
++}
++
++static bool trans_amoor_b(DisasContext *ctx, arg_amoor_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, MO_SB);
++}
++
++static bool trans_amomin_b(DisasContext *ctx, arg_amomin_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, MO_SB);
++}
++
++static bool trans_amomax_b(DisasContext *ctx, arg_amomax_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, MO_SB);
++}
++
++static bool trans_amominu_b(DisasContext *ctx, arg_amominu_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, MO_SB);
++}
++
++static bool trans_amomaxu_b(DisasContext *ctx, arg_amomaxu_b *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, MO_SB);
++}
++
++static bool trans_amoswap_h(DisasContext *ctx, arg_amoswap_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_xchg_tl, MO_TESW);
++}
++
++static bool trans_amoadd_h(DisasContext *ctx, arg_amoadd_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_add_tl, MO_TESW);
++}
++
++static bool trans_amoxor_h(DisasContext *ctx, arg_amoxor_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_xor_tl, MO_TESW);
++}
++
++static bool trans_amoand_h(DisasContext *ctx, arg_amoand_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_and_tl, MO_TESW);
++}
++
++static bool trans_amoor_h(DisasContext *ctx, arg_amoor_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_or_tl, MO_TESW);
++}
++
++static bool trans_amomin_h(DisasContext *ctx, arg_amomin_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smin_tl, MO_TESW);
++}
++
++static bool trans_amomax_h(DisasContext *ctx, arg_amomax_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_smax_tl, MO_TESW);
++}
++
++static bool trans_amominu_h(DisasContext *ctx, arg_amominu_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umin_tl, MO_TESW);
++}
++
++static bool trans_amomaxu_h(DisasContext *ctx, arg_amomaxu_h *a)
++{
++    REQUIRE_ZABHA(ctx);
++    return gen_amo(ctx, a, &tcg_gen_atomic_fetch_umax_tl, MO_TESW);
++}
++
++static bool trans_amocas_b(DisasContext *ctx, arg_amocas_b *a)
++{
++    REQUIRE_ZACAS(ctx);
++    REQUIRE_ZABHA(ctx);
++    return gen_cmpxchg(ctx, a, MO_SB);
++}
++
++static bool trans_amocas_h(DisasContext *ctx, arg_amocas_h *a)
++{
++    REQUIRE_ZACAS(ctx);
++    REQUIRE_ZABHA(ctx);
++    return gen_cmpxchg(ctx, a, MO_ALIGN | MO_TESW);
++}
+diff --git a/target/riscv/insn_trans/trans_rvzacas.c.inc b/target/riscv/insn_trans/trans_rvzacas.c.inc
+index 5d274d4c08..fcced99fc7 100644
+--- a/target/riscv/insn_trans/trans_rvzacas.c.inc
++++ b/target/riscv/insn_trans/trans_rvzacas.c.inc
+@@ -22,19 +22,6 @@
+     }                                     \
+ } while (0)
+ 
+-static bool gen_cmpxchg(DisasContext *ctx, arg_atomic *a, MemOp mop)
+-{
+-    TCGv dest = get_gpr(ctx, a->rd, EXT_NONE);
+-    TCGv src1 = get_address(ctx, a->rs1, 0);
+-    TCGv src2 = get_gpr(ctx, a->rs2, EXT_NONE);
+-
+-    decode_save_opc(ctx);
+-    tcg_gen_atomic_cmpxchg_tl(dest, src1, dest, src2, ctx->mem_idx, mop);
+-
+-    gen_set_gpr(ctx, a->rd, dest);
+-    return true;
+-}
+-
+ static bool trans_amocas_w(DisasContext *ctx, arg_amocas_w *a)
+ {
+     REQUIRE_ZACAS(ctx);
+diff --git a/target/riscv/insn_trans/trans_rvzcmop.c.inc b/target/riscv/insn_trans/trans_rvzcmop.c.inc
+new file mode 100644
+index 0000000000..7205586508
+--- /dev/null
++++ b/target/riscv/insn_trans/trans_rvzcmop.c.inc
+@@ -0,0 +1,29 @@
++/*
++ * RISC-V translation routines for compressed May-Be-Operation(zcmop).
++ *
++ * Copyright (c) 2024 Alibaba Group.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2 or later, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#define REQUIRE_ZCMOP(ctx) do {           \
++    if (!ctx->cfg_ptr->ext_zcmop) {       \
++        return false;                     \
++    }                                     \
++} while (0)
++
++static bool trans_c_mop_n(DisasContext *ctx, arg_c_mop_n *a)
++{
++    REQUIRE_ZCMOP(ctx);
++    return true;
++}
+diff --git a/target/riscv/insn_trans/trans_rvzimop.c.inc b/target/riscv/insn_trans/trans_rvzimop.c.inc
+new file mode 100644
+index 0000000000..165aacd2b6
+--- /dev/null
++++ b/target/riscv/insn_trans/trans_rvzimop.c.inc
+@@ -0,0 +1,37 @@
++/*
++ * RISC-V translation routines for May-Be-Operation(zimop).
++ *
++ * Copyright (c) 2024 Alibaba Group.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2 or later, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#define REQUIRE_ZIMOP(ctx) do {           \
++    if (!ctx->cfg_ptr->ext_zimop) {       \
++        return false;                     \
++    }                                     \
++} while (0)
++
++static bool trans_mop_r_n(DisasContext *ctx, arg_mop_r_n *a)
++{
++    REQUIRE_ZIMOP(ctx);
++    gen_set_gpr(ctx, a->rd, ctx->zero);
++    return true;
++}
++
++static bool trans_mop_rr_n(DisasContext *ctx, arg_mop_rr_n *a)
++{
++    REQUIRE_ZIMOP(ctx);
++    gen_set_gpr(ctx, a->rd, ctx->zero);
++    return true;
++}
+
+-- 
+2.43.0

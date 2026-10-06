@@ -1,0 +1,108 @@
+server:
+	trust-anchor: "att.example. 3600 IN DS 8339 13 2 ece1763ed20051bf7b7f3d521926243792884e4da604b7ed9377a8af933423fa"
+	val-override-date: "20260601000000"
+	target-fetch-policy: "0 0 0 0 0"
+	qname-minimisation: "no"
+	fake-sha1: yes
+	trust-anchor-signaling: no
+	rrset-roundrobin: no
+	harden-unknown-additional: yes
+
+stub-zone:
+	name: "."
+	stub-addr: 193.0.14.129
+CONFIG_END
+
+SCENARIO_BEGIN DS grind through keytag-colliding DNSKEYs
+
+RANGE_BEGIN 0 100
+	ADDRESS 193.0.14.129
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+. IN NS
+SECTION ANSWER
+.	IN	NS	K.ROOT-SERVERS.NET.
+SECTION ADDITIONAL
+K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+www.att.example. IN A
+SECTION AUTHORITY
+att.example.	IN	NS	ns.att.example.
+SECTION ADDITIONAL
+ns.att.example.		IN	A	1.2.3.4
+ENTRY_END
+RANGE_END
+
+RANGE_BEGIN 0 100
+	ADDRESS 1.2.3.4
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+ns.att.example. IN AAAA
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+ns.att.example. IN A
+SECTION ANSWER
+ns.att.example.		3600	IN	A	1.2.3.4
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+att.example. IN DNSKEY
+SECTION ANSWER
+att.example.	3600	IN	DNSKEY	257 3 13 fzFNoMxLAArAucbuJ8kfkzGhH2ftjK6/Ju4KjlwEXd/YlMy0Z/kqzAXxJU0YN7bIIiLtdZVRDlOYVCSOdfbDQA==
+att.example.	3600	IN	DNSKEY	257 3 13 tnzeZ4U5CdTRY+baAB5/+aHN8sSsJsbn/hto/NnO3ZI+ETqQMhuOEiYsuhfgTnMb8Uuouy0Q9n6K7qbrXq3fhQ==
+att.example.	3600	IN	DNSKEY	257 3 13 x5RJBi/V/0taHDC9JOdagC4I2s3NxK6YO/wC/9xaaaY+OPyWyR1sApSvAUIY9MblbUlZ5adX4T0CyIKh4Ysr4w==
+att.example.	3600	IN	DNSKEY	257 3 13 GBVoISoU3SFaDTI7MTn10bx+qY8SnFQ+SFi/+nQdTs994cETNmcEFQuxWmyrproWDx+IeYc/6cfrNXOcC8SRGQ==
+att.example.	3600	IN	DNSKEY	257 3 13 0bHBwcgB04lN4zZhRCjB5T1YO3kw4S1aTxKLTnMizMqFKj8/n4M9/iZdBHawLCoVvBRocX7zURX4tfRIAYnnwA==
+att.example.	3600	IN	DNSKEY	257 3 13 1fCbl++ciCSk9GlTdYygkLauIsvYs4gRhT8xdebFz/u0LOSdg5Ofhje9NGnXBjGM3iOVpz2FTYfhH8fYG3JzPw==
+att.example.	3600	IN	RRSIG	DNSKEY 13 2 3600 20330518033320 20231114221320 8339 att.example. Yd6hGTx+NpacKexk0BtBZx2+3BvGvQfy6Ml4XdUqe8BocaPtYcts7ekpFX327dAnCi9ymphWQR9SgOVz/YA12A==
+ENTRY_END
+
+ENTRY_BEGIN
+MATCH opcode qtype qname
+ADJUST copy_id
+REPLY QR NOERROR
+SECTION QUESTION
+www.att.example. IN A
+SECTION ANSWER
+www.att.example.	600	IN	A	10.9.8.7
+www.att.example.	600	IN	RRSIG	A 13 3 600 20330518033320 20231114221320 8339 att.example. YAk+wgTUgK709NXPyoPbNu/iW11+Ma5xhCfnd57Iwh/PUdGrZtK9P+GQkunx7ZJR9O41u45JqF4n552NgdCFyQ==
+ENTRY_END
+RANGE_END
+
+STEP 1 QUERY
+ENTRY_BEGIN
+REPLY RD DO
+SECTION QUESTION
+www.att.example. IN A
+ENTRY_END
+
+STEP 10 CHECK_ANSWER
+ENTRY_BEGIN
+MATCH opcode qtype qname
+REPLY QR RD RA DO SERVFAIL
+SECTION QUESTION
+www.att.example. IN A
+ENTRY_END
+
+SCENARIO_END

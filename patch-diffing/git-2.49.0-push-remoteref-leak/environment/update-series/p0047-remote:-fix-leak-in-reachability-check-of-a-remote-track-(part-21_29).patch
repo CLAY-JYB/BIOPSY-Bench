@@ -1,0 +1,53 @@
+From cd9287e0 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0047] remote: fix leak in reachability check of a remote-track (part 21/29)
+
+---
+diff --git a/remote.c b/remote.c
+index 8d666c16..539e5cea 100644
+--- a/remote.c
++++ b/remote.c
+@@ -373,8 +392,10 @@ static int handle_config(const char *key, const char *value,
+ 			return -1;
+ 		branch = make_branch(remote_state, name, namelen);
+ 		if (!strcmp(subkey, "remote")) {
++			FREE_AND_NULL(branch->remote_name);
+ 			return git_config_string(&branch->remote_name, key, value);
+ 		} else if (!strcmp(subkey, "pushremote")) {
++			FREE_AND_NULL(branch->pushremote_name);
+ 			return git_config_string(&branch->pushremote_name, key, value);
+ 		} else if (!strcmp(subkey, "merge")) {
+ 			if (!value)
+@@ -406,9 +427,11 @@ static int handle_config(const char *key, const char *value,
+ 		return 0;
+ 
+ 	/* Handle remote.* variables */
+-	if (!name && !strcmp(subkey, "pushdefault"))
++	if (!name && !strcmp(subkey, "pushdefault")) {
++		FREE_AND_NULL(remote_state->pushremote_name);
+ 		return git_config_string(&remote_state->pushremote_name, key,
+ 					 value);
++	}
+ 
+ 	if (!name)
+ 		return 0;
+@@ -475,12 +498,15 @@ static int handle_config(const char *key, const char *value,
+ 		else if (!strcmp(value, "--tags"))
+ 			remote->fetch_tags = 2;
+ 	} else if (!strcmp(subkey, "proxy")) {
++		FREE_AND_NULL(remote->http_proxy);
+ 		return git_config_string(&remote->http_proxy,
+ 					 key, value);
+ 	} else if (!strcmp(subkey, "proxyauthmethod")) {
++		FREE_AND_NULL(remote->http_proxy_authmethod);
+ 		return git_config_string(&remote->http_proxy_authmethod,
+ 					 key, value);
+ 	} else if (!strcmp(subkey, "vcs")) {
++		FREE_AND_NULL(remote->foreign_vcs);
+ 		return git_config_string(&remote->foreign_vcs, key, value);
+ 	}
+ 	return 0;
+
+-- 
+2.43.0

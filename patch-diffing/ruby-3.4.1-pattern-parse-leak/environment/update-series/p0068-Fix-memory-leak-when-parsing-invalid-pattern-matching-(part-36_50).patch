@@ -1,0 +1,37 @@
+From 49206db9 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0068] Fix memory leak when parsing invalid pattern matching (part 36/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -15137,6 +15549,23 @@ nd_st_key(struct parser_params *p, NODE *node)
+     }
+ }
+ 
++static void
++warn_duplicate_keys_check_key(struct parser_params *p, st_data_t key, st_table *literal_keys)
++{
++    if (OBJ_BUILTIN_TYPE(key) == T_NODE && nd_type(key) == NODE_SYM) {
++        rb_parser_string_t *parser_str = RNODE_SYM(key)->string;
++        struct RString fake_str;
++        VALUE str = rb_setup_fake_str(&fake_str, parser_str->ptr, parser_str->len, parser_str->enc);
++        if (rb_enc_asciicompat(parser_str->enc) && rb_enc_str_coderange(str) == ENC_CODERANGE_BROKEN) {
++            st_free_table(literal_keys);
++            /* Since we have a ASCII compatible encoding and the coderange is
++             * broken, sym_check_asciionly should raise an EncodingError. */
++            rb_check_id_cstr(parser_str->ptr, parser_str->len, parser_str->enc);
++            rb_bug("unreachable");
++        }
++    }
++}
++
+ static void
+ warn_duplicate_keys(struct parser_params *p, NODE *hash)
+ {
+
+-- 
+2.43.0

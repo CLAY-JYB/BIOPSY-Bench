@@ -1,0 +1,320 @@
+From 9def0e23 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0089] Fix crash when checking symbol encoding
+
+---
+diff --git a/test/ruby/test_module.rb b/test/ruby/test_module.rb
+index ca1574600..4722fa22e 100644
+--- a/test/ruby/test_module.rb
++++ b/test/ruby/test_module.rb
+@@ -253,6 +253,14 @@ class TestModule < Test::Unit::TestCase
+     assert_operator(Math, :const_defined?, "PI")
+     assert_not_operator(Math, :const_defined?, :IP)
+     assert_not_operator(Math, :const_defined?, "IP")
++
++    # Test invalid symbol name
++    # [Bug #20245]
++    EnvUtil.under_gc_stress do
++      assert_raise(EncodingError) do
++        Math.const_defined?("\xC3")
++      end
++    end
+   end
+ 
+   def each_bad_constants(m, &b)
+diff --git a/test/ruby/test_parse.rb b/test/ruby/test_parse.rb
+index 6b8c196a8..edf61db32 100644
+--- a/test/ruby/test_parse.rb
++++ b/test/ruby/test_parse.rb
+@@ -1537,12 +1537,71 @@ x = __ENCODING__
+   end
+ 
+   def test_shareable_constant_value_unshareable_literal
+-    assert_raise_separately(Ractor::IsolationError, /unshareable/,
++    assert_raise_separately(Ractor::IsolationError, /unshareable object to C/,
+                             "#{<<~"begin;"}\n#{<<~'end;'}")
+     begin;
+       # shareable_constant_value: literal
+       C = ["Not " + "shareable"]
+     end;
++
++    assert_raise_separately(Ractor::IsolationError, /unshareable object to B::C/,
++                            "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      # shareable_constant_value: literal
++      B = Class.new
++      B::C = ["Not " + "shareable"]
++    end;
++
++    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      assert_raise_with_message(Ractor::IsolationError, /unshareable object to ::C/) do
++        # shareable_constant_value: literal
++        ::C = ["Not " + "shareable"]
++      end
++    end;
++
++    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      assert_raise_with_message(Ractor::IsolationError, /unshareable object to ::B::C/) do
++        # shareable_constant_value: literal
++        ::B = Class.new
++        ::B::C = ["Not " + "shareable"]
++      end
++    end;
++
++    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      assert_raise_with_message(Ractor::IsolationError, /unshareable object to ::C/) do
++        # shareable_constant_value: literal
++        ::C ||= ["Not " + "shareable"]
++      end
++    end;
++
++    assert_raise_separately(Ractor::IsolationError, /unshareable object to B::C/,
++                            "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      # shareable_constant_value: literal
++      B = Class.new
++      B::C ||= ["Not " + "shareable"]
++    end;
++
++    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      assert_raise_with_message(Ractor::IsolationError, /unshareable object to ::B::C/) do
++        # shareable_constant_value: literal
++        ::B = Class.new
++        ::B::C ||= ["Not " + "shareable"]
++      end
++    end;
++
++    assert_raise_separately(Ractor::IsolationError, /unshareable object to ...::C/,
++                            "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      # shareable_constant_value: literal
++      B = Class.new
++      def self.expr; B; end
++      expr::C ||= ["Not " + "shareable"]
++    end;
+   end
+ 
+   def test_shareable_constant_value_nonliteral
+diff --git a/test/ruby/test_regexp.rb b/test/ruby/test_regexp.rb
+index e6eee24b2..9eab99d67 100644
+--- a/test/ruby/test_regexp.rb
++++ b/test/ruby/test_regexp.rb
+@@ -2045,6 +2045,11 @@ class TestRegexp < Test::Unit::TestCase
+     100.times.each { assert(regex.match?(string)) }
+   end
+ 
++  def test_bug_20246 # [Bug #20246]
++    assert_equal '1.2.3', '1.2.3'[/(\d+)(\.\g<1>){2}/]
++    assert_equal '1.2.3', '1.2.3'[/((?:\d|foo|bar)+)(\.\g<1>){2}/]
++  end
++
+   def test_linear_time_p
+     assert_send [Regexp, :linear_time?, /a/]
+     assert_send [Regexp, :linear_time?, 'a']
+diff --git a/test/ruby/test_syntax.rb b/test/ruby/test_syntax.rb
+index 854fd4602..a3aa823cd 100644
+--- a/test/ruby/test_syntax.rb
++++ b/test/ruby/test_syntax.rb
+@@ -1365,6 +1365,21 @@ eom
+     assert_valid_syntax 'p :foo, {proc do end => proc do end, b: proc do end}', bug13073
+   end
+ 
++  def test_invalid_symbol_in_hash_memory_leak
++    assert_no_memory_leak([], "#{<<-'begin;'}", "#{<<-'end;'}", rss: true)
++      str = '{"\xC3": 1}'.force_encoding("UTF-8")
++      code = proc do
++        eval(str)
++        raise "unreachable"
++      rescue EncodingError
++      end
++
++      1_000.times(&code)
++    begin;
++      1_000_000.times(&code)
++    end;
++  end
++
+   def test_do_after_local_variable
+     obj = Object.new
+     def obj.m; yield; end
+diff --git a/test/ruby/test_yjit.rb b/test/ruby/test_yjit.rb
+index bd513c60e..33cb7b16c 100644
+--- a/test/ruby/test_yjit.rb
++++ b/test/ruby/test_yjit.rb
+@@ -1532,6 +1532,34 @@ class TestYJIT < Test::Unit::TestCase
+     RUBY
+   end
+ 
++  def test_kwrest
++    assert_compiles(<<~RUBY, result: true, no_send_fallbacks: true)
++      def req_rest(r1:, **kwrest) = [r1, kwrest]
++      def opt_rest(r1: 1.succ, **kwrest) = [r1, kwrest]
++      def kwrest(**kwrest) = kwrest
++
++      def calls
++        [
++          [1, {}] == req_rest(r1: 1),
++          [1, {:r2=>2, :r3=>3}] == req_rest(r1: 1, r2: 2, r3: 3),
++          [1, {:r2=>2, :r3=>3}] == req_rest(r2: 2, r1:1, r3: 3),
++          [1, {:r2=>2, :r3=>3}] == req_rest(r2: 2, r3: 3, r1: 1),
++
++          [2, {}] == opt_rest,
++          [2, { r2: 2, r3: 3 }] == opt_rest(r2: 2, r3: 3),
++          [0, { r2: 2, r3: 3 }] == opt_rest(r1: 0, r3: 3, r2: 2),
++          [0, { r2: 2, r3: 3 }] == opt_rest(r2: 2, r1: 0, r3: 3),
++          [1, { r2: 2, r3: 3 }] == opt_rest(r2: 2, r3: 3, r1: 1),
++
++          {} == kwrest,
++          { r0: 88, r1: 99 } == kwrest(r0: 88, r1: 99),
++        ]
++      end
++
++      calls.all?
++    RUBY
++  end
++
+   private
+ 
+   def code_gc_helpers
+diff --git a/test/strscan/test_stringscanner.rb b/test/strscan/test_stringscanner.rb
+index d15c1d856..2a127a773 100644
+--- a/test/strscan/test_stringscanner.rb
++++ b/test/strscan/test_stringscanner.rb
+@@ -841,4 +841,12 @@ class TestStringScannerFixedAnchor < Test::Unit::TestCase
+     assert_equal 1, s.skip(/a/)
+     assert_nil      s.skip(/^b/)
+   end
++
++  # ruby/strscan#86
++  def test_scan_shared_string
++    s = "hellohello"[5..-1]
++    ss = StringScanner.new(s).scan(/hello/)
++
++    assert_equal "hello", ss
++  end
+ end
+diff --git a/thread_sync.c b/thread_sync.c
+index 0792da481..ae69cb4a6 100644
+--- a/thread_sync.c
++++ b/thread_sync.c
+@@ -854,7 +854,7 @@ raise_closed_queue_error(VALUE self)
+ static VALUE
+ queue_closed_result(VALUE self, struct rb_queue *q)
+ {
+-    assert(queue_length(self, q) == 0);
++    RUBY_ASSERT(queue_length(self, q) == 0);
+     return Qnil;
+ }
+ 
+@@ -1081,8 +1081,8 @@ queue_do_pop(VALUE self, struct rb_queue *q, int should_block, VALUE timeout)
+         else {
+             rb_execution_context_t *ec = GET_EC();
+ 
+-            assert(RARRAY_LEN(q->que) == 0);
+-            assert(queue_closed_p(self) == 0);
++            RUBY_ASSERT(RARRAY_LEN(q->que) == 0);
++            RUBY_ASSERT(queue_closed_p(self) == 0);
+ 
+             struct queue_waiter queue_waiter = {
+                 .w = {.self = self, .th = ec->thread_ptr, .fiber = nonblocking_fiber(ec->fiber_ptr)},
+diff --git a/tool/bundler/vendor_gems.rb.lock b/tool/bundler/vendor_gems.rb.lock
+deleted file mode 100644
+index ad3602c98..000000000
+--- a/tool/bundler/vendor_gems.rb.lock
++++ /dev/null
+@@ -1,71 +0,0 @@
+-GIT
+-  remote: https://github.com/cocoapods/molinillo.git
+-  revision: 6bc3d6045edadf800ba1b634fef15d3574369e60
+-  specs:
+-    molinillo (0.8.0)
+-
+-GIT
+-  remote: https://github.com/jhawthorn/pub_grub.git
+-  revision: 4250c533895080c356407d1f49619cb90fa2562d
+-  specs:
+-    pub_grub (0.5.0)
+-
+-GEM
+-  remote: https://rubygems.org/
+-  specs:
+-    connection_pool (2.4.1)
+-    fileutils (1.7.2)
+-    net-http (0.4.0)
+-      uri
+-    net-http-persistent (4.0.2)
+-      connection_pool (~> 2.2)
+-    net-protocol (0.2.2)
+-      timeout
+-    optparse (0.4.0)
+-    resolv (0.3.0)
+-    thor (1.3.0)
+-    timeout (0.4.1)
+-    tsort (0.2.0)
+-    uri (0.13.0)
+-
+-PLATFORMS
+-  java
+-  ruby
+-  universal-java-11
+-  universal-java-18
+-  universal-java-19
+-  x64-mingw-ucrt
+-  x64-mingw32
+-  x86_64-darwin-20
+-  x86_64-linux
+-
+-DEPENDENCIES
+-  fileutils (= 1.7.2)
+-  molinillo!
+-  net-http (= 0.4.0)
+-  net-http-persistent (= 4.0.2)
+-  net-protocol (= 0.2.2)
+-  optparse (= 0.4.0)
+-  pub_grub!
+-  resolv (= 0.3.0)
+-  thor (= 1.3.0)
+-  timeout (= 0.4.1)
+-  tsort (= 0.2.0)
+-
+-CHECKSUMS
+-  connection_pool (2.4.1) sha256=0f40cf997091f1f04ff66da67eabd61a9fe0d4928b9a3645228532512fab62f4
+-  fileutils (1.7.2) sha256=36a0fb324218263e52b486ad7408e9a295378fe8edc9fd343709e523c0980631
+-  molinillo (0.8.0)
+-  net-http (0.4.0) sha256=d87a6163ce3c64008bc8764e210d5f4ec9b87ca558a9052eb390b2c2c277f157
+-  net-http-persistent (4.0.2) sha256=03f827a33857b1d56b4e796957ad19bf5b58367d853fd0a224eb70fba8d02a44
+-  net-protocol (0.2.2) sha256=aa73e0cba6a125369de9837b8d8ef82a61849360eba0521900e2c3713aa162a8
+-  optparse (0.4.0) sha256=f584afc034f610ea7b28a9b1a68b0917d34e0da73c40c2b29cd7151c5eb0bade
+-  pub_grub (0.5.0)
+-  resolv (0.3.0) sha256=14b917f1bb4f363c81601295b68097bf1ff8b3c4179972c2d174ffb7e997a406
+-  thor (1.3.0) sha256=1adc7f9e5b3655a68c71393fee8bd0ad088d14ee8e83a0b73726f23cbb3ca7c3
+-  timeout (0.4.1) sha256=6f1f4edd4bca28cffa59501733a94215407c6960bd2107331f0280d4abdebb9a
+-  tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
+-  uri (0.13.0) sha256=26553c2a9399762e1e8bebd4444b4361c4b21298cf1c864b22eeabc9c4998f24
+-
+-BUNDLED WITH
+-   2.5.0.dev
+diff --git a/tool/rbinstall.rb b/tool/rbinstall.rb
+index 2dbc4e9e5..1001d5a64 100755
+--- a/tool/rbinstall.rb
++++ b/tool/rbinstall.rb
+@@ -1061,6 +1061,11 @@ install?(:ext, :comm, :gem, :'bundled-gems') do
+       skipped[gem_name] = "full name unmatch #{spec.full_name}"
+       next
+     end
++    # Skip install C ext bundled gem if it is build failed or not found
++    if !spec.extensions.empty? && !File.exist?("#{build_dir}/#{gem_name}/gem.build_complete")
++      skipped[gem_name] = "extensions not found or build failed #{spec.full_name}"
++      next
++    end
+     spec.extension_dir = "#{extensions_dir}/#{spec.full_name}"
+     package = RbInstall::DirPackage.new spec
+     ins = RbInstall::UnpackedInstaller.new(package, options)
+
+-- 
+2.43.0

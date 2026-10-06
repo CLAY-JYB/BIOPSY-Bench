@@ -1,0 +1,357 @@
+From 4347a86c Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0035] sync upstream changes
+
+---
+diff --git a/reftable/stack_test.c b/reftable/stack_test.c
+index 8c36590f..89cb2be1 100644
+--- a/reftable/stack_test.c
++++ b/reftable/stack_test.c
+@@ -10,6 +10,7 @@ https://developers.google.com/open-source/licenses/bsd
+ 
+ #include "system.h"
+ 
++#include "copy.h"
+ #include "reftable-reader.h"
+ #include "merged.h"
+ #include "basics.h"
+@@ -125,6 +126,7 @@ static void write_n_ref_tables(struct reftable_stack *st,
+ 			.value_type = REFTABLE_REF_VAL1,
+ 		};
+ 
++		strbuf_reset(&buf);
+ 		strbuf_addf(&buf, "refs/heads/branch-%04u", (unsigned) i);
+ 		ref.refname = buf.buf;
+ 		set_test_hash(ref.value.val1, i);
+@@ -179,13 +181,6 @@ static void test_reftable_stack_add_one(void)
+ 	EXPECT(0 == strcmp("master", dest.value.symref));
+ 	EXPECT(st->readers_len > 0);
+ 
+-	printf("testing print functionality:\n");
+-	err = reftable_stack_print_directory(dir, GIT_SHA1_FORMAT_ID);
+-	EXPECT_ERR(err);
+-
+-	err = reftable_stack_print_directory(dir, GIT_SHA256_FORMAT_ID);
+-	EXPECT(err == REFTABLE_FORMAT_ERROR);
+-
+ #ifndef GIT_WINDOWS_NATIVE
+ 	strbuf_addstr(&scratch, dir);
+ 	strbuf_addstr(&scratch, "/tables.list");
+@@ -347,9 +342,9 @@ static void test_reftable_stack_transaction_api_performs_auto_compaction(void)
+ 		 * all tables in the stack.
+ 		 */
+ 		if (i != n)
+-			EXPECT(st->merged->stack_len == i + 1);
++			EXPECT(st->merged->readers_len == i + 1);
+ 		else
+-			EXPECT(st->merged->stack_len == 1);
++			EXPECT(st->merged->readers_len == 1);
+ 	}
+ 
+ 	reftable_stack_destroy(st);
+@@ -375,7 +370,7 @@ static void test_reftable_stack_auto_compaction_fails_gracefully(void)
+ 
+ 	err = reftable_stack_add(st, write_test_ref, &ref);
+ 	EXPECT_ERR(err);
+-	EXPECT(st->merged->stack_len == 1);
++	EXPECT(st->merged->readers_len == 1);
+ 	EXPECT(st->stats.attempts == 0);
+ 	EXPECT(st->stats.failures == 0);
+ 
+@@ -390,7 +385,7 @@ static void test_reftable_stack_auto_compaction_fails_gracefully(void)
+ 	ref.update_index = 2;
+ 	err = reftable_stack_add(st, write_test_ref, &ref);
+ 	EXPECT_ERR(err);
+-	EXPECT(st->merged->stack_len == 2);
++	EXPECT(st->merged->readers_len == 2);
+ 	EXPECT(st->stats.attempts == 1);
+ 	EXPECT(st->stats.failures == 1);
+ 
+@@ -399,7 +394,7 @@ static void test_reftable_stack_auto_compaction_fails_gracefully(void)
+ 	clear_dir(dir);
+ }
+ 
+-static int write_error(struct reftable_writer *wr, void *arg)
++static int write_error(struct reftable_writer *wr UNUSED, void *arg)
+ {
+ 	return *((int *)arg);
+ }
+@@ -816,7 +811,7 @@ static void test_reflog_expire(void)
+ 	reftable_log_record_release(&log);
+ }
+ 
+-static int write_nothing(struct reftable_writer *wr, void *arg)
++static int write_nothing(struct reftable_writer *wr, void *arg UNUSED)
+ {
+ 	reftable_writer_set_limits(wr, 1, 1);
+ 	return 0;
+@@ -881,7 +876,7 @@ static void test_reftable_stack_auto_compaction(void)
+ 
+ 		err = reftable_stack_auto_compact(st);
+ 		EXPECT_ERR(err);
+-		EXPECT(i < 3 || st->merged->stack_len < 2 * fastlog2(i));
++		EXPECT(i < 3 || st->merged->readers_len < 2 * fastlog2(i));
+ 	}
+ 
+ 	EXPECT(reftable_stack_compaction_stats(st)->entries_written <
+@@ -905,7 +900,7 @@ static void test_reftable_stack_auto_compaction_with_locked_tables(void)
+ 	EXPECT_ERR(err);
+ 
+ 	write_n_ref_tables(st, 5);
+-	EXPECT(st->merged->stack_len == 5);
++	EXPECT(st->merged->readers_len == 5);
+ 
+ 	/*
+ 	 * Given that all tables we have written should be roughly the same
+@@ -925,7 +920,7 @@ static void test_reftable_stack_auto_compaction_with_locked_tables(void)
+ 	err = reftable_stack_auto_compact(st);
+ 	EXPECT_ERR(err);
+ 	EXPECT(st->stats.failures == 0);
+-	EXPECT(st->merged->stack_len == 4);
++	EXPECT(st->merged->readers_len == 4);
+ 
+ 	reftable_stack_destroy(st);
+ 	strbuf_release(&buf);
+@@ -970,9 +965,9 @@ static void test_reftable_stack_add_performs_auto_compaction(void)
+ 		 * all tables in the stack.
+ 		 */
+ 		if (i != n)
+-			EXPECT(st->merged->stack_len == i + 1);
++			EXPECT(st->merged->readers_len == i + 1);
+ 		else
+-			EXPECT(st->merged->stack_len == 1);
++			EXPECT(st->merged->readers_len == 1);
+ 	}
+ 
+ 	reftable_stack_destroy(st);
+@@ -994,7 +989,7 @@ static void test_reftable_stack_compaction_with_locked_tables(void)
+ 	EXPECT_ERR(err);
+ 
+ 	write_n_ref_tables(st, 3);
+-	EXPECT(st->merged->stack_len == 3);
++	EXPECT(st->merged->readers_len == 3);
+ 
+ 	/* Lock one of the tables that we're about to compact. */
+ 	strbuf_reset(&buf);
+@@ -1008,7 +1003,7 @@ static void test_reftable_stack_compaction_with_locked_tables(void)
+ 	err = reftable_stack_compact_all(st, NULL);
+ 	EXPECT(err == REFTABLE_LOCK_ERROR);
+ 	EXPECT(st->stats.failures == 1);
+-	EXPECT(st->merged->stack_len == 3);
++	EXPECT(st->merged->readers_len == 3);
+ 
+ 	reftable_stack_destroy(st);
+ 	strbuf_release(&buf);
+@@ -1042,10 +1037,8 @@ static void test_reftable_stack_compaction_concurrent(void)
+ static void unclean_stack_close(struct reftable_stack *st)
+ {
+ 	/* break abstraction boundary to simulate unclean shutdown. */
+-	int i = 0;
+-	for (; i < st->readers_len; i++) {
+-		reftable_reader_free(st->readers[i]);
+-	}
++	for (size_t i = 0; i < st->readers_len; i++)
++		reftable_reader_decref(st->readers[i]);
+ 	st->readers_len = 0;
+ 	FREE_AND_NULL(st->readers);
+ }
+@@ -1084,7 +1077,113 @@ static void test_reftable_stack_compaction_concurrent_clean(void)
+ 	clear_dir(dir);
+ }
+ 
+-int stack_test_main(int argc, const char *argv[])
++static void test_reftable_stack_read_across_reload(void)
++{
++	struct reftable_write_options opts = { 0 };
++	struct reftable_stack *st1 = NULL, *st2 = NULL;
++	struct reftable_ref_record rec = { 0 };
++	struct reftable_iterator it = { 0 };
++	char *dir = get_tmp_dir(__LINE__);
++	int err;
++
++	/* Create a first stack and set up an iterator for it. */
++	err = reftable_new_stack(&st1, dir, &opts);
++	EXPECT_ERR(err);
++	write_n_ref_tables(st1, 2);
++	EXPECT(st1->merged->readers_len == 2);
++	reftable_stack_init_ref_iterator(st1, &it);
++	err = reftable_iterator_seek_ref(&it, "");
++	EXPECT_ERR(err);
++
++	/* Set up a second stack for the same directory and compact it. */
++	err = reftable_new_stack(&st2, dir, &opts);
++	EXPECT_ERR(err);
++	EXPECT(st2->merged->readers_len == 2);
++	err = reftable_stack_compact_all(st2, NULL);
++	EXPECT_ERR(err);
++	EXPECT(st2->merged->readers_len == 1);
++
++	/*
++	 * Verify that we can continue to use the old iterator even after we
++	 * have reloaded its stack.
++	 */
++	err = reftable_stack_reload(st1);
++	EXPECT_ERR(err);
++	EXPECT(st1->merged->readers_len == 1);
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT_ERR(err);
++	EXPECT(!strcmp(rec.refname, "refs/heads/branch-0000"));
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT_ERR(err);
++	EXPECT(!strcmp(rec.refname, "refs/heads/branch-0001"));
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT(err > 0);
++
++	reftable_ref_record_release(&rec);
++	reftable_iterator_destroy(&it);
++	reftable_stack_destroy(st1);
++	reftable_stack_destroy(st2);
++	clear_dir(dir);
++}
++
++static void test_reftable_stack_reload_with_missing_table(void)
++{
++	struct reftable_write_options opts = { 0 };
++	struct reftable_stack *st = NULL;
++	struct reftable_ref_record rec = { 0 };
++	struct reftable_iterator it = { 0 };
++	struct strbuf table_path = STRBUF_INIT, content = STRBUF_INIT;
++	char *dir = get_tmp_dir(__LINE__);
++	int err;
++
++	/* Create a first stack and set up an iterator for it. */
++	err = reftable_new_stack(&st, dir, &opts);
++	EXPECT_ERR(err);
++	write_n_ref_tables(st, 2);
++	EXPECT(st->merged->readers_len == 2);
++	reftable_stack_init_ref_iterator(st, &it);
++	err = reftable_iterator_seek_ref(&it, "");
++	EXPECT_ERR(err);
++
++	/*
++	 * Update the tables.list file with some garbage data, while reusing
++	 * our old readers. This should trigger a partial reload of the stack,
++	 * where we try to reuse our old readers.
++	*/
++	strbuf_addf(&content, "%s\n", st->readers[0]->name);
++	strbuf_addf(&content, "%s\n", st->readers[1]->name);
++	strbuf_addstr(&content, "garbage\n");
++	strbuf_addf(&table_path, "%s.lock", st->list_file);
++	write_file_buf(table_path.buf, content.buf, content.len);
++	err = rename(table_path.buf, st->list_file);
++	EXPECT_ERR(err);
++
++	err = reftable_stack_reload(st);
++	EXPECT(err == -4);
++	EXPECT(st->merged->readers_len == 2);
++
++	/*
++	 * Even though the reload has failed, we should be able to continue
++	 * using the iterator.
++	*/
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT_ERR(err);
++	EXPECT(!strcmp(rec.refname, "refs/heads/branch-0000"));
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT_ERR(err);
++	EXPECT(!strcmp(rec.refname, "refs/heads/branch-0001"));
++	err = reftable_iterator_next_ref(&it, &rec);
++	EXPECT(err > 0);
++
++	reftable_ref_record_release(&rec);
++	reftable_iterator_destroy(&it);
++	reftable_stack_destroy(st);
++	strbuf_release(&table_path);
++	strbuf_release(&content);
++	clear_dir(dir);
++}
++
++int stack_test_main(int argc UNUSED, const char *argv[] UNUSED)
+ {
+ 	RUN_TEST(test_empty_add);
+ 	RUN_TEST(test_read_file);
+@@ -1106,6 +1205,8 @@ int stack_test_main(int argc, const char *argv[])
+ 	RUN_TEST(test_reftable_stack_auto_compaction_fails_gracefully);
+ 	RUN_TEST(test_reftable_stack_update_index_check);
+ 	RUN_TEST(test_reftable_stack_uptodate);
++	RUN_TEST(test_reftable_stack_read_across_reload);
++	RUN_TEST(test_reftable_stack_reload_with_missing_table);
+ 	RUN_TEST(test_suggest_compaction_segment);
+ 	RUN_TEST(test_suggest_compaction_segment_nothing);
+ 	return 0;
+diff --git a/reftable/test_framework.c b/reftable/test_framework.c
+index 4066924e..a07fec5d 100644
+--- a/reftable/test_framework.c
++++ b/reftable/test_framework.c
+@@ -21,7 +21,7 @@ ssize_t strbuf_add_void(void *b, const void *data, size_t sz)
+ 	return sz;
+ }
+ 
+-int noop_flush(void *arg)
++int noop_flush(void *arg UNUSED)
+ {
+ 	return 0;
+ }
+diff --git a/reftable/writer.c b/reftable/writer.c
+index 45b3e9ce..9d5e6072 100644
+--- a/reftable/writer.c
++++ b/reftable/writer.c
+@@ -544,7 +544,7 @@ static void write_object_record(void *void_arg, void *key)
+ done:;
+ }
+ 
+-static void object_record_free(void *void_arg, void *key)
++static void object_record_free(void *void_arg UNUSED, void *key)
+ {
+ 	struct obj_index_tree_node *entry = key;
+ 
+diff --git a/run-command.c b/run-command.c
+index 45ba5449..94f2f307 100644
+--- a/run-command.c
++++ b/run-command.c
+@@ -1808,16 +1808,26 @@ void run_processes_parallel(const struct run_process_parallel_opts *opts)
+ 
+ int prepare_auto_maintenance(int quiet, struct child_process *maint)
+ {
+-	int enabled;
++	int enabled, auto_detach;
+ 
+ 	if (!git_config_get_bool("maintenance.auto", &enabled) &&
+ 	    !enabled)
+ 		return 0;
+ 
++	/*
++	 * When `maintenance.autoDetach` isn't set, then we fall back to
++	 * honoring `gc.autoDetach`. This is somewhat weird, but required to
++	 * retain behaviour from when we used to run git-gc(1) here.
++	 */
++	if (git_config_get_bool("maintenance.autodetach", &auto_detach) &&
++	    git_config_get_bool("gc.autodetach", &auto_detach))
++		auto_detach = 1;
++
+ 	maint->git_cmd = 1;
+ 	maint->close_object_store = 1;
+ 	strvec_pushl(&maint->args, "maintenance", "run", "--auto", NULL);
+ 	strvec_push(&maint->args, quiet ? "--quiet" : "--no-quiet");
++	strvec_push(&maint->args, auto_detach ? "--detach" : "--no-detach");
+ 
+ 	return 1;
+ }
+diff --git a/scalar.c b/scalar.c
+index 1fe8a93e..6166a8dd 100644
+--- a/scalar.c
++++ b/scalar.c
+@@ -400,7 +400,8 @@ static int delete_enlistment(struct strbuf *enlistment)
+  * Dummy implementation; Using `get_version_info()` would cause a link error
+  * without this.
+  */
+-void load_builtin_commands(const char *prefix, struct cmdnames *cmds)
++void load_builtin_commands(const char *prefix UNUSED,
++			   struct cmdnames *cmds UNUSED)
+ {
+ 	die("not implemented");
+ }
+
+-- 
+2.43.0

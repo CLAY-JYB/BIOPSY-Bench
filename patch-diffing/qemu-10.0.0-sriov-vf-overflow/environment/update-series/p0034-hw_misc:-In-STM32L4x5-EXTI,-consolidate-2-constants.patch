@@ -1,0 +1,328 @@
+From dfa28efc Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0034] hw/misc: In STM32L4x5 EXTI, consolidate 2 constants
+
+---
+diff --git a/include/hw/misc/stm32l4x5_exti.h b/include/hw/misc/stm32l4x5_exti.h
+index be961d2f01..62f79362f2 100644
+--- a/include/hw/misc/stm32l4x5_exti.h
++++ b/include/hw/misc/stm32l4x5_exti.h
+@@ -30,7 +30,7 @@
+ #define TYPE_STM32L4X5_EXTI "stm32l4x5-exti"
+ OBJECT_DECLARE_SIMPLE_TYPE(Stm32l4x5ExtiState, STM32L4X5_EXTI)
+ 
+-#define EXTI_NUM_INTERRUPT_OUT_LINES 40
++#define EXTI_NUM_LINES 40
+ #define EXTI_NUM_REGISTER 2
+ 
+ struct Stm32l4x5ExtiState {
+@@ -45,7 +45,9 @@ struct Stm32l4x5ExtiState {
+     uint32_t swier[EXTI_NUM_REGISTER];
+     uint32_t pr[EXTI_NUM_REGISTER];
+ 
+-    qemu_irq irq[EXTI_NUM_INTERRUPT_OUT_LINES];
++    /* used for edge detection */
++    uint32_t irq_levels[EXTI_NUM_REGISTER];
++    qemu_irq irq[EXTI_NUM_LINES];
+ };
+ 
+ #endif
+diff --git a/include/hw/misc/xlnx-cfi-if.h b/include/hw/misc/xlnx-cfi-if.h
+index f9bd12292d..5010401517 100644
+--- a/include/hw/misc/xlnx-cfi-if.h
++++ b/include/hw/misc/xlnx-cfi-if.h
+@@ -11,7 +11,6 @@
+ #define XLNX_CFI_IF_H 1
+ 
+ #include "qemu/help-texts.h"
+-#include "hw/hw.h"
+ #include "qom/object.h"
+ 
+ #define TYPE_XLNX_CFI_IF "xlnx-cfi-if"
+diff --git a/include/hw/net/ftgmac100.h b/include/hw/net/ftgmac100.h
+index 765d1538a4..24ccdf0260 100644
+--- a/include/hw/net/ftgmac100.h
++++ b/include/hw/net/ftgmac100.h
+@@ -14,6 +14,11 @@
+ #define TYPE_FTGMAC100 "ftgmac100"
+ OBJECT_DECLARE_SIMPLE_TYPE(FTGMAC100State, FTGMAC100)
+ 
++#define FTGMAC100_MEM_SIZE 0x1000
++#define FTGMAC100_REG_MEM_SIZE 0x100
++#define FTGMAC100_REG_HIGH_MEM_SIZE 0x100
++#define FTGMAC100_REG_HIGH_OFFSET 0x100
++
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+ 
+@@ -30,7 +35,9 @@ struct FTGMAC100State {
+     NICState *nic;
+     NICConf conf;
+     qemu_irq irq;
++    MemoryRegion iomem_container;
+     MemoryRegion iomem;
++    MemoryRegion iomem_high;
+ 
+     uint8_t frame[FTGMAC100_MAX_FRAME_SIZE];
+ 
+@@ -38,10 +45,6 @@ struct FTGMAC100State {
+     uint32_t isr;
+     uint32_t ier;
+     uint32_t rx_enabled;
+-    uint32_t rx_ring;
+-    uint32_t rx_descriptor;
+-    uint32_t tx_ring;
+-    uint32_t tx_descriptor;
+     uint32_t math[2];
+     uint32_t rbsr;
+     uint32_t itc;
+@@ -54,7 +57,10 @@ struct FTGMAC100State {
+     uint32_t phycr;
+     uint32_t phydata;
+     uint32_t fcr;
+-
++    uint64_t rx_ring;
++    uint64_t rx_descriptor;
++    uint64_t tx_ring;
++    uint64_t tx_descriptor;
+ 
+     uint32_t phy_status;
+     uint32_t phy_control;
+@@ -65,6 +71,7 @@ struct FTGMAC100State {
+     bool aspeed;
+     uint32_t txdes0_edotr;
+     uint32_t rxdes0_edorr;
++    bool dma64;
+ };
+ 
+ #define TYPE_ASPEED_MII "aspeed-mmi"
+diff --git a/include/hw/nvram/bcm2835_otp.h b/include/hw/nvram/bcm2835_otp.h
+new file mode 100644
+index 0000000000..1df33700bd
+--- /dev/null
++++ b/include/hw/nvram/bcm2835_otp.h
+@@ -0,0 +1,68 @@
++/*
++ * BCM2835 One-Time Programmable (OTP) Memory
++ *
++ * Copyright (c) 2024 Rayhan Faizel <rayhan.faizel@gmail.com>
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#ifndef BCM2835_OTP_H
++#define BCM2835_OTP_H
++
++#include "hw/sysbus.h"
++#include "qom/object.h"
++
++#define TYPE_BCM2835_OTP "bcm2835-otp"
++OBJECT_DECLARE_SIMPLE_TYPE(BCM2835OTPState, BCM2835_OTP)
++
++#define BCM2835_OTP_ROW_COUNT                              66
++
++/* https://elinux.org/BCM2835_registers#OTP */
++#define BCM2835_OTP_BOOTMODE_REG                         0x00
++#define BCM2835_OTP_CONFIG_REG                           0x04
++#define BCM2835_OTP_CTRL_LO_REG                          0x08
++#define BCM2835_OTP_CTRL_HI_REG                          0x0c
++#define BCM2835_OTP_STATUS_REG                           0x10
++#define BCM2835_OTP_BITSEL_REG                           0x14
++#define BCM2835_OTP_DATA_REG                             0x18
++#define BCM2835_OTP_ADDR_REG                             0x1c
++#define BCM2835_OTP_WRITE_DATA_READ_REG                  0x20
++#define BCM2835_OTP_INIT_STATUS_REG                      0x24
++
++
++/* -- Row 32: Undocumented -- */
++
++#define BCM2835_OTP_ROW_32                                 32
++
++/* Lock OTP Programming (Customer OTP and private key) */
++#define BCM2835_OTP_ROW_32_LOCK                        BIT(6)
++
++/* -- Row 36-43: Customer OTP -- */
++
++#define BCM2835_OTP_CUSTOMER_OTP                           36
++#define BCM2835_OTP_CUSTOMER_OTP_LEN                        8
++
++/* Magic numbers to lock programming of customer OTP and private key */
++#define BCM2835_OTP_LOCK_NUM1                      0xffffffff
++#define BCM2835_OTP_LOCK_NUM2                      0xaffe0000
++
++/* -- Row 56-63: Device-specific private key -- */
++
++#define BCM2835_OTP_PRIVATE_KEY                            56
++#define BCM2835_OTP_PRIVATE_KEY_LEN                         8
++
++
++struct BCM2835OTPState {
++    /* <private> */
++    SysBusDevice parent_obj;
++
++    /* <public> */
++    MemoryRegion iomem;
++    uint32_t otp_rows[BCM2835_OTP_ROW_COUNT];
++};
++
++
++uint32_t bcm2835_otp_get_row(BCM2835OTPState *s, unsigned int row);
++void bcm2835_otp_set_row(BCM2835OTPState *s, unsigned int row, uint32_t value);
++
++#endif
+diff --git a/include/hw/pci/pci.h b/include/hw/pci/pci.h
+index fe04b4fafd..14a869eeaa 100644
+--- a/include/hw/pci/pci.h
++++ b/include/hw/pci/pci.h
+@@ -680,9 +680,4 @@ static inline void pci_irq_pulse(PCIDevice *pci_dev)
+ MSIMessage pci_get_msi_message(PCIDevice *dev, int vector);
+ void pci_set_enabled(PCIDevice *pci_dev, bool state);
+ 
+-static inline void pci_set_power(PCIDevice *pci_dev, bool state)
+-{
+-    pci_set_enabled(pci_dev, state);
+-}
+-
+ #endif
+diff --git a/include/hw/pci/pci_device.h b/include/hw/pci/pci_device.h
+index d57f9ce838..ca15132508 100644
+--- a/include/hw/pci/pci_device.h
++++ b/include/hw/pci/pci_device.h
+@@ -205,6 +205,21 @@ static inline uint16_t pci_get_bdf(PCIDevice *dev)
+     return PCI_BUILD_BDF(pci_bus_num(pci_get_bus(dev)), dev->devfn);
+ }
+ 
++static inline void pci_set_power(PCIDevice *pci_dev, bool state)
++{
++    /*
++     * Don't change the enabled state of VFs when powering on/off the device.
++     *
++     * When powering on, VFs must not be enabled immediately but they must
++     * wait until the guest configures SR-IOV.
++     * When powering off, their corresponding PFs will be reset and disable
++     * VFs.
++     */
++    if (!pci_is_vf(pci_dev)) {
++        pci_set_enabled(pci_dev, state);
++    }
++}
++
+ uint16_t pci_requester_id(PCIDevice *dev);
+ 
+ /* DMA access functions */
+diff --git a/include/hw/qdev-core.h b/include/hw/qdev-core.h
+index 5336728a23..77bfcbdf73 100644
+--- a/include/hw/qdev-core.h
++++ b/include/hw/qdev-core.h
+@@ -624,8 +624,9 @@ qemu_irq qdev_get_gpio_in(DeviceState *dev, int n);
+  * @name: Name of the input GPIO array
+  * @n: Number of the GPIO line in that array (which must be in range)
+  *
+- * Returns the qemu_irq corresponding to a named input GPIO line
+- * (which the device has set up with qdev_init_gpio_in_named()).
++ * Returns the qemu_irq corresponding to a single input GPIO line
++ * in a named array of input GPIO lines on a device (which the device
++ * has set up with qdev_init_gpio_in_named()).
+  * The @name string must correspond to an input GPIO array which exists on
+  * the device, and the index @n of the GPIO line must be valid (i.e.
+  * be at least 0 and less than the total number of input GPIOs in that
+@@ -673,15 +674,15 @@ void qdev_connect_gpio_out(DeviceState *dev, int n, qemu_irq pin);
+  *                              GPIO lines
+  * @dev: Device whose GPIO to connect
+  * @name: Name of the output GPIO array
+- * @n: Number of the anonymous output GPIO line (which must be in range)
++ * @n: Number of the output GPIO line within that array (which must be in range)
+  * @input_pin: qemu_irq to connect the output line to
+  *
+- * This function connects an anonymous output GPIO line on a device
+- * up to an arbitrary qemu_irq, so that when the device asserts that
+- * output GPIO line, the qemu_irq's callback is invoked.
++ * This function connects a single GPIO output in a named array of output
++ * GPIO lines on a device up to an arbitrary qemu_irq, so that when the
++ * device asserts that output GPIO line, the qemu_irq's callback is invoked.
+  * The @name string must correspond to an output GPIO array which exists on
+  * the device, and the index @n of the GPIO line must be valid (i.e.
+- * be at least 0 and less than the total number of input GPIOs in that
++ * be at least 0 and less than the total number of output GPIOs in that
+  * array); this function will assert() if passed an invalid name or index.
+  *
+  * Outbound GPIO lines can be connected to any qemu_irq, but the common
+@@ -796,7 +797,7 @@ void qdev_init_gpio_out(DeviceState *dev, qemu_irq *pins, int n);
+  * @dev: Device to create output GPIOs for
+  * @pins: Pointer to qemu_irq or qemu_irq array for the GPIO lines
+  * @name: Name to give this array of GPIO lines
+- * @n: Number of GPIO lines to create
++ * @n: Number of GPIO lines to create in this array
+  *
+  * Like qdev_init_gpio_out(), but creates an array of GPIO output lines
+  * with a name. Code using the device can then connect these GPIO lines
+diff --git a/include/hw/s390x/s390_flic.h b/include/hw/s390x/s390_flic.h
+index 382d9833f1..4d66c5e42e 100644
+--- a/include/hw/s390x/s390_flic.h
++++ b/include/hw/s390x/s390_flic.h
+@@ -116,6 +116,7 @@ struct QEMUS390FLICState {
+     uint8_t simm;
+     uint8_t nimm;
+     QLIST_HEAD(, QEMUS390FlicIO) io[8];
++    bool migrate_all_state;
+ };
+ 
+ uint32_t qemu_s390_flic_dequeue_service(QEMUS390FLICState *flic);
+diff --git a/include/hw/sd/sd.h b/include/hw/sd/sd.h
+index 2c8748fb9b..d35a839f5e 100644
+--- a/include/hw/sd/sd.h
++++ b/include/hw/sd/sd.h
+@@ -76,8 +76,8 @@ typedef enum  {
+ } sd_uhs_mode_t;
+ 
+ typedef enum {
+-    sd_none = -1,
+-    sd_bc = 0, /* broadcast -- no response */
++    sd_spi,
++    sd_bc,     /* broadcast -- no response */
+     sd_bcr,    /* broadcast with response */
+     sd_ac,     /* addressed -- no data transfer */
+     sd_adtc,   /* addressed with data transfer */
+@@ -96,6 +96,9 @@ OBJECT_DECLARE_TYPE(SDState, SDCardClass, SD_CARD)
+ #define TYPE_SD_CARD_SPI "sd-card-spi"
+ DECLARE_INSTANCE_CHECKER(SDState, SD_CARD_SPI, TYPE_SD_CARD_SPI)
+ 
++#define TYPE_EMMC "emmc"
++DECLARE_INSTANCE_CHECKER(SDState, EMMC, TYPE_EMMC)
++
+ struct SDCardClass {
+     /*< private >*/
+     DeviceClass parent_class;
+@@ -127,6 +130,8 @@ struct SDCardClass {
+     void (*enable)(SDState *sd, bool enable);
+     bool (*get_inserted)(SDState *sd);
+     bool (*get_readonly)(SDState *sd);
++    void (*set_cid)(SDState *sd);
++    void (*set_csd)(SDState *sd, uint64_t size);
+ 
+     const struct SDProto *proto;
+ };
+diff --git a/include/hw/vfio/vfio-container-base.h b/include/hw/vfio/vfio-container-base.h
+index 419e45ee7a..62a8b60d87 100644
+--- a/include/hw/vfio/vfio-container-base.h
++++ b/include/hw/vfio/vfio-container-base.h
+@@ -86,6 +86,15 @@ int vfio_container_set_dirty_page_tracking(VFIOContainerBase *bcontainer,
+ int vfio_container_query_dirty_bitmap(const VFIOContainerBase *bcontainer,
+                    VFIOBitmap *vbmap, hwaddr iova, hwaddr size, Error **errp);
+ 
++GList *vfio_container_get_iova_ranges(const VFIOContainerBase *bcontainer);
++
++static inline uint64_t
++vfio_container_get_page_size_mask(const VFIOContainerBase *bcontainer)
++{
++    assert(bcontainer);
++    return bcontainer->pgsizes;
++}
++
+ #define TYPE_VFIO_IOMMU "vfio-iommu"
+ #define TYPE_VFIO_IOMMU_LEGACY TYPE_VFIO_IOMMU "-legacy"
+ #define TYPE_VFIO_IOMMU_SPAPR TYPE_VFIO_IOMMU "-spapr"
+
+-- 
+2.43.0

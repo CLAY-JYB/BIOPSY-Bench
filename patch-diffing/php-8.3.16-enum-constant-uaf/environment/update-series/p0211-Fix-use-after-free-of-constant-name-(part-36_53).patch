@@ -1,0 +1,30 @@
+From f80d5c3f Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0211] Fix use-after-free of constant name (part 36/53)
+
+---
+diff --git a/Zend/zend_enum.c b/Zend/zend_enum.c
+index 25261cf5..3366fb7d 100644
+--- a/Zend/zend_enum.c
++++ b/Zend/zend_enum.c
+@@ -560,14 +463,12 @@ ZEND_API void zend_enum_add_case(zend_class_entry *ce, zend_string *case_name, z
+ 			zval_make_interned_string(value);
+ 		}
+ 
+-		HashTable *backed_enum_table = CE_BACKED_ENUM_TABLE(ce);
+-
+ 		zval case_name_zv;
+ 		ZVAL_STR(&case_name_zv, case_name);
+ 		if (Z_TYPE_P(value) == IS_LONG) {
+-			zend_hash_index_add_new(backed_enum_table, Z_LVAL_P(value), &case_name_zv);
++			zend_hash_index_add_new(ce->backed_enum_table, Z_LVAL_P(value), &case_name_zv);
+ 		} else {
+-			zend_hash_add_new(backed_enum_table, Z_STR_P(value), &case_name_zv);
++			zend_hash_add_new(ce->backed_enum_table, Z_STR_P(value), &case_name_zv);
+ 		}
+ 	} else {
+ 		ZEND_ASSERT(ce->enum_backing_type == IS_UNDEF);
+
+-- 
+2.43.0

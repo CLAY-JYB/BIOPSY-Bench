@@ -1,0 +1,472 @@
+From 41d2334e Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0027] vfio-container-base: Introduce vfio_container_get_iova_ranges() helper
+
+---
+diff --git a/hw/vfio/container-base.c b/hw/vfio/container-base.c
+index 50b1664f89..809b157674 100644
+--- a/hw/vfio/container-base.c
++++ b/hw/vfio/container-base.c
+@@ -83,6 +83,21 @@ int vfio_container_query_dirty_bitmap(const VFIOContainerBase *bcontainer,
+                                                errp);
+ }
+ 
++static gpointer copy_iova_range(gconstpointer src, gpointer data)
++{
++     Range *source = (Range *)src;
++     Range *dest = g_new(Range, 1);
++
++     range_set_bounds(dest, range_lob(source), range_upb(source));
++     return dest;
++}
++
++GList *vfio_container_get_iova_ranges(const VFIOContainerBase *bcontainer)
++{
++    assert(bcontainer);
++    return g_list_copy_deep(bcontainer->iova_ranges, copy_iova_range, NULL);
++}
++
+ static void vfio_container_instance_finalize(Object *obj)
+ {
+     VFIOContainerBase *bcontainer = VFIO_IOMMU(obj);
+diff --git a/hw/vfio/container.c b/hw/vfio/container.c
+index 2e7ecdf10e..38a9df3496 100644
+--- a/hw/vfio/container.c
++++ b/hw/vfio/container.c
+@@ -26,7 +26,6 @@
+ #include "exec/address-spaces.h"
+ #include "exec/memory.h"
+ #include "exec/ram_addr.h"
+-#include "hw/hw.h"
+ #include "qemu/error-report.h"
+ #include "qemu/range.h"
+ #include "sysemu/reset.h"
+@@ -601,9 +600,8 @@ static bool vfio_connect_container(VFIOGroup *group, AddressSpace *as,
+         }
+     }
+ 
+-    fd = qemu_open_old("/dev/vfio/vfio", O_RDWR);
++    fd = qemu_open("/dev/vfio/vfio", O_RDWR, errp);
+     if (fd < 0) {
+-        error_setg_errno(errp, errno, "failed to open /dev/vfio/vfio");
+         goto put_space_exit;
+     }
+ 
+@@ -744,9 +742,8 @@ static VFIOGroup *vfio_get_group(int groupid, AddressSpace *as, Error **errp)
+     group = g_malloc0(sizeof(*group));
+ 
+     snprintf(path, sizeof(path), "/dev/vfio/%d", groupid);
+-    group->fd = qemu_open_old(path, O_RDWR);
++    group->fd = qemu_open(path, O_RDWR, errp);
+     if (group->fd < 0) {
+-        error_setg_errno(errp, errno, "failed to open %s", path);
+         goto free_group_exit;
+     }
+ 
+@@ -1166,18 +1163,21 @@ static int hiod_legacy_vfio_get_cap(HostIOMMUDevice *hiod, int cap,
+ }
+ 
+ static GList *
+-hiod_legacy_vfio_get_iova_ranges(HostIOMMUDevice *hiod, Error **errp)
++hiod_legacy_vfio_get_iova_ranges(HostIOMMUDevice *hiod)
+ {
+     VFIODevice *vdev = hiod->agent;
+-    GList *l = NULL;
+ 
+     g_assert(vdev);
++    return vfio_container_get_iova_ranges(vdev->bcontainer);
++}
+ 
+-    if (vdev->bcontainer) {
+-        l = g_list_copy(vdev->bcontainer->iova_ranges);
+-    }
++static uint64_t
++hiod_legacy_vfio_get_page_size_mask(HostIOMMUDevice *hiod)
++{
++    VFIODevice *vdev = hiod->agent;
+ 
+-    return l;
++    g_assert(vdev);
++    return vfio_container_get_page_size_mask(vdev->bcontainer);
+ }
+ 
+ static void vfio_iommu_legacy_instance_init(Object *obj)
+@@ -1194,6 +1194,7 @@ static void hiod_legacy_vfio_class_init(ObjectClass *oc, void *data)
+     hioc->realize = hiod_legacy_vfio_realize;
+     hioc->get_cap = hiod_legacy_vfio_get_cap;
+     hioc->get_iova_ranges = hiod_legacy_vfio_get_iova_ranges;
++    hioc->get_page_size_mask = hiod_legacy_vfio_get_page_size_mask;
+ };
+ 
+ static const TypeInfo types[] = {
+diff --git a/hw/vfio/display.c b/hw/vfio/display.c
+index 661e921616..ea87830fe0 100644
+--- a/hw/vfio/display.c
++++ b/hw/vfio/display.c
+@@ -124,7 +124,7 @@ static void vfio_display_edid_ui_info(void *opaque, uint32_t idx,
+     }
+ }
+ 
+-static void vfio_display_edid_init(VFIOPCIDevice *vdev)
++static bool vfio_display_edid_init(VFIOPCIDevice *vdev, Error **errp)
+ {
+     VFIODisplay *dpy = vdev->dpy;
+     int fd = vdev->vbasedev.fd;
+@@ -135,7 +135,8 @@ static void vfio_display_edid_init(VFIOPCIDevice *vdev)
+                                    VFIO_REGION_SUBTYPE_GFX_EDID,
+                                    &dpy->edid_info);
+     if (ret) {
+-        return;
++        /* Failed to get GFX edid info, allow to go through without edid. */
++        return true;
+     }
+ 
+     trace_vfio_display_edid_available();
+@@ -167,13 +168,16 @@ static void vfio_display_edid_init(VFIOPCIDevice *vdev)
+                                         vfio_display_edid_link_up, vdev);
+ 
+     vfio_display_edid_update(vdev, true, 0, 0);
+-    return;
++    return true;
+ 
+ err:
++    error_setg(errp, "vfio: failed to read GFX edid field");
+     trace_vfio_display_edid_write_error();
++    g_free(dpy->edid_info);
+     g_free(dpy->edid_regs);
++    dpy->edid_info = NULL;
+     dpy->edid_regs = NULL;
+-    return;
++    return false;
+ }
+ 
+ static void vfio_display_edid_exit(VFIODisplay *dpy)
+@@ -182,6 +186,7 @@ static void vfio_display_edid_exit(VFIODisplay *dpy)
+         return;
+     }
+ 
++    g_free(dpy->edid_info);
+     g_free(dpy->edid_regs);
+     g_free(dpy->edid_blob);
+     timer_free(dpy->edid_link_timer);
+@@ -365,8 +370,7 @@ static bool vfio_display_dmabuf_init(VFIOPCIDevice *vdev, Error **errp)
+             return false;
+         }
+     }
+-    vfio_display_edid_init(vdev);
+-    return true;
++    return vfio_display_edid_init(vdev, errp);
+ }
+ 
+ static void vfio_display_dmabuf_exit(VFIODisplay *dpy)
+diff --git a/hw/vfio/iommufd.c b/hw/vfio/iommufd.c
+index c2f158e603..7b5f87a148 100644
+--- a/hw/vfio/iommufd.c
++++ b/hw/vfio/iommufd.c
+@@ -644,26 +644,31 @@ static bool hiod_iommufd_vfio_realize(HostIOMMUDevice *hiod, void *opaque,
+ }
+ 
+ static GList *
+-hiod_iommufd_vfio_get_iova_ranges(HostIOMMUDevice *hiod, Error **errp)
++hiod_iommufd_vfio_get_iova_ranges(HostIOMMUDevice *hiod)
+ {
+     VFIODevice *vdev = hiod->agent;
+-    GList *l = NULL;
+ 
+     g_assert(vdev);
++    return vfio_container_get_iova_ranges(vdev->bcontainer);
++}
+ 
+-    if (vdev->bcontainer) {
+-        l = g_list_copy(vdev->bcontainer->iova_ranges);
+-    }
++static uint64_t
++hiod_iommufd_vfio_get_page_size_mask(HostIOMMUDevice *hiod)
++{
++    VFIODevice *vdev = hiod->agent;
+ 
+-    return l;
++    g_assert(vdev);
++    return vfio_container_get_page_size_mask(vdev->bcontainer);
+ }
+ 
++
+ static void hiod_iommufd_vfio_class_init(ObjectClass *oc, void *data)
+ {
+     HostIOMMUDeviceClass *hiodc = HOST_IOMMU_DEVICE_CLASS(oc);
+ 
+     hiodc->realize = hiod_iommufd_vfio_realize;
+     hiodc->get_iova_ranges = hiod_iommufd_vfio_get_iova_ranges;
++    hiodc->get_page_size_mask = hiod_iommufd_vfio_get_page_size_mask;
+ };
+ 
+ static const TypeInfo types[] = {
+diff --git a/hw/virtio/trace-events b/hw/virtio/trace-events
+index 3cf84e04a7..b7c04f0856 100644
+--- a/hw/virtio/trace-events
++++ b/hw/virtio/trace-events
+@@ -131,7 +131,7 @@ virtio_iommu_fill_resv_property(uint32_t devid, uint8_t subtype, uint64_t start,
+ virtio_iommu_notify_map(const char *name, uint64_t virt_start, uint64_t virt_end, uint64_t phys_start, uint32_t flags) "mr=%s virt_start=0x%"PRIx64" virt_end=0x%"PRIx64" phys_start=0x%"PRIx64" flags=%d"
+ virtio_iommu_notify_unmap(const char *name, uint64_t virt_start, uint64_t virt_end) "mr=%s virt_start=0x%"PRIx64" virt_end=0x%"PRIx64
+ virtio_iommu_remap(const char *name, uint64_t virt_start, uint64_t virt_end, uint64_t phys_start) "mr=%s virt_start=0x%"PRIx64" virt_end=0x%"PRIx64" phys_start=0x%"PRIx64
+-virtio_iommu_set_page_size_mask(const char *name, uint64_t old, uint64_t new) "mr=%s old_mask=0x%"PRIx64" new_mask=0x%"PRIx64
++virtio_iommu_update_page_size_mask(const char *name, uint64_t old, uint64_t new) "host iommu device=%s old_mask=0x%"PRIx64" new_mask=0x%"PRIx64
+ virtio_iommu_notify_flag_add(const char *name) "add notifier to mr %s"
+ virtio_iommu_notify_flag_del(const char *name) "del notifier from mr %s"
+ virtio_iommu_switch_address_space(uint8_t bus, uint8_t slot, uint8_t fn, bool on) "Device %02x:%02x.%x switching address space (iommu enabled=%d)"
+diff --git a/hw/virtio/virtio-iommu.c b/hw/virtio/virtio-iommu.c
+index 7c54c6b5e2..33ae61c4a6 100644
+--- a/hw/virtio/virtio-iommu.c
++++ b/hw/virtio/virtio-iommu.c
+@@ -563,10 +563,15 @@ static int virtio_iommu_set_host_iova_ranges(VirtIOIOMMU *s, PCIBus *bus,
+     int ret = -EINVAL;
+ 
+     if (!sbus) {
+-        error_report("%s no sbus", __func__);
++        error_setg(errp, "%s: no IOMMUPciBus found!", __func__);
++        return ret;
+     }
+ 
+     sdev = sbus->pbdev[devfn];
++    if (!sdev) {
++        error_setg(errp, "%s: no IOMMUDevice found!", __func__);
++        return ret;
++    }
+ 
+     current_ranges = sdev->host_resv_ranges;
+ 
+@@ -613,9 +618,39 @@ out:
+     return ret;
+ }
+ 
++static bool check_page_size_mask(VirtIOIOMMU *viommu, uint64_t new_mask,
++                                 Error **errp)
++{
++    uint64_t cur_mask = viommu->config.page_size_mask;
++
++    if ((cur_mask & new_mask) == 0) {
++        error_setg(errp, "virtio-iommu reports a page size mask 0x%"PRIx64
++                   " incompatible with currently supported mask 0x%"PRIx64,
++                   new_mask, cur_mask);
++        return false;
++    }
++    /*
++     * Once the granule is frozen we can't change the mask anymore. If by
++     * chance the hotplugged device supports the same granule, we can still
++     * accept it.
++     */
++    if (viommu->granule_frozen) {
++        int cur_granule = ctz64(cur_mask);
++
++        if (!(BIT_ULL(cur_granule) & new_mask)) {
++            error_setg(errp,
++                       "virtio-iommu does not support frozen granule 0x%llx",
++                       BIT_ULL(cur_granule));
++            return false;
++        }
++    }
++    return true;
++}
++
+ static bool virtio_iommu_set_iommu_device(PCIBus *bus, void *opaque, int devfn,
+                                           HostIOMMUDevice *hiod, Error **errp)
+ {
++    ERRP_GUARD();
+     VirtIOIOMMU *viommu = opaque;
+     HostIOMMUDeviceClass *hiodc = HOST_IOMMU_DEVICE_GET_CLASS(hiod);
+     struct hiod_key *new_key;
+@@ -630,7 +665,7 @@ static bool virtio_iommu_set_iommu_device(PCIBus *bus, void *opaque, int devfn,
+ 
+     if (hiodc->get_iova_ranges) {
+         int ret;
+-        host_iova_ranges = hiodc->get_iova_ranges(hiod, errp);
++        host_iova_ranges = hiodc->get_iova_ranges(hiod);
+         if (!host_iova_ranges) {
+             return true; /* some old kernels may not support that capability */
+         }
+@@ -638,8 +673,28 @@ static bool virtio_iommu_set_iommu_device(PCIBus *bus, void *opaque, int devfn,
+                                                 hiod->aliased_devfn,
+                                                 host_iova_ranges, errp);
+         if (ret) {
+-            g_list_free_full(host_iova_ranges, g_free);
+-            return false;
++            goto error;
++        }
++    }
++    if (hiodc->get_page_size_mask) {
++        uint64_t new_mask = hiodc->get_page_size_mask(hiod);
++
++        if (check_page_size_mask(viommu, new_mask, errp)) {
++            /*
++             * The default mask depends on the "granule" property. For example,
++             * with 4k granule, it is -(4 * KiB). When an assigned device has
++             * page size restrictions due to the hardware IOMMU configuration,
++             * apply this restriction to the mask.
++             */
++            trace_virtio_iommu_update_page_size_mask(hiod->name,
++                                                     viommu->config.page_size_mask,
++                                                     new_mask);
++            if (!viommu->granule_frozen) {
++                viommu->config.page_size_mask &= new_mask;
++            }
++        } else {
++            error_prepend(errp, "%s: ", hiod->name);
++            goto error;
+         }
+     }
+ 
+@@ -652,6 +707,9 @@ static bool virtio_iommu_set_iommu_device(PCIBus *bus, void *opaque, int devfn,
+     g_list_free_full(host_iova_ranges, g_free);
+ 
+     return true;
++error:
++    g_list_free_full(host_iova_ranges, g_free);
++    return false;
+ }
+ 
+ static void
+@@ -1350,50 +1408,6 @@ static int virtio_iommu_notify_flag_changed(IOMMUMemoryRegion *iommu_mr,
+     return 0;
+ }
+ 
+-/*
+- * The default mask depends on the "granule" property. For example, with
+- * 4k granule, it is -(4 * KiB). When an assigned device has page size
+- * restrictions due to the hardware IOMMU configuration, apply this restriction
+- * to the mask.
+- */
+-static int virtio_iommu_set_page_size_mask(IOMMUMemoryRegion *mr,
+-                                           uint64_t new_mask,
+-                                           Error **errp)
+-{
+-    IOMMUDevice *sdev = container_of(mr, IOMMUDevice, iommu_mr);
+-    VirtIOIOMMU *s = sdev->viommu;
+-    uint64_t cur_mask = s->config.page_size_mask;
+-
+-    trace_virtio_iommu_set_page_size_mask(mr->parent_obj.name, cur_mask,
+-                                          new_mask);
+-
+-    if ((cur_mask & new_mask) == 0) {
+-        error_setg(errp, "virtio-iommu %s reports a page size mask 0x%"PRIx64
+-                   " incompatible with currently supported mask 0x%"PRIx64,
+-                   mr->parent_obj.name, new_mask, cur_mask);
+-        return -1;
+-    }
+-
+-    /*
+-     * Once the granule is frozen we can't change the mask anymore. If by
+-     * chance the hotplugged device supports the same granule, we can still
+-     * accept it.
+-     */
+-    if (s->granule_frozen) {
+-        int cur_granule = ctz64(cur_mask);
+-
+-        if (!(BIT_ULL(cur_granule) & new_mask)) {
+-            error_setg(errp, "virtio-iommu %s does not support frozen granule 0x%llx",
+-                       mr->parent_obj.name, BIT_ULL(cur_granule));
+-            return -1;
+-        }
+-        return 0;
+-    }
+-
+-    s->config.page_size_mask &= new_mask;
+-    return 0;
+-}
+-
+ static void virtio_iommu_system_reset(void *opaque)
+ {
+     VirtIOIOMMU *s = opaque;
+@@ -1416,18 +1430,6 @@ static void virtio_iommu_freeze_granule(Notifier *notifier, void *data)
+     VirtIOIOMMU *s = container_of(notifier, VirtIOIOMMU, machine_done);
+     int granule;
+ 
+-    if (likely(s->config.bypass)) {
+-        /*
+-         * Transient IOMMU MR enable to collect page_size_mask requirements
+-         * through memory_region_iommu_set_page_size_mask() called by
+-         * VFIO region_add() callback
+-         */
+-         s->config.bypass = false;
+-         virtio_iommu_switch_address_space_all(s);
+-         /* restore default */
+-         s->config.bypass = true;
+-         virtio_iommu_switch_address_space_all(s);
+-    }
+     s->granule_frozen = true;
+     granule = ctz64(s->config.page_size_mask);
+     trace_virtio_iommu_freeze_granule(BIT_ULL(granule));
+@@ -1718,7 +1720,6 @@ static void virtio_iommu_memory_region_class_init(ObjectClass *klass,
+     imrc->translate = virtio_iommu_translate;
+     imrc->replay = virtio_iommu_replay;
+     imrc->notify_flag_changed = virtio_iommu_notify_flag_changed;
+-    imrc->iommu_set_page_size_mask = virtio_iommu_set_page_size_mask;
+ }
+ 
+ static const TypeInfo virtio_iommu_info = {
+diff --git a/hw/virtio/virtio-mem.c b/hw/virtio/virtio-mem.c
+index ffd119ebac..ef64bf1b4a 100644
+--- a/hw/virtio/virtio-mem.c
++++ b/hw/virtio/virtio-mem.c
+@@ -1832,8 +1832,8 @@ static void virtio_mem_unplug_request_check(VirtIOMEM *vmem, Error **errp)
+     }
+ 
+     if (vmem->size) {
+-        error_setg(errp, "virtio-mem device cannot get unplugged while"
+-                   " '" VIRTIO_MEM_SIZE_PROP "' != '0'");
++        error_setg(errp, "virtio-mem device cannot get unplugged while some"
++                   " of its memory is still plugged");
+         return;
+     }
+     if (vmem->requested_size) {
+diff --git a/hw/xen/xen-mapcache.c b/hw/xen/xen-mapcache.c
+index 5f23b0adbe..18ba7b1d8f 100644
+--- a/hw/xen/xen-mapcache.c
++++ b/hw/xen/xen-mapcache.c
+@@ -597,7 +597,17 @@ static void xen_invalidate_map_cache_entry_unlocked(MapCache *mc,
+         pentry->next = entry->next;
+         g_free(entry);
+     } else {
+-        memset(entry, 0, sizeof *entry);
++        /*
++         * Invalidate mapping but keep entry->next pointing to the rest
++         * of the list.
++         *
++         * Note that lock is already zero here, otherwise we don't unmap.
++         */
++        entry->paddr_index = 0;
++        entry->vaddr_base = NULL;
++        entry->valid_mapping = NULL;
++        entry->flags = 0;
++        entry->size = 0;
+     }
+ }
+ 
+diff --git a/hw/xen/xen_pt_load_rom.c b/hw/xen/xen_pt_load_rom.c
+index 03422a8a71..6bc64acd33 100644
+--- a/hw/xen/xen_pt_load_rom.c
++++ b/hw/xen/xen_pt_load_rom.c
+@@ -53,7 +53,7 @@ void *pci_assign_dev_load_option_rom(PCIDevice *dev,
+     }
+     fseek(fp, 0, SEEK_SET);
+ 
+-    if (dev->romsize != -1) {
++    if (dev->romsize != UINT_MAX) {
+         if (st.st_size > dev->romsize) {
+             error_report("ROM BAR \"%s\" (%ld bytes) is too large for ROM size %u",
+                          rom_file, (long) st.st_size, dev->romsize);
+diff --git a/include/block/nvme.h b/include/block/nvme.h
+index bb231d0b9a..7c77d38174 100644
+--- a/include/block/nvme.h
++++ b/include/block/nvme.h
+@@ -1074,6 +1074,7 @@ enum NvmeIdCns {
+     NVME_ID_CNS_CTRL_LIST             = 0x13,
+     NVME_ID_CNS_PRIMARY_CTRL_CAP      = 0x14,
+     NVME_ID_CNS_SECONDARY_CTRL_LIST   = 0x15,
++    NVME_ID_CNS_ENDURANCE_GROUP_LIST  = 0x19,
+     NVME_ID_CNS_CS_NS_PRESENT_LIST    = 0x1a,
+     NVME_ID_CNS_CS_NS_PRESENT         = 0x1b,
+     NVME_ID_CNS_IO_COMMAND_SET        = 0x1c,
+
+-- 
+2.43.0

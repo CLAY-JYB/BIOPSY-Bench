@@ -1,0 +1,23 @@
+From 1598b36d Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0500] Fix use-after-free of constant name (part 53/53)
+
+---
+diff --git a/sapi/fpm/fpm/fpm_php.c b/sapi/fpm/fpm/fpm_php.c
+index 92b18966..a9ad0433 100644
+--- a/sapi/fpm/fpm/fpm_php.c
++++ b/sapi/fpm/fpm/fpm_php.c
+@@ -87,7 +87,9 @@ int fpm_php_apply_defines_ex(struct key_value_s *kv, int mode) /* {{{ */
+ 
+ 	if (!strcmp(name, "extension") && *value) {
+ 		zval zv;
++		zend_interned_strings_switch_storage(0);
+ 		php_dl(value, MODULE_PERSISTENT, &zv, 1);
++		zend_interned_strings_switch_storage(1);
+ 		return Z_TYPE(zv) == IS_TRUE;
+ 	}
+ 
+
+-- 
+2.43.0

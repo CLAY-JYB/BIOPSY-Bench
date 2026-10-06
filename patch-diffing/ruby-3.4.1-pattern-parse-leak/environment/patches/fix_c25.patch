@@ -1,0 +1,49 @@
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -12854,31 +13250,31 @@ list_concat(NODE *head, NODE *tail)
+ }
+ 
+ static int
+-literal_concat0(struct parser_params *p, VALUE head, VALUE tail)
++literal_concat0(struct parser_params *p, rb_parser_string_t *head, rb_parser_string_t *tail)
+ {
+-    if (NIL_P(tail)) return 1;
+-    if (!rb_enc_compatible(head, tail)) {
++    if (!tail) return 1;
++    if (!rb_parser_enc_compatible(p, head, tail)) {
+         compile_error(p, "string literal encodings differ (%s / %s)",
+-                      rb_enc_name(rb_enc_get(head)),
+-                      rb_enc_name(rb_enc_get(tail)));
+-        rb_str_resize(head, 0);
+-        rb_str_resize(tail, 0);
++                      rb_enc_name(rb_parser_str_get_encoding(head)),
++                      rb_enc_name(rb_parser_str_get_encoding(tail)));
++        rb_parser_str_resize(p, head, 0);
++        rb_parser_str_resize(p, tail, 0);
+         return 0;
+     }
+-    rb_str_buf_append(head, tail);
++    rb_parser_str_buf_append(p, head, tail);
+     return 1;
+ }
+ 
+-static VALUE
++static rb_parser_string_t *
+ string_literal_head(struct parser_params *p, enum node_type htype, NODE *head)
+ {
+-    if (htype != NODE_DSTR) return Qfalse;
++    if (htype != NODE_DSTR) return false;
+     if (RNODE_DSTR(head)->nd_next) {
+         head = RNODE_LIST(RNODE_LIST(RNODE_DSTR(head)->nd_next)->as.nd_end)->nd_head;
+-        if (!head || !nd_type_p(head, NODE_STR)) return Qfalse;
++        if (!head || !nd_type_p(head, NODE_STR)) return false;
+     }
+-    const VALUE lit = RNODE_DSTR(head)->nd_lit;
+-    ASSUME(lit != Qfalse);
++    rb_parser_string_t *lit = RNODE_DSTR(head)->string;
++    ASSUME(lit != false);
+     return lit;
+ }
+ 

@@ -1,0 +1,254 @@
+From 042e3264 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0036] send-pack: add new tracing regions for push
+
+---
+diff --git a/send-pack.c b/send-pack.c
+index b224ef9f..9666b2c9 100644
+--- a/send-pack.c
++++ b/send-pack.c
+@@ -75,6 +75,7 @@ static int pack_objects(int fd, struct ref *refs, struct oid_array *advertised,
+ 	int i;
+ 	int rc;
+ 
++	trace2_region_enter("send_pack", "pack_objects", the_repository);
+ 	strvec_push(&po.args, "pack-objects");
+ 	strvec_push(&po.args, "--all-progress-implied");
+ 	strvec_push(&po.args, "--revs");
+@@ -146,8 +147,10 @@ static int pack_objects(int fd, struct ref *refs, struct oid_array *advertised,
+ 		 */
+ 		if (rc > 128 && rc != 141)
+ 			error("pack-objects died of signal %d", rc - 128);
++		trace2_region_leave("send_pack", "pack_objects", the_repository);
+ 		return -1;
+ 	}
++	trace2_region_leave("send_pack", "pack_objects", the_repository);
+ 	return 0;
+ }
+ 
+@@ -170,6 +173,7 @@ static int receive_status(struct packet_reader *reader, struct ref *refs)
+ 	int new_report = 0;
+ 	int once = 0;
+ 
++	trace2_region_enter("send_pack", "receive_status", the_repository);
+ 	hint = NULL;
+ 	ret = receive_unpack_status(reader);
+ 	while (1) {
+@@ -268,6 +272,7 @@ static int receive_status(struct packet_reader *reader, struct ref *refs)
+ 			new_report = 1;
+ 		}
+ 	}
++	trace2_region_leave("send_pack", "receive_status", the_repository);
+ 	return ret;
+ }
+ 
+@@ -508,13 +513,15 @@ int send_pack(struct send_pack_args *args,
+ 	if (!remote_refs) {
+ 		fprintf(stderr, "No refs in common and none specified; doing nothing.\n"
+ 			"Perhaps you should specify a branch.\n");
+-		ret = 0;
+-		goto out;
++		return 0;
+ 	}
+ 
+ 	git_config_get_bool("push.negotiate", &push_negotiate);
+-	if (push_negotiate)
++	if (push_negotiate) {
++		trace2_region_enter("send_pack", "push_negotiate", the_repository);
+ 		get_commons_through_negotiation(args->url, remote_refs, &commons);
++		trace2_region_leave("send_pack", "push_negotiate", the_repository);
++	}
+ 
+ 	if (!git_config_get_bool("push.usebitmaps", &use_bitmaps))
+ 		args->disable_bitmaps = !use_bitmaps;
+@@ -616,11 +623,12 @@ int send_pack(struct send_pack_args *args,
+ 			 * atomically, abort the whole operation.
+ 			 */
+ 			if (use_atomic) {
++				strbuf_release(&req_buf);
++				strbuf_release(&cap_buf);
+ 				reject_atomic_push(remote_refs, args->send_mirror);
+ 				error("atomic push failed for ref %s. status: %d\n",
+ 				      ref->name, ref->status);
+-				ret = args->porcelain ? 0 : -1;
+-				goto out;
++				return args->porcelain ? 0 : -1;
+ 			}
+ 			/* else fallthrough */
+ 		default:
+@@ -641,10 +649,11 @@ int send_pack(struct send_pack_args *args,
+ 	/*
+ 	 * Finally, tell the other end!
+ 	 */
+-	if (!args->dry_run && push_cert_nonce)
++	if (!args->dry_run && push_cert_nonce) {
+ 		cmds_sent = generate_push_cert(&req_buf, remote_refs, args,
+ 					       cap_buf.buf, push_cert_nonce);
+-	else if (!args->dry_run)
++		trace2_printf("Generated push certificate");
++	} else if (!args->dry_run) {
+ 		for (ref = remote_refs; ref; ref = ref->next) {
+ 			char *old_hex, *new_hex;
+ 
+@@ -664,6 +673,7 @@ int send_pack(struct send_pack_args *args,
+ 						 old_hex, new_hex, ref->name);
+ 			}
+ 		}
++	}
+ 
+ 	if (use_push_options) {
+ 		struct string_list_item *item;
+@@ -682,6 +692,8 @@ int send_pack(struct send_pack_args *args,
+ 		write_or_die(out, req_buf.buf, req_buf.len);
+ 		packet_flush(out);
+ 	}
++	strbuf_release(&req_buf);
++	strbuf_release(&cap_buf);
+ 
+ 	if (use_sideband && cmds_sent) {
+ 		memset(&demux, 0, sizeof(demux));
+@@ -719,9 +731,7 @@ int send_pack(struct send_pack_args *args,
+ 				finish_async(&demux);
+ 			}
+ 			fd[1] = -1;
+-
+-			ret = -1;
+-			goto out;
++			return -1;
+ 		}
+ 		if (!args->stateless_rpc)
+ 			/* Closed by pack_objects() via start_command() */
+@@ -746,12 +756,10 @@ int send_pack(struct send_pack_args *args,
+ 	}
+ 
+ 	if (ret < 0)
+-		goto out;
++		return ret;
+ 
+-	if (args->porcelain) {
+-		ret = 0;
+-		goto out;
+-	}
++	if (args->porcelain)
++		return 0;
+ 
+ 	for (ref = remote_refs; ref; ref = ref->next) {
+ 		switch (ref->status) {
+@@ -760,16 +768,8 @@ int send_pack(struct send_pack_args *args,
+ 		case REF_STATUS_OK:
+ 			break;
+ 		default:
+-			ret = -1;
+-			goto out;
++			return -1;
+ 		}
+ 	}
+-
+-	ret = 0;
+-
+-out:
+-	oid_array_clear(&commons);
+-	strbuf_release(&req_buf);
+-	strbuf_release(&cap_buf);
+-	return ret;
++	return 0;
+ }
+diff --git a/sequencer.c b/sequencer.c
+index e592df0f..8d01cd50 100644
+--- a/sequencer.c
++++ b/sequencer.c
+@@ -3794,12 +3794,13 @@ static int error_failed_squash(struct repository *r,
+ 	return error_with_patch(r, commit, subject, subject_len, opts, 1, 0);
+ }
+ 
+-static int do_exec(struct repository *r, const char *command_line)
++static int do_exec(struct repository *r, const char *command_line, int quiet)
+ {
+ 	struct child_process cmd = CHILD_PROCESS_INIT;
+ 	int dirty, status;
+ 
+-	fprintf(stderr, _("Executing: %s\n"), command_line);
++	if (!quiet)
++		fprintf(stderr, _("Executing: %s\n"), command_line);
+ 	cmd.use_shell = 1;
+ 	strvec_push(&cmd.args, command_line);
+ 	strvec_push(&cmd.env, "GIT_CHERRY_PICK_HELP");
+@@ -5014,7 +5015,7 @@ static int pick_commits(struct repository *r,
+ 			if (!opts->verbose)
+ 				term_clear_line();
+ 			*end_of_arg = '\0';
+-			res = do_exec(r, arg);
++			res = do_exec(r, arg, opts->quiet);
+ 			*end_of_arg = saved;
+ 
+ 			if (res) {
+diff --git a/setup.c b/setup.c
+index 2e11542a..29f86739 100644
+--- a/setup.c
++++ b/setup.c
+@@ -1907,7 +1907,7 @@ struct template_dir_cb_data {
+ };
+ 
+ static int template_dir_cb(const char *key, const char *value,
+-			   const struct config_context *ctx, void *d)
++			   const struct config_context *ctx UNUSED, void *d)
+ {
+ 	struct template_dir_cb_data *data = d;
+ 
+diff --git a/sideband.c b/sideband.c
+index 5b6b872a..4e816be4 100644
+--- a/sideband.c
++++ b/sideband.c
+@@ -32,28 +32,27 @@ static int use_sideband_colors(void)
+ 
+ 	const char *key = "color.remote";
+ 	struct strbuf sb = STRBUF_INIT;
+-	char *value;
++	const char *value;
+ 	int i;
+ 
+ 	if (use_sideband_colors_cached >= 0)
+ 		return use_sideband_colors_cached;
+ 
+-	if (!git_config_get_string(key, &value)) {
++	if (!git_config_get_string_tmp(key, &value))
+ 		use_sideband_colors_cached = git_config_colorbool(key, value);
+-	} else if (!git_config_get_string("color.ui", &value)) {
++	else if (!git_config_get_string_tmp("color.ui", &value))
+ 		use_sideband_colors_cached = git_config_colorbool("color.ui", value);
+-	} else {
++	else
+ 		use_sideband_colors_cached = GIT_COLOR_AUTO;
+-	}
+ 
+ 	for (i = 0; i < ARRAY_SIZE(keywords); i++) {
+ 		strbuf_reset(&sb);
+ 		strbuf_addf(&sb, "%s.%s", key, keywords[i].keyword);
+-		if (git_config_get_string(sb.buf, &value))
+-			continue;
+-		if (color_parse(value, keywords[i].color))
++		if (git_config_get_string_tmp(sb.buf, &value))
+ 			continue;
++		color_parse(value, keywords[i].color);
+ 	}
++
+ 	strbuf_release(&sb);
+ 	return use_sideband_colors_cached;
+ }
+diff --git a/submodule.c b/submodule.c
+index 97d0d47b..97516b0f 100644
+--- a/submodule.c
++++ b/submodule.c
+@@ -1883,8 +1883,6 @@ int fetch_submodules(struct repository *r,
+ out:
+ 	free_submodules_data(&spf.changed_submodule_names);
+ 	string_list_clear(&spf.seen_submodule_names, 0);
+-	strbuf_release(&spf.submodules_with_errors);
+-	free(spf.oid_fetch_tasks);
+ 	return spf.result;
+ }
+ 
+
+-- 
+2.43.0

@@ -1,0 +1,114 @@
+From 25008823 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0088] Fix memory leak when parsing invalid pattern matching (part 49/50)
+
+---
+diff --git a/rubyparser.h b/rubyparser.h
+index 704789f08..59f594bad 100644
+--- a/rubyparser.h
++++ b/rubyparser.h
+@@ -605,7 +614,7 @@ typedef struct RNode_BACK_REF {
+     long nd_nth;
+ } rb_node_back_ref_t;
+ 
+-/* RNode_MATCH, RNode_LIT, RNode_STR and RNode_XSTR should be same structure */
++/* RNode_MATCH and RNode_LIT should be same structure */
+ typedef struct RNode_MATCH {
+     NODE node;
+ 
+@@ -673,17 +682,18 @@ typedef struct RNode_IMAGINARY {
+     enum rb_numeric_type type;
+ } rb_node_imaginary_t;
+ 
++/* RNode_STR and RNode_XSTR should be same structure */
+ typedef struct RNode_STR {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+ } rb_node_str_t;
+ 
+ /* RNode_DSTR, RNode_DXSTR and RNode_DSYM should be same structure */
+ typedef struct RNode_DSTR {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+     union {
+         long nd_alen;
+         struct RNode *nd_end; /* Second dstr node has this structure. See also RNode_LIST */
+@@ -694,13 +704,13 @@ typedef struct RNode_DSTR {
+ typedef struct RNode_XSTR {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+ } rb_node_xstr_t;
+ 
+ typedef struct RNode_DXSTR {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+     long nd_alen;
+     struct RNode_LIST *nd_next;
+ } rb_node_dxstr_t;
+@@ -714,7 +724,7 @@ typedef struct RNode_EVSTR {
+ typedef struct RNode_DREGX {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+     ID nd_cflag;
+     struct RNode_LIST *nd_next;
+ } rb_node_dregx_t;
+@@ -950,7 +960,7 @@ typedef struct RNode_SYM {
+ typedef struct RNode_DSYM {
+     NODE node;
+ 
+-    VALUE nd_lit;
++    struct rb_parser_string *string;
+     long nd_alen;
+     struct RNode_LIST *nd_next;
+ } rb_node_dsym_t;
+@@ -1267,6 +1277,7 @@ typedef struct rb_parser_config_struct {
+     VALUE (*id2str)(ID id);
+     VALUE (*id2sym)(ID x);
+     ID (*sym2id)(VALUE sym);
++    ID (*check_id_cstr)(const char *ptr, long len, rb_encoding *enc);
+ 
+     /* String */
+     RBIMPL_ATTR_FORMAT(RBIMPL_PRINTF_FORMAT, 2, 3)
+@@ -1283,10 +1294,12 @@ typedef struct rb_parser_config_struct {
+     VALUE (*str_resize)(VALUE str, long len);
+     VALUE (*str_new)(const char *ptr, long len);
+     VALUE (*str_new_cstr)(const char *ptr);
++    VALUE (*setup_fake_str)(struct RString *fake_str, const char *name, long len, rb_encoding *enc);
+     VALUE (*fstring)(VALUE);
+     int (*is_ascii_string)(VALUE str);
+     VALUE (*enc_str_new)(const char *ptr, long len, rb_encoding *enc);
+     VALUE (*enc_str_buf_cat)(VALUE str, const char *ptr, long len, rb_encoding *enc);
++    int (*enc_str_coderange)(VALUE str);
+     VALUE (*str_buf_append)(VALUE str, VALUE str2);
+     RBIMPL_ATTR_FORMAT(RBIMPL_PRINTF_FORMAT, 2, 0)
+     VALUE (*str_vcatf)(VALUE str, const char *fmt, va_list ap);
+@@ -1329,6 +1342,7 @@ typedef struct rb_parser_config_struct {
+     int (*enc_isalnum)(OnigCodePoint c, rb_encoding *enc);
+     int (*enc_precise_mbclen)(const char *p, const char *e, rb_encoding *enc);
+     int (*mbclen_charfound_p)(int len);
++    int (*mbclen_charfound_len)(int len);
+     const char *(*enc_name)(rb_encoding *enc);
+     char *(*enc_prev_char)(const char *s, const char *p, const char *e, rb_encoding *enc);
+     rb_encoding* (*enc_get)(VALUE obj);
+@@ -1350,6 +1364,7 @@ typedef struct rb_parser_config_struct {
+     void (*encoding_set)(VALUE obj, int encindex);
+     int (*encoding_is_ascii8bit)(VALUE obj);
+     rb_encoding *(*usascii_encoding)(void);
++    int enc_coderange_broken;
+ 
+     /* Ractor */
+     VALUE (*ractor_make_shareable)(VALUE obj);
+
+-- 
+2.43.0

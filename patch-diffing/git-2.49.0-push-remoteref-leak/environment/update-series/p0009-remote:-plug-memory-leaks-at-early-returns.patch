@@ -1,0 +1,230 @@
+From e0df35e0 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0009] remote: plug memory leaks at early returns
+
+---
+diff --git a/builtin/remote.c b/builtin/remote.c
+index d1f9292e..0acc547d 100644
+--- a/builtin/remote.c
++++ b/builtin/remote.c
+@@ -164,6 +164,7 @@ static int add(int argc, const char **argv, const char *prefix)
+ 	struct strbuf buf = STRBUF_INIT, buf2 = STRBUF_INIT;
+ 	const char *name, *url;
+ 	int i;
++	int result = 0;
+ 
+ 	struct option options[] = {
+ 		OPT_BOOL('f', "fetch", &fetch, N_("fetch the remote branches")),
+@@ -230,8 +231,10 @@ static int add(int argc, const char **argv, const char *prefix)
+ 			       fetch_tags == TAGS_SET ? "--tags" : "--no-tags");
+ 	}
+ 
+-	if (fetch && fetch_remote(name))
+-		return 1;
++	if (fetch && fetch_remote(name)) {
++		result = 1;
++		goto out;
++	}
+ 
+ 	if (master) {
+ 		strbuf_reset(&buf);
+@@ -241,14 +244,15 @@ static int add(int argc, const char **argv, const char *prefix)
+ 		strbuf_addf(&buf2, "refs/remotes/%s/%s", name, master);
+ 
+ 		if (refs_update_symref(get_main_ref_store(the_repository), buf.buf, buf2.buf, "remote add"))
+-			return error(_("Could not setup master '%s'"), master);
++			result = error(_("Could not setup master '%s'"), master);
+ 	}
+ 
++out:
+ 	strbuf_release(&buf);
+ 	strbuf_release(&buf2);
+ 	string_list_clear(&track, 0);
+ 
+-	return 0;
++	return result;
+ }
+ 
+ struct branch_info {
+@@ -715,6 +719,7 @@ static int mv(int argc, const char **argv, const char *prefix)
+ 	struct rename_info rename;
+ 	int i, refs_renamed_nr = 0, refspec_updated = 0;
+ 	struct progress *progress = NULL;
++	int result = 0;
+ 
+ 	argc = parse_options(argc, argv, prefix, options,
+ 			     builtin_remote_rename_usage, 0);
+@@ -747,9 +752,11 @@ static int mv(int argc, const char **argv, const char *prefix)
+ 
+ 	strbuf_addf(&buf, "remote.%s", rename.old_name);
+ 	strbuf_addf(&buf2, "remote.%s", rename.new_name);
+-	if (repo_config_rename_section(the_repository, buf.buf, buf2.buf) < 1)
+-		return error(_("Could not rename config section '%s' to '%s'"),
+-				buf.buf, buf2.buf);
++	if (repo_config_rename_section(the_repository, buf.buf, buf2.buf) < 1) {
++		result = error(_("Could not rename config section '%s' to '%s'"),
++			       buf.buf, buf2.buf);
++		goto out;
++	}
+ 
+ 	if (oldremote->fetch.raw_nr) {
+ 		strbuf_reset(&buf);
+@@ -870,7 +877,7 @@ out:
+ 	strbuf_release(&buf);
+ 	strbuf_release(&buf2);
+ 	strbuf_release(&buf3);
+-	return 0;
++	return result;
+ }
+ 
+ static int rm(int argc, const char **argv, const char *prefix)
+diff --git a/builtin/repack.c b/builtin/repack.c
+index 62cfa50c..8bb87553 100644
+--- a/builtin/repack.c
++++ b/builtin/repack.c
+@@ -732,14 +732,23 @@ static void midx_included_packs(struct string_list *include,
+ 				struct pack_geometry *geometry)
+ {
+ 	struct string_list_item *item;
++	struct strbuf buf = STRBUF_INIT;
++
++	for_each_string_list_item(item, &existing->kept_packs) {
++		strbuf_reset(&buf);
++		strbuf_addf(&buf, "%s.idx", item->string);
++		string_list_insert(include, buf.buf);
++	}
++
++	for_each_string_list_item(item, names) {
++		strbuf_reset(&buf);
++		strbuf_addf(&buf, "pack-%s.idx", item->string);
++		string_list_insert(include, buf.buf);
++	}
+ 
+-	for_each_string_list_item(item, &existing->kept_packs)
+-		string_list_insert(include, xstrfmt("%s.idx", item->string));
+-	for_each_string_list_item(item, names)
+-		string_list_insert(include, xstrfmt("pack-%s.idx", item->string));
+ 	if (geometry->split_factor) {
+-		struct strbuf buf = STRBUF_INIT;
+ 		uint32_t i;
++
+ 		for (i = geometry->split; i < geometry->pack_nr; i++) {
+ 			struct packed_git *p = geometry->pack[i];
+ 
+@@ -754,17 +763,21 @@ static void midx_included_packs(struct string_list *include,
+ 			if (!p->pack_local)
+ 				continue;
+ 
++			strbuf_reset(&buf);
+ 			strbuf_addstr(&buf, pack_basename(p));
+ 			strbuf_strip_suffix(&buf, ".pack");
+ 			strbuf_addstr(&buf, ".idx");
+ 
+-			string_list_insert(include, strbuf_detach(&buf, NULL));
++			string_list_insert(include, buf.buf);
+ 		}
+ 	} else {
+ 		for_each_string_list_item(item, &existing->non_kept_packs) {
+ 			if (pack_is_marked_for_deletion(item))
+ 				continue;
+-			string_list_insert(include, xstrfmt("%s.idx", item->string));
++
++			strbuf_reset(&buf);
++			strbuf_addf(&buf, "%s.idx", item->string);
++			string_list_insert(include, buf.buf);
+ 		}
+ 	}
+ 
+@@ -784,8 +797,13 @@ static void midx_included_packs(struct string_list *include,
+ 		 */
+ 		if (pack_is_marked_for_deletion(item))
+ 			continue;
+-		string_list_insert(include, xstrfmt("%s.idx", item->string));
++
++		strbuf_reset(&buf);
++		strbuf_addf(&buf, "%s.idx", item->string);
++		string_list_insert(include, buf.buf);
+ 	}
++
++	strbuf_release(&buf);
+ }
+ 
+ static int write_midx_included_packs(struct string_list *include,
+@@ -1476,7 +1494,7 @@ int cmd_repack(int argc, const char **argv, const char *prefix)
+ 		mark_packs_for_deletion(&existing, &names);
+ 
+ 	if (write_midx) {
+-		struct string_list include = STRING_LIST_INIT_NODUP;
++		struct string_list include = STRING_LIST_INIT_DUP;
+ 		midx_included_packs(&include, &existing, &names, &geometry);
+ 
+ 		ret = write_midx_included_packs(&include, &geometry, &names,
+diff --git a/builtin/send-pack.c b/builtin/send-pack.c
+index 17cae6bb..ef0df808 100644
+--- a/builtin/send-pack.c
++++ b/builtin/send-pack.c
+@@ -338,5 +338,6 @@ int cmd_send_pack(int argc, const char **argv, const char *prefix)
+ 
+ 	free_refs(remote_refs);
+ 	free_refs(local_refs);
++	refspec_clear(&rs);
+ 	return ret;
+ }
+diff --git a/builtin/submodule--helper.c b/builtin/submodule--helper.c
+index 642a0eda..85fb23de 100644
+--- a/builtin/submodule--helper.c
++++ b/builtin/submodule--helper.c
+@@ -2958,9 +2958,7 @@ static int push_check(int argc, const char **argv, const char *prefix UNUSED)
+ 				    rs->src);
+ 			}
+ 		}
+-
+ 		refspec_clear(&refspec);
+-		free_refs(local_refs);
+ 	}
+ 	free(head);
+ 
+diff --git a/builtin/update-ref.c b/builtin/update-ref.c
+index 6a6a2ff5..8f31da9a 100644
+--- a/builtin/update-ref.c
++++ b/builtin/update-ref.c
+@@ -274,7 +274,7 @@ static void parse_cmd_update(struct ref_transaction *transaction,
+ }
+ 
+ static void parse_cmd_symref_update(struct ref_transaction *transaction,
+-				    const char *next, const char *end)
++				    const char *next, const char *end UNUSED)
+ {
+ 	char *refname, *new_target, *old_arg;
+ 	char *old_target = NULL;
+@@ -360,7 +360,7 @@ static void parse_cmd_create(struct ref_transaction *transaction,
+ 
+ 
+ static void parse_cmd_symref_create(struct ref_transaction *transaction,
+-				    const char *next, const char *end)
++				    const char *next, const char *end UNUSED)
+ {
+ 	struct strbuf err = STRBUF_INIT;
+ 	char *refname, *new_target;
+@@ -423,7 +423,7 @@ static void parse_cmd_delete(struct ref_transaction *transaction,
+ 
+ 
+ static void parse_cmd_symref_delete(struct ref_transaction *transaction,
+-				    const char *next, const char *end)
++				    const char *next, const char *end UNUSED)
+ {
+ 	struct strbuf err = STRBUF_INIT;
+ 	char *refname, *old_target;
+@@ -479,7 +479,7 @@ static void parse_cmd_verify(struct ref_transaction *transaction,
+ }
+ 
+ static void parse_cmd_symref_verify(struct ref_transaction *transaction,
+-				    const char *next, const char *end)
++				    const char *next, const char *end UNUSED)
+ {
+ 	struct strbuf err = STRBUF_INIT;
+ 	struct object_id old_oid;
+
+-- 
+2.43.0

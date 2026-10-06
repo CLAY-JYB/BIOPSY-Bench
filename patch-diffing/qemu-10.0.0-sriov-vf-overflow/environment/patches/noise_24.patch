@@ -1,0 +1,232 @@
+diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
+index bc5aef979e..af5f9db469 100644
+--- a/include/qemu/plugin.h
++++ b/include/qemu/plugin.h
+@@ -149,6 +149,9 @@ struct CPUPluginState {
+ 
+ /**
+  * qemu_plugin_create_vcpu_state: allocate plugin state
++ *
++ * The returned data must be released with g_free()
++ * when no longer required.
+  */
+ CPUPluginState *qemu_plugin_create_vcpu_state(void);
+ 
+diff --git a/include/qemu/timer.h b/include/qemu/timer.h
+index 5ce83c7911..fa56ec9481 100644
+--- a/include/qemu/timer.h
++++ b/include/qemu/timer.h
+@@ -1016,6 +1016,15 @@ static inline int64_t cpu_get_host_ticks(void)
+     return val;
+ }
+ 
++#elif defined(__loongarch64)
++static inline int64_t cpu_get_host_ticks(void)
++{
++    uint64_t val;
++
++    asm volatile("rdtime.d %0, $zero" : "=r"(val));
++    return val;
++}
++
+ #else
+ /* The host CPU doesn't have an easily accessible cycle counter.
+    Just return a monotonically increasing value.  This will be
+diff --git a/include/sysemu/host_iommu_device.h b/include/sysemu/host_iommu_device.h
+index ee6c813c8b..c1bf74ae2c 100644
+--- a/include/sysemu/host_iommu_device.h
++++ b/include/sysemu/host_iommu_device.h
+@@ -87,9 +87,16 @@ struct HostIOMMUDeviceClass {
+      * @hiod Host IOMMU device
+      *
+      * @hiod: handle to the host IOMMU device
+-     * @errp: error handle
+      */
+-    GList* (*get_iova_ranges)(HostIOMMUDevice *hiod, Error **errp);
++    GList* (*get_iova_ranges)(HostIOMMUDevice *hiod);
++    /**
++     *
++     * @get_page_size_mask: Return the page size mask supported along this
++     * @hiod Host IOMMU device
++     *
++     * @hiod: handle to the host IOMMU device
++     */
++    uint64_t (*get_page_size_mask)(HostIOMMUDevice *hiod);
+ };
+ 
+ /*
+diff --git a/include/ui/console.h b/include/ui/console.h
+index a208a68b88..fa986ab97e 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -233,7 +233,7 @@ typedef struct DisplayChangeListenerOps {
+ 
+     /* optional */
+     void (*dpy_mouse_set)(DisplayChangeListener *dcl,
+-                          int x, int y, int on);
++                          int x, int y, bool on);
+     /* optional */
+     void (*dpy_cursor_define)(DisplayChangeListener *dcl,
+                               QEMUCursor *cursor);
+@@ -322,9 +322,8 @@ void dpy_gfx_replace_surface(QemuConsole *con,
+ void dpy_text_cursor(QemuConsole *con, int x, int y);
+ void dpy_text_update(QemuConsole *con, int x, int y, int w, int h);
+ void dpy_text_resize(QemuConsole *con, int w, int h);
+-void dpy_mouse_set(QemuConsole *con, int x, int y, int on);
++void dpy_mouse_set(QemuConsole *con, int x, int y, bool on);
+ void dpy_cursor_define(QemuConsole *con, QEMUCursor *cursor);
+-bool dpy_cursor_define_supported(QemuConsole *con);
+ bool dpy_gfx_check_format(QemuConsole *con,
+                           pixman_format_code_t format);
+ 
+diff --git a/io/meson.build b/io/meson.build
+index 283b9b2bdb..1164812f91 100644
+--- a/io/meson.build
++++ b/io/meson.build
+@@ -13,4 +13,4 @@ io_ss.add(files(
+   'dns-resolver.c',
+   'net-listener.c',
+   'task.c',
+-), gnutls)
++))
+diff --git a/linux-user/aarch64/meson.build b/linux-user/aarch64/meson.build
+index 248c578d15..f75bb3cd75 100644
+--- a/linux-user/aarch64/meson.build
++++ b/linux-user/aarch64/meson.build
+@@ -9,3 +9,5 @@ vdso_le_inc = gen_vdso.process('vdso-le.so',
+                                extra_args: ['-r', '__kernel_rt_sigreturn'])
+ 
+ linux_user_ss.add(when: 'TARGET_AARCH64', if_true: [vdso_be_inc, vdso_le_inc])
++
++linux_user_ss.add(when: 'TARGET_AARCH64', if_true: [files('mte_user_helper.c')])
+diff --git a/linux-user/aarch64/mte_user_helper.c b/linux-user/aarch64/mte_user_helper.c
+new file mode 100644
+index 0000000000..a5b1c8503b
+--- /dev/null
++++ b/linux-user/aarch64/mte_user_helper.c
+@@ -0,0 +1,35 @@
++/*
++ * ARM MemTag convenience functions.
++ *
++ * This code is licensed under the GNU GPL v2 or later.
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#include "qemu/osdep.h"
++#include "qemu.h"
++#include "mte_user_helper.h"
++
++void arm_set_mte_tcf0(CPUArchState *env, abi_long value)
++{
++    /*
++     * Write PR_MTE_TCF to SCTLR_EL1[TCF0].
++     *
++     * The kernel has a per-cpu configuration for the sysadmin,
++     * /sys/devices/system/cpu/cpu<N>/mte_tcf_preferred,
++     * which qemu does not implement.
++     *
++     * Because there is no performance difference between the modes, and
++     * because SYNC is most useful for debugging MTE errors, choose SYNC
++     * as the preferred mode.  With this preference, and the way the API
++     * uses only two bits, there is no way for the program to select
++     * ASYMM mode.
++     */
++    unsigned tcf = 0;
++    if (value & PR_MTE_TCF_SYNC) {
++        tcf = 1;
++    } else if (value & PR_MTE_TCF_ASYNC) {
++        tcf = 2;
++    }
++    env->cp15.sctlr_el[1] = deposit64(env->cp15.sctlr_el[1], 38, 2, tcf);
++}
+diff --git a/linux-user/aarch64/mte_user_helper.h b/linux-user/aarch64/mte_user_helper.h
+new file mode 100644
+index 0000000000..8685e5175a
+--- /dev/null
++++ b/linux-user/aarch64/mte_user_helper.h
+@@ -0,0 +1,32 @@
++/*
++ * ARM MemTag convenience functions.
++ *
++ * This code is licensed under the GNU GPL v2 or later.
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#ifndef AARCH64_MTE_USER_HELPER_H
++#define AARCH64_MTE USER_HELPER_H
++
++#ifndef PR_MTE_TCF_SHIFT
++# define PR_MTE_TCF_SHIFT       1
++# define PR_MTE_TCF_NONE        (0UL << PR_MTE_TCF_SHIFT)
++# define PR_MTE_TCF_SYNC        (1UL << PR_MTE_TCF_SHIFT)
++# define PR_MTE_TCF_ASYNC       (2UL << PR_MTE_TCF_SHIFT)
++# define PR_MTE_TCF_MASK        (3UL << PR_MTE_TCF_SHIFT)
++# define PR_MTE_TAG_SHIFT       3
++# define PR_MTE_TAG_MASK        (0xffffUL << PR_MTE_TAG_SHIFT)
++#endif
++
++/**
++ * arm_set_mte_tcf0 - Set TCF0 field in SCTLR_EL1 register
++ * @env: The CPU environment
++ * @value: The value to be set for the Tag Check Fault in EL0 field.
++ *
++ * Only SYNC and ASYNC modes can be selected. If ASYMM mode is given, the SYNC
++ * mode is selected instead. So, there is no way to set the ASYMM mode.
++ */
++void arm_set_mte_tcf0(CPUArchState *env, abi_long value);
++
++#endif /* AARCH64_MTE_USER_HELPER_H */
+diff --git a/linux-user/aarch64/target_prctl.h b/linux-user/aarch64/target_prctl.h
+index aa8e203c15..ed75b9e4b5 100644
+--- a/linux-user/aarch64/target_prctl.h
++++ b/linux-user/aarch64/target_prctl.h
+@@ -7,6 +7,7 @@
+ #define AARCH64_TARGET_PRCTL_H
+ 
+ #include "target/arm/cpu-features.h"
++#include "mte_user_helper.h"
+ 
+ static abi_long do_prctl_sve_get_vl(CPUArchState *env)
+ {
+@@ -173,26 +174,7 @@ static abi_long do_prctl_set_tagged_addr_ctrl(CPUArchState *env, abi_long arg2)
+     env->tagged_addr_enable = arg2 & PR_TAGGED_ADDR_ENABLE;
+ 
+     if (cpu_isar_feature(aa64_mte, cpu)) {
+-        /*
+-         * Write PR_MTE_TCF to SCTLR_EL1[TCF0].
+-         *
+-         * The kernel has a per-cpu configuration for the sysadmin,
+-         * /sys/devices/system/cpu/cpu<N>/mte_tcf_preferred,
+-         * which qemu does not implement.
+-         *
+-         * Because there is no performance difference between the modes, and
+-         * because SYNC is most useful for debugging MTE errors, choose SYNC
+-         * as the preferred mode.  With this preference, and the way the API
+-         * uses only two bits, there is no way for the program to select
+-         * ASYMM mode.
+-         */
+-        unsigned tcf = 0;
+-        if (arg2 & PR_MTE_TCF_SYNC) {
+-            tcf = 1;
+-        } else if (arg2 & PR_MTE_TCF_ASYNC) {
+-            tcf = 2;
+-        }
+-        env->cp15.sctlr_el[1] = deposit64(env->cp15.sctlr_el[1], 38, 2, tcf);
++        arm_set_mte_tcf0(env, arg2);
+ 
+         /*
+          * Write PR_MTE_TAG to GCR_EL1[Exclude].
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 94c99a1366..7d3cf45fa9 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -843,6 +843,7 @@ int main(int argc, char **argv, char **envp)
+      */
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wtype-limits"
++#pragma GCC diagnostic ignored "-Wtautological-compare"
+ 
+     /*
+      * Select an initial value for task_unmapped_base that is in range.

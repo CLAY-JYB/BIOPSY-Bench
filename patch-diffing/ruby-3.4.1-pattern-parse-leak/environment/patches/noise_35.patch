@@ -1,0 +1,507 @@
+diff --git a/spec/ruby/library/syslog/opened_spec.rb b/spec/ruby/library/syslog/opened_spec.rb
+index ee7a884a5..94432e65a 100644
+--- a/spec/ruby/library/syslog/opened_spec.rb
++++ b/spec/ruby/library/syslog/opened_spec.rb
+@@ -1,41 +1,38 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require 'syslog'
++  describe "Syslog.opened?" do
++    platform_is_not :windows do
+ 
+-    describe "Syslog.opened?" do
+-      platform_is_not :windows do
+-
+-        before :each do
+-          Syslog.opened?.should be_false
+-        end
++      before :each do
++        Syslog.opened?.should be_false
++      end
+ 
+-        after :each do
+-          Syslog.opened?.should be_false
+-        end
++      after :each do
++        Syslog.opened?.should be_false
++      end
+ 
+-        it "returns true if the log is opened" do
+-          Syslog.open
+-          Syslog.opened?.should be_true
+-          Syslog.close
+-        end
++      it "returns true if the log is opened" do
++        Syslog.open
++        Syslog.opened?.should be_true
++        Syslog.close
++      end
+ 
+-        it "returns false otherwise" do
+-          Syslog.opened?.should be_false
+-          Syslog.open
+-          Syslog.close
+-          Syslog.opened?.should be_false
+-        end
++      it "returns false otherwise" do
++        Syslog.opened?.should be_false
++        Syslog.open
++        Syslog.close
++        Syslog.opened?.should be_false
++      end
+ 
+-        it "works inside a block" do
+-          Syslog.open do |s|
+-            s.opened?.should be_true
+-            Syslog.opened?.should be_true
+-          end
+-          Syslog.opened?.should be_false
++      it "works inside a block" do
++        Syslog.open do |s|
++          s.opened?.should be_true
++          Syslog.opened?.should be_true
+         end
++        Syslog.opened?.should be_false
+       end
+     end
+   end
+diff --git a/spec/ruby/library/syslog/options_spec.rb b/spec/ruby/library/syslog/options_spec.rb
+index 814f7daee..83ba43503 100644
+--- a/spec/ruby/library/syslog/options_spec.rb
++++ b/spec/ruby/library/syslog/options_spec.rb
+@@ -1,50 +1,47 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
+-
+-  platform_is_not :windows do
+-    require 'syslog'
+-
+-    describe "Syslog.options" do
+-      platform_is_not :windows do
+-
+-        before :each do
+-          Syslog.opened?.should be_false
+-        end
+-
+-        after :each do
+-          Syslog.opened?.should be_false
+-        end
+-
+-        it "returns the logging options" do
+-          Syslog.open("rubyspec", Syslog::LOG_PID)
+-          Syslog.options.should == Syslog::LOG_PID
+-          Syslog.close
+-        end
+-
+-        it "returns nil when the log is closed" do
+-          Syslog.opened?.should be_false
+-          Syslog.options.should == nil
+-        end
+-
+-        it "defaults to LOG_PID | LOG_CONS" do
+-          Syslog.open
+-          Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
+-          Syslog.close
+-        end
+-
+-        it "resets after each open call" do
+-          Syslog.open
+-          Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
+-
+-          Syslog.open!("rubyspec", Syslog::LOG_PID)
+-          Syslog.options.should == Syslog::LOG_PID
+-          Syslog.close
+-
+-          Syslog.open
+-          Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
+-          Syslog.close
+-        end
++platform_is_not :windows do
++  require 'syslog'
++
++  describe "Syslog.options" do
++    platform_is_not :windows do
++
++      before :each do
++        Syslog.opened?.should be_false
++      end
++
++      after :each do
++        Syslog.opened?.should be_false
++      end
++
++      it "returns the logging options" do
++        Syslog.open("rubyspec", Syslog::LOG_PID)
++        Syslog.options.should == Syslog::LOG_PID
++        Syslog.close
++      end
++
++      it "returns nil when the log is closed" do
++        Syslog.opened?.should be_false
++        Syslog.options.should == nil
++      end
++
++      it "defaults to LOG_PID | LOG_CONS" do
++        Syslog.open
++        Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
++        Syslog.close
++      end
++
++      it "resets after each open call" do
++        Syslog.open
++        Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
++
++        Syslog.open!("rubyspec", Syslog::LOG_PID)
++        Syslog.options.should == Syslog::LOG_PID
++        Syslog.close
++
++        Syslog.open
++        Syslog.options.should == Syslog::LOG_PID | Syslog::LOG_CONS
++        Syslog.close
+       end
+     end
+   end
+diff --git a/spec/ruby/library/syslog/reopen_spec.rb b/spec/ruby/library/syslog/reopen_spec.rb
+index 47861bc1c..a78529fa1 100644
+--- a/spec/ruby/library/syslog/reopen_spec.rb
++++ b/spec/ruby/library/syslog/reopen_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/reopen'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/reopen'
+-    require 'syslog'
+-
+-    describe "Syslog.reopen" do
+-      it_behaves_like :syslog_reopen, :reopen
+-    end
++  describe "Syslog.reopen" do
++    it_behaves_like :syslog_reopen, :reopen
+   end
+ end
+diff --git a/spec/ruby/library/syslog/shared/log.rb b/spec/ruby/library/syslog/shared/log.rb
+index d6daf3cc6..12e4ea836 100644
+--- a/spec/ruby/library/syslog/shared/log.rb
++++ b/spec/ruby/library/syslog/shared/log.rb
+@@ -1,41 +1,39 @@
+-ruby_version_is ""..."3.4" do
+-  describe :syslog_log, shared: true do
+-    platform_is_not :windows, :darwin, :solaris, :aix, :android do
+-      before :each do
+-        Syslog.opened?.should be_false
+-      end
++describe :syslog_log, shared: true do
++  platform_is_not :windows, :darwin, :solaris, :aix, :android do
++    before :each do
++      Syslog.opened?.should be_false
++    end
+ 
+-      after :each do
+-        Syslog.opened?.should be_false
+-      end
++    after :each do
++      Syslog.opened?.should be_false
++    end
+ 
+-      it "logs a message" do
+-        -> {
+-          Syslog.open("rubyspec", Syslog::LOG_PERROR) do
+-            Syslog.send(@method, "Hello")
+-          end
+-        }.should output_to_fd(/\Arubyspec(?::| \d+ - -) Hello\n\z/, $stderr)
+-      end
++    it "logs a message" do
++      -> {
++        Syslog.open("rubyspec", Syslog::LOG_PERROR) do
++          Syslog.send(@method, "Hello")
++        end
++      }.should output_to_fd(/\Arubyspec(?::| \d+ - -) Hello\n\z/, $stderr)
++    end
+ 
+-      it "accepts sprintf arguments" do
+-        -> {
+-          Syslog.open("rubyspec", Syslog::LOG_PERROR) do
+-            Syslog.send(@method, "Hello %s", "world")
+-            Syslog.send(@method, "%d dogs", 2)
+-          end
+-        }.should output_to_fd(/\Arubyspec(?::| \d+ - -) Hello world\nrubyspec(?::| \d+ - -) 2 dogs\n\z/, $stderr)
+-      end
++    it "accepts sprintf arguments" do
++      -> {
++        Syslog.open("rubyspec", Syslog::LOG_PERROR) do
++          Syslog.send(@method, "Hello %s", "world")
++          Syslog.send(@method, "%d dogs", 2)
++        end
++      }.should output_to_fd(/\Arubyspec(?::| \d+ - -) Hello world\nrubyspec(?::| \d+ - -) 2 dogs\n\z/, $stderr)
++    end
+ 
+-      it "works as an alias for Syslog.log" do
+-        level = Syslog.const_get "LOG_#{@method.to_s.upcase}"
+-        -> {
+-          Syslog.open("rubyspec", Syslog::LOG_PERROR) do
+-            Syslog.send(@method, "Hello")
+-            Syslog.log(level, "Hello")
+-          end
+-          # make sure the same thing is written to $stderr.
+-        }.should output_to_fd(/\A(?:rubyspec(?::| \d+ - -) Hello\n){2}\z/, $stderr)
+-      end
++    it "works as an alias for Syslog.log" do
++      level = Syslog.const_get "LOG_#{@method.to_s.upcase}"
++      -> {
++        Syslog.open("rubyspec", Syslog::LOG_PERROR) do
++          Syslog.send(@method, "Hello")
++          Syslog.log(level, "Hello")
++        end
++        # make sure the same thing is written to $stderr.
++      }.should output_to_fd(/\A(?:rubyspec(?::| \d+ - -) Hello\n){2}\z/, $stderr)
+     end
+   end
+ end
+diff --git a/spec/ruby/library/syslog/shared/reopen.rb b/spec/ruby/library/syslog/shared/reopen.rb
+index 935349010..621437a01 100644
+--- a/spec/ruby/library/syslog/shared/reopen.rb
++++ b/spec/ruby/library/syslog/shared/reopen.rb
+@@ -1,42 +1,40 @@
+-ruby_version_is ""..."3.4" do
+-  describe :syslog_reopen, shared: true do
+-    platform_is_not :windows do
+-      before :each do
+-        Syslog.opened?.should be_false
+-      end
++describe :syslog_reopen, shared: true do
++  platform_is_not :windows do
++    before :each do
++      Syslog.opened?.should be_false
++    end
+ 
+-      after :each do
+-        Syslog.opened?.should be_false
+-      end
++    after :each do
++      Syslog.opened?.should be_false
++    end
+ 
+-      it "reopens the log" do
+-        Syslog.open
+-        -> { Syslog.send(@method)}.should_not raise_error
+-        Syslog.opened?.should be_true
+-        Syslog.close
+-      end
++    it "reopens the log" do
++      Syslog.open
++      -> { Syslog.send(@method)}.should_not raise_error
++      Syslog.opened?.should be_true
++      Syslog.close
++    end
+ 
+-      it "fails with RuntimeError if the log is closed" do
+-        -> { Syslog.send(@method)}.should raise_error(RuntimeError)
+-      end
++    it "fails with RuntimeError if the log is closed" do
++      -> { Syslog.send(@method)}.should raise_error(RuntimeError)
++    end
+ 
+-      it "receives the same parameters as Syslog.open" do
+-        Syslog.open
+-        Syslog.send(@method, "rubyspec", 3, 8) do |s|
+-          s.should == Syslog
+-          s.ident.should == "rubyspec"
+-          s.options.should == 3
+-          s.facility.should == Syslog::LOG_USER
+-          s.opened?.should be_true
+-        end
+-        Syslog.opened?.should be_false
++    it "receives the same parameters as Syslog.open" do
++      Syslog.open
++      Syslog.send(@method, "rubyspec", 3, 8) do |s|
++        s.should == Syslog
++        s.ident.should == "rubyspec"
++        s.options.should == 3
++        s.facility.should == Syslog::LOG_USER
++        s.opened?.should be_true
+       end
++      Syslog.opened?.should be_false
++    end
+ 
+-      it "returns the module" do
+-        Syslog.open
+-        Syslog.send(@method).should == Syslog
+-        Syslog.close
+-      end
++    it "returns the module" do
++      Syslog.open
++      Syslog.send(@method).should == Syslog
++      Syslog.close
+     end
+   end
+ end
+diff --git a/spec/ruby/library/syslog/warning_spec.rb b/spec/ruby/library/syslog/warning_spec.rb
+index cf0f7d0dc..eeca60313 100644
+--- a/spec/ruby/library/syslog/warning_spec.rb
++++ b/spec/ruby/library/syslog/warning_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.warning" do
+-      it_behaves_like :syslog_log, :warning
+-    end
++  describe "Syslog.warning" do
++    it_behaves_like :syslog_log, :warning
+   end
+ end
+diff --git a/spec/ruby/optional/capi/ext/util_spec.c b/spec/ruby/optional/capi/ext/util_spec.c
+index 95ba71ea9..b5bde420d 100644
+--- a/spec/ruby/optional/capi/ext/util_spec.c
++++ b/spec/ruby/optional/capi/ext/util_spec.c
+@@ -62,22 +62,17 @@ static VALUE util_spec_rb_get_kwargs(VALUE self, VALUE keyword_hash, VALUE keys,
+   int len = RARRAY_LENINT(keys);
+ 
+   int values_len = req + (opt < 0 ? -1 - opt : opt);
+-  int i = 0;
+ 
+-  ID *ids = (ID*) malloc(sizeof(VALUE) * len);
+-  VALUE *results = (VALUE*) malloc(sizeof(VALUE) * values_len);
+-  int extracted = 0;
+-  VALUE ary = Qundef;
++  ID *ids = (ID *)alloca(sizeof(VALUE) * len);
++  VALUE *results = (VALUE *)alloca(sizeof(VALUE) * values_len);
+ 
+-  for (i = 0; i < len; i++) {
++  for (int i = 0; i < len; i++) {
+     ids[i] = SYM2ID(rb_ary_entry(keys, i));
+   }
+ 
+-  extracted = rb_get_kwargs(keyword_hash, ids, req, opt, results);
+-  ary = rb_ary_new_from_values(extracted, results);
+-  free(results);
+-  free(ids);
+-  return ary;
++  int extracted = rb_get_kwargs(keyword_hash, ids, req, opt, results);
++
++  return rb_ary_new_from_values(extracted, results);
+ }
+ 
+ static VALUE util_spec_rb_long2int(VALUE self, VALUE n) {
+diff --git a/spec/ruby/shared/rational/coerce.rb b/spec/ruby/shared/rational/coerce.rb
+index 38925721e..ccc8901ba 100644
+--- a/spec/ruby/shared/rational/coerce.rb
++++ b/spec/ruby/shared/rational/coerce.rb
+@@ -1,5 +1,7 @@
+ require_relative '../../spec_helper'
+ 
++require 'bigdecimal'
++
+ describe :rational_coerce, shared: true do
+   it "returns the passed argument, self as Float, when given a Float" do
+     result = Rational(3, 4).coerce(1.0)
+@@ -24,12 +26,9 @@ describe :rational_coerce, shared: true do
+     Rational(3, 7).coerce(Rational(9, 2)).should == [Rational(9, 2), Rational(3, 7)]
+   end
+ 
+-  ruby_version_is ""..."3.4" do
+-    require 'bigdecimal'
+-    it "raises an error when passed a BigDecimal" do
+-      -> {
+-        Rational(500, 3).coerce(BigDecimal('166.666666666'))
+-      }.should raise_error(TypeError, /BigDecimal can't be coerced into Rational/)
+-    end
++  it "raises an error when passed a BigDecimal" do
++    -> {
++      Rational(500, 3).coerce(BigDecimal('166.666666666'))
++    }.should raise_error(TypeError, /BigDecimal can't be coerced into Rational/)
+   end
+ end
+diff --git a/st.c b/st.c
+index 33a05c3c4..4f0259a23 100644
+--- a/st.c
++++ b/st.c
+@@ -718,7 +718,9 @@ count_collision(const struct st_hash_type *type)
+ #error "REBUILD_THRESHOLD should be >= 2"
+ #endif
+ 
+-static void rebuild_table_with(st_table *new_tab, st_table *tab);
++static void rebuild_table_with(st_table *const new_tab, st_table *const tab);
++static void rebuild_move_table(st_table *const new_tab, st_table *const tab);
++static void rebuild_cleanup(st_table *const tab);
+ 
+ /* Rebuild table TAB.  Rebuilding removes all deleted bins and entries
+    and can change size of the table entries and bins arrays.
+@@ -744,11 +746,13 @@ rebuild_table(st_table *tab)
+         new_tab = st_init_table_with_size(tab->type,
+                                           2 * tab->num_entries - 1);
+         rebuild_table_with(new_tab, tab);
++        rebuild_move_table(new_tab, tab);
+     }
++    rebuild_cleanup(tab);
+ }
+ 
+ static void
+-rebuild_table_with(st_table *new_tab, st_table *tab)
++rebuild_table_with(st_table *const new_tab, st_table *const tab)
+ {
+     st_index_t i, ni;
+     unsigned int size_ind;
+@@ -780,16 +784,24 @@ rebuild_table_with(st_table *new_tab, st_table *tab)
+         new_tab->num_entries++;
+         ni++;
+     }
+-    if (new_tab != tab) {
+-        tab->entry_power = new_tab->entry_power;
+-        tab->bin_power = new_tab->bin_power;
+-        tab->size_ind = new_tab->size_ind;
+-        free(tab->bins);
+-        tab->bins = new_tab->bins;
+-        free(tab->entries);
+-        tab->entries = new_tab->entries;
+-        free(new_tab);
+-    }
++}
++
++static void
++rebuild_move_table(st_table *const new_tab, st_table *const tab)
++{
++    tab->entry_power = new_tab->entry_power;
++    tab->bin_power = new_tab->bin_power;
++    tab->size_ind = new_tab->size_ind;
++    free(tab->bins);
++    tab->bins = new_tab->bins;
++    free(tab->entries);
++    tab->entries = new_tab->entries;
++    free(new_tab);
++}
++
++static void
++rebuild_cleanup(st_table *const tab)
++{
+     tab->entries_start = 0;
+     tab->entries_bound = tab->num_entries;
+     tab->rebuilds_num++;
+@@ -2319,6 +2331,8 @@ rb_st_compact_table(st_table *tab)
+         /* Compaction: */
+         st_table *new_tab = st_init_table_with_size(tab->type, 2 * num);
+         rebuild_table_with(new_tab, tab);
++        rebuild_move_table(new_tab, tab);
++        rebuild_cleanup(tab);
+     }
+ }
+ 

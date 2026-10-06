@@ -1,0 +1,519 @@
+diff --git a/test/prism/ripper_test.rb b/test/prism/ripper_test.rb
+new file mode 100644
+index 000000000..7abb78c72
+--- /dev/null
++++ b/test/prism/ripper_test.rb
+@@ -0,0 +1,185 @@
++# frozen_string_literal: true
++
++require_relative "test_helper"
++
++module Prism
++  class RipperTest < TestCase
++    def test_binary
++      assert_equivalent("1 + 2")
++      assert_equivalent("3 - 4 * 5")
++      assert_equivalent("6 / 7; 8 % 9")
++    end
++
++    def test_unary
++      assert_equivalent("-7")
++    end
++
++    def test_unary_parens
++      assert_equivalent("-(7)")
++      assert_equivalent("(-7)")
++      assert_equivalent("(-\n7)")
++    end
++
++    def test_binary_parens
++      assert_equivalent("(3 + 7) * 4")
++    end
++
++    def test_method_calls_with_variable_names
++      assert_equivalent("foo")
++      assert_equivalent("foo()")
++      assert_equivalent("foo -7")
++      assert_equivalent("foo(-7)")
++      assert_equivalent("foo(1, 2, 3)")
++      assert_equivalent("foo 1")
++      assert_equivalent("foo bar")
++      assert_equivalent("foo 1, 2")
++      assert_equivalent("foo.bar")
++
++      # TruffleRuby prints emoji symbols differently in a way that breaks here.
++      if RUBY_ENGINE != "truffleruby"
++        assert_equivalent("🗻")
++        assert_equivalent("🗻.location")
++        assert_equivalent("foo.🗻")
++        assert_equivalent("🗻.😮!")
++        assert_equivalent("🗻 🗻,🗻,🗻")
++      end
++
++      assert_equivalent("foo&.bar")
++      assert_equivalent("foo { bar }")
++      assert_equivalent("foo.bar { 7 }")
++      assert_equivalent("foo(1) { bar }")
++      assert_equivalent("foo(bar)")
++      assert_equivalent("foo(bar(1))")
++      assert_equivalent("foo(bar(1)) { 7 }")
++      assert_equivalent("foo bar(1)")
++    end
++
++    def test_method_call_blocks
++      assert_equivalent("foo { |a| a }")
++
++      # assert_equivalent("foo(bar 1)")
++      # assert_equivalent("foo bar 1")
++      # assert_equivalent("foo(bar 1) { 7 }")
++    end
++
++    def test_method_calls_on_immediate_values
++      assert_equivalent("7.even?")
++      assert_equivalent("!1")
++      assert_equivalent("7 && 7")
++      assert_equivalent("7 and 7")
++      assert_equivalent("7 || 7")
++      assert_equivalent("7 or 7")
++      #assert_equivalent("'racecar'.reverse")
++    end
++
++    def test_range
++      assert_equivalent("(...2)")
++      assert_equivalent("(..2)")
++      assert_equivalent("(1...2)")
++      assert_equivalent("(1..2)")
++      assert_equivalent("(foo..-7)")
++    end
++
++    def test_parentheses
++      assert_equivalent("()")
++      assert_equivalent("(1)")
++      assert_equivalent("(1; 2)")
++    end
++
++    def test_numbers
++      assert_equivalent("[1, -1, +1, 1.0, -1.0, +1.0]")
++      assert_equivalent("[1r, -1r, +1r, 1.5r, -1.5r, +1.5r]")
++      assert_equivalent("[1i, -1i, +1i, 1.5i, -1.5i, +1.5i]")
++      assert_equivalent("[1ri, -1ri, +1ri, 1.5ri, -1.5ri, +1.5ri]")
++    end
++
++    def test_begin_rescue
++      assert_equivalent("begin a; rescue; c; ensure b; end")
++    end
++
++    def test_break
++      assert_equivalent("foo { break }")
++      assert_equivalent("foo { break 7 }")
++      assert_equivalent("foo { break [1, 2, 3] }")
++    end
++
++    def test_op_assign
++      assert_equivalent("a += b")
++      assert_equivalent("a -= b")
++      assert_equivalent("a *= b")
++      assert_equivalent("a /= b")
++    end
++
++    def test_arrays
++      assert_equivalent("[1, 2, 7]")
++      assert_equivalent("[1, [2, 7]]")
++    end
++
++    def test_array_refs
++      assert_equivalent("a[1]")
++      assert_equivalent("a[1] = 7")
++    end
++
++    def test_strings
++      assert_equivalent("'a'")
++      assert_equivalent("'a\01'")
++      assert_equivalent("`a`")
++      assert_equivalent("`a\07`")
++      assert_equivalent('"a#{1}c"')
++      assert_equivalent('"a#{1}b#{2}c"')
++      assert_equivalent("`f\oo`")
++    end
++
++    def test_symbols
++      assert_equivalent(":a")
++      assert_equivalent(":'a'")
++      assert_equivalent(':"a"')
++      assert_equivalent("%s(foo)")
++    end
++
++    def test_assign
++      assert_equivalent("a = b")
++      assert_equivalent("a = 1")
++    end
++
++    private
++
++    def assert_equivalent(source)
++      expected = Ripper.sexp_raw(source)
++
++      refute_nil expected
++      assert_equal expected, Prism::Translation::Ripper.sexp_raw(source)
++    end
++  end
++
++  class RipperFixturesTest < TestCase
++    #base = File.join(__dir__, "fixtures")
++    #relatives = ENV["FOCUS"] ? [ENV["FOCUS"]] : Dir["**/*.txt", base: base]
++    relatives = [
++      "arithmetic.txt",
++      "booleans.txt",
++      "boolean_operators.txt",
++      # "break.txt", # No longer parseable by Ripper in CRuby 3.3.0+
++      "comments.txt",
++      "integer_operations.txt",
++    ]
++
++    relatives.each do |relative|
++      define_method "test_ripper_filepath_#{relative}" do
++        path = File.join(__dir__, "fixtures", relative)
++
++        # First, read the source from the path. Use binmode to avoid converting CRLF on Windows,
++        # and explicitly set the external encoding to UTF-8 to override the binmode default.
++        source = File.read(path, binmode: true, external_encoding: Encoding::UTF_8)
++
++        expected = Ripper.sexp_raw(source)
++        if expected.nil?
++          puts "Could not parse #{path.inspect}!"
++        end
++        refute_nil expected
++        assert_equal expected, Translation::Ripper.sexp_raw(source)
++      end
++    end
++
++  end
++end
+diff --git a/test/prism/ruby_parser_test.rb b/test/prism/ruby_parser_test.rb
+new file mode 100644
+index 000000000..f89aa4c23
+--- /dev/null
++++ b/test/prism/ruby_parser_test.rb
+@@ -0,0 +1,149 @@
++# frozen_string_literal: true
++
++return if RUBY_ENGINE == "jruby"
++
++require_relative "test_helper"
++
++begin
++  require "ruby_parser"
++rescue LoadError
++  # In CRuby's CI, we're not going to test against the ruby_parser gem because
++  # we don't want to have to install it. So in this case we'll just skip this
++  # test.
++  return
++end
++
++# We want to also compare lines and files to make sure we're setting them
++# correctly.
++Sexp.prepend(
++  Module.new do
++    def ==(other)
++      super && line == other.line && max_line == other.max_line && file == other.file
++    end
++  end
++)
++
++module Prism
++  class RubyParserTest < TestCase
++    base = File.join(__dir__, "fixtures")
++
++    todos = %w[
++      heredocs_nested.txt
++      newline_terminated.txt
++      seattlerb/bug169.txt
++      seattlerb/dstr_evstr.txt
++      seattlerb/heredoc_squiggly_interp.txt
++      seattlerb/masgn_colon3.txt
++      seattlerb/messy_op_asgn_lineno.txt
++      seattlerb/op_asgn_primary_colon_const_command_call.txt
++      seattlerb/parse_line_evstr_after_break.txt
++      seattlerb/regexp_esc_C_slash.txt
++      seattlerb/str_lit_concat_bad_encodings.txt
++      seattlerb/str_pct_nested_nested.txt
++      unescaping.txt
++      unparser/corpus/literal/kwbegin.txt
++      unparser/corpus/literal/send.txt
++      unparser/corpus/semantic/dstr.txt
++      whitequark/masgn_const.txt
++      whitequark/ruby_bug_12402.txt
++      whitequark/ruby_bug_14690.txt
++      whitequark/space_args_block.txt
++      whitequark/string_concat.txt
++    ]
++
++    # These files contain CRLF line endings, which ruby_parser translates into
++    # LF before it gets back to the node. This means the node actually has the
++    # wrong contents.
++    crlf = %w[
++      dos_endings.txt
++      heredoc_with_comment.txt
++      seattlerb/heredoc__backslash_dos_format.txt
++      seattlerb/heredoc_with_carriage_return_escapes_windows.txt
++      seattlerb/heredoc_with_extra_carriage_horrible_mix.txt
++      seattlerb/heredoc_with_extra_carriage_returns_windows.txt
++      seattlerb/heredoc_with_extra_carriage_returns.txt
++      seattlerb/heredoc_with_interpolation_and_carriage_return_escapes_windows.txt
++      seattlerb/heredoc_with_only_carriage_returns_windows.txt
++      seattlerb/heredoc_with_only_carriage_returns.txt
++    ]
++
++    # https://github.com/seattlerb/ruby_parser/issues/344
++    failures = crlf | %w[
++      alias.txt
++      method_calls.txt
++      methods.txt
++      not.txt
++      patterns.txt
++      regex.txt
++      seattlerb/and_multi.txt
++      seattlerb/heredoc_bad_hex_escape.txt
++      seattlerb/heredoc_bad_oct_escape.txt
++      spanning_heredoc_newlines.txt
++      spanning_heredoc.txt
++      tilde_heredocs.txt
++      unparser/corpus/literal/literal.txt
++      while.txt
++      whitequark/class_definition_in_while_cond.txt
++      whitequark/cond_eflipflop.txt
++      whitequark/cond_iflipflop.txt
++      whitequark/cond_match_current_line.txt
++      whitequark/dedenting_heredoc.txt
++      whitequark/if_while_after_class__since_32.txt
++      whitequark/lvar_injecting_match.txt
++      whitequark/not.txt
++      whitequark/op_asgn_cmd.txt
++      whitequark/parser_slash_slash_n_escaping_in_literals.txt
++      whitequark/pattern_matching_single_line_allowed_omission_of_parentheses.txt
++      whitequark/pattern_matching_single_line.txt
++      whitequark/ruby_bug_11989.txt
++      whitequark/slash_newline_in_heredocs.txt
++    ]
++
++    Dir["**/*.txt", base: base].each do |name|
++      next if failures.include?(name)
++
++      define_method("test_#{name}") do
++        begin
++          # Parsing with ruby parser tends to be noisy with warnings, so we're
++          # turning those off.
++          previous_verbose, $VERBOSE = $VERBOSE, nil
++          assert_parse_file(base, name, todos.include?(name))
++        ensure
++          $VERBOSE = previous_verbose
++        end
++      end
++    end
++
++    private
++
++    def assert_parse_file(base, name, allowed_failure)
++      filepath = File.join(base, name)
++      expected = ::RubyParser.new.parse(File.read(filepath), filepath)
++      actual = Prism::Translation::RubyParser.parse_file(filepath)
++
++      if !allowed_failure
++        assert_equal_nodes expected, actual
++      elsif expected == actual
++        puts "#{name} now passes"
++      end
++    end
++
++    def assert_equal_nodes(left, right)
++      return if left == right
++
++      if left.is_a?(Sexp) && right.is_a?(Sexp)
++        if left.line != right.line
++          assert_equal "(#{left.inspect} line=#{left.line})", "(#{right.inspect} line=#{right.line})"
++        elsif left.file != right.file
++          assert_equal "(#{left.inspect} file=#{left.file})", "(#{right.inspect} file=#{right.file})"
++        elsif left.length != right.length
++          assert_equal "(#{left.inspect} length=#{left.length})", "(#{right.inspect} length=#{right.length})"
++        else
++          left.zip(right).each { |l, r| assert_equal_nodes(l, r) }
++        end
++      else
++        assert_equal left, right
++      end
++    end
++  end
++end
+diff --git a/test/prism/snapshots/seattlerb/defn_unary_not.txt b/test/prism/snapshots/seattlerb/defn_unary_not.txt
+index df2e3a87b..231a3c0da 100644
+--- a/test/prism/snapshots/seattlerb/defn_unary_not.txt
++++ b/test/prism/snapshots/seattlerb/defn_unary_not.txt
+@@ -5,7 +5,7 @@
+     └── body: (length: 1)
+         └── @ DefNode (location: (1,0)-(1,17))
+             ├── name: :!
+-            ├── name_loc: (1,4)-(1,5) = "!"
++            ├── name_loc: (1,4)-(1,6) = "!@"
+             ├── receiver: ∅
+             ├── parameters: ∅
+             ├── body:
+diff --git a/test/rdoc/test_rdoc_parser_ruby.rb b/test/rdoc/test_rdoc_parser_ruby.rb
+index 1f75ba7c6..3e2a85ffb 100644
+--- a/test/rdoc/test_rdoc_parser_ruby.rb
++++ b/test/rdoc/test_rdoc_parser_ruby.rb
+@@ -3065,6 +3065,28 @@ RUBY
+     assert_nil m.params, 'Module parameter not removed'
+   end
+ 
++  def test_parse_statements_nodoc_identifier_alias
++    klass = @top_level.add_class RDoc::NormalClass, 'Foo'
++
++    util_parser "\nalias :old :new # :nodoc:"
++
++    @parser.parse_statements klass, RDoc::Parser::Ruby::NORMAL, nil
++
++    assert_empty klass.aliases
++    assert_empty klass.unmatched_alias_lists
++  end
++
++  def test_parse_statements_nodoc_identifier_alias_method
++    klass = @top_level.add_class RDoc::NormalClass, 'Foo'
++
++    util_parser "\nalias_method :old :new # :nodoc:"
++
++    @parser.parse_statements klass, RDoc::Parser::Ruby::NORMAL, nil
++
++    assert_empty klass.aliases
++    assert_empty klass.unmatched_alias_lists
++  end
++
+   def test_parse_statements_stopdoc_alias
+     klass = @top_level.add_class RDoc::NormalClass, 'Foo'
+ 
+diff --git a/test/reline/test_key_actor_vi.rb b/test/reline/test_key_actor_vi.rb
+index 20630e580..7c924d196 100644
+--- a/test/reline/test_key_actor_vi.rb
++++ b/test/reline/test_key_actor_vi.rb
+@@ -1455,6 +1455,16 @@ class Reline::KeyActor::ViInsert::Test < Reline::TestCase
+     assert_line('c')
+   end
+ 
++  def test_vi_change_to_eol
++    input_keys("abcdef\C-[2hC")
++    assert_line("abc")
++    input_keys("\C-[0C")
++    assert_line("")
++    assert_cursor(0)
++    assert_cursor_max(0)
++    assert_instance_of(Reline::KeyActor::ViInsert, @config.editing_mode)
++  end
++
+   def test_vi_motion_operators
+     assert_instance_of(Reline::KeyActor::ViInsert, @config.editing_mode)
+ 
+diff --git a/test/ruby/test_clone.rb b/test/ruby/test_clone.rb
+index 216eaa39d..775c9ed84 100644
+--- a/test/ruby/test_clone.rb
++++ b/test/ruby/test_clone.rb
+@@ -73,6 +73,13 @@ class TestClone < Test::Unit::TestCase
+     assert_equal(cloned_obj.instance_variable_get(:@a), 1)
+   end
+ 
++  def test_proc_obj_id_flag_reset
++    # [Bug #20250]
++    proc = Proc.new { }
++    proc.object_id
++    proc.clone.object_id # Would crash with RUBY_DEBUG=1
++  end
++
+   def test_user_flags
+     assert_separately([], <<-EOS)
+       #
+diff --git a/test/ruby/test_compile_prism.rb b/test/ruby/test_compile_prism.rb
+index e09192a4b..927ce3fa0 100644
+--- a/test/ruby/test_compile_prism.rb
++++ b/test/ruby/test_compile_prism.rb
+@@ -1838,6 +1838,15 @@ end
+       assert_prism_eval("-> { to_s }.call")
+     end
+ 
++    def test_LambdaNode_with_multiline_args
++      assert_prism_eval(<<-CODE)
++        -> (a,
++            b) {
++              a + b
++            }.call(1, 2)
++      CODE
++    end
++
+     def test_ModuleNode
+       assert_prism_eval("module M; end")
+       assert_prism_eval("module M::N; end")
+@@ -2678,6 +2687,22 @@ end
+       assert_prism_eval(":però")
+     end
+ 
++    def test_parse_file
++      assert_nothing_raised do
++        RubyVM::InstructionSequence.compile_file_prism(__FILE__)
++      end
++
++      error = assert_raise Errno::ENOENT do
++        RubyVM::InstructionSequence.compile_file_prism("idontexist.rb")
++      end
++
++      assert_equal "No such file or directory - idontexist.rb", error.message
++
++      assert_raise TypeError do
++        RubyVM::InstructionSequence.compile_file_prism(nil)
++      end
++    end
++
+     private
+ 
+     def compare_eval(source, raw:)
+diff --git a/test/ruby/test_keyword.rb b/test/ruby/test_keyword.rb
+index 956cc9c56..a856a4656 100644
+--- a/test/ruby/test_keyword.rb
++++ b/test/ruby/test_keyword.rb
+@@ -189,6 +189,7 @@ class TestKeywordArguments < Test::Unit::TestCase
+     def self.a0; end
+     assert_equal(nil, a0(**nil))
+     assert_equal(nil, :a0.to_proc.call(self, **nil))
++    assert_equal(nil, a0(**nil, &:block))
+ 
+     def self.o(x=1); x end
+     assert_equal(1, o(**nil))
+@@ -4002,6 +4003,20 @@ class TestKeywordArguments < Test::Unit::TestCase
+     }, bug8964
+   end
+ 
++  def test_large_kwsplat_to_method_taking_kw_and_kwsplat
++    assert_separately(['-'], "#{<<~"begin;"}\n#{<<~'end;'}")
++    begin;
++      n = 100000
++      x = Fiber.new do
++        h = {kw: 2}
++        n.times{|i| h[i.to_s.to_sym] = i}
++        def self.f(kw: 1, **kws) kws.size end
++        f(**h)
++      end.resume
++      assert_equal(n, x)
++    end;
++  end
++
+   def test_dynamic_symbol_keyword
+     bug10266 = '[ruby-dev:48564] [Bug #10266]'
+     assert_separately(['-', bug10266], "#{<<~"begin;"}\n#{<<~'end;'}")
+diff --git a/test/ruby/test_literal.rb b/test/ruby/test_literal.rb
+index a73687402..00adbff73 100644
+--- a/test/ruby/test_literal.rb
++++ b/test/ruby/test_literal.rb
+@@ -498,6 +498,7 @@ class TestRubyLiteral < Test::Unit::TestCase
+       '//',
+       '__LINE__',
+       '__FILE__',
++      '__ENCODING__',
+     ) do |key|
+       assert_warning(/key #{Regexp.quote(eval(key).inspect)} is duplicated/) { eval("{#{key} => :bar, #{key} => :foo}") }
+     end

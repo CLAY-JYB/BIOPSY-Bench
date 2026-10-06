@@ -1,0 +1,41 @@
+From f1f8e875 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0025] Fix memory leak when parsing invalid pattern matching (part 15/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -7140,8 +7524,7 @@ static enum yytokentype here_document(struct parser_params*,rb_strterm_heredoc_t
+ }
+ # define set_yylval_str(x) \
+ do { \
+-  set_yylval_node(NEW_STR(x, &_cur_loc)); \
+-  RB_OBJ_WRITTEN(p->ast, Qnil, x); \
++  set_yylval_node(NEW_STR(rb_str_to_parser_string(p, x), &_cur_loc)); \
+ } while(0)
+ # define set_yylval_num(x) (yylval.num = (x))
+ # define set_yylval_id(x)  (yylval.id = (x))
+@@ -9359,7 +9755,7 @@ here_document(struct parser_params *p, rb_strterm_heredoc_t *here)
+     rb_encoding *base_enc = 0;
+     int bol;
+ 
+-    eos = rb_parser_string_pointer(here->lastline) + here->offset;
++    eos = PARSER_STRING_PTR(here->lastline) + here->offset;
+     len = here->length;
+     indent = (func = here->func) & STR_FUNC_INDENT;
+ 
+@@ -9415,7 +9811,7 @@ here_document(struct parser_params *p, rb_strterm_heredoc_t *here)
+ 
+     if (!(func & STR_FUNC_EXPAND)) {
+         do {
+-            ptr = rb_parser_string_pointer(p->lex.lastline);
++            ptr = PARSER_STRING_PTR(p->lex.lastline);
+             ptr_end = p->lex.pend;
+             if (ptr_end > ptr) {
+                 switch (ptr_end[-1]) {
+
+-- 
+2.43.0

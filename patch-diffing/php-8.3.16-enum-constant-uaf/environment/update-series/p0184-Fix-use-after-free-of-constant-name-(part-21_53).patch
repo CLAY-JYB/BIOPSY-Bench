@@ -1,0 +1,43 @@
+From 0252c365 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0184] Fix use-after-free of constant name (part 21/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -3622,7 +3536,7 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
+ 				fcc->called_scope = fcc->object ? fcc->object->ce : fcc->calling_scope;
+ 			}
+ 			strict_class = 1;
+-		} else if (!zend_is_callable_check_class(cname, scope, frame, fcc, &strict_class, error, suppress_deprecation || ce_org != NULL)) {
++		} else if (!zend_is_callable_check_class(cname, scope, frame, fcc, &strict_class, error)) {
+ 			zend_string_release_ex(cname, 0);
+ 			return 0;
+ 		}
+@@ -3633,11 +3547,6 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
+ 			if (error) zend_spprintf(error, 0, "class %s is not a subclass of %s", ZSTR_VAL(ce_org->name), ZSTR_VAL(fcc->calling_scope->name));
+ 			return 0;
+ 		}
+-		if (ce_org && !suppress_deprecation) {
+-			zend_error(E_DEPRECATED,
+-				"Callables of the form [\"%s\", \"%s\"] are deprecated",
+-				ZSTR_VAL(ce_org->name), Z_STRVAL_P(callable));
+-		}
+ 		mname = zend_string_init(Z_STRVAL_P(callable) + clen + 2, mlen, 0);
+ 	} else if (ce_org) {
+ 		/* Try to fetch find static method of given class. */
+@@ -3647,7 +3556,7 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
+ 		fcc->calling_scope = ce_org;
+ 	} else {
+ 		/* We already checked for plain function before. */
+-		if (error) {
++		if (error && !(check_flags & IS_CALLABLE_CHECK_SILENT)) {
+ 			zend_spprintf(error, 0, "function \"%s\" not found or invalid function name", Z_STRVAL_P(callable));
+ 		}
+ 		return 0;
+
+-- 
+2.43.0

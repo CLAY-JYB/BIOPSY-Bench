@@ -1,0 +1,160 @@
+diff --git a/Documentation/git-cat-file.txt b/Documentation/git-cat-file.txt
+index bd95a6c1..d5890ae3 100644
+--- a/Documentation/git-cat-file.txt
++++ b/Documentation/git-cat-file.txt
+@@ -270,9 +270,9 @@ BATCH OUTPUT
+ ------------
+ 
+ If `--batch` or `--batch-check` is given, `cat-file` will read objects
+-from stdin, one per line, and print information about them. By default,
+-the whole line is considered as an object, as if it were fed to
+-linkgit:git-rev-parse[1].
++from stdin, one per line, and print information about them in the same
++order as they have been read. By default, the whole line is
++considered as an object, as if it were fed to linkgit:git-rev-parse[1].
+ 
+ When `--batch-command` is given, `cat-file` will read commands from stdin,
+ one per line, and print information based on the command given. With
+diff --git a/Documentation/git-check-mailmap.txt b/Documentation/git-check-mailmap.txt
+index 02f44183..966c91c4 100644
+--- a/Documentation/git-check-mailmap.txt
++++ b/Documentation/git-check-mailmap.txt
+@@ -15,10 +15,10 @@ SYNOPSIS
+ DESCRIPTION
+ -----------
+ 
+-For each ``Name $$<user@host>$$'' or ``$$<user@host>$$'' from the command-line
+-or standard input (when using `--stdin`), look up the person's canonical name
+-and email address (see "Mapping Authors" below). If found, print them;
+-otherwise print the input as-is.
++For each ``Name $$<user@host>$$'', ``$$<user@host>$$'', or ``$$user@host$$''
++from the command-line or standard input (when using `--stdin`), look up the
++person's canonical name and email address (see "Mapping Authors" below). If
++found, print them; otherwise print the input as-is.
+ 
+ 
+ OPTIONS
+@@ -27,6 +27,16 @@ OPTIONS
+ 	Read contacts, one per line, from the standard input after exhausting
+ 	contacts provided on the command-line.
+ 
++--mailmap-file=<file>::
++	In addition to any configured mailmap files, read the specified
++	mailmap file. Entries in this file take precedence over entries in
++	either the default mailmap file or any configured mailmap file.
++
++--mailmap-blob=<blob>::
++	Like `--mailmap-file`, but consider the value as a reference to a
++	blob in the repository. If both `--mailmap-file` and
++	`--mailmap-blob` are specified, entries in `--mailmap-file` will
++	take precedence.
+ 
+ OUTPUT
+ ------
+diff --git a/Documentation/git-config.txt b/Documentation/git-config.txt
+index 65c645d4..7f81fbbe 100644
+--- a/Documentation/git-config.txt
++++ b/Documentation/git-config.txt
+@@ -10,7 +10,7 @@ SYNOPSIS
+ --------
+ [verse]
+ 'git config list' [<file-option>] [<display-option>] [--includes]
+-'git config get' [<file-option>] [<display-option>] [--includes] [--all] [--regexp=<regexp>] [--value=<value>] [--fixed-value] [--default=<default>] <name>
++'git config get' [<file-option>] [<display-option>] [--includes] [--all] [--regexp] [--value=<value>] [--fixed-value] [--default=<default>] <name>
+ 'git config set' [<file-option>] [--type=<type>] [--all] [--value=<value>] [--fixed-value] <name> <value>
+ 'git config unset' [<file-option>] [--all] [--value=<value>] [--fixed-value] <name> <value>
+ 'git config rename-section' [<file-option>] <old-name> <new-name>
+@@ -130,7 +130,7 @@ OPTIONS
+ --all::
+ 	With `get`, return all values for a multi-valued key.
+ 
+----regexp::
++--regexp::
+ 	With `get`, interpret the name as a regular expression. Regular
+ 	expression matching is currently case-sensitive and done against a
+ 	canonicalized version of the key in which section and variable names
+@@ -309,7 +309,7 @@ recommended to migrate to the new syntax.
+ 	Replaced by `git config get [--value=<pattern>] <name>`.
+ 
+ --get-all <name> [<value-pattern>]::
+-	Replaced by `git config get [--value=<pattern>] --all --show-names <name>`.
++	Replaced by `git config get [--value=<pattern>] --all <name>`.
+ 
+ --get-regexp <name-regexp>::
+ 	Replaced by `git config get --all --show-names --regexp <name-regexp>`.
+diff --git a/Documentation/git-for-each-ref.txt b/Documentation/git-for-each-ref.txt
+index c1dd12b9..d3764401 100644
+--- a/Documentation/git-for-each-ref.txt
++++ b/Documentation/git-for-each-ref.txt
+@@ -264,6 +264,48 @@ ahead-behind:<committish>::
+ 	commits ahead and behind, respectively, when comparing the output
+ 	ref to the `<committish>` specified in the format.
+ 
++is-base:<committish>::
++	In at most one row, `(<committish>)` will appear to indicate the ref
++	that is most likely the ref used as a starting point for the branch
++	that produced `<committish>`. This choice is made using a heuristic:
++	choose the ref that minimizes the number of commits in the
++	first-parent history of `<committish>` and not in the first-parent
++	history of the ref.
+++
++For example, consider the following figure of first-parent histories of
++several refs:
+++
++----
++*--*--*--*--*--* refs/heads/A
++\
++ \
++  *--*--*--* refs/heads/B
++   \     \
++    \     \
++     *     * refs/heads/C
++      \
++       \
++	*--* refs/heads/D
++----
+++
++Here, if `A`, `B`, and `C` are the filtered references, and the format
++string is `%(refname):%(is-base:D)`, then the output would be
+++
++----
++refs/heads/A:
++refs/heads/B:(D)
++refs/heads/C:
++----
+++
++This is because the first-parent history of `D` has its earliest
++intersection with the first-parent histories of the filtered refs at a
++common first-parent ancestor of `B` and `C` and ties are broken by the
++earliest ref in the sorted order.
+++
++Note that this token will not appear if the first-parent history of
++`<committish>` does not intersect the first-parent histories of the
++filtered refs.
++
+ describe[:options]::
+ 	A human-readable name, like linkgit:git-describe[1];
+ 	empty string for undescribable commits. The `describe` string may
+diff --git a/Documentation/git-gc.txt b/Documentation/git-gc.txt
+index b5561c45..370e22fa 100644
+--- a/Documentation/git-gc.txt
++++ b/Documentation/git-gc.txt
+@@ -9,7 +9,7 @@ git-gc - Cleanup unnecessary files and optimize the local repository
+ SYNOPSIS
+ --------
+ [verse]
+-'git gc' [--aggressive] [--auto] [--quiet] [--prune=<date> | --no-prune] [--force] [--keep-largest-pack]
++'git gc' [--aggressive] [--auto] [--[no-]detach] [--quiet] [--prune=<date> | --no-prune] [--force] [--keep-largest-pack]
+ 
+ DESCRIPTION
+ -----------
+@@ -53,6 +53,9 @@ configuration options such as `gc.auto` and `gc.autoPackLimit`, all
+ other housekeeping tasks (e.g. rerere, working trees, reflog...) will
+ be performed as well.
+ 
++--[no-]detach::
++	Run in the background if the system supports it. This option overrides
++	the `gc.autoDetach` config.
+ 
+ --[no-]cruft::
+ 	When expiring unreachable objects, pack them separately into a

@@ -1,0 +1,35 @@
+From d3363bb3 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0191] Fix use-after-free of constant name (part 27/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -4876,16 +4799,14 @@ ZEND_API void zend_restore_error_handling(zend_error_handling *saved) /* {{{ */
+ }
+ /* }}} */
+ 
+-ZEND_API ZEND_COLD const char *zend_get_object_type_case(const zend_class_entry *ce, bool upper_case) /* {{{ */
++ZEND_API ZEND_COLD const char *zend_get_object_type(const zend_class_entry *ce) /* {{{ */
+ {
+-	if (ce->ce_flags & ZEND_ACC_TRAIT) {
+-		return upper_case ? "Trait" : "trait";
++	if(ce->ce_flags & ZEND_ACC_TRAIT) {
++		return "trait";
+ 	} else if (ce->ce_flags & ZEND_ACC_INTERFACE) {
+-		return upper_case ? "Interface" : "interface";
+-	} else if (ce->ce_flags & ZEND_ACC_ENUM) {
+-		return upper_case ? "Enum" : "enum";
++		return "interface";
+ 	} else {
+-		return upper_case ? "Class" : "class";
++		return "class";
+ 	}
+ }
+ /* }}} */
+
+-- 
+2.43.0

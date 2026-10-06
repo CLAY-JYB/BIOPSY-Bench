@@ -1,0 +1,777 @@
+From 8cee7a32 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0008] meson: Drop the .fa library suffix
+
+---
+diff --git a/docs/devel/build-system.rst b/docs/devel/build-system.rst
+index f4fd76117d..79eceb179d 100644
+--- a/docs/devel/build-system.rst
++++ b/docs/devel/build-system.rst
+@@ -235,14 +235,10 @@ Subsystem sourcesets:
+   are then turned into static libraries as follows::
+ 
+     libchardev = static_library('chardev', chardev_ss.sources(),
+-                                name_suffix: 'fa',
+                                 build_by_default: false)
+ 
+-    chardev = declare_dependency(link_whole: libchardev)
+-
+-  As of Meson 0.55.1, the special ``.fa`` suffix should be used for everything
+-  that is used with ``link_whole``, to ensure that the link flags are placed
+-  correctly in the command line.
++    chardev = declare_dependency(objects: libchardev.extract_all_objects(recursive: false),
++                                 dependencies: chardev_ss.dependencies())
+ 
+ Target-independent emulator sourcesets:
+   Various general purpose helper code is compiled only once and
+diff --git a/docs/devel/qapi-code-gen.rst b/docs/devel/qapi-code-gen.rst
+index f453bd3546..583207a8ec 100644
+--- a/docs/devel/qapi-code-gen.rst
++++ b/docs/devel/qapi-code-gen.rst
+@@ -899,7 +899,7 @@ Documentation markup
+ ~~~~~~~~~~~~~~~~~~~~
+ 
+ Documentation comments can use most rST markup.  In particular,
+-a ``::`` literal block can be used for examples::
++a ``::`` literal block can be used for pre-formatted text::
+ 
+     # ::
+     #
+@@ -995,14 +995,13 @@ line "Features:", like this::
+   # @feature: Description text
+ 
+ A tagged section begins with a paragraph that starts with one of the
+-following words: "Note:"/"Notes:", "Since:", "Example:"/"Examples:",
+-"Returns:", "Errors:", "TODO:".  It ends with the start of a new
+-section.
++following words: "Since:", "Returns:", "Errors:", "TODO:".  It ends with
++the start of a new section.
+ 
+ The second and subsequent lines of tagged sections must be indented
+ like this::
+ 
+- # Note: Ut enim ad minim veniam, quis nostrud exercitation ullamco
++ # TODO: Ut enim ad minim veniam, quis nostrud exercitation ullamco
+  #     laboris nisi ut aliquip ex ea commodo consequat.
+  #
+  #     Duis aute irure dolor in reprehenderit in voluptate velit esse
+@@ -1011,16 +1010,63 @@ like this::
+ "Returns" and "Errors" sections are only valid for commands.  They
+ document the success and the error response, respectively.
+ 
++"Errors" sections should be formatted as an rST list, each entry
++detailing a relevant error condition. For example::
++
++ # Errors:
++ #     - If @device does not exist, DeviceNotFound
++ #     - Any other error returns a GenericError.
++
+ A "Since: x.y.z" tagged section lists the release that introduced the
+ definition.
+ 
+-An "Example" or "Examples" section is rendered entirely
+-as literal fixed-width text.  "TODO" sections are not rendered at all
+-(they are for developers, not users of QMP).  In other sections, the
+-text is formatted, and rST markup can be used.
++"TODO" sections are not rendered (they are for developers, not users of
++QMP).  In other sections, the text is formatted, and rST markup can be
++used.
++
++QMP Examples can be added by using the ``.. qmp-example::``
++directive. In its simplest form, this can be used to contain a single
++QMP code block which accepts standard JSON syntax with additional server
++directionality indicators (``->`` and ``<-``), and elisions (``...``).
++
++Optionally, a plaintext title may be provided by using the ``:title:``
++directive option. If the title is omitted, the example title will
++default to "Example:".
++
++A simple QMP example::
++
++  # .. qmp-example::
++  #    :title: Using query-block
++  #
++  #    -> { "execute": "query-block" }
++  #    <- { ... }
++
++More complex or multi-step examples where exposition is needed before or
++between QMP code blocks can be created by using the ``:annotated:``
++directive option. When using this option, nested QMP code blocks must be
++entered explicitly with rST's ``::`` syntax.
++
++Highlighting in non-QMP languages can be accomplished by using the
++``.. code-block:: lang`` directive, and non-highlighted text can be
++achieved by omitting the language argument.
+ 
+ For example::
+ 
++  # .. qmp-example::
++  #    :annotated:
++  #    :title: A more complex demonstration
++  #
++  #    This is a more complex example that can use
++  #    ``arbitrary rST syntax`` in its exposition::
++  #
++  #      -> { "execute": "query-block" }
++  #      <- { ... }
++  #
++  #    Above, lengthy output has been omitted for brevity.
++
++
++Examples of complete definition documentation::
++
+  ##
+  # @BlockStats:
+  #
+@@ -1052,11 +1098,11 @@ For example::
+  #
+  # Since: 0.14
+  #
+- # Example:
++ # .. qmp-example::
+  #
+  #     -> { "execute": "query-blockstats" }
+  #     <- {
+- #          ... lots of output ...
++ #          ...
+  #        }
+  ##
+  { 'command': 'query-blockstats',
+diff --git a/docs/devel/tcg-plugins.rst b/docs/devel/tcg-plugins.rst
+index 9cc09d8c3d..f7d7b9e3a4 100644
+--- a/docs/devel/tcg-plugins.rst
++++ b/docs/devel/tcg-plugins.rst
+@@ -539,7 +539,9 @@ which will output an execution trace following this structure::
+   0, 0xd34, 0xf9c8f000, "bl #0x10c8"
+   0, 0x10c8, 0xfff96c43, "ldr r3, [r0, #0x44]", load, 0x200000e4, RAM
+ 
+-the output can be filtered to only track certain instructions or
++Please note that you need to configure QEMU with Capstone support to get disassembly.
++
++The output can be filtered to only track certain instructions or
+ addresses using the ``ifilter`` or ``afilter`` options. You can stack the
+ arguments if required::
+ 
+diff --git a/docs/pcie_sriov.txt b/docs/pcie_sriov.txt
+index a47aad0bfa..ab2142807f 100644
+--- a/docs/pcie_sriov.txt
++++ b/docs/pcie_sriov.txt
+@@ -52,9 +52,11 @@ setting up a BAR for a VF.
+       ...
+ 
+       /* Add and initialize the SR/IOV capability */
+-      pcie_sriov_pf_init(d, 0x200, "your_virtual_dev",
+-                       vf_devid, initial_vfs, total_vfs,
+-                       fun_offset, stride);
++      if (!pcie_sriov_pf_init(d, 0x200, "your_virtual_dev",
++                              vf_devid, initial_vfs, total_vfs,
++                              fun_offset, stride, errp)) {
++         return;
++      }
+ 
+       /* Set up individual VF BARs (parameters as for normal BARs) */
+       pcie_sriov_pf_init_vf_bar( ... )
+diff --git a/docs/sphinx-static/theme_overrides.css b/docs/sphinx-static/theme_overrides.css
+index c70ef95128..965ecac54f 100644
+--- a/docs/sphinx-static/theme_overrides.css
++++ b/docs/sphinx-static/theme_overrides.css
+@@ -87,6 +87,55 @@ div[class^="highlight"] pre {
+     padding-bottom: 1px;
+ }
+ 
++/* qmp-example directive styling */
++
++.rst-content .admonition-example {
++    /* do not apply the standard admonition background */
++    background-color: transparent;
++    border: solid #ffd2ed 1px;
++}
++
++.rst-content .admonition-example > .admonition-title:before {
++    content: "▷";
++}
++
++.rst-content .admonition-example > .admonition-title {
++    background-color: #5980a6;
++}
++
++.rst-content .admonition-example > div[class^="highlight"] {
++    /* make code boxes take up the full width of the admonition w/o margin */
++    margin-left: -12px;
++    margin-right: -12px;
++
++    border-top: 1px solid #ffd2ed;
++    border-bottom: 1px solid #ffd2ed;
++    border-left: 0px;
++    border-right: 0px;
++}
++
++.rst-content .admonition-example > div[class^="highlight"]:nth-child(2) {
++    /* If a code box is the second element in an example admonition,
++     * it is the first child after the title. let it sit flush against
++     * the title. */
++    margin-top: -12px;
++    border-top: 0px;
++}
++
++.rst-content .admonition-example > div[class^="highlight"]:last-child {
++    /* If a code box is the final element in an example admonition, don't
++     * render margin below it; let it sit flush with the end of the
++     * admonition box */
++    margin-bottom: -12px;
++    border-bottom: 0px;
++}
++
++.rst-content .admonition-example .highlight {
++    background-color: #fffafd;
++}
++
++/* end qmp-example styling */
++
+ @media screen {
+ 
+     /* content column
+diff --git a/docs/sphinx/hxtool.py b/docs/sphinx/hxtool.py
+index 3729084a36..a84723be19 100644
+--- a/docs/sphinx/hxtool.py
++++ b/docs/sphinx/hxtool.py
+@@ -24,16 +24,10 @@ from docutils import nodes
+ from docutils.statemachine import ViewList
+ from docutils.parsers.rst import directives, Directive
+ from sphinx.errors import ExtensionError
++from sphinx.util.docutils import switch_source_input
+ from sphinx.util.nodes import nested_parse_with_titles
+ import sphinx
+ 
+-# Sphinx up to 1.6 uses AutodocReporter; 1.7 and later
+-# use switch_source_input. Check borrowed from kerneldoc.py.
+-Use_SSI = sphinx.__version__[:3] >= '1.7'
+-if Use_SSI:
+-    from sphinx.util.docutils import switch_source_input
+-else:
+-    from sphinx.ext.autodoc import AutodocReporter
+ 
+ __version__ = '1.0'
+ 
+@@ -185,16 +179,9 @@ class HxtoolDocDirective(Directive):
+     # of title_styles and section_level that kerneldoc.py does,
+     # because nested_parse_with_titles() does that for us.
+     def do_parse(self, result, node):
+-        if Use_SSI:
+-            with switch_source_input(self.state, result):
+-                nested_parse_with_titles(self.state, result, node)
+-        else:
+-            save = self.state.memo.reporter
+-            self.state.memo.reporter = AutodocReporter(result, self.state.memo.reporter)
+-            try:
+-                nested_parse_with_titles(self.state, result, node)
+-            finally:
+-                self.state.memo.reporter = save
++        with switch_source_input(self.state, result):
++            nested_parse_with_titles(self.state, result, node)
++
+ 
+ def setup(app):
+     """ Register hxtool-doc directive with Sphinx"""
+diff --git a/docs/sphinx/kerneldoc.py b/docs/sphinx/kerneldoc.py
+index 72c403a737..3aa972f2e8 100644
+--- a/docs/sphinx/kerneldoc.py
++++ b/docs/sphinx/kerneldoc.py
+@@ -38,20 +38,14 @@ from docutils import nodes, statemachine
+ from docutils.statemachine import ViewList
+ from docutils.parsers.rst import directives, Directive
+ 
+-#
+-# AutodocReporter is only good up to Sphinx 1.7
+-#
+ import sphinx
++from sphinx.util import logging
++from sphinx.util.docutils import switch_source_input
+ 
+-Use_SSI = sphinx.__version__[:3] >= '1.7'
+-if Use_SSI:
+-    from sphinx.util.docutils import switch_source_input
+-else:
+-    from sphinx.ext.autodoc import AutodocReporter
+-
+-import kernellog
+ 
+ __version__  = '1.0'
++logger = logging.getLogger('kerneldoc')
++
+ 
+ class KernelDocDirective(Directive):
+     """Extract kernel-doc comments from the specified file"""
+@@ -111,8 +105,7 @@ class KernelDocDirective(Directive):
+         cmd += [filename]
+ 
+         try:
+-            kernellog.verbose(env.app,
+-                              'calling kernel-doc \'%s\'' % (" ".join(cmd)))
++            logger.verbose('calling kernel-doc \'%s\'' % (" ".join(cmd)))
+ 
+             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+             out, err = p.communicate()
+@@ -122,8 +115,10 @@ class KernelDocDirective(Directive):
+             if p.returncode != 0:
+                 sys.stderr.write(err)
+ 
+-                kernellog.warn(env.app,
+-                               'kernel-doc \'%s\' failed with return code %d' % (" ".join(cmd), p.returncode))
++                logger.warning(
++                    'kernel-doc \'%s\' failed with return code %d' %
++                    (" ".join(cmd), p.returncode)
++                )
+                 return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+             elif env.config.kerneldoc_verbosity > 0:
+                 sys.stderr.write(err)
+@@ -149,22 +144,13 @@ class KernelDocDirective(Directive):
+             return node.children
+ 
+         except Exception as e:  # pylint: disable=W0703
+-            kernellog.warn(env.app, 'kernel-doc \'%s\' processing failed with: %s' %
++            logger.warning('kernel-doc \'%s\' processing failed with: %s' %
+                            (" ".join(cmd), str(e)))
+             return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+ 
+     def do_parse(self, result, node):
+-        if Use_SSI:
+-            with switch_source_input(self.state, result):
+-                self.state.nested_parse(result, 0, node, match_titles=1)
+-        else:
+-            save = self.state.memo.title_styles, self.state.memo.section_level, self.state.memo.reporter
+-            self.state.memo.reporter = AutodocReporter(result, self.state.memo.reporter)
+-            self.state.memo.title_styles, self.state.memo.section_level = [], 0
+-            try:
+-                self.state.nested_parse(result, 0, node, match_titles=1)
+-            finally:
+-                self.state.memo.title_styles, self.state.memo.section_level, self.state.memo.reporter = save
++        with switch_source_input(self.state, result):
++            self.state.nested_parse(result, 0, node, match_titles=1)
+ 
+ 
+ def setup(app):
+diff --git a/docs/sphinx/kernellog.py b/docs/sphinx/kernellog.py
+deleted file mode 100644
+index af924f51a7..0000000000
+--- a/docs/sphinx/kernellog.py
++++ /dev/null
+@@ -1,28 +0,0 @@
+-# SPDX-License-Identifier: GPL-2.0
+-#
+-# Sphinx has deprecated its older logging interface, but the replacement
+-# only goes back to 1.6.  So here's a wrapper layer to keep around for
+-# as long as we support 1.4.
+-#
+-import sphinx
+-
+-if sphinx.__version__[:3] >= '1.6':
+-    UseLogging = True
+-    from sphinx.util import logging
+-    logger = logging.getLogger('kerneldoc')
+-else:
+-    UseLogging = False
+-
+-def warn(app, message):
+-    if UseLogging:
+-        logger.warning(message)
+-    else:
+-        app.warn(message)
+-
+-def verbose(app, message):
+-    if UseLogging:
+-        logger.verbose(message)
+-    else:
+-        app.verbose(message)
+-
+-
+diff --git a/docs/sphinx/qapidoc.py b/docs/sphinx/qapidoc.py
+index f270b494f0..738b2450fb 100644
+--- a/docs/sphinx/qapidoc.py
++++ b/docs/sphinx/qapidoc.py
+@@ -26,38 +26,42 @@ https://www.sphinx-doc.org/en/master/development/index.html
+ 
+ import os
+ import re
++import sys
++import textwrap
++from typing import List
+ 
+ from docutils import nodes
++from docutils.parsers.rst import Directive, directives
+ from docutils.statemachine import ViewList
+-from docutils.parsers.rst import directives, Directive
+-from sphinx.errors import ExtensionError
+-from sphinx.util.nodes import nested_parse_with_titles
+-import sphinx
+-from qapi.gen import QAPISchemaVisitor
+ from qapi.error import QAPIError, QAPISemError
++from qapi.gen import QAPISchemaVisitor
+ from qapi.schema import QAPISchema
+ 
++from sphinx import addnodes
++from sphinx.directives.code import CodeBlock
++from sphinx.errors import ExtensionError
++from sphinx.util.docutils import switch_source_input
++from sphinx.util.nodes import nested_parse_with_titles
++
+ 
+-# Sphinx up to 1.6 uses AutodocReporter; 1.7 and later
+-# use switch_source_input. Check borrowed from kerneldoc.py.
+-Use_SSI = sphinx.__version__[:3] >= '1.7'
+-if Use_SSI:
+-    from sphinx.util.docutils import switch_source_input
+-else:
+-    from sphinx.ext.autodoc import AutodocReporter
++__version__ = "1.0"
+ 
+ 
+-__version__ = '1.0'
++def dedent(text: str) -> str:
++    # Adjust indentation to make description text parse as paragraph.
+ 
++    lines = text.splitlines(True)
++    if re.match(r"\s+", lines[0]):
++        # First line is indented; description started on the line after
++        # the name. dedent the whole block.
++        return textwrap.dedent(text)
+ 
+-# Function borrowed from pydash, which is under the MIT license
+-def intersperse(iterable, separator):
+-    """Yield the members of *iterable* interspersed with *separator*."""
+-    iterable = iter(iterable)
+-    yield next(iterable)
+-    for item in iterable:
+-        yield separator
+-        yield item
++    # Descr started on same line. Dedent line 2+.
++    return lines[0] + textwrap.dedent("".join(lines[1:]))
++
++
++# Disable black auto-formatter until re-enabled:
++# fmt: off
+ 
+ 
+ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+@@ -167,7 +171,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+             term = self._nodes_for_one_member(section.member)
+             # TODO drop fallbacks when undocumented members are outlawed
+             if section.text:
+-                defn = section.text
++                defn = dedent(section.text)
+             else:
+                 defn = [nodes.Text('Not documented')]
+ 
+@@ -205,7 +209,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+                 termtext.extend(self._nodes_for_ifcond(section.member.ifcond))
+             # TODO drop fallbacks when undocumented members are outlawed
+             if section.text:
+-                defn = section.text
++                defn = dedent(section.text)
+             else:
+                 defn = [nodes.Text('Not documented')]
+ 
+@@ -219,15 +223,15 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         section += dlnode
+         return [section]
+ 
+-    def _nodes_for_arguments(self, doc, boxed_arg_type):
++    def _nodes_for_arguments(self, doc, arg_type):
+         """Return list of doctree nodes for the arguments section"""
+-        if boxed_arg_type:
++        if arg_type and not arg_type.is_implicit():
+             assert not doc.args
+             section = self._make_section('Arguments')
+             dlnode = nodes.definition_list()
+             dlnode += self._make_dlitem(
+                 [nodes.Text('The members of '),
+-                 nodes.literal('', boxed_arg_type.name)],
++                 nodes.literal('', arg_type.name)],
+                 None)
+             section += dlnode
+             return [section]
+@@ -240,7 +244,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         dlnode = nodes.definition_list()
+         for section in doc.features.values():
+             dlnode += self._make_dlitem(
+-                [nodes.literal('', section.member.name)], section.text)
++                [nodes.literal('', section.member.name)], dedent(section.text))
+             seen_item = True
+ 
+         if not seen_item:
+@@ -261,11 +265,20 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+             if section.tag and section.tag == 'TODO':
+                 # Hide TODO: sections
+                 continue
++
++            if not section.tag:
++                # Sphinx cannot handle sectionless titles;
++                # Instead, just append the results to the prior section.
++                container = nodes.container()
++                self._parse_text_into_node(section.text, container)
++                nodelist += container.children
++                continue
++
+             snode = self._make_section(section.tag)
+-            if section.tag and section.tag.startswith('Example'):
+-                snode += self._nodes_for_example(section.text)
++            if section.tag.startswith('Example'):
++                snode += self._nodes_for_example(dedent(section.text))
+             else:
+-                self._parse_text_into_node(section.text, snode)
++                self._parse_text_into_node(dedent(section.text), snode)
+             nodelist.append(snode)
+         return nodelist
+ 
+@@ -332,8 +345,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+                       allow_preconfig, coroutine):
+         doc = self._cur_doc
+         self._add_doc('Command',
+-                      self._nodes_for_arguments(doc,
+-                                                arg_type if boxed else None)
++                      self._nodes_for_arguments(doc, arg_type)
+                       + self._nodes_for_features(doc)
+                       + self._nodes_for_sections(doc)
+                       + self._nodes_for_if_section(ifcond))
+@@ -341,8 +353,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+     def visit_event(self, name, info, ifcond, features, arg_type, boxed):
+         doc = self._cur_doc
+         self._add_doc('Event',
+-                      self._nodes_for_arguments(doc,
+-                                                arg_type if boxed else None)
++                      self._nodes_for_arguments(doc, arg_type)
+                       + self._nodes_for_features(doc)
+                       + self._nodes_for_sections(doc)
+                       + self._nodes_for_if_section(ifcond))
+@@ -451,6 +462,10 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         return self._top_node.children
+ 
+ 
++# Turn the black formatter on for the rest of the file.
++# fmt: on
++
++
+ class QAPISchemaGenDepVisitor(QAPISchemaVisitor):
+     """A QAPI schema visitor which adds Sphinx dependencies each module
+ 
+@@ -458,34 +473,52 @@ class QAPISchemaGenDepVisitor(QAPISchemaVisitor):
+     that the generated documentation output depends on the input
+     schema file associated with each module in the QAPI input.
+     """
++
+     def __init__(self, env, qapidir):
+         self._env = env
+         self._qapidir = qapidir
+ 
+     def visit_module(self, name):
+         if name != "./builtin":
+-            qapifile = self._qapidir + '/' + name
++            qapifile = self._qapidir + "/" + name
+             self._env.note_dependency(os.path.abspath(qapifile))
+         super().visit_module(name)
+ 
+ 
+-class QAPIDocDirective(Directive):
++class NestedDirective(Directive):
++    def run(self):
++        raise NotImplementedError
++
++    def do_parse(self, rstlist, node):
++        """
++        Parse rST source lines and add them to the specified node
++
++        Take the list of rST source lines rstlist, parse them as
++        rST, and add the resulting docutils nodes as children of node.
++        The nodes are parsed in a way that allows them to include
++        subheadings (titles) without confusing the rendering of
++        anything else.
++        """
++        with switch_source_input(self.state, rstlist):
++            nested_parse_with_titles(self.state, rstlist, node)
++
++
++class QAPIDocDirective(NestedDirective):
+     """Extract documentation from the specified QAPI .json file"""
++
+     required_argument = 1
+     optional_arguments = 1
+-    option_spec = {
+-        'qapifile': directives.unchanged_required
+-    }
++    option_spec = {"qapifile": directives.unchanged_required}
+     has_content = False
+ 
+     def new_serialno(self):
+         """Return a unique new ID string suitable for use as a node's ID"""
+         env = self.state.document.settings.env
+-        return 'qapidoc-%d' % env.new_serialno('qapidoc')
++        return "qapidoc-%d" % env.new_serialno("qapidoc")
+ 
+     def run(self):
+         env = self.state.document.settings.env
+-        qapifile = env.config.qapidoc_srctree + '/' + self.arguments[0]
++        qapifile = env.config.qapidoc_srctree + "/" + self.arguments[0]
+         qapidir = os.path.dirname(qapifile)
+ 
+         try:
+@@ -508,41 +541,110 @@ class QAPIDocDirective(Directive):
+             # so they are displayed nicely to the user
+             raise ExtensionError(str(err)) from err
+ 
+-    def do_parse(self, rstlist, node):
+-        """Parse rST source lines and add them to the specified node
+ 
+-        Take the list of rST source lines rstlist, parse them as
+-        rST, and add the resulting docutils nodes as children of node.
+-        The nodes are parsed in a way that allows them to include
+-        subheadings (titles) without confusing the rendering of
+-        anything else.
+-        """
+-        # This is from kerneldoc.py -- it works around an API change in
+-        # Sphinx between 1.6 and 1.7. Unlike kerneldoc.py, we use
+-        # sphinx.util.nodes.nested_parse_with_titles() rather than the
+-        # plain self.state.nested_parse(), and so we can drop the saving
+-        # of title_styles and section_level that kerneldoc.py does,
+-        # because nested_parse_with_titles() does that for us.
+-        if Use_SSI:
+-            with switch_source_input(self.state, rstlist):
+-                nested_parse_with_titles(self.state, rstlist, node)
++class QMPExample(CodeBlock, NestedDirective):
++    """
++    Custom admonition for QMP code examples.
++
++    When the :annotated: option is present, the body of this directive
++    is parsed as normal rST, but with any '::' code blocks set to use
++    the QMP lexer. Code blocks must be explicitly written by the user,
++    but this allows for intermingling explanatory paragraphs with
++    arbitrary rST syntax and code blocks for more involved examples.
++
++    When :annotated: is absent, the directive body is treated as a
++    simple standalone QMP code block literal.
++    """
++
++    required_argument = 0
++    optional_arguments = 0
++    has_content = True
++    option_spec = {
++        "annotated": directives.flag,
++        "title": directives.unchanged,
++    }
++
++    def _highlightlang(self) -> addnodes.highlightlang:
++        """Return the current highlightlang setting for the document"""
++        node = None
++        doc = self.state.document
++
++        if hasattr(doc, "findall"):
++            # docutils >= 0.18.1
++            for node in doc.findall(addnodes.highlightlang):
++                pass
++        else:
++            for elem in doc.traverse():
++                if isinstance(elem, addnodes.highlightlang):
++                    node = elem
++
++        if node:
++            return node
++
++        # No explicit directive found, use defaults
++        node = addnodes.highlightlang(
++            lang=self.env.config.highlight_language,
++            force=False,
++            # Yes, Sphinx uses this value to effectively disable line
++            # numbers and not 0 or None or -1 or something. ¯\_(ツ)_/¯
++            linenothreshold=sys.maxsize,
++        )
++        return node
++
++    def admonition_wrap(self, *content) -> List[nodes.Node]:
++        title = "Example:"
++        if "title" in self.options:
++            title = f"{title} {self.options['title']}"
++
++        admon = nodes.admonition(
++            "",
++            nodes.title("", title),
++            *content,
++            classes=["admonition", "admonition-example"],
++        )
++        return [admon]
++
++    def run_annotated(self) -> List[nodes.Node]:
++        lang_node = self._highlightlang()
++
++        content_node: nodes.Element = nodes.section()
++
++        # Configure QMP highlighting for "::" blocks, if needed
++        if lang_node["lang"] != "QMP":
++            content_node += addnodes.highlightlang(
++                lang="QMP",
++                force=False,  # "True" ignores lexing errors
++                linenothreshold=lang_node["linenothreshold"],
++            )
++
++        self.do_parse(self.content, content_node)
++
++        # Restore prior language highlighting, if needed
++        if lang_node["lang"] != "QMP":
++            content_node += addnodes.highlightlang(**lang_node.attributes)
++
++        return content_node.children
++
++    def run(self) -> List[nodes.Node]:
++        annotated = "annotated" in self.options
++
++        if annotated:
++            content_nodes = self.run_annotated()
+         else:
+-            save = self.state.memo.reporter
+-            self.state.memo.reporter = AutodocReporter(
+-                rstlist, self.state.memo.reporter)
+-            try:
+-                nested_parse_with_titles(self.state, rstlist, node)
+-            finally:
+-                self.state.memo.reporter = save
++            self.arguments = ["QMP"]
++            content_nodes = super().run()
++
++        return self.admonition_wrap(*content_nodes)
+ 
+ 
+ def setup(app):
+-    """ Register qapi-doc directive with Sphinx"""
+-    app.add_config_value('qapidoc_srctree', None, 'env')
+-    app.add_directive('qapi-doc', QAPIDocDirective)
+-
+-    return dict(
+-        version=__version__,
+-        parallel_read_safe=True,
+-        parallel_write_safe=True
+-    )
++    """Register qapi-doc directive with Sphinx"""
++    app.add_config_value("qapidoc_srctree", None, "env")
++    app.add_directive("qapi-doc", QAPIDocDirective)
++    app.add_directive("qmp-example", QMPExample)
++
++    return {
++        "version": __version__,
++        "parallel_read_safe": True,
++        "parallel_write_safe": True,
++    }
+diff --git a/docs/system/arm/aspeed.rst b/docs/system/arm/aspeed.rst
+index cd9559e3e2..6733ffd2b9 100644
+--- a/docs/system/arm/aspeed.rst
++++ b/docs/system/arm/aspeed.rst
+@@ -123,6 +123,8 @@ To boot the machine from the flash image, use an MTD drive :
+ 
+ Options specific to Aspeed machines are :
+ 
++ * ``boot-emmc`` to set or unset boot from eMMC (AST2600).
++
+  * ``execute-in-place`` which emulates the boot from the CE0 flash
+    device by using the FMC controller to load the instructions, and
+    not simply from RAM. This takes a little longer.
+
+-- 
+2.43.0

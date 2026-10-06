@@ -1,0 +1,227 @@
+From 9d2c441a Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0028] pretty: fix leaking key/value separator buffer
+
+---
+diff --git a/pretty.c b/pretty.c
+index 44222fb8..5e5ae452 100644
+--- a/pretty.c
++++ b/pretty.c
+@@ -63,7 +63,7 @@ static int git_pretty_formats_config(const char *var, const char *value,
+ 				     void *cb UNUSED)
+ {
+ 	struct cmt_fmt_map *commit_format = NULL;
+-	const char *name;
++	const char *name, *stripped;
+ 	char *fmt;
+ 	int i;
+ 
+@@ -90,15 +90,21 @@ static int git_pretty_formats_config(const char *var, const char *value,
+ 		commit_formats_len++;
+ 	}
+ 
++	free((char *)commit_format->name);
+ 	commit_format->name = xstrdup(name);
+ 	commit_format->format = CMIT_FMT_USERFORMAT;
+ 	if (git_config_string(&fmt, var, value))
+ 		return -1;
+ 
+-	if (skip_prefix(fmt, "format:", &commit_format->user_format)) {
++	free((char *)commit_format->user_format);
++	if (skip_prefix(fmt, "format:", &stripped)) {
+ 		commit_format->is_tformat = 0;
+-	} else if (skip_prefix(fmt, "tformat:", &commit_format->user_format)) {
++		commit_format->user_format = xstrdup(stripped);
++		free(fmt);
++	} else if (skip_prefix(fmt, "tformat:", &stripped)) {
+ 		commit_format->is_tformat = 1;
++		commit_format->user_format = xstrdup(stripped);
++		free(fmt);
+ 	} else if (strchr(fmt, '%')) {
+ 		commit_format->is_tformat = 1;
+ 		commit_format->user_format = fmt;
+@@ -1770,6 +1776,7 @@ static size_t format_commit_one(struct strbuf *sb, /* in UTF-8 */
+ 		}
+ 	trailer_out:
+ 		string_list_clear(&filter_list, 0);
++		strbuf_release(&kvsepbuf);
+ 		strbuf_release(&sepbuf);
+ 		return ret;
+ 	}
+diff --git a/pseudo-merge.c b/pseudo-merge.c
+index 77a83b9c..10ebd9a4 100644
+--- a/pseudo-merge.c
++++ b/pseudo-merge.c
+@@ -183,11 +183,12 @@ done:
+ 	return ret;
+ }
+ 
+-void load_pseudo_merges_from_config(struct string_list *list)
++void load_pseudo_merges_from_config(struct repository *r,
++				    struct string_list *list)
+ {
+ 	struct string_list_item *item;
+ 
+-	git_config(pseudo_merge_config, list);
++	repo_config(r, pseudo_merge_config, list);
+ 
+ 	for_each_string_list_item(item, list) {
+ 		struct pseudo_merge_group *group = item->util;
+@@ -218,6 +219,8 @@ static int find_pseudo_merge_group_for_ref(const char *refname,
+ 	c = lookup_commit(the_repository, oid);
+ 	if (!c)
+ 		return 0;
++	if (!packlist_find(writer->to_pack, oid))
++		return 0;
+ 
+ 	has_bitmap = bitmap_writer_has_bitmapped_object_id(writer, oid);
+ 
+@@ -358,8 +361,10 @@ static void select_pseudo_merges_1(struct bitmap_writer *writer,
+ 			p = commit_list_append(c, p);
+ 		} while (j % group->stable_size);
+ 
+-		bitmap_writer_push_commit(writer, merge, 1);
+-		writer->pseudo_merges_nr++;
++		if (merge->parents) {
++			bitmap_writer_push_commit(writer, merge, 1);
++			writer->pseudo_merges_nr++;
++		}
+ 	}
+ 
+ 	/* make up to group->max_merges pseudo merges for unstable commits */
+@@ -399,8 +404,9 @@ static void select_pseudo_merges_1(struct bitmap_writer *writer,
+ 			p = commit_list_append(c, p);
+ 		}
+ 
+-		bitmap_writer_push_commit(writer, merge, 1);
+-		writer->pseudo_merges_nr++;
++		if (merge->parents) {
++			bitmap_writer_push_commit(writer, merge, 1);
++			writer->pseudo_merges_nr++; }
+ 		if (end >= matches->unstable_nr)
+ 			break;
+ 	}
+@@ -424,8 +430,7 @@ static void sort_pseudo_merge_matches(struct pseudo_merge_matches *matches)
+ 	QSORT(matches->unstable, matches->unstable_nr, commit_date_cmp);
+ }
+ 
+-void select_pseudo_merges(struct bitmap_writer *writer,
+-			  struct commit **commits, size_t commits_nr)
++void select_pseudo_merges(struct bitmap_writer *writer)
+ {
+ 	struct progress *progress = NULL;
+ 	uint32_t i;
+diff --git a/pseudo-merge.h b/pseudo-merge.h
+index 2aca01d0..4b5febaa 100644
+--- a/pseudo-merge.h
++++ b/pseudo-merge.h
+@@ -10,6 +10,7 @@ struct commit;
+ struct string_list;
+ struct bitmap_index;
+ struct bitmap_writer;
++struct repository;
+ 
+ /*
+  * A pseudo-merge group tracks the set of non-bitmapped reference tips
+@@ -72,7 +73,7 @@ struct pseudo_merge_matches {
+  * entry keys are the pseudo-merge group names, and the values are
+  * pointers to the pseudo_merge_group structure itself.
+  */
+-void load_pseudo_merges_from_config(struct string_list *list);
++void load_pseudo_merges_from_config(struct repository *r, struct string_list *list);
+ 
+ /*
+  * A pseudo-merge commit index (pseudo_merge_commit_idx) maps a
+@@ -94,8 +95,7 @@ struct pseudo_merge_commit_idx {
+  *
+  * Optionally shows a progress meter.
+  */
+-void select_pseudo_merges(struct bitmap_writer *writer,
+-			  struct commit **commits, size_t commits_nr);
++void select_pseudo_merges(struct bitmap_writer *writer);
+ 
+ /*
+  * Represents a serialized view of a file containing pseudo-merge(s)
+diff --git a/read-cache.c b/read-cache.c
+index 54643981..4e67dc18 100644
+--- a/read-cache.c
++++ b/read-cache.c
+@@ -3195,18 +3195,24 @@ static int write_split_index(struct index_state *istate,
+ 	return ret;
+ }
+ 
+-static const char *shared_index_expire = "2.weeks.ago";
+-
+ static unsigned long get_shared_index_expire_date(void)
+ {
+ 	static unsigned long shared_index_expire_date;
+ 	static int shared_index_expire_date_prepared;
+ 
+ 	if (!shared_index_expire_date_prepared) {
++		const char *shared_index_expire = "2.weeks.ago";
++		char *value = NULL;
++
+ 		repo_config_get_expiry(the_repository, "splitindex.sharedindexexpire",
+-				       &shared_index_expire);
++				       &value);
++		if (value)
++			shared_index_expire = value;
++
+ 		shared_index_expire_date = approxidate(shared_index_expire);
+ 		shared_index_expire_date_prepared = 1;
++
++		free(value);
+ 	}
+ 
+ 	return shared_index_expire_date;
+diff --git a/ref-filter.h b/ref-filter.h
+index 27ae1aa0..e794b8a6 100644
+--- a/ref-filter.h
++++ b/ref-filter.h
+@@ -48,6 +48,7 @@ struct ref_array_item {
+ 	struct commit *commit;
+ 	struct atom_value *value;
+ 	struct ahead_behind_count **counts;
++	char **is_base;
+ 
+ 	char refname[FLEX_ARRAY];
+ };
+@@ -101,6 +102,9 @@ struct ref_format {
+ 	/* List of bases for ahead-behind counts. */
+ 	struct string_list bases;
+ 
++	/* List of bases for is-base indicators. */
++	struct string_list is_base_tips;
++
+ 	struct {
+ 		int max_count;
+ 		int omit_empty;
+@@ -114,6 +118,7 @@ struct ref_format {
+ #define REF_FORMAT_INIT {             \
+ 	.use_color = -1,              \
+ 	.bases = STRING_LIST_INIT_DUP, \
++	.is_base_tips = STRING_LIST_INIT_DUP, \
+ }
+ 
+ /*  Macros for checking --merged and --no-merged options */
+@@ -203,6 +208,16 @@ void filter_ahead_behind(struct repository *r,
+ 			 struct ref_format *format,
+ 			 struct ref_array *array);
+ 
++/*
++ * If the provided format includes is-base atoms, then compute the base checks
++ * for those tips against all refs.
++ *
++ * If this is not called, then any is-base atoms will be blank.
++ */
++void filter_is_base(struct repository *r,
++		    struct ref_format *format,
++		    struct ref_array *array);
++
+ void ref_filter_init(struct ref_filter *filter);
+ void ref_filter_clear(struct ref_filter *filter);
+ 
+
+-- 
+2.43.0

@@ -1,0 +1,51 @@
+diff --git a/Zend/zend_enum.c b/Zend/zend_enum.c
+index 25261cf5..3366fb7d 100644
+--- a/Zend/zend_enum.c
++++ b/Zend/zend_enum.c
+@@ -363,22 +242,40 @@ static void zend_enum_from_base(INTERNAL_FUNCTION_PARAMETERS, bool try)
+ 				string_key = zend_long_to_str(long_key);
+ 			}
+ 		}
++
++		case_name_zv = zend_hash_find(ce->backed_enum_table, string_key);
+ 	}
+ 
+-	zend_object *case_obj;
+-	if (zend_enum_get_case_by_value(&case_obj, ce, long_key, string_key, try) == FAILURE) {
++	if (case_name_zv == NULL) {
++		if (try) {
++			goto return_null;
++		}
++
++		if (ce->enum_backing_type == IS_LONG) {
++			zend_value_error(ZEND_LONG_FMT " is not a valid backing value for enum \"%s\"", long_key, ZSTR_VAL(ce->name));
++		} else {
++			ZEND_ASSERT(ce->enum_backing_type == IS_STRING);
++			zend_value_error("\"%s\" is not a valid backing value for enum \"%s\"", ZSTR_VAL(string_key), ZSTR_VAL(ce->name));
++		}
+ 		goto throw;
+ 	}
+ 
+-	if (case_obj == NULL) {
+-		ZEND_ASSERT(try);
+-		goto return_null;
++	// TODO: We might want to store pointers to constants in backed_enum_table instead of names,
++	// to make this lookup more efficient.
++	ZEND_ASSERT(Z_TYPE_P(case_name_zv) == IS_STRING);
++	zend_class_constant *c = zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), Z_STR_P(case_name_zv));
++	ZEND_ASSERT(c != NULL);
++	zval *case_zv = &c->value;
++	if (Z_TYPE_P(case_zv) == IS_CONSTANT_AST) {
++		if (zval_update_constant_ex(case_zv, c->ce) == FAILURE) {
++			goto throw;
++		}
+ 	}
+ 
+ 	if (release_string) {
+ 		zend_string_release(string_key);
+ 	}
+-	RETURN_OBJ_COPY(case_obj);
++	RETURN_COPY(case_zv);
+ 
+ throw:
+ 	if (release_string) {

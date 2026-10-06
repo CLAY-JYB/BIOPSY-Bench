@@ -1,0 +1,47 @@
+From 6c08012e Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0026] pcie_sriov: Ensure VF function number does not overflow (part 9/26)
+
+---
+diff --git a/hw/nvme/ctrl.c b/hw/nvme/ctrl.c
+index 127c3d2383..f7b4e4627d 100644
+--- a/hw/nvme/ctrl.c
++++ b/hw/nvme/ctrl.c
+@@ -7805,6 +7827,11 @@ static bool nvme_check_params(NvmeCtrl *n, Error **errp)
+         return false;
+     }
+ 
++    if (params->mqes < 1) {
++        error_setg(errp, "mqes property cannot be less than 1");
++        return false;
++    }
++
+     if (n->pmr.dev) {
+         if (params->msix_exclusive_bar) {
+             error_setg(errp, "not enough BARs available to enable PMR");
+@@ -7842,12 +7869,6 @@ static bool nvme_check_params(NvmeCtrl *n, Error **errp)
+             return false;
+         }
+ 
+-        if (params->sriov_max_vfs > NVME_MAX_VFS) {
+-            error_setg(errp, "sriov_max_vfs must be between 0 and %d",
+-                       NVME_MAX_VFS);
+-            return false;
+-        }
+-
+         if (params->cmb_size_mb) {
+             error_setg(errp, "CMB is not supported with SR-IOV");
+             return false;
+@@ -7912,7 +7933,7 @@ static bool nvme_check_params(NvmeCtrl *n, Error **errp)
+ static void nvme_init_state(NvmeCtrl *n)
+ {
+     NvmePriCtrlCap *cap = &n->pri_ctrl_cap;
+-    NvmeSecCtrlList *list = &n->sec_ctrl_list;
++    NvmeSecCtrlEntry *list = n->sec_ctrl_list;
+     NvmeSecCtrlEntry *sctrl;
+     PCIDevice *pci = PCI_DEVICE(n);
+     uint8_t max_vfs;
+
+-- 
+2.43.0

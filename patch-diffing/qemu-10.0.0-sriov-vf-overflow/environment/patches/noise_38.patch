@@ -1,0 +1,466 @@
+diff --git a/stubs/blk-exp-close-all.c b/stubs/blk-exp-close-all.c
+index 1c71316763..2f68e06d7d 100644
+--- a/stubs/blk-exp-close-all.c
++++ b/stubs/blk-exp-close-all.c
+@@ -1,7 +1,7 @@
+ #include "qemu/osdep.h"
+ #include "block/export.h"
+ 
+-/* Only used in programs that support block exports (libblockdev.fa) */
++/* Only used in programs that support block exports (libblockdev.a) */
+ void blk_exp_close_all(void)
+ {
+ }
+diff --git a/system/cpus.c b/system/cpus.c
+index d3640c9503..5e3a988a0a 100644
+--- a/system/cpus.c
++++ b/system/cpus.c
+@@ -568,6 +568,22 @@ void cpu_thread_signal_destroyed(CPUState *cpu)
+     qemu_cond_signal(&qemu_cpu_cond);
+ }
+ 
++void cpu_pause(CPUState *cpu)
++{
++    if (qemu_cpu_is_self(cpu)) {
++        qemu_cpu_stop(cpu, true);
++    } else {
++        cpu->stop = true;
++        qemu_cpu_kick(cpu);
++    }
++}
++
++void cpu_resume(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
+ 
+ static bool all_vcpus_paused(void)
+ {
+@@ -588,12 +604,7 @@ void pause_all_vcpus(void)
+ 
+     qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
+     CPU_FOREACH(cpu) {
+-        if (qemu_cpu_is_self(cpu)) {
+-            qemu_cpu_stop(cpu, true);
+-        } else {
+-            cpu->stop = true;
+-            qemu_cpu_kick(cpu);
+-        }
++        cpu_pause(cpu);
+     }
+ 
+     /* We need to drop the replay_lock so any vCPU threads woken up
+@@ -613,13 +624,6 @@ void pause_all_vcpus(void)
+     bql_lock();
+ }
+ 
+-void cpu_resume(CPUState *cpu)
+-{
+-    cpu->stop = false;
+-    cpu->stopped = false;
+-    qemu_cpu_kick(cpu);
+-}
+-
+ void resume_all_vcpus(void)
+ {
+     CPUState *cpu;
+diff --git a/system/memory.c b/system/memory.c
+index 2d69521360..5e6eb459d5 100644
+--- a/system/memory.c
++++ b/system/memory.c
+@@ -1901,19 +1901,6 @@ static int memory_region_update_iommu_notify_flags(IOMMUMemoryRegion *iommu_mr,
+     return ret;
+ }
+ 
+-int memory_region_iommu_set_page_size_mask(IOMMUMemoryRegion *iommu_mr,
+-                                           uint64_t page_size_mask,
+-                                           Error **errp)
+-{
+-    IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_GET_CLASS(iommu_mr);
+-    int ret = 0;
+-
+-    if (imrc->iommu_set_page_size_mask) {
+-        ret = imrc->iommu_set_page_size_mask(iommu_mr, page_size_mask, errp);
+-    }
+-    return ret;
+-}
+-
+ int memory_region_register_iommu_notifier(MemoryRegion *mr,
+                                           IOMMUNotifier *n, Error **errp)
+ {
+diff --git a/system/physmem.c b/system/physmem.c
+index 33d09f7571..9a3b3a7636 100644
+--- a/system/physmem.c
++++ b/system/physmem.c
+@@ -53,7 +53,7 @@
+ #include "sysemu/hostmem.h"
+ #include "sysemu/hw_accel.h"
+ #include "sysemu/xen-mapcache.h"
+-#include "trace/trace-root.h"
++#include "trace.h"
+ 
+ #ifdef CONFIG_FALLOCATE_PUNCH_HOLE
+ #include <linux/falloc.h>
+@@ -1521,7 +1521,7 @@ static void qemu_ram_setup_dump(void *addr, ram_addr_t size)
+         if (ret) {
+             perror("qemu_madvise");
+             fprintf(stderr, "madvise doesn't support MADV_DONTDUMP, "
+-                            "but dump_guest_core=off specified\n");
++                            "but dump-guest-core=off specified\n");
+         }
+     }
+ }
+@@ -1845,11 +1845,14 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
+     }
+ 
+     if (new_block->flags & RAM_GUEST_MEMFD) {
++        int ret;
++
+         assert(kvm_enabled());
+         assert(new_block->guest_memfd < 0);
+ 
+-        if (ram_block_discard_require(true) < 0) {
+-            error_setg_errno(errp, errno,
++        ret = ram_block_discard_require(true);
++        if (ret < 0) {
++            error_setg_errno(errp, -ret,
+                              "cannot set up private guest memory: discard currently blocked");
+             error_append_hint(errp, "Are you using assigned devices?\n");
+             goto out_free;
+@@ -2277,6 +2280,10 @@ RAMBlock *qemu_ram_block_from_host(void *ptr, bool round_offset,
+         ram_addr_t ram_addr;
+         RCU_READ_LOCK_GUARD();
+         ram_addr = xen_ram_addr_from_mapcache(ptr);
++        if (ram_addr == RAM_ADDR_INVALID) {
++            return NULL;
++        }
++
+         block = qemu_get_ram_block(ram_addr);
+         if (block) {
+             *offset = ram_addr - block->offset;
+@@ -3193,6 +3200,8 @@ void *address_space_map(AddressSpace *as,
+     MemoryRegion *mr;
+     FlatView *fv;
+ 
++    trace_address_space_map(as, addr, len, is_write, *(uint32_t *) &attrs);
++
+     if (len == 0) {
+         return NULL;
+     }
+diff --git a/system/trace-events b/system/trace-events
+index 69c9044151..2ed1d59b1f 100644
+--- a/system/trace-events
++++ b/system/trace-events
+@@ -21,6 +21,12 @@ flatview_destroy(void *view, void *root) "%p (root %p)"
+ flatview_destroy_rcu(void *view, void *root) "%p (root %p)"
+ global_dirty_changed(unsigned int bitmask) "bitmask 0x%"PRIx32
+ 
++# physmem.c
++address_space_map(void *as, uint64_t addr, uint64_t len, bool is_write, uint32_t attrs) "as:%p addr 0x%"PRIx64":%"PRIx64" write:%d attrs:0x%x"
++find_ram_offset(uint64_t size, uint64_t offset) "size: 0x%" PRIx64 " @ 0x%" PRIx64
++find_ram_offset_loop(uint64_t size, uint64_t candidate, uint64_t offset, uint64_t next, uint64_t mingap) "trying size: 0x%" PRIx64 " @ 0x%" PRIx64 ", offset: 0x%" PRIx64" next: 0x%" PRIx64 " mingap: 0x%" PRIx64
++ram_block_discard_range(const char *rbname, void *hva, size_t length, bool need_madvise, bool need_fallocate, int ret) "%s@%p + 0x%zx: madvise: %d fallocate: %d ret: %d"
++
+ # cpus.c
+ vm_stop_flush_all(int ret) "ret %d"
+ 
+diff --git a/system/vl.c b/system/vl.c
+index bdd2f6ecf6..9e8f16f155 100644
+--- a/system/vl.c
++++ b/system/vl.c
+@@ -1000,9 +1000,16 @@ static bool vga_interface_available(VGAInterfaceType t)
+     const VGAInterfaceInfo *ti = &vga_interfaces[t];
+ 
+     assert(t < VGA_TYPE_MAX);
+-    return !ti->class_names[0] ||
+-           module_object_class_by_name(ti->class_names[0]) ||
+-           module_object_class_by_name(ti->class_names[1]);
++
++    if (!ti->class_names[0] || module_object_class_by_name(ti->class_names[0])) {
++        return true;
++    }
++
++    if (ti->class_names[1] && module_object_class_by_name(ti->class_names[1])) {
++        return true;
++    }
++
++    return false;
+ }
+ 
+ static const char *
+diff --git a/target/alpha/cpu.c b/target/alpha/cpu.c
+index 0e2fbcb397..9db1dffc03 100644
+--- a/target/alpha/cpu.c
++++ b/target/alpha/cpu.c
+@@ -219,6 +219,7 @@ static const TCGCPUOps alpha_tcg_ops = {
+ #else
+     .tlb_fill = alpha_cpu_tlb_fill,
+     .cpu_exec_interrupt = alpha_cpu_exec_interrupt,
++    .cpu_exec_halt = alpha_cpu_has_work,
+     .do_interrupt = alpha_cpu_do_interrupt,
+     .do_transaction_failed = alpha_cpu_do_transaction_failed,
+     .do_unaligned_access = alpha_cpu_do_unaligned_access,
+diff --git a/target/arm/cpu.c b/target/arm/cpu.c
+index 35fa281f1b..19191c2391 100644
+--- a/target/arm/cpu.c
++++ b/target/arm/cpu.c
+@@ -1133,7 +1133,7 @@ static bool arm_cpu_virtio_is_big_endian(CPUState *cs)
+ }
+ 
+ #ifdef CONFIG_TCG
+-static bool arm_cpu_exec_halt(CPUState *cs)
++bool arm_cpu_exec_halt(CPUState *cs)
+ {
+     bool leave_halt = cpu_has_work(cs);
+ 
+@@ -2518,6 +2518,7 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
+ 
+     register_cp_regs_for_features(cpu);
+     arm_cpu_register_gdb_regs_for_features(cpu);
++    arm_cpu_register_gdb_commands(cpu);
+ 
+     init_cpreg_list(cpu);
+ 
+diff --git a/target/arm/cpu.h b/target/arm/cpu.h
+index 3841359d0f..a12859fc53 100644
+--- a/target/arm/cpu.h
++++ b/target/arm/cpu.h
+@@ -619,6 +619,13 @@ typedef struct CPUArchState {
+         int vec_len;
+         int vec_stride;
+ 
++        /*
++         * Floating point status and control registers. Some bits are
++         * stored separately in other fields or in the float_status below.
++         */
++        uint64_t fpsr;
++        uint64_t fpcr;
++
+         uint32_t xregs[16];
+ 
+         /* Scratch space for aa32 neon expansion.  */
+@@ -1680,61 +1687,99 @@ static inline void xpsr_write(CPUARMState *env, uint32_t val, uint32_t mask)
+ uint32_t vfp_get_fpscr(CPUARMState *env);
+ void vfp_set_fpscr(CPUARMState *env, uint32_t val);
+ 
+-/* FPCR, Floating Point Control Register
+- * FPSR, Floating Poiht Status Register
++/*
++ * FPCR, Floating Point Control Register
++ * FPSR, Floating Point Status Register
+  *
+- * For A64 the FPSCR is split into two logically distinct registers,
+- * FPCR and FPSR. However since they still use non-overlapping bits
+- * we store the underlying state in fpscr and just mask on read/write.
++ * For A64 floating point control and status bits are stored in
++ * two logically distinct registers, FPCR and FPSR. We store these
++ * in QEMU in vfp.fpcr and vfp.fpsr.
++ * For A32 there was only one register, FPSCR. The bits are arranged
++ * such that FPSCR bits map to FPCR or FPSR bits in the same bit positions,
++ * so we can use appropriate masking to handle FPSCR reads and writes.
++ * Note that the FPCR has some bits which are not visible in the
++ * AArch32 view (for FEAT_AFP). Writing the FPSCR leaves these unchanged.
+  */
+-#define FPSR_MASK 0xf800009f
+-#define FPCR_MASK 0x07ff9f00
+ 
++/* FPCR bits */
+ #define FPCR_IOE    (1 << 8)    /* Invalid Operation exception trap enable */
+ #define FPCR_DZE    (1 << 9)    /* Divide by Zero exception trap enable */
+ #define FPCR_OFE    (1 << 10)   /* Overflow exception trap enable */
+ #define FPCR_UFE    (1 << 11)   /* Underflow exception trap enable */
+ #define FPCR_IXE    (1 << 12)   /* Inexact exception trap enable */
+ #define FPCR_IDE    (1 << 15)   /* Input Denormal exception trap enable */
++#define FPCR_LEN_MASK (7 << 16) /* LEN, A-profile only */
+ #define FPCR_FZ16   (1 << 19)   /* ARMv8.2+, FP16 flush-to-zero */
++#define FPCR_STRIDE_MASK (3 << 20) /* Stride */
+ #define FPCR_RMODE_MASK (3 << 22) /* Rounding mode */
+ #define FPCR_FZ     (1 << 24)   /* Flush-to-zero enable bit */
+ #define FPCR_DN     (1 << 25)   /* Default NaN enable bit */
+ #define FPCR_AHP    (1 << 26)   /* Alternative half-precision */
+-#define FPCR_QC     (1 << 27)   /* Cumulative saturation bit */
+-#define FPCR_V      (1 << 28)   /* FP overflow flag */
+-#define FPCR_C      (1 << 29)   /* FP carry flag */
+-#define FPCR_Z      (1 << 30)   /* FP zero flag */
+-#define FPCR_N      (1 << 31)   /* FP negative flag */
+ 
+ #define FPCR_LTPSIZE_SHIFT 16   /* LTPSIZE, M-profile only */
+ #define FPCR_LTPSIZE_MASK (7 << FPCR_LTPSIZE_SHIFT)
+ #define FPCR_LTPSIZE_LENGTH 3
+ 
+-#define FPCR_NZCV_MASK (FPCR_N | FPCR_Z | FPCR_C | FPCR_V)
+-#define FPCR_NZCVQC_MASK (FPCR_NZCV_MASK | FPCR_QC)
++/* Cumulative exception trap enable bits */
++#define FPCR_EEXC_MASK (FPCR_IOE | FPCR_DZE | FPCR_OFE | FPCR_UFE | FPCR_IXE | FPCR_IDE)
++
++/* FPSR bits */
++#define FPSR_IOC    (1 << 0)    /* Invalid Operation cumulative exception */
++#define FPSR_DZC    (1 << 1)    /* Divide by Zero cumulative exception */
++#define FPSR_OFC    (1 << 2)    /* Overflow cumulative exception */
++#define FPSR_UFC    (1 << 3)    /* Underflow cumulative exception */
++#define FPSR_IXC    (1 << 4)    /* Inexact cumulative exception */
++#define FPSR_IDC    (1 << 7)    /* Input Denormal cumulative exception */
++#define FPSR_QC     (1 << 27)   /* Cumulative saturation bit */
++#define FPSR_V      (1 << 28)   /* FP overflow flag */
++#define FPSR_C      (1 << 29)   /* FP carry flag */
++#define FPSR_Z      (1 << 30)   /* FP zero flag */
++#define FPSR_N      (1 << 31)   /* FP negative flag */
++
++/* Cumulative exception status bits */
++#define FPSR_CEXC_MASK (FPSR_IOC | FPSR_DZC | FPSR_OFC | FPSR_UFC | FPSR_IXC | FPSR_IDC)
++
++#define FPSR_NZCV_MASK (FPSR_N | FPSR_Z | FPSR_C | FPSR_V)
++#define FPSR_NZCVQC_MASK (FPSR_NZCV_MASK | FPSR_QC)
++
++/* A32 FPSCR bits which architecturally map to FPSR bits */
++#define FPSCR_FPSR_MASK (FPSR_NZCVQC_MASK | FPSR_CEXC_MASK)
++/* A32 FPSCR bits which architecturally map to FPCR bits */
++#define FPSCR_FPCR_MASK (FPCR_EEXC_MASK | FPCR_LEN_MASK | FPCR_FZ16 | \
++                         FPCR_STRIDE_MASK | FPCR_RMODE_MASK | \
++                         FPCR_FZ | FPCR_DN | FPCR_AHP)
++/* These masks don't overlap: each bit lives in only one place */
++QEMU_BUILD_BUG_ON(FPSCR_FPSR_MASK & FPSCR_FPCR_MASK);
+ 
+-static inline uint32_t vfp_get_fpsr(CPUARMState *env)
+-{
+-    return vfp_get_fpscr(env) & FPSR_MASK;
+-}
++/**
++ * vfp_get_fpsr: read the AArch64 FPSR
++ * @env: CPU context
++ *
++ * Return the current AArch64 FPSR value
++ */
++uint32_t vfp_get_fpsr(CPUARMState *env);
+ 
+-static inline void vfp_set_fpsr(CPUARMState *env, uint32_t val)
+-{
+-    uint32_t new_fpscr = (vfp_get_fpscr(env) & ~FPSR_MASK) | (val & FPSR_MASK);
+-    vfp_set_fpscr(env, new_fpscr);
+-}
++/**
++ * vfp_get_fpcr: read the AArch64 FPCR
++ * @env: CPU context
++ *
++ * Return the current AArch64 FPCR value
++ */
++uint32_t vfp_get_fpcr(CPUARMState *env);
+ 
+-static inline uint32_t vfp_get_fpcr(CPUARMState *env)
+-{
+-    return vfp_get_fpscr(env) & FPCR_MASK;
+-}
++/**
++ * vfp_set_fpsr: write the AArch64 FPSR
++ * @env: CPU context
++ * @value: new value
++ */
++void vfp_set_fpsr(CPUARMState *env, uint32_t value);
+ 
+-static inline void vfp_set_fpcr(CPUARMState *env, uint32_t val)
+-{
+-    uint32_t new_fpscr = (vfp_get_fpscr(env) & ~FPCR_MASK) | (val & FPCR_MASK);
+-    vfp_set_fpscr(env, new_fpscr);
+-}
++/**
++ * vfp_set_fpcr: write the AArch64 FPCR
++ * @env: CPU context
++ * @value: new value
++ */
++void vfp_set_fpcr(CPUARMState *env, uint32_t value);
+ 
+ enum arm_cpu_mode {
+   ARM_CPU_MODE_USR = 0x10,
+@@ -2299,6 +2344,8 @@ FIELD(DBGDEVID, DOUBLELOCK, 20, 4)
+ FIELD(DBGDEVID, AUXREGS, 24, 4)
+ FIELD(DBGDEVID, CIDMASK, 28, 4)
+ 
++FIELD(DBGDEVID1, PCSROFFSET, 0, 4)
++
+ FIELD(MVFR0, SIMDREG, 0, 4)
+ FIELD(MVFR0, FPSP, 4, 4)
+ FIELD(MVFR0, FPDP, 8, 4)
+@@ -3307,8 +3354,8 @@ extern const uint64_t pred_esz_masks[5];
+  */
+ static inline target_ulong cpu_untagged_addr(CPUState *cs, target_ulong x)
+ {
+-    ARMCPU *cpu = ARM_CPU(cs);
+-    if (cpu->env.tagged_addr_enable) {
++    CPUARMState *env = cpu_env(cs);
++    if (env->tagged_addr_enable) {
+         /*
+          * TBI is enabled for userspace but not kernelspace addresses.
+          * Only clear the tag if bit 55 is clear.
+diff --git a/target/arm/gdbstub.c b/target/arm/gdbstub.c
+index a3bb73cfa7..c3a9b5eb1e 100644
+--- a/target/arm/gdbstub.c
++++ b/target/arm/gdbstub.c
+@@ -21,6 +21,7 @@
+ #include "cpu.h"
+ #include "exec/gdbstub.h"
+ #include "gdbstub/helpers.h"
++#include "gdbstub/commands.h"
+ #include "sysemu/tcg.h"
+ #include "internals.h"
+ #include "cpu-features.h"
+@@ -474,6 +475,41 @@ static GDBFeature *arm_gen_dynamic_m_secextreg_feature(CPUState *cs,
+ #endif
+ #endif /* CONFIG_TCG */
+ 
++void arm_cpu_register_gdb_commands(ARMCPU *cpu)
++{
++    GArray *query_table =
++        g_array_new(FALSE, FALSE, sizeof(GdbCmdParseEntry));
++    GArray *set_table =
++        g_array_new(FALSE, FALSE, sizeof(GdbCmdParseEntry));
++    GString *qsupported_features = g_string_new(NULL);
++
++    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64)) {
++    #ifdef TARGET_AARCH64
++        aarch64_cpu_register_gdb_commands(cpu, qsupported_features, query_table,
++                                          set_table);
++    #endif
++    }
++
++    /* Set arch-specific handlers for 'q' commands. */
++    if (query_table->len) {
++        gdb_extend_query_table(&g_array_index(query_table,
++                                              GdbCmdParseEntry, 0),
++                                              query_table->len);
++    }
++
++    /* Set arch-specific handlers for 'Q' commands. */
++    if (set_table->len) {
++        gdb_extend_set_table(&g_array_index(set_table,
++                             GdbCmdParseEntry, 0),
++                             set_table->len);
++    }
++
++    /* Set arch-specific qSupported feature. */
++    if (qsupported_features->len) {
++        gdb_extend_qsupported_features(qsupported_features->str);
++    }
++}
++
+ void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu)
+ {
+     CPUState *cs = CPU(cpu);
+@@ -507,6 +543,16 @@ void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu)
+                                      gdb_find_static_feature("aarch64-pauth.xml"),
+                                      0);
+         }
++
++#ifdef CONFIG_USER_ONLY
++        /* Memory Tagging Extension (MTE) 'tag_ctl' pseudo-register. */
++        if (cpu_isar_feature(aa64_mte, cpu)) {
++            gdb_register_coprocessor(cs, aarch64_gdb_get_tag_ctl_reg,
++                                     aarch64_gdb_set_tag_ctl_reg,
++                                     gdb_find_static_feature("aarch64-mte.xml"),
++                                     0);
++        }
++#endif
+ #endif
+     } else {
+         if (arm_feature(env, ARM_FEATURE_NEON)) {

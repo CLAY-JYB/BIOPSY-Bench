@@ -1,0 +1,41 @@
+diff --git a/ext/mbstring/tests/mb_send_mail01.phpt b/ext/mbstring/tests/mb_send_mail01.phpt
+index 4387d9f8..a71e2125 100644
+--- a/ext/mbstring/tests/mb_send_mail01.phpt
++++ b/ext/mbstring/tests/mb_send_mail01.phpt
+@@ -4,12 +4,15 @@ mb_send_mail() test 1 (lang=neutral)
+ mbstring
+ --SKIPIF--
+ <?php
++if (substr(PHP_OS, 0, 3) == 'WIN') {
++    die('skip.. Not valid for Windows');
++}
+ if (!function_exists("mb_send_mail") || !mb_language("neutral")) {
+     die("skip mb_send_mail() not available");
+ }
+ ?>
+ --INI--
+-sendmail_path={MAIL:{PWD}/mb_send_mail01.eml}
++sendmail_path=/bin/cat
+ mail.add_x_header=off
+ --FILE--
+ <?php
+@@ -17,19 +20,13 @@ $to = 'example@example.com';
+ 
+ /* default setting */
+ mb_send_mail($to, mb_language(), "test");
+-readfile(__DIR__ . "/mb_send_mail01.eml");
+ 
+ /* neutral (UTF-8) */
+ if (mb_language("neutral")) {
+     mb_internal_encoding("UTF-8");
+     mb_send_mail($to, "test ".mb_language(), "test");
+-    readfile(__DIR__ . "/mb_send_mail01.eml");
+ }
+ ?>
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . "/mb_send_mail01.eml");
+-?>
+ --EXPECTF--
+ To: example@example.com
+ Subject: %s

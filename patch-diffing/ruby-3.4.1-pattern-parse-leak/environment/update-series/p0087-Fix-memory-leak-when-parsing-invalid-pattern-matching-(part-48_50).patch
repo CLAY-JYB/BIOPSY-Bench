@@ -1,0 +1,36 @@
+From 63160b55 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0087] Fix memory leak when parsing invalid pattern matching (part 48/50)
+
+---
+diff --git a/rubyparser.h b/rubyparser.h
+index 704789f08..59f594bad 100644
+--- a/rubyparser.h
++++ b/rubyparser.h
+@@ -37,12 +37,21 @@
+ /*
+  * Parser String
+  */
++enum rb_parser_string_coderange_type {
++    /** The object's coderange is unclear yet. */
++    RB_PARSER_ENC_CODERANGE_UNKNOWN  = 0,
++    RB_PARSER_ENC_CODERANGE_7BIT     = 1,
++    RB_PARSER_ENC_CODERANGE_VALID    = 2,
++    RB_PARSER_ENC_CODERANGE_BROKEN   = 3
++};
++
+ typedef struct rb_parser_string {
++    enum rb_parser_string_coderange_type coderange;
+     rb_encoding *enc;
+     /* Length of the string, not including terminating NUL character. */
+     long len;
+     /* Pointer to the contents of the string. */
+-    char ptr[FLEX_ARY_LEN];
++    char *ptr;
+ } rb_parser_string_t;
+ 
+ /*
+
+-- 
+2.43.0

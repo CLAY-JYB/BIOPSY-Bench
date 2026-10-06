@@ -1,0 +1,416 @@
+From a99969e9 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0031] proc.c: get rid of `CLONESETUP`
+
+---
+diff --git a/proc.c b/proc.c
+index 34d2d4e71..8d958d415 100644
+--- a/proc.c
++++ b/proc.c
+@@ -51,23 +51,6 @@ static VALUE proc_binding(VALUE self);
+ 
+ #define IS_METHOD_PROC_IFUNC(ifunc) ((ifunc)->func == bmcall)
+ 
+-/* :FIXME: The way procs are cloned has been historically different from the
+- * way everything else are.  @shyouhei is not sure for the intention though.
+- */
+-#undef CLONESETUP
+-static inline void
+-CLONESETUP(VALUE clone, VALUE obj)
+-{
+-    RBIMPL_ASSERT_OR_ASSUME(! RB_SPECIAL_CONST_P(obj));
+-    RBIMPL_ASSERT_OR_ASSUME(! RB_SPECIAL_CONST_P(clone));
+-
+-    const VALUE flags = RUBY_FL_PROMOTED | RUBY_FL_FINALIZE;
+-    rb_obj_setup(clone, rb_singleton_class_clone(obj),
+-                 RB_FL_TEST_RAW(obj, ~flags));
+-    rb_singleton_class_attached(RBASIC_CLASS(clone), clone);
+-    if (RB_FL_TEST(obj, RUBY_FL_EXIVAR)) rb_copy_generic_ivar(clone, obj);
+-}
+-
+ static void
+ block_mark_and_move(struct rb_block *block)
+ {
+@@ -142,9 +125,7 @@ static VALUE
+ proc_clone(VALUE self)
+ {
+     VALUE procval = rb_proc_dup(self);
+-    CLONESETUP(procval, self);
+-    rb_check_funcall(procval, idInitialize_clone, 1, &self);
+-    return procval;
++    return rb_obj_clone_setup(self, procval, Qnil);
+ }
+ 
+ /* :nodoc: */
+@@ -152,8 +133,7 @@ static VALUE
+ proc_dup(VALUE self)
+ {
+     VALUE procval = rb_proc_dup(self);
+-    rb_check_funcall(procval, idInitialize_dup, 1, &self);
+-    return procval;
++    return rb_obj_dup_setup(self, procval);
+ }
+ 
+ /*
+@@ -328,7 +308,7 @@ binding_dup(VALUE self)
+     rb_vm_block_copy(bindval, &dst->block, &src->block);
+     RB_OBJ_WRITE(bindval, &dst->pathobj, src->pathobj);
+     dst->first_lineno = src->first_lineno;
+-    return bindval;
++    return rb_obj_dup_setup(self, bindval);
+ }
+ 
+ /* :nodoc: */
+@@ -336,8 +316,7 @@ static VALUE
+ binding_clone(VALUE self)
+ {
+     VALUE bindval = binding_dup(self);
+-    CLONESETUP(bindval, self);
+-    return bindval;
++    return rb_obj_clone_setup(self, bindval, Qnil);
+ }
+ 
+ VALUE
+@@ -2385,7 +2364,25 @@ method_clone(VALUE self)
+ 
+     TypedData_Get_Struct(self, struct METHOD, &method_data_type, orig);
+     clone = TypedData_Make_Struct(CLASS_OF(self), struct METHOD, &method_data_type, data);
+-    CLONESETUP(clone, self);
++    rb_obj_clone_setup(self, clone, Qnil);
++    RB_OBJ_WRITE(clone, &data->recv, orig->recv);
++    RB_OBJ_WRITE(clone, &data->klass, orig->klass);
++    RB_OBJ_WRITE(clone, &data->iclass, orig->iclass);
++    RB_OBJ_WRITE(clone, &data->owner, orig->owner);
++    RB_OBJ_WRITE(clone, &data->me, rb_method_entry_clone(orig->me));
++    return clone;
++}
++
++/* :nodoc: */
++static VALUE
++method_dup(VALUE self)
++{
++    VALUE clone;
++    struct METHOD *orig, *data;
++
++    TypedData_Get_Struct(self, struct METHOD, &method_data_type, orig);
++    clone = TypedData_Make_Struct(CLASS_OF(self), struct METHOD, &method_data_type, data);
++    rb_obj_dup_setup(self, clone);
+     RB_OBJ_WRITE(clone, &data->recv, orig->recv);
+     RB_OBJ_WRITE(clone, &data->klass, orig->klass);
+     RB_OBJ_WRITE(clone, &data->iclass, orig->iclass);
+@@ -4295,6 +4292,7 @@ Init_Proc(void)
+     rb_define_method(rb_cMethod, "eql?", method_eq, 1);
+     rb_define_method(rb_cMethod, "hash", method_hash, 0);
+     rb_define_method(rb_cMethod, "clone", method_clone, 0);
++    rb_define_method(rb_cMethod, "dup", method_dup, 0);
+     rb_define_method(rb_cMethod, "call", rb_method_call_pass_called_kw, -1);
+     rb_define_method(rb_cMethod, "===", rb_method_call_pass_called_kw, -1);
+     rb_define_method(rb_cMethod, "curry", rb_method_curry, -1);
+@@ -4325,6 +4323,7 @@ Init_Proc(void)
+     rb_define_method(rb_cUnboundMethod, "eql?", unbound_method_eq, 1);
+     rb_define_method(rb_cUnboundMethod, "hash", method_hash, 0);
+     rb_define_method(rb_cUnboundMethod, "clone", method_clone, 0);
++    rb_define_method(rb_cUnboundMethod, "dup", method_dup, 0);
+     rb_define_method(rb_cUnboundMethod, "arity", method_arity_m, 0);
+     rb_define_method(rb_cUnboundMethod, "inspect", method_inspect, 0);
+     rb_define_method(rb_cUnboundMethod, "to_s", method_inspect, 0);
+diff --git a/range.c b/range.c
+index 51da98e51..af4706f87 100644
+--- a/range.c
++++ b/range.c
+@@ -1266,11 +1266,11 @@ rb_int_range_last(int argc, VALUE *argv, VALUE range)
+     int x;
+     long n;
+ 
+-    assert(argc > 0);
++    RUBY_ASSERT(argc > 0);
+ 
+     b = RANGE_BEG(range);
+     e = RANGE_END(range);
+-    assert(RB_INTEGER_TYPE_P(b) && RB_INTEGER_TYPE_P(e));
++    RUBY_ASSERT(RB_INTEGER_TYPE_P(b) && RB_INTEGER_TYPE_P(e));
+ 
+     x = EXCL(range);
+ 
+diff --git a/rational.c b/rational.c
+index c5ad7598f..3b82016f3 100644
+--- a/rational.c
++++ b/rational.c
+@@ -389,8 +389,8 @@ f_gcd(VALUE x, VALUE y)
+ {
+     VALUE r = f_gcd_orig(x, y);
+     if (f_nonzero_p(r)) {
+-        assert(f_zero_p(f_mod(x, r)));
+-        assert(f_zero_p(f_mod(y, r)));
++        RUBY_ASSERT(f_zero_p(f_mod(x, r)));
++        RUBY_ASSERT(f_zero_p(f_mod(y, r)));
+     }
+     return r;
+ }
+@@ -456,8 +456,8 @@ nurat_int_value(VALUE num)
+ static void
+ nurat_canonicalize(VALUE *num, VALUE *den)
+ {
+-    assert(num); assert(RB_INTEGER_TYPE_P(*num));
+-    assert(den); assert(RB_INTEGER_TYPE_P(*den));
++    RUBY_ASSERT(num); RUBY_ASSERT(RB_INTEGER_TYPE_P(*num));
++    RUBY_ASSERT(den); RUBY_ASSERT(RB_INTEGER_TYPE_P(*den));
+     if (INT_NEGATIVE_P(*den)) {
+         *num = rb_int_uminus(*num);
+         *den = rb_int_uminus(*den);
+@@ -497,16 +497,16 @@ nurat_s_canonicalize_internal_no_reduce(VALUE klass, VALUE num, VALUE den)
+ inline static VALUE
+ f_rational_new2(VALUE klass, VALUE x, VALUE y)
+ {
+-    assert(!k_rational_p(x));
+-    assert(!k_rational_p(y));
++    RUBY_ASSERT(!k_rational_p(x));
++    RUBY_ASSERT(!k_rational_p(y));
+     return nurat_s_canonicalize_internal(klass, x, y);
+ }
+ 
+ inline static VALUE
+ f_rational_new_no_reduce2(VALUE klass, VALUE x, VALUE y)
+ {
+-    assert(!k_rational_p(x));
+-    assert(!k_rational_p(y));
++    RUBY_ASSERT(!k_rational_p(x));
++    RUBY_ASSERT(!k_rational_p(y));
+     return nurat_s_canonicalize_internal_no_reduce(klass, x, y);
+ }
+ 
+@@ -610,7 +610,7 @@ nurat_denominator(VALUE self)
+ VALUE
+ rb_rational_uminus(VALUE self)
+ {
+-    const int unused = (assert(RB_TYPE_P(self, T_RATIONAL)), 0);
++    const int unused = (RUBY_ASSERT(RB_TYPE_P(self, T_RATIONAL)), 0);
+     get_dat1(self);
+     (void)unused;
+     return f_rational_new2(CLASS_OF(self), rb_int_uminus(dat->num), dat->den);
+@@ -646,7 +646,7 @@ inline static VALUE
+ f_imul(long x, long y)
+ {
+     VALUE r = f_imul_orig(x, y);
+-    assert(f_eqeq_p(r, f_mul(LONG2NUM(x), LONG2NUM(y))));
++    RUBY_ASSERT(f_eqeq_p(r, f_mul(LONG2NUM(x), LONG2NUM(y))));
+     return r;
+ }
+ #endif
+@@ -795,7 +795,7 @@ f_muldiv(VALUE self, VALUE anum, VALUE aden, VALUE bnum, VALUE bden, int k)
+ {
+     VALUE num, den;
+ 
+-    assert(RB_TYPE_P(self, T_RATIONAL));
++    RUBY_ASSERT(RB_TYPE_P(self, T_RATIONAL));
+ 
+     /* Integer#** can return Rational with Float right now */
+     if (RB_FLOAT_TYPE_P(anum) || RB_FLOAT_TYPE_P(aden) ||
+@@ -806,10 +806,10 @@ f_muldiv(VALUE self, VALUE anum, VALUE aden, VALUE bnum, VALUE bden, int k)
+         return DBL2NUM(x);
+     }
+ 
+-    assert(RB_INTEGER_TYPE_P(anum));
+-    assert(RB_INTEGER_TYPE_P(aden));
+-    assert(RB_INTEGER_TYPE_P(bnum));
+-    assert(RB_INTEGER_TYPE_P(bden));
++    RUBY_ASSERT(RB_INTEGER_TYPE_P(anum));
++    RUBY_ASSERT(RB_INTEGER_TYPE_P(aden));
++    RUBY_ASSERT(RB_INTEGER_TYPE_P(bnum));
++    RUBY_ASSERT(RB_INTEGER_TYPE_P(bden));
+ 
+     if (k == '/') {
+         VALUE t;
+@@ -2559,7 +2559,7 @@ nurat_convert(VALUE klass, VALUE numv, VALUE denv, int raise)
+     VALUE a1 = numv, a2 = denv;
+     int state;
+ 
+-    assert(!UNDEF_P(a1));
++    RUBY_ASSERT(!UNDEF_P(a1));
+ 
+     if (NIL_P(a1) || NIL_P(a2)) {
+         if (!raise) return Qnil;
+diff --git a/regcomp.c b/regcomp.c
+index 13762364a..38bfed563 100644
+--- a/regcomp.c
++++ b/regcomp.c
+@@ -3395,7 +3395,7 @@ next_setup(Node* node, Node* next_node, regex_t* reg)
+   }
+   else if (type == NT_ENCLOSE) {
+     EncloseNode* en = NENCLOSE(node);
+-    if (en->type == ENCLOSE_MEMORY) {
++    if (en->type == ENCLOSE_MEMORY && !IS_ENCLOSE_CALLED(en)) {
+       node = en->target;
+       goto retry;
+     }
+diff --git a/ruby.c b/ruby.c
+index b0bce7216..ad53737aa 100644
+--- a/ruby.c
++++ b/ruby.c
+@@ -1787,7 +1787,12 @@ ruby_opt_init(ruby_cmdline_options_t *opt)
+ 
+     Init_ext(); /* load statically linked extensions before rubygems */
+     Init_extra_exts();
++
++    GET_VM()->running = 0;
+     rb_call_builtin_inits();
++    GET_VM()->running = 1;
++    memset(ruby_vm_redefined_flag, 0, sizeof(ruby_vm_redefined_flag));
++
+     ruby_init_prelude();
+ 
+     // Initialize JITs after prelude because JITing prelude is typically not optimal.
+@@ -2407,6 +2412,7 @@ process_options(int argc, char **argv, ruby_cmdline_options_t *opt)
+         const struct rb_block *base_block = toplevel_context(toplevel_binding);
+ 
+         if ((*rb_ruby_prism_ptr())) {
++            ruby_opt_init(opt);
+             pm_parse_result_t result = { 0 };
+             VALUE error;
+ 
+@@ -2423,10 +2429,24 @@ process_options(int argc, char **argv, ruby_cmdline_options_t *opt)
+             }
+             else {
+                 error = pm_parse_file(&result, opt->script_name);
++
++                // If we found an __END__ marker, then we're going to define a
++                // global DATA constant that is a file object that can be read
++                // to read the contents after the marker.
++                if (error == Qnil && result.parser.data_loc.start != NULL) {
++                    int xflag = opt->xflag;
++                    VALUE file = open_load_file(opt->script_name, &xflag);
++
++                    size_t offset = result.parser.data_loc.start - result.parser.start + 7;
++                    if ((result.parser.start + offset < result.parser.end) && result.parser.start[offset] == '\r') offset++;
++                    if ((result.parser.start + offset < result.parser.end) && result.parser.start[offset] == '\n') offset++;
++
++                    rb_funcall(file, rb_intern("seek"), 2, LONG2NUM(offset), INT2FIX(SEEK_SET));
++                    rb_define_global_const("DATA", file);
++                }
+             }
+ 
+             if (error == Qnil) {
+-                ruby_opt_init(opt);
+                 iseq = pm_iseq_new_main(&result.node, opt->script_name, path, vm_block_iseq(base_block), !(dump & DUMP_BIT(insns_without_opt)));
+                 pm_parse_result_free(&result);
+             }
+diff --git a/spec/bundler/bundler/definition_spec.rb b/spec/bundler/bundler/definition_spec.rb
+index a19cf789e..28c04e086 100644
+--- a/spec/bundler/bundler/definition_spec.rb
++++ b/spec/bundler/bundler/definition_spec.rb
+@@ -5,40 +5,37 @@ require "bundler/definition"
+ RSpec.describe Bundler::Definition do
+   describe "#lock" do
+     before do
+-      allow(Bundler).to receive(:settings) { Bundler::Settings.new(".") }
+-      allow(Bundler::SharedHelpers).to receive(:find_gemfile) { Pathname.new("Gemfile") }
++      allow(Bundler::SharedHelpers).to receive(:find_gemfile) { bundled_app_gemfile }
+       allow(Bundler).to receive(:ui) { double("UI", info: "", debug: "") }
+     end
+-    context "when it's not possible to write to the file" do
+-      subject { Bundler::Definition.new(nil, [], Bundler::SourceList.new, []) }
+ 
++    subject { Bundler::Definition.new(bundled_app_lock, [], Bundler::SourceList.new, {}) }
++
++    context "when it's not possible to write to the file" do
+       it "raises an PermissionError with explanation" do
+         allow(File).to receive(:open).and_call_original
+-        expect(File).to receive(:open).with("Gemfile.lock", "wb").
++        expect(File).to receive(:open).with(bundled_app_lock, "wb").
+           and_raise(Errno::EACCES)
+-        expect { subject.lock("Gemfile.lock") }.
++        expect { subject.lock }.
+           to raise_error(Bundler::PermissionError, /Gemfile\.lock/)
+       end
+     end
+     context "when a temporary resource access issue occurs" do
+-      subject { Bundler::Definition.new(nil, [], Bundler::SourceList.new, []) }
+-
+       it "raises a TemporaryResourceError with explanation" do
+         allow(File).to receive(:open).and_call_original
+-        expect(File).to receive(:open).with("Gemfile.lock", "wb").
++        expect(File).to receive(:open).with(bundled_app_lock, "wb").
+           and_raise(Errno::EAGAIN)
+-        expect { subject.lock("Gemfile.lock") }.
++        expect { subject.lock }.
+           to raise_error(Bundler::TemporaryResourceError, /temporarily unavailable/)
+       end
+     end
+     context "when Bundler::Definition.no_lock is set to true" do
+-      subject { Bundler::Definition.new(nil, [], Bundler::SourceList.new, []) }
+       before { Bundler::Definition.no_lock = true }
+       after { Bundler::Definition.no_lock = false }
+ 
+       it "does not create a lock file" do
+-        subject.lock("Gemfile.lock")
+-        expect(File.file?("Gemfile.lock")).to eq false
++        subject.lock
++        expect(bundled_app_lock).not_to be_file
+       end
+     end
+   end
+diff --git a/spec/ruby/core/binding/clone_spec.rb b/spec/ruby/core/binding/clone_spec.rb
+index ebd40f537..f1769ac6d 100644
+--- a/spec/ruby/core/binding/clone_spec.rb
++++ b/spec/ruby/core/binding/clone_spec.rb
+@@ -4,4 +4,10 @@ require_relative 'shared/clone'
+ 
+ describe "Binding#clone" do
+   it_behaves_like :binding_clone, :clone
++
++  it "preserves frozen status" do
++    bind = binding.freeze
++    bind.frozen?.should == true
++    bind.clone.frozen?.should == true
++  end
+ end
+diff --git a/spec/ruby/core/binding/dup_spec.rb b/spec/ruby/core/binding/dup_spec.rb
+index 43968213c..55fac6e33 100644
+--- a/spec/ruby/core/binding/dup_spec.rb
++++ b/spec/ruby/core/binding/dup_spec.rb
+@@ -4,4 +4,10 @@ require_relative 'shared/clone'
+ 
+ describe "Binding#dup" do
+   it_behaves_like :binding_clone, :dup
++
++  it "resets frozen status" do
++    bind = binding.freeze
++    bind.frozen?.should == true
++    bind.dup.frozen?.should == false
++  end
+ end
+diff --git a/spec/ruby/core/binding/shared/clone.rb b/spec/ruby/core/binding/shared/clone.rb
+index 0e934ac1b..1224b8ec7 100644
+--- a/spec/ruby/core/binding/shared/clone.rb
++++ b/spec/ruby/core/binding/shared/clone.rb
+@@ -31,4 +31,26 @@ describe :binding_clone, shared: true do
+       b2.local_variable_defined?(:x).should == false
+     end
+   end
++
++  ruby_version_is "3.4" do
++    it "copies instance variables" do
++      @b1.instance_variable_set(:@ivar, 1)
++      cl = @b1.send(@method)
++      cl.instance_variables.should == [:@ivar]
++    end
++
++    it "copies the finalizer" do
++      code = <<-RUBY
++        obj = binding
++
++        ObjectSpace.define_finalizer(obj, Proc.new { STDOUT.write "finalized\n" })
++
++        obj.clone
++
++        exit 0
++      RUBY
++
++      ruby_exe(code).lines.sort.should == ["finalized\n", "finalized\n"]
++    end
++  end
+ end
+
+-- 
+2.43.0

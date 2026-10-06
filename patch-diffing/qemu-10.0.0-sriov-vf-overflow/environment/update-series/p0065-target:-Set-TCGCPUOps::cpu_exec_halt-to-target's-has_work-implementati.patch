@@ -1,0 +1,518 @@
+From aebcf8cf Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0065] target: Set TCGCPUOps::cpu_exec_halt to target's has_work implementati
+
+---
+diff --git a/target/riscv/internals.h b/target/riscv/internals.h
+index 8239ae83cc..0ac17bc5ad 100644
+--- a/target/riscv/internals.h
++++ b/target/riscv/internals.h
+@@ -136,4 +136,7 @@ static inline float16 check_nanbox_h(CPURISCVState *env, uint64_t f)
+     }
+ }
+ 
++/* Our implementation of CPUClass::has_work */
++bool riscv_cpu_has_work(CPUState *cs);
++
+ #endif
+diff --git a/target/riscv/kvm/kvm-cpu.c b/target/riscv/kvm/kvm-cpu.c
+index 1047961fed..f6e3156b8d 100644
+--- a/target/riscv/kvm/kvm-cpu.c
++++ b/target/riscv/kvm/kvm-cpu.c
+@@ -281,6 +281,7 @@ static KVMCPUConfig kvm_multi_ext_cfgs[] = {
+     KVM_EXT_CFG("zihintntl", ext_zihintntl, KVM_RISCV_ISA_EXT_ZIHINTNTL),
+     KVM_EXT_CFG("zihintpause", ext_zihintpause, KVM_RISCV_ISA_EXT_ZIHINTPAUSE),
+     KVM_EXT_CFG("zihpm", ext_zihpm, KVM_RISCV_ISA_EXT_ZIHPM),
++    KVM_EXT_CFG("zacas", ext_zacas, KVM_RISCV_ISA_EXT_ZACAS),
+     KVM_EXT_CFG("zfa", ext_zfa, KVM_RISCV_ISA_EXT_ZFA),
+     KVM_EXT_CFG("zfh", ext_zfh, KVM_RISCV_ISA_EXT_ZFH),
+     KVM_EXT_CFG("zfhmin", ext_zfhmin, KVM_RISCV_ISA_EXT_ZFHMIN),
+@@ -298,6 +299,7 @@ static KVMCPUConfig kvm_multi_ext_cfgs[] = {
+     KVM_EXT_CFG("zksed", ext_zksed, KVM_RISCV_ISA_EXT_ZKSED),
+     KVM_EXT_CFG("zksh", ext_zksh, KVM_RISCV_ISA_EXT_ZKSH),
+     KVM_EXT_CFG("zkt", ext_zkt, KVM_RISCV_ISA_EXT_ZKT),
++    KVM_EXT_CFG("ztso", ext_ztso, KVM_RISCV_ISA_EXT_ZTSO),
+     KVM_EXT_CFG("zvbb", ext_zvbb, KVM_RISCV_ISA_EXT_ZVBB),
+     KVM_EXT_CFG("zvbc", ext_zvbc, KVM_RISCV_ISA_EXT_ZVBC),
+     KVM_EXT_CFG("zvfh", ext_zvfh, KVM_RISCV_ISA_EXT_ZVFH),
+diff --git a/target/riscv/machine.c b/target/riscv/machine.c
+index 76f2150f78..492c2c6d9d 100644
+--- a/target/riscv/machine.c
++++ b/target/riscv/machine.c
+@@ -320,15 +320,14 @@ static bool pmu_needed(void *opaque)
+ 
+ static const VMStateDescription vmstate_pmu_ctr_state = {
+     .name = "cpu/pmu",
+-    .version_id = 1,
+-    .minimum_version_id = 1,
++    .version_id = 2,
++    .minimum_version_id = 2,
+     .needed = pmu_needed,
+     .fields = (const VMStateField[]) {
+         VMSTATE_UINTTL(mhpmcounter_val, PMUCTRState),
+         VMSTATE_UINTTL(mhpmcounterh_val, PMUCTRState),
+         VMSTATE_UINTTL(mhpmcounter_prev, PMUCTRState),
+         VMSTATE_UINTTL(mhpmcounterh_prev, PMUCTRState),
+-        VMSTATE_BOOL(started, PMUCTRState),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+diff --git a/target/riscv/op_helper.c b/target/riscv/op_helper.c
+index 2baf5bc3ca..25a5263573 100644
+--- a/target/riscv/op_helper.c
++++ b/target/riscv/op_helper.c
+@@ -51,7 +51,7 @@ target_ulong helper_csrr(CPURISCVState *env, int csr)
+     }
+ 
+     target_ulong val = 0;
+-    RISCVException ret = riscv_csrrw(env, csr, &val, 0, 0);
++    RISCVException ret = riscv_csrr(env, csr, &val);
+ 
+     if (ret != RISCV_EXCP_NONE) {
+         riscv_raise_exception(env, ret, GETPC());
+@@ -84,9 +84,7 @@ target_ulong helper_csrrw(CPURISCVState *env, int csr,
+ target_ulong helper_csrr_i128(CPURISCVState *env, int csr)
+ {
+     Int128 rv = int128_zero();
+-    RISCVException ret = riscv_csrrw_i128(env, csr, &rv,
+-                                          int128_zero(),
+-                                          int128_zero());
++    RISCVException ret = riscv_csrr_i128(env, csr, &rv);
+ 
+     if (ret != RISCV_EXCP_NONE) {
+         riscv_raise_exception(env, ret, GETPC());
+@@ -264,7 +262,7 @@ void helper_cbo_inval(CPURISCVState *env, target_ulong address)
+ target_ulong helper_sret(CPURISCVState *env)
+ {
+     uint64_t mstatus;
+-    target_ulong prev_priv, prev_virt;
++    target_ulong prev_priv, prev_virt = env->virt_enabled;
+ 
+     if (!(env->priv >= PRV_S)) {
+         riscv_raise_exception(env, RISCV_EXCP_ILLEGAL_INST, GETPC());
+@@ -307,11 +305,9 @@ target_ulong helper_sret(CPURISCVState *env)
+         if (prev_virt) {
+             riscv_cpu_swap_hypervisor_regs(env);
+         }
+-
+-        riscv_cpu_set_virt_enabled(env, prev_virt);
+     }
+ 
+-    riscv_cpu_set_mode(env, prev_priv);
++    riscv_cpu_set_mode(env, prev_priv, prev_virt);
+ 
+     return retpc;
+ }
+@@ -347,16 +343,13 @@ target_ulong helper_mret(CPURISCVState *env)
+         mstatus = set_field(mstatus, MSTATUS_MPRV, 0);
+     }
+     env->mstatus = mstatus;
+-    riscv_cpu_set_mode(env, prev_priv);
+ 
+-    if (riscv_has_ext(env, RVH)) {
+-        if (prev_virt) {
+-            riscv_cpu_swap_hypervisor_regs(env);
+-        }
+-
+-        riscv_cpu_set_virt_enabled(env, prev_virt);
++    if (riscv_has_ext(env, RVH) && prev_virt) {
++        riscv_cpu_swap_hypervisor_regs(env);
+     }
+ 
++    riscv_cpu_set_mode(env, prev_priv, prev_virt);
++
+     return retpc;
+ }
+ 
+diff --git a/target/riscv/pmu.c b/target/riscv/pmu.c
+index 0e7d58b8a5..3cc0b3648c 100644
+--- a/target/riscv/pmu.c
++++ b/target/riscv/pmu.c
+@@ -19,6 +19,7 @@
+ #include "qemu/osdep.h"
+ #include "qemu/log.h"
+ #include "qemu/error-report.h"
++#include "qemu/timer.h"
+ #include "cpu.h"
+ #include "pmu.h"
+ #include "sysemu/cpu-timers.h"
+@@ -176,6 +177,97 @@ static int riscv_pmu_incr_ctr_rv64(RISCVCPU *cpu, uint32_t ctr_idx)
+     return 0;
+ }
+ 
++/*
++ * Information needed to update counters:
++ *  new_priv, new_virt: To correctly save starting snapshot for the newly
++ *                      started mode. Look at array being indexed with newprv.
++ *  old_priv, old_virt: To correctly select previous snapshot for old priv
++ *                      and compute delta. Also to select correct counter
++ *                      to inc. Look at arrays being indexed with env->priv.
++ *
++ *  To avoid the complexity of calling this function, we assume that
++ *  env->priv and env->virt_enabled contain old priv and old virt and
++ *  new priv and new virt values are passed in as arguments.
++ */
++static void riscv_pmu_icount_update_priv(CPURISCVState *env,
++                                         target_ulong newpriv, bool new_virt)
++{
++    uint64_t *snapshot_prev, *snapshot_new;
++    uint64_t current_icount;
++    uint64_t *counter_arr;
++    uint64_t delta;
++
++    if (icount_enabled()) {
++        current_icount = icount_get_raw();
++    } else {
++        current_icount = cpu_get_host_ticks();
++    }
++
++    if (env->virt_enabled) {
++        counter_arr = env->pmu_fixed_ctrs[1].counter_virt;
++        snapshot_prev = env->pmu_fixed_ctrs[1].counter_virt_prev;
++    } else {
++        counter_arr = env->pmu_fixed_ctrs[1].counter;
++        snapshot_prev = env->pmu_fixed_ctrs[1].counter_prev;
++    }
++
++    if (new_virt) {
++        snapshot_new = env->pmu_fixed_ctrs[1].counter_virt_prev;
++    } else {
++        snapshot_new = env->pmu_fixed_ctrs[1].counter_prev;
++    }
++
++     /*
++      * new_priv can be same as env->priv. So we need to calculate
++      * delta first before updating snapshot_new[new_priv].
++      */
++    delta = current_icount - snapshot_prev[env->priv];
++    snapshot_new[newpriv] = current_icount;
++
++    counter_arr[env->priv] += delta;
++}
++
++static void riscv_pmu_cycle_update_priv(CPURISCVState *env,
++                                        target_ulong newpriv, bool new_virt)
++{
++    uint64_t *snapshot_prev, *snapshot_new;
++    uint64_t current_ticks;
++    uint64_t *counter_arr;
++    uint64_t delta;
++
++    if (icount_enabled()) {
++        current_ticks = icount_get();
++    } else {
++        current_ticks = cpu_get_host_ticks();
++    }
++
++    if (env->virt_enabled) {
++        counter_arr = env->pmu_fixed_ctrs[0].counter_virt;
++        snapshot_prev = env->pmu_fixed_ctrs[0].counter_virt_prev;
++    } else {
++        counter_arr = env->pmu_fixed_ctrs[0].counter;
++        snapshot_prev = env->pmu_fixed_ctrs[0].counter_prev;
++    }
++
++    if (new_virt) {
++        snapshot_new = env->pmu_fixed_ctrs[0].counter_virt_prev;
++    } else {
++        snapshot_new = env->pmu_fixed_ctrs[0].counter_prev;
++    }
++
++    delta = current_ticks - snapshot_prev[env->priv];
++    snapshot_new[newpriv] = current_ticks;
++
++    counter_arr[env->priv] += delta;
++}
++
++void riscv_pmu_update_fixed_ctrs(CPURISCVState *env, target_ulong newpriv,
++                                 bool new_virt)
++{
++    riscv_pmu_cycle_update_priv(env, newpriv, new_virt);
++    riscv_pmu_icount_update_priv(env, newpriv, new_virt);
++}
++
+ int riscv_pmu_incr_ctr(RISCVCPU *cpu, enum riscv_pmu_event_idx event_idx)
+ {
+     uint32_t ctr_idx;
+@@ -193,8 +285,7 @@ int riscv_pmu_incr_ctr(RISCVCPU *cpu, enum riscv_pmu_event_idx event_idx)
+     }
+ 
+     ctr_idx = GPOINTER_TO_UINT(value);
+-    if (!riscv_pmu_counter_enabled(cpu, ctr_idx) ||
+-        get_field(env->mcountinhibit, BIT(ctr_idx))) {
++    if (!riscv_pmu_counter_enabled(cpu, ctr_idx)) {
+         return -1;
+     }
+ 
+@@ -325,15 +416,52 @@ int riscv_pmu_update_event_map(CPURISCVState *env, uint64_t value,
+     return 0;
+ }
+ 
++static bool pmu_hpmevent_is_of_set(CPURISCVState *env, uint32_t ctr_idx)
++{
++    target_ulong mhpmevent_val;
++    uint64_t of_bit_mask;
++
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        mhpmevent_val = env->mhpmeventh_val[ctr_idx];
++        of_bit_mask = MHPMEVENTH_BIT_OF;
++     } else {
++        mhpmevent_val = env->mhpmevent_val[ctr_idx];
++        of_bit_mask = MHPMEVENT_BIT_OF;
++    }
++
++    return get_field(mhpmevent_val, of_bit_mask);
++}
++
++static bool pmu_hpmevent_set_of_if_clear(CPURISCVState *env, uint32_t ctr_idx)
++{
++    target_ulong *mhpmevent_val;
++    uint64_t of_bit_mask;
++
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        mhpmevent_val = &env->mhpmeventh_val[ctr_idx];
++        of_bit_mask = MHPMEVENTH_BIT_OF;
++     } else {
++        mhpmevent_val = &env->mhpmevent_val[ctr_idx];
++        of_bit_mask = MHPMEVENT_BIT_OF;
++    }
++
++    if (!get_field(*mhpmevent_val, of_bit_mask)) {
++        *mhpmevent_val |= of_bit_mask;
++        return true;
++    }
++
++    return false;
++}
++
+ static void pmu_timer_trigger_irq(RISCVCPU *cpu,
+                                   enum riscv_pmu_event_idx evt_idx)
+ {
+     uint32_t ctr_idx;
+     CPURISCVState *env = &cpu->env;
+     PMUCTRState *counter;
+-    target_ulong *mhpmevent_val;
+-    uint64_t of_bit_mask;
+     int64_t irq_trigger_at;
++    uint64_t curr_ctr_val, curr_ctrh_val;
++    uint64_t ctr_val;
+ 
+     if (evt_idx != RISCV_PMU_EVENT_HW_CPU_CYCLES &&
+         evt_idx != RISCV_PMU_EVENT_HW_INSTRUCTIONS) {
+@@ -346,12 +474,9 @@ static void pmu_timer_trigger_irq(RISCVCPU *cpu,
+         return;
+     }
+ 
+-    if (riscv_cpu_mxl(env) == MXL_RV32) {
+-        mhpmevent_val = &env->mhpmeventh_val[ctr_idx];
+-        of_bit_mask = MHPMEVENTH_BIT_OF;
+-     } else {
+-        mhpmevent_val = &env->mhpmevent_val[ctr_idx];
+-        of_bit_mask = MHPMEVENT_BIT_OF;
++    /* Generate interrupt only if OF bit is clear */
++    if (pmu_hpmevent_is_of_set(env, ctr_idx)) {
++        return;
+     }
+ 
+     counter = &env->pmu_ctrs[ctr_idx];
+@@ -363,10 +488,28 @@ static void pmu_timer_trigger_irq(RISCVCPU *cpu,
+         return;
+     }
+ 
++    riscv_pmu_read_ctr(env, (target_ulong *)&curr_ctr_val, false, ctr_idx);
++    ctr_val = counter->mhpmcounter_val;
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        riscv_pmu_read_ctr(env, (target_ulong *)&curr_ctrh_val, true, ctr_idx);
++        curr_ctr_val = curr_ctr_val | (curr_ctrh_val << 32);
++        ctr_val = ctr_val |
++                ((uint64_t)counter->mhpmcounterh_val << 32);
++    }
++
++    /*
++     * We can not accommodate for inhibited modes when setting up timer. Check
++     * if the counter has actually overflowed or not by comparing current
++     * counter value (accommodated for inhibited modes) with software written
++     * counter value.
++     */
++    if (curr_ctr_val >= ctr_val) {
++        riscv_pmu_setup_timer(env, curr_ctr_val, ctr_idx);
++        return;
++    }
++
+     if (cpu->pmu_avail_ctrs & BIT(ctr_idx)) {
+-        /* Generate interrupt only if OF bit is clear */
+-        if (!(*mhpmevent_val & of_bit_mask)) {
+-            *mhpmevent_val |= of_bit_mask;
++        if (pmu_hpmevent_set_of_if_clear(env, ctr_idx)) {
+             riscv_cpu_update_mip(env, MIP_LCOFIP, BOOL_TO_MASK(1));
+         }
+     }
+@@ -384,12 +527,14 @@ void riscv_pmu_timer_cb(void *priv)
+ 
+ int riscv_pmu_setup_timer(CPURISCVState *env, uint64_t value, uint32_t ctr_idx)
+ {
+-    uint64_t overflow_delta, overflow_at;
++    uint64_t overflow_delta, overflow_at, curr_ns;
+     int64_t overflow_ns, overflow_left = 0;
+     RISCVCPU *cpu = env_archcpu(env);
+     PMUCTRState *counter = &env->pmu_ctrs[ctr_idx];
+ 
+-    if (!riscv_pmu_counter_valid(cpu, ctr_idx) || !cpu->cfg.ext_sscofpmf) {
++    /* No need to setup a timer if LCOFI is disabled when OF is set */
++    if (!riscv_pmu_counter_valid(cpu, ctr_idx) || !cpu->cfg.ext_sscofpmf ||
++        pmu_hpmevent_is_of_set(env, ctr_idx)) {
+         return -1;
+     }
+ 
+@@ -415,8 +560,10 @@ int riscv_pmu_setup_timer(CPURISCVState *env, uint64_t value, uint32_t ctr_idx)
+     } else {
+         return -1;
+     }
+-    overflow_at = (uint64_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+-                  overflow_ns;
++    curr_ns = (uint64_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    overflow_at =  curr_ns + overflow_ns;
++    if (overflow_at <= curr_ns)
++        overflow_at = UINT64_MAX;
+ 
+     if (overflow_at > INT64_MAX) {
+         overflow_left += overflow_at - INT64_MAX;
+diff --git a/target/riscv/pmu.h b/target/riscv/pmu.h
+index 7c0ad661e0..3853d0e262 100644
+--- a/target/riscv/pmu.h
++++ b/target/riscv/pmu.h
+@@ -34,5 +34,9 @@ int riscv_pmu_incr_ctr(RISCVCPU *cpu, enum riscv_pmu_event_idx event_idx);
+ void riscv_pmu_generate_fdt_node(void *fdt, uint32_t cmask, char *pmu_name);
+ int riscv_pmu_setup_timer(CPURISCVState *env, uint64_t value,
+                           uint32_t ctr_idx);
++void riscv_pmu_update_fixed_ctrs(CPURISCVState *env, target_ulong newpriv,
++                                 bool new_virt);
++RISCVException riscv_pmu_read_ctr(CPURISCVState *env, target_ulong *val,
++                                  bool upper_half, uint32_t ctr_idx);
+ 
+ #endif /* RISCV_PMU_H */
+diff --git a/target/riscv/tcg/tcg-cpu.c b/target/riscv/tcg/tcg-cpu.c
+index ae25686824..b8814ab753 100644
+--- a/target/riscv/tcg/tcg-cpu.c
++++ b/target/riscv/tcg/tcg-cpu.c
+@@ -21,6 +21,7 @@
+ #include "exec/exec-all.h"
+ #include "tcg-cpu.h"
+ #include "cpu.h"
++#include "internals.h"
+ #include "pmu.h"
+ #include "time_helper.h"
+ #include "qapi/error.h"
+@@ -138,6 +139,7 @@ static const TCGCPUOps riscv_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = riscv_cpu_tlb_fill,
+     .cpu_exec_interrupt = riscv_cpu_exec_interrupt,
++    .cpu_exec_halt = riscv_cpu_has_work,
+     .do_interrupt = riscv_cpu_do_interrupt,
+     .do_transaction_failed = riscv_cpu_do_transaction_failed,
+     .do_unaligned_access = riscv_cpu_do_unaligned_access,
+@@ -547,6 +549,11 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
+         }
+     }
+ 
++    if (cpu->cfg.ext_zcmop && !cpu->cfg.ext_zca) {
++        error_setg(errp, "Zcmop extensions require Zca");
++        return;
++    }
++
+     if (mcc->misa_mxl_max != MXL_RV32 && cpu->cfg.ext_zcf) {
+         error_setg(errp, "Zcf extension is only relevant to RV32");
+         return;
+diff --git a/target/riscv/translate.c b/target/riscv/translate.c
+index 0569224e53..acba90f170 100644
+--- a/target/riscv/translate.c
++++ b/target/riscv/translate.c
+@@ -1077,6 +1077,41 @@ static bool gen_unary_per_ol(DisasContext *ctx, arg_r2 *a, DisasExtend ext,
+     return gen_unary(ctx, a, ext, f_tl);
+ }
+ 
++static bool gen_amo(DisasContext *ctx, arg_atomic *a,
++                    void(*func)(TCGv, TCGv, TCGv, TCGArg, MemOp),
++                    MemOp mop)
++{
++    TCGv dest = dest_gpr(ctx, a->rd);
++    TCGv src1, src2 = get_gpr(ctx, a->rs2, EXT_NONE);
++    MemOp size = mop & MO_SIZE;
++
++    if (ctx->cfg_ptr->ext_zama16b && size >= MO_32) {
++        mop |= MO_ATOM_WITHIN16;
++    } else {
++        mop |= MO_ALIGN;
++    }
++
++    decode_save_opc(ctx);
++    src1 = get_address(ctx, a->rs1, 0);
++    func(dest, src1, src2, ctx->mem_idx, mop);
++
++    gen_set_gpr(ctx, a->rd, dest);
++    return true;
++}
++
++static bool gen_cmpxchg(DisasContext *ctx, arg_atomic *a, MemOp mop)
++{
++    TCGv dest = get_gpr(ctx, a->rd, EXT_NONE);
++    TCGv src1 = get_address(ctx, a->rs1, 0);
++    TCGv src2 = get_gpr(ctx, a->rs2, EXT_NONE);
++
++    decode_save_opc(ctx);
++    tcg_gen_atomic_cmpxchg_tl(dest, src1, dest, src2, ctx->mem_idx, mop);
++
++    gen_set_gpr(ctx, a->rd, dest);
++    return true;
++}
++
+ static uint32_t opcode_at(DisasContextBase *dcbase, target_ulong pc)
+ {
+     DisasContext *ctx = container_of(dcbase, DisasContext, base);
+@@ -1097,8 +1132,10 @@ static uint32_t opcode_at(DisasContextBase *dcbase, target_ulong pc)
+ #include "insn_trans/trans_rvb.c.inc"
+ #include "insn_trans/trans_rvzicond.c.inc"
+ #include "insn_trans/trans_rvzacas.c.inc"
++#include "insn_trans/trans_rvzabha.c.inc"
+ #include "insn_trans/trans_rvzawrs.c.inc"
+ #include "insn_trans/trans_rvzicbo.c.inc"
++#include "insn_trans/trans_rvzimop.c.inc"
+ #include "insn_trans/trans_rvzfa.c.inc"
+ #include "insn_trans/trans_rvzfh.c.inc"
+ #include "insn_trans/trans_rvk.c.inc"
+@@ -1113,6 +1150,7 @@ static uint32_t opcode_at(DisasContextBase *dcbase, target_ulong pc)
+ /* Include the auto-generated decoder for 16 bit insn */
+ #include "decode-insn16.c.inc"
+ #include "insn_trans/trans_rvzce.c.inc"
++#include "insn_trans/trans_rvzcmop.c.inc"
+ 
+ /* Include decoders for factored-out extensions */
+ #include "decode-XVentanaCondOps.c.inc"
+diff --git a/target/rx/cpu.c b/target/rx/cpu.c
+index 8a584f0a11..36d2a6f189 100644
+--- a/target/rx/cpu.c
++++ b/target/rx/cpu.c
+@@ -192,6 +192,7 @@ static const TCGCPUOps rx_tcg_ops = {
+ 
+ #ifndef CONFIG_USER_ONLY
+     .cpu_exec_interrupt = rx_cpu_exec_interrupt,
++    .cpu_exec_halt = rx_cpu_has_work,
+     .do_interrupt = rx_cpu_do_interrupt,
+ #endif /* !CONFIG_USER_ONLY */
+ };
+diff --git a/target/s390x/cpu.c b/target/s390x/cpu.c
+index 2bbeaca36e..0fbfcd35d8 100644
+--- a/target/s390x/cpu.c
++++ b/target/s390x/cpu.c
+@@ -370,6 +370,7 @@ static const TCGCPUOps s390_tcg_ops = {
+ #else
+     .tlb_fill = s390_cpu_tlb_fill,
+     .cpu_exec_interrupt = s390_cpu_exec_interrupt,
++    .cpu_exec_halt = s390_cpu_has_work,
+     .do_interrupt = s390_cpu_do_interrupt,
+     .debug_excp_handler = s390x_cpu_debug_excp_handler,
+     .do_unaligned_access = s390x_cpu_do_unaligned_access,
+
+-- 
+2.43.0

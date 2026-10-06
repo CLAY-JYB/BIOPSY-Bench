@@ -1,0 +1,5161 @@
+diff --git a/ext/pcre/pcre2lib/sljit/sljitNativeX86_64.c b/ext/pcre/pcre2lib/sljit/sljitNativeX86_64.c
+index f37df6e1..e85b56a6 100644
+--- a/ext/pcre/pcre2lib/sljit/sljitNativeX86_64.c
++++ b/ext/pcre/pcre2lib/sljit/sljitNativeX86_64.c
+@@ -26,10 +26,6 @@
+ 
+ /* x86 64-bit arch dependent functions. */
+ 
+-/* --------------------------------------------------------------------- */
+-/*  Operators                                                            */
+-/* --------------------------------------------------------------------- */
+-
+ static sljit_s32 emit_load_imm64(struct sljit_compiler *compiler, sljit_s32 reg, sljit_sw imm)
+ {
+ 	sljit_u8 *inst;
+@@ -38,246 +34,14 @@ static sljit_s32 emit_load_imm64(struct sljit_compiler *compiler, sljit_s32 reg,
+ 	FAIL_IF(!inst);
+ 	INC_SIZE(2 + sizeof(sljit_sw));
+ 	*inst++ = REX_W | ((reg_map[reg] <= 7) ? 0 : REX_B);
+-	*inst++ = U8(MOV_r_i32 | (reg_map[reg] & 0x7));
++	*inst++ = MOV_r_i32 + (reg_map[reg] & 0x7);
+ 	sljit_unaligned_store_sw(inst, imm);
+ 	return SLJIT_SUCCESS;
+ }
+ 
+-static sljit_s32 emit_do_imm32(struct sljit_compiler *compiler, sljit_u8 rex, sljit_u8 opcode, sljit_sw imm)
+-{
+-	sljit_u8 *inst;
+-	sljit_uw length = (rex ? 2 : 1) + sizeof(sljit_s32);
+-
+-	inst = (sljit_u8*)ensure_buf(compiler, 1 + length);
+-	FAIL_IF(!inst);
+-	INC_SIZE(length);
+-	if (rex)
+-		*inst++ = rex;
+-	*inst++ = opcode;
+-	sljit_unaligned_store_s32(inst, (sljit_s32)imm);
+-	return SLJIT_SUCCESS;
+-}
+-
+-static sljit_u8* emit_x86_instruction(struct sljit_compiler *compiler, sljit_uw size,
+-	/* The register or immediate operand. */
+-	sljit_s32 a, sljit_sw imma,
+-	/* The general operand (not immediate). */
+-	sljit_s32 b, sljit_sw immb)
+-{
+-	sljit_u8 *inst;
+-	sljit_u8 *buf_ptr;
+-	sljit_u8 rex = 0;
+-	sljit_u8 reg_lmap_b;
+-	sljit_uw flags = size;
+-	sljit_uw inst_size;
+-
+-	/* The immediate operand must be 32 bit. */
+-	SLJIT_ASSERT(!(a & SLJIT_IMM) || compiler->mode32 || IS_HALFWORD(imma));
+-	/* Both cannot be switched on. */
+-	SLJIT_ASSERT((flags & (EX86_BIN_INS | EX86_SHIFT_INS)) != (EX86_BIN_INS | EX86_SHIFT_INS));
+-	/* Size flags not allowed for typed instructions. */
+-	SLJIT_ASSERT(!(flags & (EX86_BIN_INS | EX86_SHIFT_INS)) || (flags & (EX86_BYTE_ARG | EX86_HALF_ARG)) == 0);
+-	/* Both size flags cannot be switched on. */
+-	SLJIT_ASSERT((flags & (EX86_BYTE_ARG | EX86_HALF_ARG)) != (EX86_BYTE_ARG | EX86_HALF_ARG));
+-	/* SSE2 and immediate is not possible. */
+-	SLJIT_ASSERT(!(a & SLJIT_IMM) || !(flags & EX86_SSE2));
+-	SLJIT_ASSERT((flags & (EX86_PREF_F2 | EX86_PREF_F3)) != (EX86_PREF_F2 | EX86_PREF_F3)
+-		&& (flags & (EX86_PREF_F2 | EX86_PREF_66)) != (EX86_PREF_F2 | EX86_PREF_66)
+-		&& (flags & (EX86_PREF_F3 | EX86_PREF_66)) != (EX86_PREF_F3 | EX86_PREF_66));
+-
+-	size &= 0xf;
+-	inst_size = size;
+-
+-	if (!compiler->mode32 && !(flags & EX86_NO_REXW))
+-		rex |= REX_W;
+-	else if (flags & EX86_REX)
+-		rex |= REX;
+-
+-	if (flags & (EX86_PREF_F2 | EX86_PREF_F3))
+-		inst_size++;
+-	if (flags & EX86_PREF_66)
+-		inst_size++;
+-
+-	/* Calculate size of b. */
+-	inst_size += 1; /* mod r/m byte. */
+-	if (b & SLJIT_MEM) {
+-		if (!(b & OFFS_REG_MASK)) {
+-			if (NOT_HALFWORD(immb)) {
+-				PTR_FAIL_IF(emit_load_imm64(compiler, TMP_REG2, immb));
+-				immb = 0;
+-				if (b & REG_MASK)
+-					b |= TO_OFFS_REG(TMP_REG2);
+-				else
+-					b |= TMP_REG2;
+-			}
+-			else if (reg_lmap[b & REG_MASK] == 4)
+-				b |= TO_OFFS_REG(SLJIT_SP);
+-		}
+-
+-		if (!(b & REG_MASK))
+-			inst_size += 1 + sizeof(sljit_s32); /* SIB byte required to avoid RIP based addressing. */
+-		else {
+-			if (reg_map[b & REG_MASK] >= 8)
+-				rex |= REX_B;
+-
+-			if (immb != 0 && (!(b & OFFS_REG_MASK) || (b & OFFS_REG_MASK) == TO_OFFS_REG(SLJIT_SP))) {
+-				/* Immediate operand. */
+-				if (immb <= 127 && immb >= -128)
+-					inst_size += sizeof(sljit_s8);
+-				else
+-					inst_size += sizeof(sljit_s32);
+-			}
+-			else if (reg_lmap[b & REG_MASK] == 5)
+-				inst_size += sizeof(sljit_s8);
+-
+-			if (b & OFFS_REG_MASK) {
+-				inst_size += 1; /* SIB byte. */
+-				if (reg_map[OFFS_REG(b)] >= 8)
+-					rex |= REX_X;
+-			}
+-		}
+-	}
+-	else if (!(flags & EX86_SSE2_OP2)) {
+-		if (reg_map[b] >= 8)
+-			rex |= REX_B;
+-	}
+-	else if (freg_map[b] >= 8)
+-		rex |= REX_B;
+-
+-	if (a & SLJIT_IMM) {
+-		if (flags & EX86_BIN_INS) {
+-			if (imma <= 127 && imma >= -128) {
+-				inst_size += 1;
+-				flags |= EX86_BYTE_ARG;
+-			} else
+-				inst_size += 4;
+-		}
+-		else if (flags & EX86_SHIFT_INS) {
+-			imma &= compiler->mode32 ? 0x1f : 0x3f;
+-			if (imma != 1) {
+-				inst_size ++;
+-				flags |= EX86_BYTE_ARG;
+-			}
+-		} else if (flags & EX86_BYTE_ARG)
+-			inst_size++;
+-		else if (flags & EX86_HALF_ARG)
+-			inst_size += sizeof(short);
+-		else
+-			inst_size += sizeof(sljit_s32);
+-	}
+-	else {
+-		SLJIT_ASSERT(!(flags & EX86_SHIFT_INS) || a == SLJIT_PREF_SHIFT_REG);
+-		/* reg_map[SLJIT_PREF_SHIFT_REG] is less than 8. */
+-		if (!(flags & EX86_SSE2_OP1)) {
+-			if (reg_map[a] >= 8)
+-				rex |= REX_R;
+-		}
+-		else if (freg_map[a] >= 8)
+-			rex |= REX_R;
+-	}
+-
+-	if (rex)
+-		inst_size++;
+-
+-	inst = (sljit_u8*)ensure_buf(compiler, 1 + inst_size);
+-	PTR_FAIL_IF(!inst);
+-
+-	/* Encoding the byte. */
+-	INC_SIZE(inst_size);
+-	if (flags & EX86_PREF_F2)
+-		*inst++ = 0xf2;
+-	if (flags & EX86_PREF_F3)
+-		*inst++ = 0xf3;
+-	if (flags & EX86_PREF_66)
+-		*inst++ = 0x66;
+-	if (rex)
+-		*inst++ = rex;
+-	buf_ptr = inst + size;
+-
+-	/* Encode mod/rm byte. */
+-	if (!(flags & EX86_SHIFT_INS)) {
+-		if ((flags & EX86_BIN_INS) && (a & SLJIT_IMM))
+-			*inst = (flags & EX86_BYTE_ARG) ? GROUP_BINARY_83 : GROUP_BINARY_81;
+-
+-		if (a & SLJIT_IMM)
+-			*buf_ptr = 0;
+-		else if (!(flags & EX86_SSE2_OP1))
+-			*buf_ptr = U8(reg_lmap[a] << 3);
+-		else
+-			*buf_ptr = U8(freg_lmap[a] << 3);
+-	}
+-	else {
+-		if (a & SLJIT_IMM) {
+-			if (imma == 1)
+-				*inst = GROUP_SHIFT_1;
+-			else
+-				*inst = GROUP_SHIFT_N;
+-		} else
+-			*inst = GROUP_SHIFT_CL;
+-		*buf_ptr = 0;
+-	}
+-
+-	if (!(b & SLJIT_MEM)) {
+-		*buf_ptr = U8(*buf_ptr | MOD_REG | (!(flags & EX86_SSE2_OP2) ? reg_lmap[b] : freg_lmap[b]));
+-		buf_ptr++;
+-	} else if (b & REG_MASK) {
+-		reg_lmap_b = reg_lmap[b & REG_MASK];
+-
+-		if (!(b & OFFS_REG_MASK) || (b & OFFS_REG_MASK) == TO_OFFS_REG(SLJIT_SP) || reg_lmap_b == 5) {
+-			if (immb != 0 || reg_lmap_b == 5) {
+-				if (immb <= 127 && immb >= -128)
+-					*buf_ptr |= 0x40;
+-				else
+-					*buf_ptr |= 0x80;
+-			}
+-
+-			if (!(b & OFFS_REG_MASK))
+-				*buf_ptr++ |= reg_lmap_b;
+-			else {
+-				*buf_ptr++ |= 0x04;
+-				*buf_ptr++ = U8(reg_lmap_b | (reg_lmap[OFFS_REG(b)] << 3));
+-			}
+-
+-			if (immb != 0 || reg_lmap_b == 5) {
+-				if (immb <= 127 && immb >= -128)
+-					*buf_ptr++ = U8(immb); /* 8 bit displacement. */
+-				else {
+-					sljit_unaligned_store_s32(buf_ptr, (sljit_s32)immb); /* 32 bit displacement. */
+-					buf_ptr += sizeof(sljit_s32);
+-				}
+-			}
+-		}
+-		else {
+-			*buf_ptr++ |= 0x04;
+-			*buf_ptr++ = U8(reg_lmap_b | (reg_lmap[OFFS_REG(b)] << 3) | (immb << 6));
+-		}
+-	}
+-	else {
+-		*buf_ptr++ |= 0x04;
+-		*buf_ptr++ = 0x25;
+-		sljit_unaligned_store_s32(buf_ptr, (sljit_s32)immb); /* 32 bit displacement. */
+-		buf_ptr += sizeof(sljit_s32);
+-	}
+-
+-	if (a & SLJIT_IMM) {
+-		if (flags & EX86_BYTE_ARG)
+-			*buf_ptr = U8(imma);
+-		else if (flags & EX86_HALF_ARG)
+-			sljit_unaligned_store_s16(buf_ptr, (sljit_s16)imma);
+-		else if (!(flags & EX86_SHIFT_INS))
+-			sljit_unaligned_store_s32(buf_ptr, (sljit_s32)imma);
+-	}
+-
+-	return !(flags & EX86_SHIFT_INS) ? inst : (inst + 1);
+-}
+-
+-/* --------------------------------------------------------------------- */
+-/*  Enter / return                                                       */
+-/* --------------------------------------------------------------------- */
+-
+ static sljit_u8* generate_far_jump_code(struct sljit_jump *jump, sljit_u8 *code_ptr)
+ {
+-	sljit_uw type = jump->flags >> TYPE_SHIFT;
++	sljit_s32 type = jump->flags >> TYPE_SHIFT;
+ 
+ 	int short_addr = !(jump->flags & SLJIT_REWRITABLE_JUMP) && !(jump->flags & JUMP_LABEL) && (jump->u.target <= 0xffffffff);
+ 
+@@ -286,7 +50,7 @@ static sljit_u8* generate_far_jump_code(struct sljit_jump *jump, sljit_u8 *code_
+ 
+ 	if (type < SLJIT_JUMP) {
+ 		/* Invert type. */
+-		*code_ptr++ = U8(get_jump_code(type ^ 0x1) - 0x10);
++		*code_ptr++ = get_jump_code(type ^ 0x1) - 0x10;
+ 		*code_ptr++ = short_addr ? (6 + 3) : (10 + 3);
+ 	}
+ 
+@@ -299,13 +63,13 @@ static sljit_u8* generate_far_jump_code(struct sljit_jump *jump, sljit_u8 *code_
+ 	else if (short_addr)
+ 		sljit_unaligned_store_s32(code_ptr, (sljit_s32)jump->u.target);
+ 	else
+-		sljit_unaligned_store_sw(code_ptr, (sljit_sw)jump->u.target);
++		sljit_unaligned_store_sw(code_ptr, jump->u.target);
+ 
+ 	code_ptr += short_addr ? sizeof(sljit_s32) : sizeof(sljit_sw);
+ 
+ 	*code_ptr++ = REX_B;
+ 	*code_ptr++ = GROUP_FF;
+-	*code_ptr++ = U8(MOD_REG | (type >= SLJIT_FAST_CALL ? CALL_rm : JMP_rm) | reg_lmap[TMP_REG2]);
++	*code_ptr++ = MOD_REG | (type >= SLJIT_FAST_CALL ? CALL_rm : JMP_rm) | reg_lmap[TMP_REG2];
+ 
+ 	return code_ptr;
+ }
+@@ -326,7 +90,7 @@ static sljit_u8* generate_put_label_code(struct sljit_put_label *put_label, slji
+ 		SLJIT_ASSERT((code_ptr[1] & 0xf8) == MOV_r_i32);
+ 
+ 		if ((code_ptr[0] & 0x07) != 0) {
+-			code_ptr[0] = U8(code_ptr[0] & ~0x08);
++			code_ptr[0] = (sljit_u8)(code_ptr[0] & ~0x08);
+ 			code_ptr += 2 + sizeof(sljit_s32);
+ 		}
+ 		else {
+@@ -350,9 +114,9 @@ static sljit_u8* generate_put_label_code(struct sljit_put_label *put_label, slji
+ 
+ 	SLJIT_ASSERT(code_ptr[1] == MOV_rm_r);
+ 
+-	code_ptr[0] = U8(code_ptr[0] & ~0x4);
++	code_ptr[0] = (sljit_u8)(code_ptr[0] & ~0x4);
+ 	code_ptr[1] = MOV_rm_i32;
+-	code_ptr[2] = U8(code_ptr[2] & ~(0x7 << 3));
++	code_ptr[2] = (sljit_u8)(code_ptr[2] & ~(0x7 << 3));
+ 
+ 	code_ptr = (sljit_u8*)(put_label->addr - (2 + sizeof(sljit_uw)) + sizeof(sljit_s32));
+ 	put_label->addr = (sljit_uw)code_ptr;
+@@ -364,15 +128,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_enter(struct sljit_compiler *compi
+ 	sljit_s32 options, sljit_s32 arg_types, sljit_s32 scratches, sljit_s32 saveds,
+ 	sljit_s32 fscratches, sljit_s32 fsaveds, sljit_s32 local_size)
+ {
+-	sljit_uw size;
+-	sljit_s32 word_arg_count = 0;
+-	sljit_s32 saved_arg_count = 0;
+-	sljit_s32 saved_regs_size, tmp, i;
+-#ifdef _WIN64
+-	sljit_s32 saved_float_regs_size;
+-	sljit_s32 saved_float_regs_offset = 0;
+-	sljit_s32 float_arg_count = 0;
+-#endif /* _WIN64 */
++	sljit_s32 args, i, tmp, size, saved_register_size;
+ 	sljit_u8 *inst;
+ 
+ 	CHECK_ERROR();
+@@ -384,11 +140,19 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_enter(struct sljit_compiler *compi
+ 
+ 	compiler->mode32 = 0;
+ 
++#ifdef _WIN64
++	/* Two/four register slots for parameters plus space for xmm6 register if needed. */
++	if (fscratches >= 6 || fsaveds >= 1)
++		compiler->locals_offset = 6 * sizeof(sljit_sw);
++	else
++		compiler->locals_offset = ((scratches > 2) ? 4 : 2) * sizeof(sljit_sw);
++#endif
++
+ 	/* Including the return address saved by the call instruction. */
+-	saved_regs_size = GET_SAVED_REGISTERS_SIZE(scratches, saveds, 1);
++	saved_register_size = GET_SAVED_REGISTERS_SIZE(scratches, saveds, 1);
+ 
+-	tmp = SLJIT_S0 - saveds;
+-	for (i = SLJIT_S0; i > tmp; i--) {
++	tmp = saveds < SLJIT_NUMBER_OF_SAVED_REGISTERS ? (SLJIT_S0 + 1 - saveds) : SLJIT_FIRST_SAVED_REG;
++	for (i = SLJIT_S0; i >= tmp; i--) {
+ 		size = reg_map[i] >= 8 ? 2 : 1;
+ 		inst = (sljit_u8*)ensure_buf(compiler, 1 + size);
+ 		FAIL_IF(!inst);
+@@ -408,75 +172,55 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_enter(struct sljit_compiler *compi
+ 		PUSH_REG(reg_lmap[i]);
+ 	}
+ 
+-#ifdef _WIN64
+-	local_size += SLJIT_LOCALS_OFFSET;
+-	saved_float_regs_size = GET_SAVED_FLOAT_REGISTERS_SIZE(fscratches, fsaveds, 16);
++	args = get_arg_count(arg_types);
+ 
+-	if (saved_float_regs_size > 0) {
+-		saved_float_regs_offset = ((local_size + 0xf) & ~0xf);
+-		local_size = saved_float_regs_offset + saved_float_regs_size;
+-	}
+-#else /* !_WIN64 */
+-	SLJIT_ASSERT(SLJIT_LOCALS_OFFSET == 0);
+-#endif /* _WIN64 */
++	if (args > 0) {
++		size = args * 3;
++		inst = (sljit_u8*)ensure_buf(compiler, 1 + size);
++		FAIL_IF(!inst);
+ 
+-	arg_types >>= SLJIT_ARG_SHIFT;
++		INC_SIZE(size);
+ 
+-	while (arg_types > 0) {
+-		if ((arg_types & SLJIT_ARG_MASK) < SLJIT_ARG_TYPE_F64) {
+-			tmp = 0;
+ #ifndef _WIN64
+-			switch (word_arg_count) {
+-			case 0:
+-				tmp = SLJIT_R2;
+-				break;
+-			case 1:
+-				tmp = SLJIT_R1;
+-				break;
+-			case 2:
+-				tmp = TMP_REG1;
+-				break;
+-			default:
+-				tmp = SLJIT_R3;
+-				break;
+-			}
+-#else /* !_WIN64 */
+-			switch (word_arg_count + float_arg_count) {
+-			case 0:
+-				tmp = SLJIT_R3;
+-				break;
+-			case 1:
+-				tmp = SLJIT_R1;
+-				break;
+-			case 2:
+-				tmp = SLJIT_R2;
+-				break;
+-			default:
+-				tmp = TMP_REG1;
+-				break;
+-			}
+-#endif /* _WIN64 */
+-			if (arg_types & SLJIT_ARG_TYPE_SCRATCH_REG) {
+-				if (tmp != SLJIT_R0 + word_arg_count)
+-					EMIT_MOV(compiler, SLJIT_R0 + word_arg_count, 0, tmp, 0);
+-			} else {
+-				EMIT_MOV(compiler, SLJIT_S0 - saved_arg_count, 0, tmp, 0);
+-				saved_arg_count++;
+-			}
+-			word_arg_count++;
+-		} else {
+-#ifdef _WIN64
+-			SLJIT_COMPILE_ASSERT(SLJIT_FR0 == 1, float_register_index_start);
+-			float_arg_count++;
+-			if (float_arg_count != float_arg_count + word_arg_count)
+-				FAIL_IF(emit_sse2_load(compiler, (arg_types & SLJIT_ARG_MASK) == SLJIT_ARG_TYPE_F32,
+-					float_arg_count, float_arg_count + word_arg_count, 0));
+-#endif /* _WIN64 */
++		if (args > 0) {
++			inst[0] = REX_W;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_map[SLJIT_S0] << 3) | 0x7 /* rdi */;
++			inst += 3;
++		}
++		if (args > 1) {
++			inst[0] = REX_W | REX_R;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_lmap[SLJIT_S1] << 3) | 0x6 /* rsi */;
++			inst += 3;
++		}
++		if (args > 2) {
++			inst[0] = REX_W | REX_R;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_lmap[SLJIT_S2] << 3) | 0x2 /* rdx */;
++		}
++#else
++		if (args > 0) {
++			inst[0] = REX_W;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_map[SLJIT_S0] << 3) | 0x1 /* rcx */;
++			inst += 3;
++		}
++		if (args > 1) {
++			inst[0] = REX_W;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_map[SLJIT_S1] << 3) | 0x2 /* rdx */;
++			inst += 3;
+ 		}
+-		arg_types >>= SLJIT_ARG_SHIFT;
++		if (args > 2) {
++			inst[0] = REX_W | REX_B;
++			inst[1] = MOV_r_rm;
++			inst[2] = MOD_REG | (reg_map[SLJIT_S2] << 3) | 0x0 /* r8 */;
++		}
++#endif
+ 	}
+ 
+-	local_size = ((local_size + saved_regs_size + 0xf) & ~0xf) - saved_regs_size;
++	local_size = ((local_size + SLJIT_LOCALS_OFFSET + saved_register_size + 15) & ~15) - saved_register_size;
+ 	compiler->local_size = local_size;
+ 
+ #ifdef _WIN64
+@@ -490,49 +234,44 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_enter(struct sljit_compiler *compi
+ 				EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_MEM1(SLJIT_SP), -4096 * 3);
+ 		}
+ 		else {
+-			EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_IMM, local_size >> 12);
++			EMIT_MOV(compiler, SLJIT_R0, 0, SLJIT_SP, 0);
++			EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_IMM, (local_size - 1) >> 12);
+ 
+-			EMIT_MOV(compiler, TMP_REG2, 0, SLJIT_MEM1(SLJIT_SP), -4096);
+-			BINARY_IMM32(SUB, 4096, SLJIT_SP, 0);
+-			BINARY_IMM32(SUB, 1, TMP_REG1, 0);
++			SLJIT_ASSERT (reg_map[SLJIT_R0] == 0);
++
++			EMIT_MOV(compiler, TMP_REG2, 0, SLJIT_MEM1(SLJIT_R0), -4096);
++			FAIL_IF(emit_non_cum_binary(compiler, BINARY_OPCODE(SUB),
++				SLJIT_R0, 0, SLJIT_R0, 0, SLJIT_IMM, 4096));
++			FAIL_IF(emit_non_cum_binary(compiler, BINARY_OPCODE(SUB),
++				TMP_REG1, 0, TMP_REG1, 0, SLJIT_IMM, 1));
+ 
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 2);
+ 			FAIL_IF(!inst);
+ 
+ 			INC_SIZE(2);
+ 			inst[0] = JNE_i8;
+-			inst[1] = (sljit_u8)-21;
+-			local_size &= 0xfff;
++			inst[1] = (sljit_s8) -19;
+ 		}
+ 
+-		if (local_size > 0)
+-			EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_MEM1(SLJIT_SP), -local_size);
++		EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_MEM1(SLJIT_SP), -local_size);
+ 	}
+-#endif /* _WIN64 */
++#endif
+ 
+-	if (local_size > 0)
+-		BINARY_IMM32(SUB, local_size, SLJIT_SP, 0);
++	if (local_size > 0) {
++		FAIL_IF(emit_non_cum_binary(compiler, BINARY_OPCODE(SUB),
++			SLJIT_SP, 0, SLJIT_SP, 0, SLJIT_IMM, local_size));
++	}
+ 
+ #ifdef _WIN64
+-	if (saved_float_regs_size > 0) {
+-		compiler->mode32 = 1;
+-
+-		tmp = SLJIT_FS0 - fsaveds;
+-		for (i = SLJIT_FS0; i > tmp; i--) {
+-			inst = emit_x86_instruction(compiler, 2 | EX86_SSE2, i, 0, SLJIT_MEM1(SLJIT_SP), saved_float_regs_offset);
+-			*inst++ = GROUP_0F;
+-			*inst = MOVAPS_xm_x;
+-			saved_float_regs_offset += 16;
+-		}
+-
+-		for (i = fscratches; i >= SLJIT_FIRST_SAVED_FLOAT_REG; i--) {
+-			inst = emit_x86_instruction(compiler, 2 | EX86_SSE2, i, 0, SLJIT_MEM1(SLJIT_SP), saved_float_regs_offset);
+-			*inst++ = GROUP_0F;
+-			*inst = MOVAPS_xm_x;
+-			saved_float_regs_offset += 16;
+-		}
++	/* Save xmm6 register: movaps [rsp + 0x20], xmm6 */
++	if (fscratches >= 6 || fsaveds >= 1) {
++		inst = (sljit_u8*)ensure_buf(compiler, 1 + 5);
++		FAIL_IF(!inst);
++		INC_SIZE(5);
++		*inst++ = GROUP_0F;
++		sljit_unaligned_store_s32(inst, 0x20247429);
+ 	}
+-#endif /* _WIN64 */
++#endif
+ 
+ 	return SLJIT_SUCCESS;
+ }
+@@ -541,65 +280,46 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_set_context(struct sljit_compiler *comp
+ 	sljit_s32 options, sljit_s32 arg_types, sljit_s32 scratches, sljit_s32 saveds,
+ 	sljit_s32 fscratches, sljit_s32 fsaveds, sljit_s32 local_size)
+ {
+-	sljit_s32 saved_regs_size;
+-#ifdef _WIN64
+-	sljit_s32 saved_float_regs_size;
+-#endif /* _WIN64 */
++	sljit_s32 saved_register_size;
+ 
+ 	CHECK_ERROR();
+ 	CHECK(check_sljit_set_context(compiler, options, arg_types, scratches, saveds, fscratches, fsaveds, local_size));
+ 	set_set_context(compiler, options, arg_types, scratches, saveds, fscratches, fsaveds, local_size);
+ 
+ #ifdef _WIN64
+-	local_size += SLJIT_LOCALS_OFFSET;
+-	saved_float_regs_size = GET_SAVED_FLOAT_REGISTERS_SIZE(fscratches, fsaveds, 16);
+-
+-	if (saved_float_regs_size > 0)
+-		local_size = ((local_size + 0xf) & ~0xf) + saved_float_regs_size;
+-#else /* !_WIN64 */
+-	SLJIT_ASSERT(SLJIT_LOCALS_OFFSET == 0);
+-#endif /* _WIN64 */
++	/* Two/four register slots for parameters plus space for xmm6 register if needed. */
++	if (fscratches >= 6 || fsaveds >= 1)
++		compiler->locals_offset = 6 * sizeof(sljit_sw);
++	else
++		compiler->locals_offset = ((scratches > 2) ? 4 : 2) * sizeof(sljit_sw);
++#endif
+ 
+ 	/* Including the return address saved by the call instruction. */
+-	saved_regs_size = GET_SAVED_REGISTERS_SIZE(scratches, saveds, 1);
+-	compiler->local_size = ((local_size + saved_regs_size + 0xf) & ~0xf) - saved_regs_size;
++	saved_register_size = GET_SAVED_REGISTERS_SIZE(scratches, saveds, 1);
++	compiler->local_size = ((local_size + SLJIT_LOCALS_OFFSET + saved_register_size + 15) & ~15) - saved_register_size;
+ 	return SLJIT_SUCCESS;
+ }
+ 
+-static sljit_s32 emit_stack_frame_release(struct sljit_compiler *compiler)
++SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_return(struct sljit_compiler *compiler, sljit_s32 op, sljit_s32 src, sljit_sw srcw)
+ {
+-	sljit_uw size;
+-	sljit_s32 i, tmp;
++	sljit_s32 i, tmp, size;
+ 	sljit_u8 *inst;
+-#ifdef _WIN64
+-	sljit_s32 saved_float_regs_offset;
+-	sljit_s32 fscratches = compiler->fscratches;
+-	sljit_s32 fsaveds = compiler->fsaveds;
+-#endif /* _WIN64 */
+ 
+-#ifdef _WIN64
+-	saved_float_regs_offset = GET_SAVED_FLOAT_REGISTERS_SIZE(fscratches, fsaveds, 16);
++	CHECK_ERROR();
++	CHECK(check_sljit_emit_return(compiler, op, src, srcw));
+ 
+-	if (saved_float_regs_offset > 0) {
+-		compiler->mode32 = 1;
+-		saved_float_regs_offset = (compiler->local_size - saved_float_regs_offset) & ~0xf;
+-
+-		tmp = SLJIT_FS0 - fsaveds;
+-		for (i = SLJIT_FS0; i > tmp; i--) {
+-			inst = emit_x86_instruction(compiler, 2 | EX86_SSE2, i, 0, SLJIT_MEM1(SLJIT_SP), saved_float_regs_offset);
+-			*inst++ = GROUP_0F;
+-			*inst = MOVAPS_x_xm;
+-			saved_float_regs_offset += 16;
+-		}
++	FAIL_IF(emit_mov_before_return(compiler, op, src, srcw));
+ 
+-		for (i = fscratches; i >= SLJIT_FIRST_SAVED_FLOAT_REG; i--) {
+-			inst = emit_x86_instruction(compiler, 2 | EX86_SSE2, i, 0, SLJIT_MEM1(SLJIT_SP), saved_float_regs_offset);
+-			*inst++ = GROUP_0F;
+-			*inst = MOVAPS_x_xm;
+-			saved_float_regs_offset += 16;
+-		}
++#ifdef _WIN64
++	/* Restore xmm6 register: movaps xmm6, [rsp + 0x20] */
++	if (compiler->fscratches >= 6 || compiler->fsaveds >= 1) {
++		inst = (sljit_u8*)ensure_buf(compiler, 1 + 5);
++		FAIL_IF(!inst);
++		INC_SIZE(5);
++		*inst++ = GROUP_0F;
++		sljit_unaligned_store_s32(inst, 0x20247428);
+ 	}
+-#endif /* _WIN64 */
++#endif
+ 
+ 	if (compiler->local_size > 0) {
+ 		if (compiler->local_size <= 127) {
+@@ -609,7 +329,7 @@ static sljit_s32 emit_stack_frame_release(struct sljit_compiler *compiler)
+ 			*inst++ = REX_W;
+ 			*inst++ = GROUP_BINARY_83;
+ 			*inst++ = MOD_REG | ADD | 4;
+-			*inst = U8(compiler->local_size);
++			*inst = compiler->local_size;
+ 		}
+ 		else {
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 7);
+@@ -644,63 +364,288 @@ static sljit_s32 emit_stack_frame_release(struct sljit_compiler *compiler)
+ 		POP_REG(reg_lmap[i]);
+ 	}
+ 
++	inst = (sljit_u8*)ensure_buf(compiler, 1 + 1);
++	FAIL_IF(!inst);
++	INC_SIZE(1);
++	RET();
+ 	return SLJIT_SUCCESS;
+ }
+ 
+-SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_return_void(struct sljit_compiler *compiler)
++/* --------------------------------------------------------------------- */
++/*  Operators                                                            */
++/* --------------------------------------------------------------------- */
++
++static sljit_s32 emit_do_imm32(struct sljit_compiler *compiler, sljit_u8 rex, sljit_u8 opcode, sljit_sw imm)
+ {
+ 	sljit_u8 *inst;
++	sljit_s32 length = 1 + (rex ? 1 : 0) + sizeof(sljit_s32);
+ 
+-	CHECK_ERROR();
+-	CHECK(check_sljit_emit_return_void(compiler));
+-
+-	FAIL_IF(emit_stack_frame_release(compiler));
+-
+-	inst = (sljit_u8*)ensure_buf(compiler, 1 + 1);
++	inst = (sljit_u8*)ensure_buf(compiler, 1 + length);
+ 	FAIL_IF(!inst);
+-	INC_SIZE(1);
+-	RET();
++	INC_SIZE(length);
++	if (rex)
++		*inst++ = rex;
++	*inst++ = opcode;
++	sljit_unaligned_store_s32(inst, imm);
+ 	return SLJIT_SUCCESS;
+ }
+ 
++static sljit_u8* emit_x86_instruction(struct sljit_compiler *compiler, sljit_s32 size,
++	/* The register or immediate operand. */
++	sljit_s32 a, sljit_sw imma,
++	/* The general operand (not immediate). */
++	sljit_s32 b, sljit_sw immb)
++{
++	sljit_u8 *inst;
++	sljit_u8 *buf_ptr;
++	sljit_u8 rex = 0;
++	sljit_s32 flags = size & ~0xf;
++	sljit_s32 inst_size;
++
++	/* The immediate operand must be 32 bit. */
++	SLJIT_ASSERT(!(a & SLJIT_IMM) || compiler->mode32 || IS_HALFWORD(imma));
++	/* Both cannot be switched on. */
++	SLJIT_ASSERT((flags & (EX86_BIN_INS | EX86_SHIFT_INS)) != (EX86_BIN_INS | EX86_SHIFT_INS));
++	/* Size flags not allowed for typed instructions. */
++	SLJIT_ASSERT(!(flags & (EX86_BIN_INS | EX86_SHIFT_INS)) || (flags & (EX86_BYTE_ARG | EX86_HALF_ARG)) == 0);
++	/* Both size flags cannot be switched on. */
++	SLJIT_ASSERT((flags & (EX86_BYTE_ARG | EX86_HALF_ARG)) != (EX86_BYTE_ARG | EX86_HALF_ARG));
++	/* SSE2 and immediate is not possible. */
++	SLJIT_ASSERT(!(a & SLJIT_IMM) || !(flags & EX86_SSE2));
++	SLJIT_ASSERT((flags & (EX86_PREF_F2 | EX86_PREF_F3)) != (EX86_PREF_F2 | EX86_PREF_F3)
++		&& (flags & (EX86_PREF_F2 | EX86_PREF_66)) != (EX86_PREF_F2 | EX86_PREF_66)
++		&& (flags & (EX86_PREF_F3 | EX86_PREF_66)) != (EX86_PREF_F3 | EX86_PREF_66));
++
++	size &= 0xf;
++	inst_size = size;
++
++	if (!compiler->mode32 && !(flags & EX86_NO_REXW))
++		rex |= REX_W;
++	else if (flags & EX86_REX)
++		rex |= REX;
++
++	if (flags & (EX86_PREF_F2 | EX86_PREF_F3))
++		inst_size++;
++	if (flags & EX86_PREF_66)
++		inst_size++;
++
++	/* Calculate size of b. */
++	inst_size += 1; /* mod r/m byte. */
++	if (b & SLJIT_MEM) {
++		if (!(b & OFFS_REG_MASK)) {
++			if (NOT_HALFWORD(immb)) {
++				PTR_FAIL_IF(emit_load_imm64(compiler, TMP_REG2, immb));
++				immb = 0;
++				if (b & REG_MASK)
++					b |= TO_OFFS_REG(TMP_REG2);
++				else
++					b |= TMP_REG2;
++			}
++			else if (reg_lmap[b & REG_MASK] == 4)
++				b |= TO_OFFS_REG(SLJIT_SP);
++		}
++
++		if ((b & REG_MASK) == SLJIT_UNUSED)
++			inst_size += 1 + sizeof(sljit_s32); /* SIB byte required to avoid RIP based addressing. */
++		else {
++			if (reg_map[b & REG_MASK] >= 8)
++				rex |= REX_B;
++
++			if (immb != 0 && (!(b & OFFS_REG_MASK) || (b & OFFS_REG_MASK) == TO_OFFS_REG(SLJIT_SP))) {
++				/* Immediate operand. */
++				if (immb <= 127 && immb >= -128)
++					inst_size += sizeof(sljit_s8);
++				else
++					inst_size += sizeof(sljit_s32);
++			}
++			else if (reg_lmap[b & REG_MASK] == 5)
++				inst_size += sizeof(sljit_s8);
++
++			if ((b & OFFS_REG_MASK) != SLJIT_UNUSED) {
++				inst_size += 1; /* SIB byte. */
++				if (reg_map[OFFS_REG(b)] >= 8)
++					rex |= REX_X;
++			}
++		}
++	}
++	else if (!(flags & EX86_SSE2_OP2)) {
++		if (reg_map[b] >= 8)
++			rex |= REX_B;
++	}
++	else if (freg_map[b] >= 8)
++		rex |= REX_B;
++
++	if (a & SLJIT_IMM) {
++		if (flags & EX86_BIN_INS) {
++			if (imma <= 127 && imma >= -128) {
++				inst_size += 1;
++				flags |= EX86_BYTE_ARG;
++			} else
++				inst_size += 4;
++		}
++		else if (flags & EX86_SHIFT_INS) {
++			imma &= compiler->mode32 ? 0x1f : 0x3f;
++			if (imma != 1) {
++				inst_size ++;
++				flags |= EX86_BYTE_ARG;
++			}
++		} else if (flags & EX86_BYTE_ARG)
++			inst_size++;
++		else if (flags & EX86_HALF_ARG)
++			inst_size += sizeof(short);
++		else
++			inst_size += sizeof(sljit_s32);
++	}
++	else {
++		SLJIT_ASSERT(!(flags & EX86_SHIFT_INS) || a == SLJIT_PREF_SHIFT_REG);
++		/* reg_map[SLJIT_PREF_SHIFT_REG] is less than 8. */
++		if (!(flags & EX86_SSE2_OP1)) {
++			if (reg_map[a] >= 8)
++				rex |= REX_R;
++		}
++		else if (freg_map[a] >= 8)
++			rex |= REX_R;
++	}
++
++	if (rex)
++		inst_size++;
++
++	inst = (sljit_u8*)ensure_buf(compiler, 1 + inst_size);
++	PTR_FAIL_IF(!inst);
++
++	/* Encoding the byte. */
++	INC_SIZE(inst_size);
++	if (flags & EX86_PREF_F2)
++		*inst++ = 0xf2;
++	if (flags & EX86_PREF_F3)
++		*inst++ = 0xf3;
++	if (flags & EX86_PREF_66)
++		*inst++ = 0x66;
++	if (rex)
++		*inst++ = rex;
++	buf_ptr = inst + size;
++
++	/* Encode mod/rm byte. */
++	if (!(flags & EX86_SHIFT_INS)) {
++		if ((flags & EX86_BIN_INS) && (a & SLJIT_IMM))
++			*inst = (flags & EX86_BYTE_ARG) ? GROUP_BINARY_83 : GROUP_BINARY_81;
++
++		if (a & SLJIT_IMM)
++			*buf_ptr = 0;
++		else if (!(flags & EX86_SSE2_OP1))
++			*buf_ptr = reg_lmap[a] << 3;
++		else
++			*buf_ptr = freg_lmap[a] << 3;
++	}
++	else {
++		if (a & SLJIT_IMM) {
++			if (imma == 1)
++				*inst = GROUP_SHIFT_1;
++			else
++				*inst = GROUP_SHIFT_N;
++		} else
++			*inst = GROUP_SHIFT_CL;
++		*buf_ptr = 0;
++	}
++
++	if (!(b & SLJIT_MEM))
++		*buf_ptr++ |= MOD_REG + ((!(flags & EX86_SSE2_OP2)) ? reg_lmap[b] : freg_lmap[b]);
++	else if ((b & REG_MASK) != SLJIT_UNUSED) {
++		if ((b & OFFS_REG_MASK) == SLJIT_UNUSED || (b & OFFS_REG_MASK) == TO_OFFS_REG(SLJIT_SP)) {
++			if (immb != 0 || reg_lmap[b & REG_MASK] == 5) {
++				if (immb <= 127 && immb >= -128)
++					*buf_ptr |= 0x40;
++				else
++					*buf_ptr |= 0x80;
++			}
++
++			if ((b & OFFS_REG_MASK) == SLJIT_UNUSED)
++				*buf_ptr++ |= reg_lmap[b & REG_MASK];
++			else {
++				*buf_ptr++ |= 0x04;
++				*buf_ptr++ = reg_lmap[b & REG_MASK] | (reg_lmap[OFFS_REG(b)] << 3);
++			}
++
++			if (immb != 0 || reg_lmap[b & REG_MASK] == 5) {
++				if (immb <= 127 && immb >= -128)
++					*buf_ptr++ = immb; /* 8 bit displacement. */
++				else {
++					sljit_unaligned_store_s32(buf_ptr, immb); /* 32 bit displacement. */
++					buf_ptr += sizeof(sljit_s32);
++				}
++			}
++		}
++		else {
++			if (reg_lmap[b & REG_MASK] == 5)
++				*buf_ptr |= 0x40;
++			*buf_ptr++ |= 0x04;
++			*buf_ptr++ = reg_lmap[b & REG_MASK] | (reg_lmap[OFFS_REG(b)] << 3) | (immb << 6);
++			if (reg_lmap[b & REG_MASK] == 5)
++				*buf_ptr++ = 0;
++		}
++	}
++	else {
++		*buf_ptr++ |= 0x04;
++		*buf_ptr++ = 0x25;
++		sljit_unaligned_store_s32(buf_ptr, immb); /* 32 bit displacement. */
++		buf_ptr += sizeof(sljit_s32);
++	}
++
++	if (a & SLJIT_IMM) {
++		if (flags & EX86_BYTE_ARG)
++			*buf_ptr = imma;
++		else if (flags & EX86_HALF_ARG)
++			sljit_unaligned_store_s16(buf_ptr, imma);
++		else if (!(flags & EX86_SHIFT_INS))
++			sljit_unaligned_store_s32(buf_ptr, imma);
++	}
++
++	return !(flags & EX86_SHIFT_INS) ? inst : (inst + 1);
++}
++
+ /* --------------------------------------------------------------------- */
+ /*  Call / return instructions                                           */
+ /* --------------------------------------------------------------------- */
+ 
+ #ifndef _WIN64
+ 
+-static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_types, sljit_s32 *src_ptr)
++static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_types, sljit_s32 *src_ptr, sljit_sw srcw)
+ {
+ 	sljit_s32 src = src_ptr ? (*src_ptr) : 0;
+ 	sljit_s32 word_arg_count = 0;
+ 
+ 	SLJIT_ASSERT(reg_map[SLJIT_R1] == 6 && reg_map[SLJIT_R3] == 1 && reg_map[TMP_REG1] == 2);
+-	SLJIT_ASSERT(!(src & SLJIT_MEM));
++
++	compiler->mode32 = 0;
+ 
+ 	/* Remove return value. */
+-	arg_types >>= SLJIT_ARG_SHIFT;
++	arg_types >>= SLJIT_DEF_SHIFT;
+ 
+ 	while (arg_types) {
+-		if ((arg_types & SLJIT_ARG_MASK) < SLJIT_ARG_TYPE_F64)
++		if ((arg_types & SLJIT_DEF_MASK) < SLJIT_ARG_TYPE_F32)
+ 			word_arg_count++;
+-		arg_types >>= SLJIT_ARG_SHIFT;
++		arg_types >>= SLJIT_DEF_SHIFT;
+ 	}
+ 
+ 	if (word_arg_count == 0)
+ 		return SLJIT_SUCCESS;
+ 
+-	if (word_arg_count >= 3) {
+-		if (src == SLJIT_R2)
+-			*src_ptr = TMP_REG1;
+-		EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_R2, 0);
++	if (src & SLJIT_MEM) {
++		ADJUST_LOCAL_OFFSET(src, srcw);
++		EMIT_MOV(compiler, TMP_REG2, 0, src, srcw);
++		*src_ptr = TMP_REG2;
+ 	}
++	else if (src == SLJIT_R2 && word_arg_count >= SLJIT_R2)
++		*src_ptr = TMP_REG1;
+ 
++	if (word_arg_count >= 3)
++		EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_R2, 0);
+ 	return emit_mov(compiler, SLJIT_R2, 0, SLJIT_R0, 0);
+ }
+ 
+ #else
+ 
+-static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_types, sljit_s32 *src_ptr)
++static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_types, sljit_s32 *src_ptr, sljit_sw srcw)
+ {
+ 	sljit_s32 src = src_ptr ? (*src_ptr) : 0;
+ 	sljit_s32 arg_count = 0;
+@@ -711,16 +656,16 @@ static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_t
+ 	static sljit_u8 word_arg_regs[5] = { 0, SLJIT_R3, SLJIT_R1, SLJIT_R2, TMP_REG1 };
+ 
+ 	SLJIT_ASSERT(reg_map[SLJIT_R3] == 1 && reg_map[SLJIT_R1] == 2 && reg_map[SLJIT_R2] == 8 && reg_map[TMP_REG1] == 9);
+-	SLJIT_ASSERT(!(src & SLJIT_MEM));
+ 
+-	arg_types >>= SLJIT_ARG_SHIFT;
++	compiler->mode32 = 0;
++	arg_types >>= SLJIT_DEF_SHIFT;
+ 
+ 	while (arg_types) {
+-		types = (types << SLJIT_ARG_SHIFT) | (arg_types & SLJIT_ARG_MASK);
++		types = (types << SLJIT_DEF_SHIFT) | (arg_types & SLJIT_DEF_MASK);
+ 
+-		switch (arg_types & SLJIT_ARG_MASK) {
+-		case SLJIT_ARG_TYPE_F64:
++		switch (arg_types & SLJIT_DEF_MASK) {
+ 		case SLJIT_ARG_TYPE_F32:
++		case SLJIT_ARG_TYPE_F64:
+ 			arg_count++;
+ 			float_arg_count++;
+ 
+@@ -742,23 +687,29 @@ static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_t
+ 			break;
+ 		}
+ 
+-		arg_types >>= SLJIT_ARG_SHIFT;
++		arg_types >>= SLJIT_DEF_SHIFT;
+ 	}
+ 
+ 	if (!data_trandfer)
+ 		return SLJIT_SUCCESS;
+ 
++	if (src & SLJIT_MEM) {
++		ADJUST_LOCAL_OFFSET(src, srcw);
++		EMIT_MOV(compiler, TMP_REG2, 0, src, srcw);
++		*src_ptr = TMP_REG2;
++	}
++
+ 	while (types) {
+-		switch (types & SLJIT_ARG_MASK) {
+-		case SLJIT_ARG_TYPE_F64:
++		switch (types & SLJIT_DEF_MASK) {
++		case SLJIT_ARG_TYPE_F32:
+ 			if (arg_count != float_arg_count)
+-				FAIL_IF(emit_sse2_load(compiler, 0, arg_count, float_arg_count, 0));
++				FAIL_IF(emit_sse2_load(compiler, 1, arg_count, float_arg_count, 0));
+ 			arg_count--;
+ 			float_arg_count--;
+ 			break;
+-		case SLJIT_ARG_TYPE_F32:
++		case SLJIT_ARG_TYPE_F64:
+ 			if (arg_count != float_arg_count)
+-				FAIL_IF(emit_sse2_load(compiler, 1, arg_count, float_arg_count, 0));
++				FAIL_IF(emit_sse2_load(compiler, 0, arg_count, float_arg_count, 0));
+ 			arg_count--;
+ 			float_arg_count--;
+ 			break;
+@@ -770,7 +721,7 @@ static sljit_s32 call_with_args(struct sljit_compiler *compiler, sljit_s32 arg_t
+ 			break;
+ 		}
+ 
+-		types >>= SLJIT_ARG_SHIFT;
++		types >>= SLJIT_DEF_SHIFT;
+ 	}
+ 
+ 	return SLJIT_SUCCESS;
+@@ -784,19 +735,13 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_jump* sljit_emit_call(struct sljit_compile
+ 	CHECK_ERROR_PTR();
+ 	CHECK_PTR(check_sljit_emit_call(compiler, type, arg_types));
+ 
+-	compiler->mode32 = 0;
+-
+-	PTR_FAIL_IF(call_with_args(compiler, arg_types, NULL));
+-
+-	if (type & SLJIT_CALL_RETURN) {
+-		PTR_FAIL_IF(emit_stack_frame_release(compiler));
+-		type = SLJIT_JUMP | (type & SLJIT_REWRITABLE_JUMP);
+-	}
++	PTR_FAIL_IF(call_with_args(compiler, arg_types, NULL, 0));
+ 
+ #if (defined SLJIT_VERBOSE && SLJIT_VERBOSE) \
+ 		|| (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
+ 	compiler->skip_checks = 1;
+ #endif
++
+ 	return sljit_emit_jump(compiler, type);
+ }
+ 
+@@ -807,25 +752,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_icall(struct sljit_compiler *compi
+ 	CHECK_ERROR();
+ 	CHECK(check_sljit_emit_icall(compiler, type, arg_types, src, srcw));
+ 
+-	compiler->mode32 = 0;
+-
+-	if (src & SLJIT_MEM) {
+-		ADJUST_LOCAL_OFFSET(src, srcw);
+-		EMIT_MOV(compiler, TMP_REG2, 0, src, srcw);
+-		src = TMP_REG2;
+-	}
+-
+-	if (type & SLJIT_CALL_RETURN) {
+-		if (src >= SLJIT_FIRST_SAVED_REG && src <= SLJIT_S0) {
+-			EMIT_MOV(compiler, TMP_REG2, 0, src, srcw);
+-			src = TMP_REG2;
+-		}
+-
+-		FAIL_IF(emit_stack_frame_release(compiler));
+-		type = SLJIT_JUMP;
+-	}
+-
+-	FAIL_IF(call_with_args(compiler, arg_types, &src));
++	FAIL_IF(call_with_args(compiler, arg_types, &src, srcw));
+ 
+ #if (defined SLJIT_VERBOSE && SLJIT_VERBOSE) \
+ 		|| (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
+@@ -843,6 +770,10 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_fast_enter(struct sljit_compiler *
+ 	CHECK(check_sljit_emit_fast_enter(compiler, dst, dstw));
+ 	ADJUST_LOCAL_OFFSET(dst, dstw);
+ 
++	/* For UNUSED dst. Uncommon, but possible. */
++	if (dst == SLJIT_UNUSED)
++		dst = TMP_REG1;
++
+ 	if (FAST_IS_REG(dst)) {
+ 		if (reg_map[dst] < 8) {
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 1);
+@@ -919,6 +850,9 @@ static sljit_s32 emit_mov_int(struct sljit_compiler *compiler, sljit_s32 sign,
+ 
+ 	compiler->mode32 = 0;
+ 
++	if (dst == SLJIT_UNUSED && !(src & SLJIT_MEM))
++		return SLJIT_SUCCESS; /* Empty instruction. */
++
+ 	if (src & SLJIT_IMM) {
+ 		if (FAST_IS_REG(dst)) {
+ 			if (sign || ((sljit_uw)srcw <= 0x7fffffff)) {
+@@ -969,16 +903,16 @@ static sljit_s32 skip_frames_before_return(struct sljit_compiler *compiler)
+ 	sljit_s32 tmp, size;
+ 
+ 	/* Don't adjust shadow stack if it isn't enabled.  */
+-	if (!cpu_has_shadow_stack())
++	if (!cpu_has_shadow_stack ())
+ 		return SLJIT_SUCCESS;
+ 
+ 	size = compiler->local_size;
+ 	tmp = compiler->scratches;
+ 	if (tmp >= SLJIT_FIRST_SAVED_REG)
+-		size += (tmp - SLJIT_FIRST_SAVED_REG + 1) * SSIZE_OF(sw);
++		size += (tmp - SLJIT_FIRST_SAVED_REG + 1) * sizeof(sljit_uw);
+ 	tmp = compiler->saveds < SLJIT_NUMBER_OF_SAVED_REGISTERS ? (SLJIT_S0 + 1 - compiler->saveds) : SLJIT_FIRST_SAVED_REG;
+ 	if (SLJIT_S0 >= tmp)
+-		size += (SLJIT_S0 - tmp + 1) * SSIZE_OF(sw);
++		size += (SLJIT_S0 - tmp + 1) * sizeof(sljit_uw);
+ 
+-	return adjust_shadow_stack(compiler, SLJIT_MEM1(SLJIT_SP), size);
++	return adjust_shadow_stack(compiler, SLJIT_UNUSED, 0, SLJIT_SP, size);
+ }
+diff --git a/ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c b/ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
+index c7dd9be8..515d98ae 100644
+--- a/ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
++++ b/ext/pcre/pcre2lib/sljit/sljitNativeX86_common.c
+@@ -65,8 +65,6 @@ SLJIT_API_FUNC_ATTRIBUTE const char* sljit_get_platform_name(void)
+     15 - R15
+ */
+ 
+-#define TMP_FREG	(0)
+-
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+ 
+ /* Last register + 1. */
+@@ -79,9 +77,9 @@ static const sljit_u8 reg_map[SLJIT_NUMBER_OF_REGISTERS + 3] = {
+ #define CHECK_EXTRA_REGS(p, w, do) \
+ 	if (p >= SLJIT_R3 && p <= SLJIT_S3) { \
+ 		if (p <= compiler->scratches) \
+-			w = compiler->scratches_offset + ((p) - SLJIT_R3) * SSIZE_OF(sw); \
++			w = compiler->saveds_offset - ((p) - SLJIT_R2) * (sljit_sw)sizeof(sljit_sw); \
+ 		else \
+-			w = compiler->locals_offset + ((p) - SLJIT_S2) * SSIZE_OF(sw); \
++			w = compiler->locals_offset + ((p) - SLJIT_S2) * (sljit_sw)sizeof(sljit_sw); \
+ 		p = SLJIT_MEM1(SLJIT_SP); \
+ 		do; \
+ 	}
+@@ -117,11 +115,11 @@ static const sljit_u8 reg_lmap[SLJIT_NUMBER_OF_REGISTERS + 4] = {
+ 
+ /* Args: xmm0-xmm3 */
+ static const sljit_u8 freg_map[SLJIT_NUMBER_OF_FLOAT_REGISTERS + 1] = {
+-	4, 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
++	4, 0, 1, 2, 3, 5, 6
+ };
+ /* low-map. freg_map & 0x7. */
+ static const sljit_u8 freg_lmap[SLJIT_NUMBER_OF_FLOAT_REGISTERS + 1] = {
+-	4, 0, 1, 2, 3, 5, 6, 7, 0, 1, 2,  3,  4,  5,  6,  7
++	4, 0, 1, 2, 3, 5, 6
+ };
+ 
+ #define REX_W		0x48
+@@ -145,8 +143,7 @@ static const sljit_u8 freg_lmap[SLJIT_NUMBER_OF_FLOAT_REGISTERS + 1] = {
+ 
+ #endif /* SLJIT_CONFIG_X86_32 */
+ 
+-#define U8(v)			((sljit_u8)(v))
+-
++#define TMP_FREG	(0)
+ 
+ /* Size flags for emit_x86_instruction: */
+ #define EX86_BIN_INS		0x0010
+@@ -208,15 +205,12 @@ static const sljit_u8 freg_lmap[SLJIT_NUMBER_OF_FLOAT_REGISTERS + 1] = {
+ #define JMP_i32		0xe9
+ #define JMP_rm		(/* GROUP_FF */ 4 << 3)
+ #define LEA_r_m		0x8d
+-#define LOOP_i8		0xe2
+ #define MOV_r_rm	0x8b
+ #define MOV_r_i32	0xb8
+ #define MOV_rm_r	0x89
+ #define MOV_rm_i32	0xc7
+ #define MOV_rm8_i8	0xc6
+ #define MOV_rm8_r8	0x88
+-#define MOVAPS_x_xm	0x28
+-#define MOVAPS_xm_x	0x29
+ #define MOVSD_x_xm	0x10
+ #define MOVSD_xm_x	0x11
+ #define MOVSXD_r_rm	0x63
+@@ -280,12 +274,14 @@ static const sljit_u8 freg_lmap[SLJIT_NUMBER_OF_FLOAT_REGISTERS + 1] = {
+ #define MOD_REG		0xc0
+ #define MOD_DISP8	0x40
+ 
+-#define INC_SIZE(s)			(*inst++ = U8(s), compiler->size += (s))
++#define INC_SIZE(s)			(*inst++ = (s), compiler->size += (s))
+ 
+-#define PUSH_REG(r)			(*inst++ = U8(PUSH_r + (r)))
+-#define POP_REG(r)			(*inst++ = U8(POP_r + (r)))
+-#define RET()				(*inst++ = RET_near)
+-#define RET_I16(n)			(*inst++ = RET_i16, *inst++ = U8(n), *inst++ = 0)
++#define PUSH_REG(r)			(*inst++ = (PUSH_r + (r)))
++#define POP_REG(r)			(*inst++ = (POP_r + (r)))
++#define RET()				(*inst++ = (RET_near))
++#define RET_I16(n)			(*inst++ = (RET_i16), *inst++ = n, *inst++ = 0)
++/* r32, r/m32 */
++#define MOV_RM(mod, reg, rm)		(*inst++ = (MOV_r_rm), *inst++ = (mod) << 6 | (reg) << 3 | (rm))
+ 
+ /* Multithreading does not affect these static variables, since they store
+    built-in CPU features. Therefore they can be overwritten by different threads
+@@ -375,7 +371,7 @@ static void get_cpu_features(void)
+ 	cpu_has_cmov = (features >> 15) & 0x1;
+ }
+ 
+-static sljit_u8 get_jump_code(sljit_uw type)
++static sljit_u8 get_jump_code(sljit_s32 type)
+ {
+ 	switch (type) {
+ 	case SLJIT_EQUAL:
+@@ -387,12 +383,10 @@ static sljit_u8 get_jump_code(sljit_uw type)
+ 		return 0x85 /* jne */;
+ 
+ 	case SLJIT_LESS:
+-	case SLJIT_CARRY:
+ 	case SLJIT_LESS_F64:
+ 		return 0x82 /* jc */;
+ 
+ 	case SLJIT_GREATER_EQUAL:
+-	case SLJIT_NOT_CARRY:
+ 	case SLJIT_GREATER_EQUAL_F64:
+ 		return 0x83 /* jae */;
+ 
+@@ -440,14 +434,14 @@ static sljit_u8* generate_put_label_code(struct sljit_put_label *put_label, slji
+ 
+ static sljit_u8* generate_near_jump_code(struct sljit_jump *jump, sljit_u8 *code_ptr, sljit_u8 *code, sljit_sw executable_offset)
+ {
+-	sljit_uw type = jump->flags >> TYPE_SHIFT;
++	sljit_s32 type = jump->flags >> TYPE_SHIFT;
+ 	sljit_s32 short_jump;
+ 	sljit_uw label_addr;
+ 
+ 	if (jump->flags & JUMP_LABEL)
+ 		label_addr = (sljit_uw)(code + jump->u.label->size);
+ 	else
+-		label_addr = jump->u.target - (sljit_uw)executable_offset;
++		label_addr = jump->u.target - executable_offset;
+ 
+ 	short_jump = (sljit_sw)(label_addr - (jump->addr + 2)) >= -128 && (sljit_sw)(label_addr - (jump->addr + 2)) <= 127;
+ 
+@@ -469,7 +463,7 @@ static sljit_u8* generate_near_jump_code(struct sljit_jump *jump, sljit_u8 *code
+ 		jump->addr++;
+ 	}
+ 	else if (short_jump) {
+-		*code_ptr++ = U8(get_jump_code(type) - 0x10);
++		*code_ptr++ = get_jump_code(type) - 0x10;
+ 		jump->addr++;
+ 	}
+ 	else {
+@@ -498,7 +492,7 @@ SLJIT_API_FUNC_ATTRIBUTE void* sljit_generate_code(struct sljit_compiler *compil
+ 	sljit_u8 *buf_end;
+ 	sljit_u8 len;
+ 	sljit_sw executable_offset;
+-	sljit_uw jump_addr;
++	sljit_sw jump_addr;
+ 
+ 	struct sljit_label *label;
+ 	struct sljit_jump *jump;
+@@ -536,7 +530,7 @@ SLJIT_API_FUNC_ATTRIBUTE void* sljit_generate_code(struct sljit_compiler *compil
+ 				switch (*buf_ptr) {
+ 				case 0:
+ 					label->addr = (sljit_uw)SLJIT_ADD_EXEC_OFFSET(code_ptr, executable_offset);
+-					label->size = (sljit_uw)(code_ptr - code);
++					label->size = code_ptr - code;
+ 					label = label->next;
+ 					break;
+ 				case 1:
+@@ -581,11 +575,11 @@ SLJIT_API_FUNC_ATTRIBUTE void* sljit_generate_code(struct sljit_compiler *compil
+ 
+ 	jump = compiler->jumps;
+ 	while (jump) {
+-		jump_addr = jump->addr + (sljit_uw)executable_offset;
++		jump_addr = jump->addr + executable_offset;
+ 
+ 		if (jump->flags & PATCH_MB) {
+ 			SLJIT_ASSERT((sljit_sw)(jump->u.label->addr - (jump_addr + sizeof(sljit_s8))) >= -128 && (sljit_sw)(jump->u.label->addr - (jump_addr + sizeof(sljit_s8))) <= 127);
+-			*(sljit_u8*)jump->addr = U8(jump->u.label->addr - (jump_addr + sizeof(sljit_s8)));
++			*(sljit_u8*)jump->addr = (sljit_u8)(jump->u.label->addr - (jump_addr + sizeof(sljit_s8)));
+ 		} else if (jump->flags & PATCH_MW) {
+ 			if (jump->flags & JUMP_LABEL) {
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+@@ -606,7 +600,7 @@ SLJIT_API_FUNC_ATTRIBUTE void* sljit_generate_code(struct sljit_compiler *compil
+ 		}
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+ 		else if (jump->flags & PATCH_MD)
+-			sljit_unaligned_store_sw((void*)jump->addr, (sljit_sw)jump->u.label->addr);
++			sljit_unaligned_store_sw((void*)jump->addr, jump->u.label->addr);
+ #endif
+ 
+ 		jump = jump->next;
+@@ -632,7 +626,7 @@ SLJIT_API_FUNC_ATTRIBUTE void* sljit_generate_code(struct sljit_compiler *compil
+ 
+ 	compiler->error = SLJIT_ERR_COMPILED;
+ 	compiler->executable_offset = executable_offset;
+-	compiler->executable_size = (sljit_uw)(code_ptr - code);
++	compiler->executable_size = code_ptr - code;
+ 
+ 	code = (sljit_u8*)SLJIT_ADD_EXEC_OFFSET(code, executable_offset);
+ 
+@@ -688,40 +682,17 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_has_cpu_feature(sljit_s32 feature_type)
+ 
+ #define BINARY_OPCODE(opcode) (((opcode ## _EAX_i32) << 24) | ((opcode ## _r_rm) << 16) | ((opcode ## _rm_r) << 8) | (opcode))
+ 
+-#define BINARY_IMM32(op_imm, immw, arg, argw) \
+-	do { \
+-		inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, immw, arg, argw); \
+-		FAIL_IF(!inst); \
+-		*(inst + 1) |= (op_imm); \
+-	} while (0)
+-
+-#if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-
+-#define BINARY_IMM(op_imm, op_mr, immw, arg, argw) \
+-	do { \
+-		if (IS_HALFWORD(immw) || compiler->mode32) { \
+-			BINARY_IMM32(op_imm, immw, arg, argw); \
+-		} \
+-		else { \
+-			FAIL_IF(emit_load_imm64(compiler, (arg == TMP_REG1) ? TMP_REG2 : TMP_REG1, immw)); \
+-			inst = emit_x86_instruction(compiler, 1, (arg == TMP_REG1) ? TMP_REG2 : TMP_REG1, 0, arg, argw); \
+-			FAIL_IF(!inst); \
+-			*inst = (op_mr); \
+-		} \
+-	} while (0)
+-
+-#define BINARY_EAX_IMM(op_eax_imm, immw) \
+-	FAIL_IF(emit_do_imm32(compiler, (!compiler->mode32) ? REX_W : 0, (op_eax_imm), immw))
+-
+-#else /* !SLJIT_CONFIG_X86_64 */
+-
+-#define BINARY_IMM(op_imm, op_mr, immw, arg, argw) \
+-	BINARY_IMM32(op_imm, immw, arg, argw)
+-
+-#define BINARY_EAX_IMM(op_eax_imm, immw) \
+-	FAIL_IF(emit_do_imm(compiler, (op_eax_imm), immw))
++static sljit_s32 emit_cum_binary(struct sljit_compiler *compiler,
++	sljit_u32 op_types,
++	sljit_s32 dst, sljit_sw dstw,
++	sljit_s32 src1, sljit_sw src1w,
++	sljit_s32 src2, sljit_sw src2w);
+ 
+-#endif /* SLJIT_CONFIG_X86_64 */
++static sljit_s32 emit_non_cum_binary(struct sljit_compiler *compiler,
++	sljit_u32 op_types,
++	sljit_s32 dst, sljit_sw dstw,
++	sljit_s32 src1, sljit_sw src1w,
++	sljit_s32 src2, sljit_sw src2w);
+ 
+ static sljit_s32 emit_mov(struct sljit_compiler *compiler,
+ 	sljit_s32 dst, sljit_sw dstw,
+@@ -824,7 +795,7 @@ static SLJIT_INLINE sljit_s32 cpu_has_shadow_stack(void)
+ }
+ 
+ static SLJIT_INLINE sljit_s32 adjust_shadow_stack(struct sljit_compiler *compiler,
+-	sljit_s32 src, sljit_sw srcw)
++	sljit_s32 src, sljit_sw srcw, sljit_s32 base, sljit_sw disp)
+ {
+ #if (defined SLJIT_CONFIG_X86_CET && SLJIT_CONFIG_X86_CET) && defined (__SHSTK__)
+ 	sljit_u8 *inst, *jz_after_cmp_inst;
+@@ -850,6 +821,12 @@ static SLJIT_INLINE sljit_s32 adjust_shadow_stack(struct sljit_compiler *compile
+ 	EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_MEM1(TMP_REG1), 0);
+ #endif /* SLJIT_CONFIG_X86_32 */
+ 
++	if (src == SLJIT_UNUSED) {
++		/* Return address is on stack.  */
++		src = SLJIT_MEM1(base);
++		srcw = disp;
++	}
++
+ 	/* Compare return address against TMP_REG1. */
+ 	FAIL_IF(emit_cmp_binary (compiler, TMP_REG1, 0, src, srcw));
+ 
+@@ -884,6 +861,8 @@ static SLJIT_INLINE sljit_s32 adjust_shadow_stack(struct sljit_compiler *compile
+ 	SLJIT_UNUSED_ARG(compiler);
+ 	SLJIT_UNUSED_ARG(src);
+ 	SLJIT_UNUSED_ARG(srcw);
++	SLJIT_UNUSED_ARG(base);
++	SLJIT_UNUSED_ARG(disp);
+ #endif /* SLJIT_CONFIG_X86_CET && __SHSTK__ */
+ 	return SLJIT_SUCCESS;
+ }
+@@ -900,6 +879,8 @@ static sljit_s32 emit_mov(struct sljit_compiler *compiler,
+ {
+ 	sljit_u8* inst;
+ 
++	SLJIT_ASSERT(dst != SLJIT_UNUSED);
++
+ 	if (FAST_IS_REG(src)) {
+ 		inst = emit_x86_instruction(compiler, 1, src, 0, dst, dstw);
+ 		FAIL_IF(!inst);
+@@ -909,14 +890,14 @@ static sljit_s32 emit_mov(struct sljit_compiler *compiler,
+ 	if (src & SLJIT_IMM) {
+ 		if (FAST_IS_REG(dst)) {
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+-			return emit_do_imm(compiler, MOV_r_i32 | reg_map[dst], srcw);
++			return emit_do_imm(compiler, MOV_r_i32 + reg_map[dst], srcw);
+ #else
+ 			if (!compiler->mode32) {
+ 				if (NOT_HALFWORD(srcw))
+ 					return emit_load_imm64(compiler, dst, srcw);
+ 			}
+ 			else
+-				return emit_do_imm32(compiler, (reg_map[dst] >= 8) ? REX_B : 0, U8(MOV_r_i32 | reg_lmap[dst]), srcw);
++				return emit_do_imm32(compiler, (reg_map[dst] >= 8) ? REX_B : 0, MOV_r_i32 + reg_lmap[dst], srcw);
+ #endif
+ 		}
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+@@ -957,7 +938,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op0(struct sljit_compiler *compile
+ {
+ 	sljit_u8 *inst;
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-	sljit_uw size;
++	sljit_s32 size;
+ #endif
+ 
+ 	CHECK_ERROR();
+@@ -994,7 +975,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op0(struct sljit_compiler *compile
+ 			&& reg_map[SLJIT_R1] < 7
+ 			&& reg_map[TMP_REG1] == 2);
+ #endif
+-		compiler->mode32 = op & SLJIT_32;
++		compiler->mode32 = op & SLJIT_I32_OP;
+ #endif
+ 		SLJIT_COMPILE_ASSERT((SLJIT_DIVMOD_UW & 0x2) == 0 && SLJIT_DIV_UW - 0x2 == SLJIT_DIVMOD_UW, bad_div_opcode_assignments);
+ 
+@@ -1103,7 +1084,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op0(struct sljit_compiler *compile
+ 		inst = (sljit_u8*)ensure_buf(compiler, 1 + 1); \
+ 		FAIL_IF(!inst); \
+ 		INC_SIZE(1); \
+-		*inst = U8(prefix); \
++		*inst = (prefix); \
+ 	} while (0)
+ 
+ static sljit_s32 emit_mov_byte(struct sljit_compiler *compiler, sljit_s32 sign,
+@@ -1123,7 +1104,7 @@ static sljit_s32 emit_mov_byte(struct sljit_compiler *compiler, sljit_s32 sign,
+ 	if (src & SLJIT_IMM) {
+ 		if (FAST_IS_REG(dst)) {
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+-			return emit_do_imm(compiler, MOV_r_i32 | reg_map[dst], srcw);
++			return emit_do_imm(compiler, MOV_r_i32 + reg_map[dst], srcw);
+ #else
+ 			inst = emit_x86_instruction(compiler, 1, SLJIT_IMM, srcw, dst, 0);
+ 			FAIL_IF(!inst);
+@@ -1153,7 +1134,7 @@ static sljit_s32 emit_mov_byte(struct sljit_compiler *compiler, sljit_s32 sign,
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+ 	else if (FAST_IS_REG(src) && reg_map[src] >= 4) {
+ 		/* src, dst are registers. */
+-		SLJIT_ASSERT(FAST_IS_REG(dst));
++		SLJIT_ASSERT(SLOW_IS_REG(dst));
+ 		if (reg_map[dst] < 4) {
+ 			if (dst != src)
+ 				EMIT_MOV(compiler, dst, 0, src, 0);
+@@ -1212,7 +1193,7 @@ static sljit_s32 emit_mov_byte(struct sljit_compiler *compiler, sljit_s32 sign,
+ 			}
+ 
+ 			if (work_r == SLJIT_R0) {
+-				ENCODE_PREFIX(XCHG_EAX_r | reg_map[TMP_REG1]);
++				ENCODE_PREFIX(XCHG_EAX_r + reg_map[TMP_REG1]);
+ 			}
+ 			else {
+ 				inst = emit_x86_instruction(compiler, 1, work_r, 0, dst_r, 0);
+@@ -1225,7 +1206,7 @@ static sljit_s32 emit_mov_byte(struct sljit_compiler *compiler, sljit_s32 sign,
+ 			*inst = MOV_rm8_r8;
+ 
+ 			if (work_r == SLJIT_R0) {
+-				ENCODE_PREFIX(XCHG_EAX_r | reg_map[TMP_REG1]);
++				ENCODE_PREFIX(XCHG_EAX_r + reg_map[TMP_REG1]);
+ 			}
+ 			else {
+ 				inst = emit_x86_instruction(compiler, 1, work_r, 0, dst_r, 0);
+@@ -1286,7 +1267,7 @@ static sljit_s32 emit_mov_half(struct sljit_compiler *compiler, sljit_s32 sign,
+ 	if (src & SLJIT_IMM) {
+ 		if (FAST_IS_REG(dst)) {
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+-			return emit_do_imm(compiler, MOV_r_i32 | reg_map[dst], srcw);
++			return emit_do_imm(compiler, MOV_r_i32 + reg_map[dst], srcw);
+ #else
+ 			inst = emit_x86_instruction(compiler, 1, SLJIT_IMM, srcw, dst, 0);
+ 			FAIL_IF(!inst);
+@@ -1335,6 +1316,9 @@ static sljit_s32 emit_unary(struct sljit_compiler *compiler, sljit_u8 opcode,
+ 		return SLJIT_SUCCESS;
+ 	}
+ 
++	if (SLJIT_UNLIKELY(dst == SLJIT_UNUSED))
++		dst = TMP_REG1;
++
+ 	if (FAST_IS_REG(dst)) {
+ 		EMIT_MOV(compiler, dst, 0, src, srcw);
+ 		inst = emit_x86_instruction(compiler, 1, 0, 0, dst, 0);
+@@ -1359,6 +1343,9 @@ static sljit_s32 emit_not_with_flags(struct sljit_compiler *compiler,
+ {
+ 	sljit_u8* inst;
+ 
++	if (dst == SLJIT_UNUSED)
++		dst = TMP_REG1;
++
+ 	if (FAST_IS_REG(dst)) {
+ 		EMIT_MOV(compiler, dst, 0, src, srcw);
+ 		inst = emit_x86_instruction(compiler, 1, 0, 0, dst, 0);
+@@ -1425,7 +1412,7 @@ static sljit_s32 emit_clz(struct sljit_compiler *compiler, sljit_s32 op_flags,
+ 	inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, 31, dst_r, 0);
+ #else
+ 	if (cpu_has_cmov) {
+-		EMIT_MOV(compiler, TMP_REG2, 0, SLJIT_IMM, !(op_flags & SLJIT_32) ? (64 + 63) : (32 + 31));
++		EMIT_MOV(compiler, TMP_REG2, 0, SLJIT_IMM, !(op_flags & SLJIT_I32_OP) ? (64 + 63) : (32 + 31));
+ 
+ 		inst = emit_x86_instruction(compiler, 2, dst_r, 0, TMP_REG2, 0);
+ 		FAIL_IF(!inst);
+@@ -1433,9 +1420,9 @@ static sljit_s32 emit_clz(struct sljit_compiler *compiler, sljit_s32 op_flags,
+ 		*inst = CMOVE_r_rm;
+ 	}
+ 	else
+-		FAIL_IF(sljit_emit_cmov_generic(compiler, SLJIT_EQUAL, dst_r, SLJIT_IMM, !(op_flags & SLJIT_32) ? (64 + 63) : (32 + 31)));
++		FAIL_IF(sljit_emit_cmov_generic(compiler, SLJIT_EQUAL, dst_r, SLJIT_IMM, !(op_flags & SLJIT_I32_OP) ? (64 + 63) : (32 + 31)));
+ 
+-	inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, !(op_flags & SLJIT_32) ? 63 : 31, dst_r, 0);
++	inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, !(op_flags & SLJIT_I32_OP) ? 63 : 31, dst_r, 0);
+ #endif
+ 
+ 	FAIL_IF(!inst);
+@@ -1463,7 +1450,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 	CHECK_EXTRA_REGS(dst, dstw, dst_is_ereg = 1);
+ 	CHECK_EXTRA_REGS(src, srcw, (void)0);
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-	compiler->mode32 = op_flags & SLJIT_32;
++	compiler->mode32 = op_flags & SLJIT_I32_OP;
+ #endif
+ 
+ 	op = GET_OPCODE(op);
+@@ -1478,8 +1465,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 				return SLJIT_SUCCESS;
+ 		}
+ 
++		if (op_flags & SLJIT_I32_OP) {
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-		if (op_flags & SLJIT_32) {
+ 			if (src & SLJIT_MEM) {
+ 				if (op == SLJIT_MOV_S32)
+ 					op = SLJIT_MOV_U32;
+@@ -1488,8 +1475,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 				if (op == SLJIT_MOV_U32)
+ 					op = SLJIT_MOV_S32;
+ 			}
+-		}
+ #endif
++		}
+ 
+ 		if (src & SLJIT_IMM) {
+ 			switch (op) {
+@@ -1533,9 +1520,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+ 		case SLJIT_MOV_U32:
+ 		case SLJIT_MOV_S32:
+-		case SLJIT_MOV32:
+ #endif
+-			EMIT_MOV(compiler, dst, dstw, src, srcw);
++			FAIL_IF(emit_mov(compiler, dst, dstw, src, srcw));
+ 			break;
+ 		case SLJIT_MOV_U8:
+ 			FAIL_IF(emit_mov_byte(compiler, 0, dst, dstw, src, srcw));
+@@ -1556,11 +1542,6 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 		case SLJIT_MOV_S32:
+ 			FAIL_IF(emit_mov_int(compiler, 1, dst, dstw, src, srcw));
+ 			break;
+-		case SLJIT_MOV32:
+-			compiler->mode32 = 1;
+-			EMIT_MOV(compiler, dst, dstw, src, srcw);
+-			compiler->mode32 = 0;
+-			break;
+ #endif
+ 		}
+ 
+@@ -1577,6 +1558,9 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 			return emit_not_with_flags(compiler, dst, dstw, src, srcw);
+ 		return emit_unary(compiler, NOT_rm, dst, dstw, src, srcw);
+ 
++	case SLJIT_NEG:
++		return emit_unary(compiler, NEG_rm, dst, dstw, src, srcw);
++
+ 	case SLJIT_CLZ:
+ 		return emit_clz(compiler, op_flags, dst, dstw, src, srcw);
+ 	}
+@@ -1584,6 +1568,36 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op1(struct sljit_compiler *compile
+ 	return SLJIT_SUCCESS;
+ }
+ 
++#if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
++
++#define BINARY_IMM(op_imm, op_mr, immw, arg, argw) \
++	if (IS_HALFWORD(immw) || compiler->mode32) { \
++		inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, immw, arg, argw); \
++		FAIL_IF(!inst); \
++		*(inst + 1) |= (op_imm); \
++	} \
++	else { \
++		FAIL_IF(emit_load_imm64(compiler, (arg == TMP_REG1) ? TMP_REG2 : TMP_REG1, immw)); \
++		inst = emit_x86_instruction(compiler, 1, (arg == TMP_REG1) ? TMP_REG2 : TMP_REG1, 0, arg, argw); \
++		FAIL_IF(!inst); \
++		*inst = (op_mr); \
++	}
++
++#define BINARY_EAX_IMM(op_eax_imm, immw) \
++	FAIL_IF(emit_do_imm32(compiler, (!compiler->mode32) ? REX_W : 0, (op_eax_imm), immw))
++
++#else
++
++#define BINARY_IMM(op_imm, op_mr, immw, arg, argw) \
++	inst = emit_x86_instruction(compiler, 1 | EX86_BIN_INS, SLJIT_IMM, immw, arg, argw); \
++	FAIL_IF(!inst); \
++	*(inst + 1) |= (op_imm);
++
++#define BINARY_EAX_IMM(op_eax_imm, immw) \
++	FAIL_IF(emit_do_imm(compiler, (op_eax_imm), immw))
++
++#endif
++
+ static sljit_s32 emit_cum_binary(struct sljit_compiler *compiler,
+ 	sljit_u32 op_types,
+ 	sljit_s32 dst, sljit_sw dstw,
+@@ -1591,10 +1605,23 @@ static sljit_s32 emit_cum_binary(struct sljit_compiler *compiler,
+ 	sljit_s32 src2, sljit_sw src2w)
+ {
+ 	sljit_u8* inst;
+-	sljit_u8 op_eax_imm = U8(op_types >> 24);
+-	sljit_u8 op_rm = U8((op_types >> 16) & 0xff);
+-	sljit_u8 op_mr = U8((op_types >> 8) & 0xff);
+-	sljit_u8 op_imm = U8(op_types & 0xff);
++	sljit_u8 op_eax_imm = (op_types >> 24);
++	sljit_u8 op_rm = (op_types >> 16) & 0xff;
++	sljit_u8 op_mr = (op_types >> 8) & 0xff;
++	sljit_u8 op_imm = op_types & 0xff;
++
++	if (dst == SLJIT_UNUSED) {
++		EMIT_MOV(compiler, TMP_REG1, 0, src1, src1w);
++		if (src2 & SLJIT_IMM) {
++			BINARY_IMM(op_imm, op_mr, src2w, TMP_REG1, 0);
++		}
++		else {
++			inst = emit_x86_instruction(compiler, 1, TMP_REG1, 0, src2, src2w);
++			FAIL_IF(!inst);
++			*inst = op_rm;
++		}
++		return SLJIT_SUCCESS;
++	}
+ 
+ 	if (dst == src1 && dstw == src1w) {
+ 		if (src2 & SLJIT_IMM) {
+@@ -1698,10 +1725,23 @@ static sljit_s32 emit_non_cum_binary(struct sljit_compiler *compiler,
+ 	sljit_s32 src2, sljit_sw src2w)
+ {
+ 	sljit_u8* inst;
+-	sljit_u8 op_eax_imm = U8(op_types >> 24);
+-	sljit_u8 op_rm = U8((op_types >> 16) & 0xff);
+-	sljit_u8 op_mr = U8((op_types >> 8) & 0xff);
+-	sljit_u8 op_imm = U8(op_types & 0xff);
++	sljit_u8 op_eax_imm = (op_types >> 24);
++	sljit_u8 op_rm = (op_types >> 16) & 0xff;
++	sljit_u8 op_mr = (op_types >> 8) & 0xff;
++	sljit_u8 op_imm = op_types & 0xff;
++
++	if (dst == SLJIT_UNUSED) {
++		EMIT_MOV(compiler, TMP_REG1, 0, src1, src1w);
++		if (src2 & SLJIT_IMM) {
++			BINARY_IMM(op_imm, op_mr, src2w, TMP_REG1, 0);
++		}
++		else {
++			inst = emit_x86_instruction(compiler, 1, TMP_REG1, 0, src2, src2w);
++			FAIL_IF(!inst);
++			*inst = op_rm;
++		}
++		return SLJIT_SUCCESS;
++	}
+ 
+ 	if (dst == src1 && dstw == src1w) {
+ 		if (src2 & SLJIT_IMM) {
+@@ -1770,7 +1810,9 @@ static sljit_s32 emit_mul(struct sljit_compiler *compiler,
+ 	sljit_s32 src2, sljit_sw src2w)
+ {
+ 	sljit_u8* inst;
+-	sljit_s32 dst_r = FAST_IS_REG(dst) ? dst : TMP_REG1;
++	sljit_s32 dst_r;
++
++	dst_r = SLOW_IS_REG(dst) ? dst : TMP_REG1;
+ 
+ 	/* Register destination. */
+ 	if (dst_r == src1 && !(src2 & SLJIT_IMM)) {
+@@ -1799,7 +1841,7 @@ static sljit_s32 emit_mul(struct sljit_compiler *compiler,
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 1);
+ 			FAIL_IF(!inst);
+ 			INC_SIZE(1);
+-			*inst = U8(src1w);
++			*inst = (sljit_s8)src1w;
+ 		}
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+ 		else {
+@@ -1842,7 +1884,7 @@ static sljit_s32 emit_mul(struct sljit_compiler *compiler,
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 1);
+ 			FAIL_IF(!inst);
+ 			INC_SIZE(1);
+-			*inst = U8(src2w);
++			*inst = (sljit_s8)src2w;
+ 		}
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+ 		else {
+@@ -2125,6 +2167,13 @@ static sljit_s32 emit_shift(struct sljit_compiler *compiler,
+ 			*inst |= mode;
+ 			return SLJIT_SUCCESS;
+ 		}
++		if (dst == SLJIT_UNUSED) {
++			EMIT_MOV(compiler, TMP_REG1, 0, src1, src1w);
++			inst = emit_x86_instruction(compiler, 1 | EX86_SHIFT_INS, src2, src2w, TMP_REG1, 0);
++			FAIL_IF(!inst);
++			*inst |= mode;
++			return SLJIT_SUCCESS;
++		}
+ 		if (dst == SLJIT_PREF_SHIFT_REG && src2 == SLJIT_PREF_SHIFT_REG) {
+ 			EMIT_MOV(compiler, TMP_REG1, 0, src1, src1w);
+ 			inst = emit_x86_instruction(compiler, 1 | EX86_SHIFT_INS, SLJIT_PREF_SHIFT_REG, 0, TMP_REG1, 0);
+@@ -2157,7 +2206,7 @@ static sljit_s32 emit_shift(struct sljit_compiler *compiler,
+ 		*inst |= mode;
+ 		EMIT_MOV(compiler, SLJIT_PREF_SHIFT_REG, 0, TMP_REG1, 0);
+ 	}
+-	else if (FAST_IS_REG(dst) && dst != src2 && dst != TMP_REG1 && !ADDRESSING_DEPENDS_ON(src2, dst)) {
++	else if (SLOW_IS_REG(dst) && dst != src2 && !ADDRESSING_DEPENDS_ON(src2, dst)) {
+ 		if (src1 != dst)
+ 			EMIT_MOV(compiler, dst, 0, src1, src1w);
+ 		EMIT_MOV(compiler, TMP_REG1, 0, SLJIT_PREF_SHIFT_REG, 0);
+@@ -2186,7 +2235,7 @@ static sljit_s32 emit_shift(struct sljit_compiler *compiler,
+ 		*inst |= mode;
+ 		EMIT_MOV(compiler, SLJIT_PREF_SHIFT_REG, 0, TMP_REG2, 0);
+ #endif
+-		if (dst != TMP_REG1)
++		if (dst != SLJIT_UNUSED)
+ 			return emit_mov(compiler, dst, dstw, TMP_REG1, 0);
+ 	}
+ 
+@@ -2224,7 +2273,7 @@ static sljit_s32 emit_shift_with_flags(struct sljit_compiler *compiler,
+ 	FAIL_IF(emit_shift(compiler, mode, dst, dstw, src1, src1w, src2, src2w));
+ 
+ 	if (FAST_IS_REG(dst))
+-		return emit_cmp_binary(compiler, dst, dstw, SLJIT_IMM, 0);
++		return emit_cmp_binary(compiler, (dst == SLJIT_UNUSED) ? TMP_REG1 : dst, dstw, SLJIT_IMM, 0);
+ 	return SLJIT_SUCCESS;
+ }
+ 
+@@ -2234,7 +2283,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2(struct sljit_compiler *compile
+ 	sljit_s32 src2, sljit_sw src2w)
+ {
+ 	CHECK_ERROR();
+-	CHECK(check_sljit_emit_op2(compiler, op, 0, dst, dstw, src1, src1w, src2, src2w));
++	CHECK(check_sljit_emit_op2(compiler, op, dst, dstw, src1, src1w, src2, src2w));
+ 	ADJUST_LOCAL_OFFSET(dst, dstw);
+ 	ADJUST_LOCAL_OFFSET(src1, src1w);
+ 	ADJUST_LOCAL_OFFSET(src2, src2w);
+@@ -2243,10 +2292,11 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2(struct sljit_compiler *compile
+ 	CHECK_EXTRA_REGS(src1, src1w, (void)0);
+ 	CHECK_EXTRA_REGS(src2, src2w, (void)0);
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-	compiler->mode32 = op & SLJIT_32;
++	compiler->mode32 = op & SLJIT_I32_OP;
+ #endif
+ 
+-	SLJIT_ASSERT(dst != TMP_REG1 || HAS_FLAGS(op));
++	if (dst == SLJIT_UNUSED && !HAS_FLAGS(op))
++		return SLJIT_SUCCESS;
+ 
+ 	switch (GET_OPCODE(op)) {
+ 	case SLJIT_ADD:
+@@ -2260,18 +2310,17 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2(struct sljit_compiler *compile
+ 		return emit_cum_binary(compiler, BINARY_OPCODE(ADC),
+ 			dst, dstw, src1, src1w, src2, src2w);
+ 	case SLJIT_SUB:
+-		if (src1 == SLJIT_IMM && src1w == 0)
+-			return emit_unary(compiler, NEG_rm, dst, dstw, src2, src2w);
+-
+ 		if (!HAS_FLAGS(op)) {
+ 			if ((src2 & SLJIT_IMM) && emit_lea_binary(compiler, dst, dstw, src1, src1w, SLJIT_IMM, -src2w) != SLJIT_ERR_UNSUPPORTED)
+ 				return compiler->error;
+-			if (FAST_IS_REG(dst) && src2 == dst) {
++			if (SLOW_IS_REG(dst) && src2 == dst) {
+ 				FAIL_IF(emit_non_cum_binary(compiler, BINARY_OPCODE(SUB), dst, 0, dst, 0, src1, src1w));
+ 				return emit_unary(compiler, NEG_rm, dst, 0, dst, 0);
+ 			}
+ 		}
+ 
++		if (dst == SLJIT_UNUSED)
++			return emit_cmp_binary(compiler, src1, src1w, src2, src2w);
+ 		return emit_non_cum_binary(compiler, BINARY_OPCODE(SUB),
+ 			dst, dstw, src1, src1w, src2, src2w);
+ 	case SLJIT_SUBC:
+@@ -2280,6 +2329,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2(struct sljit_compiler *compile
+ 	case SLJIT_MUL:
+ 		return emit_mul(compiler, dst, dstw, src1, src1w, src2, src2w);
+ 	case SLJIT_AND:
++		if (dst == SLJIT_UNUSED)
++			return emit_test_binary(compiler, src1, src1w, src2, src2w);
+ 		return emit_cum_binary(compiler, BINARY_OPCODE(AND),
+ 			dst, dstw, src1, src1w, src2, src2w);
+ 	case SLJIT_OR:
+@@ -2302,38 +2353,6 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2(struct sljit_compiler *compile
+ 	return SLJIT_SUCCESS;
+ }
+ 
+-SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op2u(struct sljit_compiler *compiler, sljit_s32 op,
+-	sljit_s32 src1, sljit_sw src1w,
+-	sljit_s32 src2, sljit_sw src2w)
+-{
+-	sljit_s32 opcode = GET_OPCODE(op);
+-
+-	CHECK_ERROR();
+-	CHECK(check_sljit_emit_op2(compiler, op, 1, 0, 0, src1, src1w, src2, src2w));
+-
+-	if (opcode != SLJIT_SUB && opcode != SLJIT_AND) {
+-#if (defined SLJIT_VERBOSE && SLJIT_VERBOSE) \
+-			|| (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
+-		compiler->skip_checks = 1;
+-#endif
+-		return sljit_emit_op2(compiler, op, TMP_REG1, 0, src1, src1w, src2, src2w);
+-	}
+-
+-	ADJUST_LOCAL_OFFSET(src1, src1w);
+-	ADJUST_LOCAL_OFFSET(src2, src2w);
+-
+-	CHECK_EXTRA_REGS(src1, src1w, (void)0);
+-	CHECK_EXTRA_REGS(src2, src2w, (void)0);
+-#if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-	compiler->mode32 = op & SLJIT_32;
+-#endif
+-
+-	if (opcode == SLJIT_SUB) {
+-		return emit_cmp_binary(compiler, src1, src1w, src2, src2w);
+-	}
+-	return emit_test_binary(compiler, src1, src1w, src2, src2w);
+-}
+-
+ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_src(struct sljit_compiler *compiler, sljit_s32 op,
+ 	sljit_s32 src, sljit_sw srcw)
+ {
+@@ -2350,7 +2369,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_src(struct sljit_compiler *comp
+ 		/* Don't adjust shadow stack if it isn't enabled.  */
+ 		if (!cpu_has_shadow_stack ())
+ 			return SLJIT_SUCCESS;
+-		return adjust_shadow_stack(compiler, src, srcw);
++		return adjust_shadow_stack(compiler, src, srcw, SLJIT_UNUSED, 0);
+ 	case SLJIT_PREFETCH_L1:
+ 	case SLJIT_PREFETCH_L2:
+ 	case SLJIT_PREFETCH_L3:
+@@ -2382,7 +2401,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_get_float_register_index(sljit_s32 reg)
+ }
+ 
+ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_custom(struct sljit_compiler *compiler,
+-	void *instruction, sljit_u32 size)
++	void *instruction, sljit_s32 size)
+ {
+ 	sljit_u8 *inst;
+ 
+@@ -2401,13 +2420,13 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_custom(struct sljit_compiler *c
+ /* --------------------------------------------------------------------- */
+ 
+ /* Alignment(3) + 4 * 16 bytes. */
+-static sljit_u32 sse2_data[3 + (4 * 4)];
+-static sljit_u32 *sse2_buffer;
++static sljit_s32 sse2_data[3 + (4 * 4)];
++static sljit_s32 *sse2_buffer;
+ 
+ static void init_compiler(void)
+ {
+ 	/* Align to 16 bytes. */
+-	sse2_buffer = (sljit_u32*)(((sljit_uw)sse2_data + 15) & ~(sljit_uw)0xf);
++	sse2_buffer = (sljit_s32*)(((sljit_uw)sse2_data + 15) & ~0xf);
+ 
+ 	/* Single precision constants (each constant is 16 byte long). */
+ 	sse2_buffer[0] = 0x80000000;
+@@ -2467,7 +2486,7 @@ static SLJIT_INLINE sljit_s32 sljit_emit_fop1_conv_sw_from_f64(struct sljit_comp
+ 		compiler->mode32 = 0;
+ #endif
+ 
+-	inst = emit_x86_instruction(compiler, 2 | ((op & SLJIT_32) ? EX86_PREF_F3 : EX86_PREF_F2) | EX86_SSE2_OP2, dst_r, 0, src, srcw);
++	inst = emit_x86_instruction(compiler, 2 | ((op & SLJIT_F32_OP) ? EX86_PREF_F3 : EX86_PREF_F2) | EX86_SSE2_OP2, dst_r, 0, src, srcw);
+ 	FAIL_IF(!inst);
+ 	*inst++ = GROUP_0F;
+ 	*inst = CVTTSD2SI_r_xm;
+@@ -2499,7 +2518,7 @@ static SLJIT_INLINE sljit_s32 sljit_emit_fop1_conv_f64_from_sw(struct sljit_comp
+ 		srcw = 0;
+ 	}
+ 
+-	inst = emit_x86_instruction(compiler, 2 | ((op & SLJIT_32) ? EX86_PREF_F3 : EX86_PREF_F2) | EX86_SSE2_OP1, dst_r, 0, src, srcw);
++	inst = emit_x86_instruction(compiler, 2 | ((op & SLJIT_F32_OP) ? EX86_PREF_F3 : EX86_PREF_F2) | EX86_SSE2_OP1, dst_r, 0, src, srcw);
+ 	FAIL_IF(!inst);
+ 	*inst++ = GROUP_0F;
+ 	*inst = CVTSI2SD_x_rm;
+@@ -2508,7 +2527,7 @@ static SLJIT_INLINE sljit_s32 sljit_emit_fop1_conv_f64_from_sw(struct sljit_comp
+ 	compiler->mode32 = 1;
+ #endif
+ 	if (dst_r == TMP_FREG)
+-		return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, TMP_FREG);
++		return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, TMP_FREG);
+ 	return SLJIT_SUCCESS;
+ }
+ 
+@@ -2517,11 +2536,11 @@ static SLJIT_INLINE sljit_s32 sljit_emit_fop1_cmp(struct sljit_compiler *compile
+ 	sljit_s32 src2, sljit_sw src2w)
+ {
+ 	if (!FAST_IS_REG(src1)) {
+-		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, TMP_FREG, src1, src1w));
++		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, TMP_FREG, src1, src1w));
+ 		src1 = TMP_FREG;
+ 	}
+ 
+-	return emit_sse2_logic(compiler, UCOMISD_x_xm, !(op & SLJIT_32), src1, src2, src2w);
++	return emit_sse2_logic(compiler, UCOMISD_x_xm, !(op & SLJIT_F32_OP), src1, src2, src2w);
+ }
+ 
+ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_fop1(struct sljit_compiler *compiler, sljit_s32 op,
+@@ -2539,11 +2558,11 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_fop1(struct sljit_compiler *compil
+ 
+ 	if (GET_OPCODE(op) == SLJIT_MOV_F64) {
+ 		if (FAST_IS_REG(dst))
+-			return emit_sse2_load(compiler, op & SLJIT_32, dst, src, srcw);
++			return emit_sse2_load(compiler, op & SLJIT_F32_OP, dst, src, srcw);
+ 		if (FAST_IS_REG(src))
+-			return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, src);
+-		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, TMP_FREG, src, srcw));
+-		return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, TMP_FREG);
++			return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, src);
++		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, TMP_FREG, src, srcw));
++		return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, TMP_FREG);
+ 	}
+ 
+ 	if (GET_OPCODE(op) == SLJIT_CONV_F64_FROM_F32) {
+@@ -2552,41 +2571,41 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_fop1(struct sljit_compiler *compil
+ 			/* We overwrite the high bits of source. From SLJIT point of view,
+ 			   this is not an issue.
+ 			   Note: In SSE3, we could also use MOVDDUP and MOVSLDUP. */
+-			FAIL_IF(emit_sse2_logic(compiler, UNPCKLPD_x_xm, op & SLJIT_32, src, src, 0));
++			FAIL_IF(emit_sse2_logic(compiler, UNPCKLPD_x_xm, op & SLJIT_F32_OP, src, src, 0));
+ 		}
+ 		else {
+-			FAIL_IF(emit_sse2_load(compiler, !(op & SLJIT_32), TMP_FREG, src, srcw));
++			FAIL_IF(emit_sse2_load(compiler, !(op & SLJIT_F32_OP), TMP_FREG, src, srcw));
+ 			src = TMP_FREG;
+ 		}
+ 
+-		FAIL_IF(emit_sse2_logic(compiler, CVTPD2PS_x_xm, op & SLJIT_32, dst_r, src, 0));
++		FAIL_IF(emit_sse2_logic(compiler, CVTPD2PS_x_xm, op & SLJIT_F32_OP, dst_r, src, 0));
+ 		if (dst_r == TMP_FREG)
+-			return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, TMP_FREG);
++			return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, TMP_FREG);
+ 		return SLJIT_SUCCESS;
+ 	}
+ 
+ 	if (FAST_IS_REG(dst)) {
+ 		dst_r = dst;
+ 		if (dst != src)
+-			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, dst_r, src, srcw));
++			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, dst_r, src, srcw));
+ 	}
+ 	else {
+ 		dst_r = TMP_FREG;
+-		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, dst_r, src, srcw));
++		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, dst_r, src, srcw));
+ 	}
+ 
+ 	switch (GET_OPCODE(op)) {
+ 	case SLJIT_NEG_F64:
+-		FAIL_IF(emit_sse2_logic(compiler, XORPD_x_xm, 1, dst_r, SLJIT_MEM0(), (sljit_sw)(op & SLJIT_32 ? sse2_buffer : sse2_buffer + 8)));
++		FAIL_IF(emit_sse2_logic(compiler, XORPD_x_xm, 1, dst_r, SLJIT_MEM0(), (sljit_sw)(op & SLJIT_F32_OP ? sse2_buffer : sse2_buffer + 8)));
+ 		break;
+ 
+ 	case SLJIT_ABS_F64:
+-		FAIL_IF(emit_sse2_logic(compiler, ANDPD_x_xm, 1, dst_r, SLJIT_MEM0(), (sljit_sw)(op & SLJIT_32 ? sse2_buffer + 4 : sse2_buffer + 12)));
++		FAIL_IF(emit_sse2_logic(compiler, ANDPD_x_xm, 1, dst_r, SLJIT_MEM0(), (sljit_sw)(op & SLJIT_F32_OP ? sse2_buffer + 4 : sse2_buffer + 12)));
+ 		break;
+ 	}
+ 
+ 	if (dst_r == TMP_FREG)
+-		return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, TMP_FREG);
++		return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, TMP_FREG);
+ 	return SLJIT_SUCCESS;
+ }
+ 
+@@ -2617,37 +2636,37 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_fop2(struct sljit_compiler *compil
+ 			src2w = src1w;
+ 		}
+ 		else if (dst != src2)
+-			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, dst_r, src1, src1w));
++			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, dst_r, src1, src1w));
+ 		else {
+ 			dst_r = TMP_FREG;
+-			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, TMP_FREG, src1, src1w));
++			FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, TMP_FREG, src1, src1w));
+ 		}
+ 	}
+ 	else {
+ 		dst_r = TMP_FREG;
+-		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_32, TMP_FREG, src1, src1w));
++		FAIL_IF(emit_sse2_load(compiler, op & SLJIT_F32_OP, TMP_FREG, src1, src1w));
+ 	}
+ 
+ 	switch (GET_OPCODE(op)) {
+ 	case SLJIT_ADD_F64:
+-		FAIL_IF(emit_sse2(compiler, ADDSD_x_xm, op & SLJIT_32, dst_r, src2, src2w));
++		FAIL_IF(emit_sse2(compiler, ADDSD_x_xm, op & SLJIT_F32_OP, dst_r, src2, src2w));
+ 		break;
+ 
+ 	case SLJIT_SUB_F64:
+-		FAIL_IF(emit_sse2(compiler, SUBSD_x_xm, op & SLJIT_32, dst_r, src2, src2w));
++		FAIL_IF(emit_sse2(compiler, SUBSD_x_xm, op & SLJIT_F32_OP, dst_r, src2, src2w));
+ 		break;
+ 
+ 	case SLJIT_MUL_F64:
+-		FAIL_IF(emit_sse2(compiler, MULSD_x_xm, op & SLJIT_32, dst_r, src2, src2w));
++		FAIL_IF(emit_sse2(compiler, MULSD_x_xm, op & SLJIT_F32_OP, dst_r, src2, src2w));
+ 		break;
+ 
+ 	case SLJIT_DIV_F64:
+-		FAIL_IF(emit_sse2(compiler, DIVSD_x_xm, op & SLJIT_32, dst_r, src2, src2w));
++		FAIL_IF(emit_sse2(compiler, DIVSD_x_xm, op & SLJIT_F32_OP, dst_r, src2, src2w));
+ 		break;
+ 	}
+ 
+ 	if (dst_r == TMP_FREG)
+-		return emit_sse2_store(compiler, op & SLJIT_32, dst, dstw, TMP_FREG);
++		return emit_sse2_store(compiler, op & SLJIT_F32_OP, dst, dstw, TMP_FREG);
+ 	return SLJIT_SUCCESS;
+ }
+ 
+@@ -2689,7 +2708,7 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_jump* sljit_emit_jump(struct sljit_compile
+ 
+ 	jump = (struct sljit_jump*)ensure_abuf(compiler, sizeof(struct sljit_jump));
+ 	PTR_FAIL_IF_NULL(jump);
+-	set_jump(jump, compiler, (sljit_u32)((type & SLJIT_REWRITABLE_JUMP) | ((type & 0xff) << TYPE_SHIFT)));
++	set_jump(jump, compiler, (type & SLJIT_REWRITABLE_JUMP) | ((type & 0xff) << TYPE_SHIFT));
+ 	type &= 0xff;
+ 
+ 	/* Worst case size. */
+@@ -2721,8 +2740,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_ijump(struct sljit_compiler *compi
+ 	if (src == SLJIT_IMM) {
+ 		jump = (struct sljit_jump*)ensure_abuf(compiler, sizeof(struct sljit_jump));
+ 		FAIL_IF_NULL(jump);
+-		set_jump(jump, compiler, (sljit_u32)(JUMP_ADDR | (type << TYPE_SHIFT)));
+-		jump->u.target = (sljit_uw)srcw;
++		set_jump(jump, compiler, JUMP_ADDR | (type << TYPE_SHIFT));
++		jump->u.target = srcw;
+ 
+ 		/* Worst case size. */
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+@@ -2745,7 +2764,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_ijump(struct sljit_compiler *compi
+ 		inst = emit_x86_instruction(compiler, 1, 0, 0, src, srcw);
+ 		FAIL_IF(!inst);
+ 		*inst++ = GROUP_FF;
+-		*inst = U8(*inst | ((type >= SLJIT_FAST_CALL) ? CALL_rm : JMP_rm));
++		*inst |= (type >= SLJIT_FAST_CALL) ? CALL_rm : JMP_rm;
+ 	}
+ 	return SLJIT_SUCCESS;
+ }
+@@ -2771,7 +2790,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 
+ 	type &= 0xff;
+ 	/* setcc = jcc + 0x10. */
+-	cond_set = U8(get_jump_code((sljit_uw)type) + 0x10);
++	cond_set = get_jump_code(type) + 0x10;
+ 
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+ 	if (GET_OPCODE(op) == SLJIT_OR && !GET_ALL_FLAGS(op) && FAST_IS_REG(dst)) {
+@@ -2783,9 +2802,9 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 		*inst++ = GROUP_0F;
+ 		*inst++ = cond_set;
+ 		*inst++ = MOD_REG | reg_lmap[TMP_REG1];
+-		*inst++ = U8(REX | (reg_map[TMP_REG1] <= 7 ? 0 : REX_R) | (reg_map[dst] <= 7 ? 0 : REX_B));
++		*inst++ = REX | (reg_map[TMP_REG1] <= 7 ? 0 : REX_R) | (reg_map[dst] <= 7 ? 0 : REX_B);
+ 		*inst++ = OR_rm8_r8;
+-		*inst++ = U8(MOD_REG | (reg_lmap[TMP_REG1] << 3) | reg_lmap[dst]);
++		*inst++ = MOD_REG | (reg_lmap[TMP_REG1] << 3) | reg_lmap[dst];
+ 		return SLJIT_SUCCESS;
+ 	}
+ 
+@@ -2803,7 +2822,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 	/* The movzx instruction does not affect flags. */
+ 	*inst++ = GROUP_0F;
+ 	*inst++ = MOVZX_r_rm8;
+-	*inst = U8(MOD_REG | (reg_lmap[reg] << 3) | reg_lmap[reg]);
++	*inst = MOD_REG | (reg_lmap[reg] << 3) | reg_lmap[reg];
+ 
+ 	if (reg != TMP_REG1)
+ 		return SLJIT_SUCCESS;
+@@ -2830,11 +2849,11 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 			/* Set low byte to conditional flag. */
+ 			*inst++ = GROUP_0F;
+ 			*inst++ = cond_set;
+-			*inst++ = U8(MOD_REG | reg_map[dst]);
++			*inst++ = MOD_REG | reg_map[dst];
+ 
+ 			*inst++ = GROUP_0F;
+ 			*inst++ = MOVZX_r_rm8;
+-			*inst = U8(MOD_REG | (reg_map[dst] << 3) | reg_map[dst]);
++			*inst = MOD_REG | (reg_map[dst] << 3) | reg_map[dst];
+ 			return SLJIT_SUCCESS;
+ 		}
+ 
+@@ -2853,15 +2872,15 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 
+ 			*inst++ = GROUP_0F;
+ 			/* cmovcc = setcc - 0x50. */
+-			*inst++ = U8(cond_set - 0x50);
+-			*inst++ = U8(MOD_REG | (reg_map[dst] << 3) | reg_map[TMP_REG1]);
++			*inst++ = cond_set - 0x50;
++			*inst++ = MOD_REG | (reg_map[dst] << 3) | reg_map[TMP_REG1];
+ 			return SLJIT_SUCCESS;
+ 		}
+ 
+ 		inst = (sljit_u8*)ensure_buf(compiler, 1 + 1 + 3 + 3 + 1);
+ 		FAIL_IF(!inst);
+ 		INC_SIZE(1 + 3 + 3 + 1);
+-		*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++		*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 		/* Set al to conditional flag. */
+ 		*inst++ = GROUP_0F;
+ 		*inst++ = cond_set;
+@@ -2869,8 +2888,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 
+ 		*inst++ = GROUP_0F;
+ 		*inst++ = MOVZX_r_rm8;
+-		*inst++ = U8(MOD_REG | (reg_map[dst] << 3) | 0 /* eax */);
+-		*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++		*inst++ = MOD_REG | (reg_map[dst] << 3) | 0 /* eax */;
++		*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 		return SLJIT_SUCCESS;
+ 	}
+ 
+@@ -2882,13 +2901,13 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 			FAIL_IF(!inst);
+ 			INC_SIZE(1 + 3 + 2 + 1);
+ 			/* Set low register to conditional flag. */
+-			*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++			*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 			*inst++ = GROUP_0F;
+ 			*inst++ = cond_set;
+ 			*inst++ = MOD_REG | 0 /* eax */;
+ 			*inst++ = OR_rm8_r8;
+ 			*inst++ = MOD_REG | (0 /* eax */ << 3) | reg_map[dst];
+-			*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++			*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 		}
+ 		else {
+ 			inst = (sljit_u8*)ensure_buf(compiler, 1 + 2 + 3 + 2 + 2);
+@@ -2896,14 +2915,14 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 			INC_SIZE(2 + 3 + 2 + 2);
+ 			/* Set low register to conditional flag. */
+ 			*inst++ = XCHG_r_rm;
+-			*inst++ = U8(MOD_REG | (1 /* ecx */ << 3) | reg_map[TMP_REG1]);
++			*inst++ = MOD_REG | (1 /* ecx */ << 3) | reg_map[TMP_REG1];
+ 			*inst++ = GROUP_0F;
+ 			*inst++ = cond_set;
+ 			*inst++ = MOD_REG | 1 /* ecx */;
+ 			*inst++ = OR_rm8_r8;
+ 			*inst++ = MOD_REG | (1 /* ecx */ << 3) | 0 /* eax */;
+ 			*inst++ = XCHG_r_rm;
+-			*inst++ = U8(MOD_REG | (1 /* ecx */ << 3) | reg_map[TMP_REG1]);
++			*inst++ = MOD_REG | (1 /* ecx */ << 3) | reg_map[TMP_REG1];
+ 		}
+ 		return SLJIT_SUCCESS;
+ 	}
+@@ -2912,7 +2931,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 	inst = (sljit_u8*)ensure_buf(compiler, 1 + 1 + 3 + 3 + 1);
+ 	FAIL_IF(!inst);
+ 	INC_SIZE(1 + 3 + 3 + 1);
+-	*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++	*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 	/* Set al to conditional flag. */
+ 	*inst++ = GROUP_0F;
+ 	*inst++ = cond_set;
+@@ -2922,7 +2941,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_op_flags(struct sljit_compiler *co
+ 	*inst++ = MOVZX_r_rm8;
+ 	*inst++ = MOD_REG | (0 << 3) /* eax */ | 0 /* eax */;
+ 
+-	*inst++ = U8(XCHG_EAX_r | reg_map[TMP_REG1]);
++	*inst++ = XCHG_EAX_r + reg_map[TMP_REG1];
+ 
+ 	if (GET_OPCODE(op) < SLJIT_ADD)
+ 		return emit_mov(compiler, dst, dstw, TMP_REG1, 0);
+@@ -2945,7 +2964,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_cmov(struct sljit_compiler *compil
+ 	CHECK(check_sljit_emit_cmov(compiler, type, dst_reg, src, srcw));
+ 
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+-	dst_reg &= ~SLJIT_32;
++	dst_reg &= ~SLJIT_I32_OP;
+ 
+ 	if (!sljit_has_cpu_feature(SLJIT_HAS_CMOV) || (dst_reg >= SLJIT_R3 && dst_reg <= SLJIT_S3))
+ 		return sljit_emit_cmov_generic(compiler, type, dst_reg, src, srcw);
+@@ -2958,8 +2977,8 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_cmov(struct sljit_compiler *compil
+ 	CHECK_EXTRA_REGS(src, srcw, (void)0);
+ 
+ #if (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+-	compiler->mode32 = dst_reg & SLJIT_32;
+-	dst_reg &= ~SLJIT_32;
++	compiler->mode32 = dst_reg & SLJIT_I32_OP;
++	dst_reg &= ~SLJIT_I32_OP;
+ #endif
+ 
+ 	if (SLJIT_UNLIKELY(src & SLJIT_IMM)) {
+@@ -2971,7 +2990,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_s32 sljit_emit_cmov(struct sljit_compiler *compil
+ 	inst = emit_x86_instruction(compiler, 2, dst_reg, 0, src, srcw);
+ 	FAIL_IF(!inst);
+ 	*inst++ = GROUP_0F;
+-	*inst = U8(get_jump_code(type & 0xff) - 0x40);
++	*inst = get_jump_code(type & 0xff) - 0x40;
+ 	return SLJIT_SUCCESS;
+ }
+ 
+@@ -3104,9 +3123,9 @@ SLJIT_API_FUNC_ATTRIBUTE void sljit_set_jump_addr(sljit_uw addr, sljit_uw new_ta
+ 
+ 	SLJIT_UPDATE_WX_FLAGS((void*)addr, (void*)(addr + sizeof(sljit_uw)), 0);
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32)
+-	sljit_unaligned_store_sw((void*)addr, (sljit_sw)(new_target - (addr + 4) - (sljit_uw)executable_offset));
++	sljit_unaligned_store_sw((void*)addr, new_target - (addr + 4) - (sljit_uw)executable_offset);
+ #else
+-	sljit_unaligned_store_sw((void*)addr, (sljit_sw)new_target);
++	sljit_unaligned_store_sw((void*)addr, (sljit_sw) new_target);
+ #endif
+ 	SLJIT_UPDATE_WX_FLAGS((void*)addr, (void*)(addr + sizeof(sljit_uw)), 1);
+ }
+diff --git a/ext/pcre/pcre2lib/sljit/sljitProtExecAllocator.c b/ext/pcre/pcre2lib/sljit/sljitProtExecAllocator.c
+index 915411fb..147175af 100644
+--- a/ext/pcre/pcre2lib/sljit/sljitProtExecAllocator.c
++++ b/ext/pcre/pcre2lib/sljit/sljitProtExecAllocator.c
+@@ -66,7 +66,7 @@
+ /* --------------------------------------------------------------------- */
+ 
+ /* 64 KByte. */
+-#define CHUNK_SIZE	(sljit_uw)0x10000
++#define CHUNK_SIZE	0x10000
+ 
+ struct chunk_header {
+ 	void *executable;
+@@ -194,7 +194,7 @@ static SLJIT_INLINE struct chunk_header* alloc_chunk(sljit_uw size)
+ 	if (fd == -1)
+ 		return NULL;
+ 
+-	if (ftruncate(fd, (off_t)size)) {
++	if (ftruncate(fd, size)) {
+ 		close(fd);
+ 		return NULL;
+ 	}
+@@ -281,7 +281,7 @@ struct free_block {
+ #define AS_FREE_BLOCK(base, offset) \
+ 	((struct free_block*)(((sljit_u8*)base) + offset))
+ #define MEM_START(base)		((void*)((base) + 1))
+-#define ALIGN_SIZE(size)	(((size) + sizeof(struct block_header) + 7u) & ~(sljit_uw)7)
++#define ALIGN_SIZE(size)	(((size) + sizeof(struct block_header) + 7) & ~7)
+ 
+ static struct free_block* free_blocks;
+ static sljit_uw allocated_size;
+diff --git a/ext/pcre/pcre2lib/sljit/sljitUtils.c b/ext/pcre/pcre2lib/sljit/sljitUtils.c
+index 967593b1..9bce7147 100644
+--- a/ext/pcre/pcre2lib/sljit/sljitUtils.c
++++ b/ext/pcre/pcre2lib/sljit/sljitUtils.c
+@@ -131,12 +131,12 @@ static SLJIT_INLINE int open_dev_zero(void)
+ 
+ #ifdef _WIN32
+ 
+-static SLJIT_INLINE sljit_uw get_page_alignment(void) {
++static SLJIT_INLINE sljit_sw get_page_alignment(void) {
+ 	SYSTEM_INFO si;
+-	static sljit_uw sljit_page_align = 0;
++	static sljit_sw sljit_page_align;
+ 	if (!sljit_page_align) {
+ 		GetSystemInfo(&si);
+-		sljit_page_align = (sljit_uw)si.dwPageSize - 1;
++		sljit_page_align = si.dwPageSize - 1;
+ 	}
+ 	return sljit_page_align;
+ }
+@@ -145,21 +145,18 @@ static SLJIT_INLINE sljit_uw get_page_alignment(void) {
+ 
+ #include <unistd.h>
+ 
+-static SLJIT_INLINE sljit_uw get_page_alignment(void) {
+-	static sljit_uw sljit_page_align = 0;
+-
+-	sljit_sw align;
+-
+-	if (!sljit_page_align) {
++static SLJIT_INLINE sljit_sw get_page_alignment(void) {
++	static sljit_sw sljit_page_align = -1;
++	if (sljit_page_align < 0) {
+ #ifdef _SC_PAGESIZE
+-		align = sysconf(_SC_PAGESIZE);
++		sljit_page_align = sysconf(_SC_PAGESIZE);
+ #else
+-		align = getpagesize();
++		sljit_page_align = getpagesize();
+ #endif
+ 		/* Should never happen. */
+-		if (align < 0)
+-			align = 4096;
+-		sljit_page_align = (sljit_uw)align - 1;
++		if (sljit_page_align < 0)
++			sljit_page_align = 4096;
++		sljit_page_align--;
+ 	}
+ 	return sljit_page_align;
+ }
+@@ -230,7 +227,7 @@ SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *st
+ SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
+ {
+ 	SLJIT_UNUSED_ARG(allocator_data);
+-	munmap((void*)stack->min_start, (size_t)(stack->end - stack->min_start));
++	munmap((void*)stack->min_start, stack->end - stack->min_start);
+ 	SLJIT_FREE(stack, allocator_data);
+ }
+ 
+@@ -240,7 +237,7 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_FUNC sljit_allocate_stack(slj
+ {
+ 	struct sljit_stack *stack;
+ 	void *ptr;
+-	sljit_uw page_align;
++	sljit_sw page_align;
+ 
+ 	SLJIT_UNUSED_ARG(allocator_data);
+ 
+@@ -298,7 +295,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_u8 *SLJIT_FUNC sljit_stack_resize(struct sljit_st
+ #if defined _WIN32 || defined(POSIX_MADV_DONTNEED)
+ 	sljit_uw aligned_old_start;
+ 	sljit_uw aligned_new_start;
+-	sljit_uw page_align;
++	sljit_sw page_align;
+ #endif
+ 
+ 	if ((new_start < stack->min_start) || (new_start >= stack->end))
+diff --git a/ext/pcre/php_pcre.c b/ext/pcre/php_pcre.c
+index ea5e6a01..6249a807 100644
+--- a/ext/pcre/php_pcre.c
++++ b/ext/pcre/php_pcre.c
+@@ -18,6 +18,7 @@
+ #include "php_ini.h"
+ #include "php_globals.h"
+ #include "php_pcre.h"
++#include "php_pcre_arginfo.h"
+ #include "ext/standard/info.h"
+ #include "ext/standard/basic_functions.h"
+ #include "zend_smart_str.h"
+@@ -42,16 +43,6 @@
+ 
+ #define PCRE_CACHE_SIZE 4096
+ 
+-#ifdef HAVE_PCRE_JIT_SUPPORT
+-#define PHP_PCRE_JIT_SUPPORT 1
+-#else
+-#define PHP_PCRE_JIT_SUPPORT 0
+-#endif
+-
+-char *php_pcre_version;
+-
+-#include "php_pcre_arginfo.h"
+-
+ struct _pcre_cache_entry {
+ 	pcre2_code *re;
+ 	uint32_t preg_options;
+@@ -369,7 +360,7 @@ PHP_INI_BEGIN()
+ 	STD_PHP_INI_ENTRY("pcre.backtrack_limit", "1000000", PHP_INI_ALL, OnUpdateBacktrackLimit, backtrack_limit, zend_pcre_globals, pcre_globals)
+ 	STD_PHP_INI_ENTRY("pcre.recursion_limit", "100000",  PHP_INI_ALL, OnUpdateRecursionLimit, recursion_limit, zend_pcre_globals, pcre_globals)
+ #ifdef HAVE_PCRE_JIT_SUPPORT
+-	STD_PHP_INI_BOOLEAN("pcre.jit",           "1",       PHP_INI_ALL, OnUpdateJit,            jit,             zend_pcre_globals, pcre_globals)
++	STD_PHP_INI_ENTRY("pcre.jit",             "1",       PHP_INI_ALL, OnUpdateJit, jit,             zend_pcre_globals, pcre_globals)
+ #endif
+ PHP_INI_END()
+ 
+@@ -431,6 +422,8 @@ static PHP_MINFO_FUNCTION(pcre)
+ /* {{{ PHP_MINIT_FUNCTION(pcre) */
+ static PHP_MINIT_FUNCTION(pcre)
+ {
++	char *version;
++
+ #ifdef HAVE_PCRE_JIT_SUPPORT
+ 	if (UNEXPECTED(!pcre2_init_ok)) {
+ 		/* Retry. */
+@@ -443,9 +436,33 @@ static PHP_MINIT_FUNCTION(pcre)
+ 
+ 	REGISTER_INI_ENTRIES();
+ 
+-	php_pcre_version = _pcre2_config_str(PCRE2_CONFIG_VERSION);
++	REGISTER_LONG_CONSTANT("PREG_PATTERN_ORDER", PREG_PATTERN_ORDER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_SET_ORDER", PREG_SET_ORDER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_OFFSET_CAPTURE", PREG_OFFSET_CAPTURE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_UNMATCHED_AS_NULL", PREG_UNMATCHED_AS_NULL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_SPLIT_NO_EMPTY", PREG_SPLIT_NO_EMPTY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_SPLIT_DELIM_CAPTURE", PREG_SPLIT_DELIM_CAPTURE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_SPLIT_OFFSET_CAPTURE", PREG_SPLIT_OFFSET_CAPTURE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_GREP_INVERT", PREG_GREP_INVERT, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("PREG_NO_ERROR", PHP_PCRE_NO_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_INTERNAL_ERROR", PHP_PCRE_INTERNAL_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_BACKTRACK_LIMIT_ERROR", PHP_PCRE_BACKTRACK_LIMIT_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_RECURSION_LIMIT_ERROR", PHP_PCRE_RECURSION_LIMIT_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_BAD_UTF8_ERROR", PHP_PCRE_BAD_UTF8_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_BAD_UTF8_OFFSET_ERROR", PHP_PCRE_BAD_UTF8_OFFSET_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PREG_JIT_STACKLIMIT_ERROR", PHP_PCRE_JIT_STACKLIMIT_ERROR, CONST_CS | CONST_PERSISTENT);
++	version = _pcre2_config_str(PCRE2_CONFIG_VERSION);
++	REGISTER_STRING_CONSTANT("PCRE_VERSION", version, CONST_CS | CONST_PERSISTENT);
++	free(version);
++	REGISTER_LONG_CONSTANT("PCRE_VERSION_MAJOR", PCRE2_MAJOR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PCRE_VERSION_MINOR", PCRE2_MINOR, CONST_CS | CONST_PERSISTENT);
+ 
+-	register_php_pcre_symbols(module_number);
++#ifdef HAVE_PCRE_JIT_SUPPORT
++	REGISTER_BOOL_CONSTANT("PCRE_JIT_SUPPORT", 1, CONST_CS | CONST_PERSISTENT);
++#else
++	REGISTER_BOOL_CONSTANT("PCRE_JIT_SUPPORT", 0, CONST_CS | CONST_PERSISTENT);
++#endif
+ 
+ 	return SUCCESS;
+ }
+@@ -456,8 +473,6 @@ static PHP_MSHUTDOWN_FUNCTION(pcre)
+ {
+ 	UNREGISTER_INI_ENTRIES();
+ 
+-	free(php_pcre_version);
+-
+ 	return SUCCESS;
+ }
+ /* }}} */
+@@ -609,7 +624,7 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 	pcre_cache_entry	 new_entry;
+ 	int					 rc;
+ 	zend_string 		*key;
+-	pcre_cache_entry	*ret;
++	pcre_cache_entry *ret;
+ 
+ 	if (locale_aware && BG(ctype_string)) {
+ 		key = zend_string_concat2(
+@@ -630,16 +645,16 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 	}
+ 
+ 	p = ZSTR_VAL(regex);
+-	const char* end_p = ZSTR_VAL(regex) + ZSTR_LEN(regex);
+ 
+ 	/* Parse through the leading whitespace, and display a warning if we
+ 	   get to the end without encountering a delimiter. */
+ 	while (isspace((int)*(unsigned char *)p)) p++;
+-	if (p >= end_p) {
++	if (*p == 0) {
+ 		if (key != regex) {
+ 			zend_string_release_ex(key, 0);
+ 		}
+-		php_error_docref(NULL, E_WARNING, "Empty regular expression");
++		php_error_docref(NULL, E_WARNING,
++						 p < ZSTR_VAL(regex) + ZSTR_LEN(regex) ? "Null byte in regex" : "Empty regular expression");
+ 		pcre_handle_exec_error(PCRE2_ERROR_INTERNAL);
+ 		return NULL;
+ 	}
+@@ -647,11 +662,11 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 	/* Get the delimiter and display a warning if it is alphanumeric
+ 	   or a backslash. */
+ 	delimiter = *p++;
+-	if (isalnum((int)*(unsigned char *)&delimiter) || delimiter == '\\' || delimiter == '\0') {
++	if (isalnum((int)*(unsigned char *)&delimiter) || delimiter == '\\') {
+ 		if (key != regex) {
+ 			zend_string_release_ex(key, 0);
+ 		}
+-		php_error_docref(NULL, E_WARNING, "Delimiter must not be alphanumeric, backslash, or NUL");
++		php_error_docref(NULL,E_WARNING, "Delimiter must not be alphanumeric or backslash");
+ 		pcre_handle_exec_error(PCRE2_ERROR_INTERNAL);
+ 		return NULL;
+ 	}
+@@ -667,8 +682,8 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 		/* We need to iterate through the pattern, searching for the ending delimiter,
+ 		   but skipping the backslashed delimiters.  If the ending delimiter is not
+ 		   found, display a warning. */
+-		while (pp < end_p) {
+-			if (*pp == '\\' && pp + 1 < end_p) pp++;
++		while (*pp != 0) {
++			if (*pp == '\\' && pp[1] != 0) pp++;
+ 			else if (*pp == delimiter)
+ 				break;
+ 			pp++;
+@@ -680,8 +695,8 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 		 * reach the end of the pattern without matching, display a warning.
+ 		 */
+ 		int brackets = 1; 	/* brackets nesting level */
+-		while (pp < end_p) {
+-			if (*pp == '\\' && pp + 1 < end_p) pp++;
++		while (*pp != 0) {
++			if (*pp == '\\' && pp[1] != 0) pp++;
+ 			else if (*pp == end_delimiter && --brackets <= 0)
+ 				break;
+ 			else if (*pp == start_delimiter)
+@@ -690,11 +705,13 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 		}
+ 	}
+ 
+-	if (pp >= end_p) {
++	if (*pp == 0) {
+ 		if (key != regex) {
+ 			zend_string_release_ex(key, 0);
+ 		}
+-		if (start_delimiter == end_delimiter) {
++		if (pp < ZSTR_VAL(regex) + ZSTR_LEN(regex)) {
++			php_error_docref(NULL,E_WARNING, "Null byte in regex");
++		} else if (start_delimiter == end_delimiter) {
+ 			php_error_docref(NULL,E_WARNING, "No ending delimiter '%c' found", delimiter);
+ 		} else {
+ 			php_error_docref(NULL,E_WARNING, "No ending matching delimiter '%c' found", delimiter);
+@@ -712,12 +729,11 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 
+ 	/* Parse through the options, setting appropriate flags.  Display
+ 	   a warning if we encounter an unknown modifier. */
+-	while (pp < end_p) {
++	while (pp < ZSTR_VAL(regex) + ZSTR_LEN(regex)) {
+ 		switch (*pp++) {
+ 			/* Perl compatible options */
+ 			case 'i':	coptions |= PCRE2_CASELESS;		break;
+ 			case 'm':	coptions |= PCRE2_MULTILINE;		break;
+-			case 'n':	coptions |= PCRE2_NO_AUTO_CAPTURE;	break;
+ 			case 's':	coptions |= PCRE2_DOTALL;		break;
+ 			case 'x':	coptions |= PCRE2_EXTENDED;		break;
+ 
+@@ -747,9 +763,9 @@ PHPAPI pcre_cache_entry* pcre_get_compiled_regex_cache_ex(zend_string *regex, in
+ 
+ 			default:
+ 				if (pp[-1]) {
+-					php_error_docref(NULL, E_WARNING, "Unknown modifier '%c'", pp[-1]);
++					php_error_docref(NULL,E_WARNING, "Unknown modifier '%c'", pp[-1]);
+ 				} else {
+-					php_error_docref(NULL, E_WARNING, "NUL is not a valid modifier");
++					php_error_docref(NULL,E_WARNING, "Null byte in regex");
+ 				}
+ 				pcre_handle_exec_error(PCRE2_ERROR_INTERNAL);
+ 				efree(pattern);
+@@ -2099,7 +2115,7 @@ static zend_string *php_pcre_replace_array(HashTable *regex,
+ 					tmp_replace_entry_str = NULL;
+ 					break;
+ 				}
+-				zv = ZEND_HASH_ELEMENT(replace_ht, replace_idx);
++				zv = &replace_ht->arData[replace_idx].val;
+ 				replace_idx++;
+ 				if (Z_TYPE_P(zv) != IS_UNDEF) {
+ 					replace_entry_str = zval_get_tmp_string(zv, &tmp_replace_entry_str);
+@@ -2421,12 +2437,14 @@ PHP_FUNCTION(preg_replace_callback_array)
+ 	}
+ 
+ 	ZEND_HASH_FOREACH_STR_KEY_VAL(pattern, str_idx_regex, replace) {
+-		if (!zend_is_callable_ex(replace, NULL, 0, NULL, &fcc, NULL)) {
+-			zend_argument_type_error(1, "must contain only valid callbacks");
++		if (!str_idx_regex) {
++			php_error_docref(NULL, E_WARNING, "Delimiter must not be alphanumeric or backslash");
++			RETVAL_NULL();
+ 			goto error;
+ 		}
+-		if (!str_idx_regex) {
+-			zend_argument_type_error(1, "must contain only string patterns as keys");
++
++		if (!zend_is_callable_ex(replace, NULL, 0, NULL, &fcc, NULL)) {
++			zend_argument_type_error(1, "must contain only valid callbacks");
+ 			goto error;
+ 		}
+ 
+diff --git a/ext/pcre/php_pcre.stub.php b/ext/pcre/php_pcre.stub.php
+index 1b060758..498219b3 100644
+--- a/ext/pcre/php_pcre.stub.php
++++ b/ext/pcre/php_pcre.stub.php
+@@ -2,102 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue PREG_PATTERN_ORDER
+- */
+-const PREG_PATTERN_ORDER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_SET_ORDER
+- */
+-const PREG_SET_ORDER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_OFFSET_CAPTURE
+- */
+-const PREG_OFFSET_CAPTURE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_UNMATCHED_AS_NULL
+- */
+-const PREG_UNMATCHED_AS_NULL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_SPLIT_NO_EMPTY
+- */
+-const PREG_SPLIT_NO_EMPTY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_SPLIT_DELIM_CAPTURE
+- */
+-const PREG_SPLIT_DELIM_CAPTURE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_SPLIT_OFFSET_CAPTURE
+- */
+-const PREG_SPLIT_OFFSET_CAPTURE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PREG_GREP_INVERT
+- */
+-const PREG_GREP_INVERT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_NO_ERROR
+- */
+-const PREG_NO_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_INTERNAL_ERROR
+- */
+-const PREG_INTERNAL_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_BACKTRACK_LIMIT_ERROR
+- */
+-const PREG_BACKTRACK_LIMIT_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_RECURSION_LIMIT_ERROR
+- */
+-const PREG_RECURSION_LIMIT_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_BAD_UTF8_ERROR
+- */
+-const PREG_BAD_UTF8_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_BAD_UTF8_OFFSET_ERROR
+- */
+-const PREG_BAD_UTF8_OFFSET_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PCRE_JIT_STACKLIMIT_ERROR
+- */
+-const PREG_JIT_STACKLIMIT_ERROR = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue php_pcre_version
+- */
+-const PCRE_VERSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PCRE2_MAJOR
+- */
+-const PCRE_VERSION_MAJOR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PCRE2_MINOR
+- */
+-const PCRE_VERSION_MINOR = UNKNOWN;
+-/**
+- * @var bool
+- * @cvalue PHP_PCRE_JIT_SUPPORT
+- */
+-const PCRE_JIT_SUPPORT = UNKNOWN;
+-
+ /** @param array $matches */
+ function preg_match(string $pattern, string $subject, &$matches = null, int $flags = 0, int $offset = 0): int|false {}
+ 
+@@ -131,7 +35,6 @@ function preg_replace_callback_array(array $pattern, string|array $subject, int
+  */
+ function preg_split(string $pattern, string $subject, int $limit = -1, int $flags = 0): array|false {}
+ 
+-/** @compile-time-eval */
+ function preg_quote(string $str, ?string $delimiter = null): string {}
+ 
+ /** @refcount 1 */
+diff --git a/ext/pcre/php_pcre_arginfo.h b/ext/pcre/php_pcre_arginfo.h
+index a4132e28..96c8331c 100644
+--- a/ext/pcre/php_pcre_arginfo.h
++++ b/ext/pcre/php_pcre_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 7f27807e45df9c9b5011aa20263c9789896acfbc */
++ * Stub hash: bc6f31ac17d4f5d1a60dd3dad5f671058f40a224 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_preg_match, 0, 2, MAY_BE_LONG|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
+@@ -84,32 +84,9 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(preg_replace_callback, arginfo_preg_replace_callback)
+ 	ZEND_FE(preg_replace_callback_array, arginfo_preg_replace_callback_array)
+ 	ZEND_FE(preg_split, arginfo_preg_split)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(preg_quote, arginfo_preg_quote)
++	ZEND_FE(preg_quote, arginfo_preg_quote)
+ 	ZEND_FE(preg_grep, arginfo_preg_grep)
+ 	ZEND_FE(preg_last_error, arginfo_preg_last_error)
+ 	ZEND_FE(preg_last_error_msg, arginfo_preg_last_error_msg)
+ 	ZEND_FE_END
+ };
+-
+-static void register_php_pcre_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("PREG_PATTERN_ORDER", PREG_PATTERN_ORDER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_SET_ORDER", PREG_SET_ORDER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_OFFSET_CAPTURE", PREG_OFFSET_CAPTURE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_UNMATCHED_AS_NULL", PREG_UNMATCHED_AS_NULL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_SPLIT_NO_EMPTY", PREG_SPLIT_NO_EMPTY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_SPLIT_DELIM_CAPTURE", PREG_SPLIT_DELIM_CAPTURE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_SPLIT_OFFSET_CAPTURE", PREG_SPLIT_OFFSET_CAPTURE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_GREP_INVERT", PREG_GREP_INVERT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_NO_ERROR", PHP_PCRE_NO_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_INTERNAL_ERROR", PHP_PCRE_INTERNAL_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_BACKTRACK_LIMIT_ERROR", PHP_PCRE_BACKTRACK_LIMIT_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_RECURSION_LIMIT_ERROR", PHP_PCRE_RECURSION_LIMIT_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_BAD_UTF8_ERROR", PHP_PCRE_BAD_UTF8_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_BAD_UTF8_OFFSET_ERROR", PHP_PCRE_BAD_UTF8_OFFSET_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PREG_JIT_STACKLIMIT_ERROR", PHP_PCRE_JIT_STACKLIMIT_ERROR, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("PCRE_VERSION", php_pcre_version, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PCRE_VERSION_MAJOR", PCRE2_MAJOR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PCRE_VERSION_MINOR", PCRE2_MINOR, CONST_PERSISTENT);
+-	REGISTER_BOOL_CONSTANT("PCRE_JIT_SUPPORT", PHP_PCRE_JIT_SUPPORT, CONST_PERSISTENT);
+-}
+diff --git a/ext/pcre/tests/bug73392.phpt b/ext/pcre/tests/bug73392.phpt
+index a1cb3ac8..7546f5d9 100644
+--- a/ext/pcre/tests/bug73392.phpt
++++ b/ext/pcre/tests/bug73392.phpt
+@@ -21,5 +21,5 @@ var_dump(preg_replace_callback_array(
+     ), 'a'));
+ ?>
+ --EXPECTF--
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %sbug73392.php on line %d
++Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric or backslash in %sbug73392.php on line %d
+ NULL
+diff --git a/ext/pcre/tests/ctype_back_to_c.phpt b/ext/pcre/tests/ctype_back_to_c.phpt
+index 9dc97a76..b3290916 100644
+--- a/ext/pcre/tests/ctype_back_to_c.phpt
++++ b/ext/pcre/tests/ctype_back_to_c.phpt
+@@ -2,7 +2,6 @@
+ Changing LC_CTYPE back to C
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (!setlocale(LC_CTYPE, "de_DE", "de-DE")) die("skip requires de_DE locale");
+ ?>
+ --FILE--
+diff --git a/ext/pcre/tests/delimiters.phpt b/ext/pcre/tests/delimiters.phpt
+index beeebc8c..1826f873 100644
+--- a/ext/pcre/tests/delimiters.phpt
++++ b/ext/pcre/tests/delimiters.phpt
+@@ -12,7 +12,6 @@ var_dump(preg_match('~a', ''));
+ var_dump(preg_match('@\@\@@', '@@'));
+ var_dump(preg_match('//z', '@@'));
+ var_dump(preg_match('{', ''));
+-var_dump(preg_match("\0\0", ''));
+ 
+ ?>
+ --EXPECTF--
+@@ -23,7 +22,7 @@ Warning: preg_match(): Empty regular expression in %sdelimiters.php on line 4
+ bool(false)
+ int(1)
+ 
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %sdelimiters.php on line 6
++Warning: preg_match(): Delimiter must not be alphanumeric or backslash in %sdelimiters.php on line 6
+ bool(false)
+ int(1)
+ 
+@@ -36,6 +35,3 @@ bool(false)
+ 
+ Warning: preg_match(): No ending matching delimiter '}' found in %sdelimiters.php on line 11
+ bool(false)
+-
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %sdelimiters.php on line 12
+-bool(false)
+diff --git a/ext/pcre/tests/locales.phpt b/ext/pcre/tests/locales.phpt
+index ea2c2106..dcca8927 100644
+--- a/ext/pcre/tests/locales.phpt
++++ b/ext/pcre/tests/locales.phpt
+@@ -2,8 +2,9 @@
+ Localized match
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
++
+ if (!@setlocale(LC_ALL, 'pt_PT', 'pt', 'pt_PT.ISO8859-1', 'portuguese')) die('skip pt locale not available');
++
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/pcre/tests/null_bytes.phpt b/ext/pcre/tests/null_bytes.phpt
+index e9db61da..9a3f433f 100644
+--- a/ext/pcre/tests/null_bytes.phpt
++++ b/ext/pcre/tests/null_bytes.phpt
+@@ -3,64 +3,40 @@ Zero byte test
+ --FILE--
+ <?php
+ 
+-var_dump(preg_match("\0//i", ""));
+-var_dump(preg_match("/\0/i", ""));
+-var_dump(preg_match("/\0/i", "\0"));
+-var_dump(preg_match("//\0i", ""));
+-var_dump(preg_match("//i\0", ""));
+-var_dump(preg_match("/\\\0/i", ""));
+-var_dump(preg_match("/\\\0/i", "\\\0"));
+-
+-var_dump(preg_match("\0[]i", ""));
+-var_dump(preg_match("[\0]i", ""));
+-var_dump(preg_match("[\0]i", "\0"));
+-var_dump(preg_match("[]\0i", ""));
+-var_dump(preg_match("[]i\0", ""));
+-var_dump(preg_match("[\\\0]i", ""));
+-var_dump(preg_match("[\\\0]i", "\\\0"));
+-
+-var_dump(preg_match("/abc\0def/", "abc"));
+-var_dump(preg_match("/abc\0def/", "abc\0def"));
+-var_dump(preg_match("/abc\0def/", "abc\0fed"));
+-
+-var_dump(preg_match("[abc\0def]", "abc"));
+-var_dump(preg_match("[abc\0def]", "abc\0def"));
+-var_dump(preg_match("[abc\0def]", "abc\0fed"));
++preg_match("\0//i", "");
++preg_match("/\0/i", "");
++preg_match("//\0i", "");
++preg_match("//i\0", "");
++preg_match("/\\\0/i", "");
++
++preg_match("\0[]i", "");
++preg_match("[\0]i", "");
++preg_match("[]\0i", "");
++preg_match("[]i\0", "");
++preg_match("[\\\0]i", "");
+ 
+ preg_replace("/foo/e\0/i", "echo('Eek');", "");
+ 
+ ?>
+ --EXPECTF--
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %snull_bytes.php on line 3
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 3
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 4
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 5
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 6
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 7
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 6
+-bool(false)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 9
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 7
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 10
+ 
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %snull_bytes.php on line 11
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 11
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 14
+-bool(false)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 12
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 15
+-bool(false)
+-int(0)
+-int(1)
+-int(0)
+-int(1)
+-int(0)
+-int(0)
+-int(1)
+-int(0)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 13
+ 
+-Warning: preg_replace(): NUL is not a valid modifier in %snull_bytes.php on line 27
++Warning: preg_replace(): Null byte in regex in %snull_bytes.php on line 15
+diff --git a/ext/pcre/tests/preg_grep_error1.phpt b/ext/pcre/tests/preg_grep_error1.phpt
+index 00425364..3079c0b4 100644
+--- a/ext/pcre/tests/preg_grep_error1.phpt
++++ b/ext/pcre/tests/preg_grep_error1.phpt
+@@ -37,7 +37,7 @@ echo "Done"
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_grep(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_grep_error1.php on line %d
++Warning: preg_grep(): Delimiter must not be alphanumeric or backslash in %spreg_grep_error1.php on line %d
+ bool(false)
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pcre/tests/preg_match_all_error1.phpt b/ext/pcre/tests/preg_match_all_error1.phpt
+index 01e0615a..d25bfe99 100644
+--- a/ext/pcre/tests/preg_match_all_error1.phpt
++++ b/ext/pcre/tests/preg_match_all_error1.phpt
+@@ -38,7 +38,7 @@ var_dump($matches);
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_match_all(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_match_all_error1.php on line %d
++Warning: preg_match_all(): Delimiter must not be alphanumeric or backslash in %spreg_match_all_error1.php on line %d
+ bool(false)
+ NULL
+ 
+diff --git a/ext/pcre/tests/preg_match_error1.phpt b/ext/pcre/tests/preg_match_error1.phpt
+index e97ddb92..7a710627 100644
+--- a/ext/pcre/tests/preg_match_error1.phpt
++++ b/ext/pcre/tests/preg_match_error1.phpt
+@@ -34,7 +34,7 @@ try {
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_match_error1.php on line %d
++Warning: preg_match(): Delimiter must not be alphanumeric or backslash in %spreg_match_error1.php on line %d
+ bool(false)
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pcre/tests/preg_match_non_capture.phpt b/ext/pcre/tests/preg_match_non_capture.phpt
+deleted file mode 100644
+index c2459e4b..00000000
+--- a/ext/pcre/tests/preg_match_non_capture.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-testing /n modifier in preg_match()
+---FILE--
+-<?php
+-
+-preg_match('/.(.)./n', 'abc', $m);
+-var_dump($m);
+-
+-preg_match('/.(?P<test>.)./n', 'abc', $m);
+-var_dump($m);
+-
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  string(3) "abc"
+-}
+-array(3) {
+-  [0]=>
+-  string(3) "abc"
+-  ["test"]=>
+-  string(1) "b"
+-  [1]=>
+-  string(1) "b"
+-}
+diff --git a/ext/pcre/tests/preg_replace_callback_array_error.phpt b/ext/pcre/tests/preg_replace_callback_array_error.phpt
+deleted file mode 100644
+index 6298d081..00000000
+--- a/ext/pcre/tests/preg_replace_callback_array_error.phpt
++++ /dev/null
+@@ -1,66 +0,0 @@
+---TEST--
+-preg_replace_callback_array() errors
+---FILE--
+-<?php
+-
+-function b() {
+-    return "b";
+-}
+-
+-// empty strings
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "" => function () { return "ok"; }), 'a'));
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        null => function () { return "ok"; }), 'a'));
+-
+-// backslashes
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "\\b\\" => function () { return "ok"; }), 'a'));
+-
+-// alphanumeric delimiters
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "aba" => function () { return "ok"; }), 'a'));
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "1b1" => function () { return "ok"; }), 'a'));
+-
+-// null character delimiter
+-
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "\0b\0" => function () { return "ok"; }), 'a'));
+-
+-?>
+---EXPECTF--
+-Warning: preg_replace_callback_array(): Empty regular expression in %spreg_replace_callback_array_error.php on line %d
+-NULL
+-
+-Warning: preg_replace_callback_array(): Empty regular expression in %spreg_replace_callback_array_error.php on line %d
+-NULL
+-
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_replace_callback_array_error.php on line %d
+-NULL
+-
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_replace_callback_array_error.php on line %d
+-NULL
+-
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_replace_callback_array_error.php on line %d
+-NULL
+-
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_replace_callback_array_error.php on line %d
+-NULL
+\ No newline at end of file
+diff --git a/ext/pcre/tests/preg_replace_callback_array_fatal_error.phpt b/ext/pcre/tests/preg_replace_callback_array_fatal_error.phpt
+deleted file mode 100644
+index dfbf73f5..00000000
+--- a/ext/pcre/tests/preg_replace_callback_array_fatal_error.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-preg_replace_callback_array() invalid callable
+---FILE--
+-<?php
+-
+-function b() {
+-    return "b";
+-}
+-
+-// invalid callable
+-var_dump(preg_replace_callback_array(
+-    array(
+-        "/a/" => 'b',
+-        "/b/" => 'invalid callable'), 'a'));
+-
+---EXPECTF--
+-Fatal error: Uncaught TypeError: preg_replace_callback_array(): Argument #1 ($pattern) must contain only valid callbacks in %spreg_replace_callback_array_fatal_error.php:%d
+-Stack trace:
+-#0 %spreg_replace_callback_array_fatal_error.php(%d): preg_replace_callback_array(Array, 'a')
+-#1 {main}
+-  thrown in %spreg_replace_callback_array_fatal_error.php on line %d
+diff --git a/ext/pcre/tests/preg_replace_callback_array_numeric_index_error.phpt b/ext/pcre/tests/preg_replace_callback_array_numeric_index_error.phpt
+deleted file mode 100644
+index 55dfabce..00000000
+--- a/ext/pcre/tests/preg_replace_callback_array_numeric_index_error.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-preg_replace_callback_array() invalid pattern
+---FILE--
+-<?php
+-preg_replace_callback_array(
+-    [42 => function () {}],
+-    'a',
+-);
+-?>
+---EXPECTF--
+-Fatal error: Uncaught TypeError: preg_replace_callback_array(): Argument #1 ($pattern) must contain only string patterns as keys in %s:%d
+-Stack trace:
+-#0 %s(%d): preg_replace_callback_array(Array, 'a')
+-#1 {main}
+-  thrown in %s on line %d
+diff --git a/ext/pcre/tests/preg_replace_callback_error1.phpt b/ext/pcre/tests/preg_replace_callback_error1.phpt
+index bd659bec..eb6478e5 100644
+--- a/ext/pcre/tests/preg_replace_callback_error1.phpt
++++ b/ext/pcre/tests/preg_replace_callback_error1.phpt
+@@ -30,7 +30,7 @@ foreach($regex_array as $regex_value) {
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_replace_callback(): Delimiter must not be alphanumeric, backslash, or NUL in %s on line %d
++Warning: preg_replace_callback(): Delimiter must not be alphanumeric or backslash in %s on line %d
+ NULL
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pcre/tests/preg_replace_error1.phpt b/ext/pcre/tests/preg_replace_error1.phpt
+index 6ea93d15..ccd35547 100644
+--- a/ext/pcre/tests/preg_replace_error1.phpt
++++ b/ext/pcre/tests/preg_replace_error1.phpt
+@@ -33,7 +33,7 @@ try {
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_replace(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_replace_error1.php on line %d
++Warning: preg_replace(): Delimiter must not be alphanumeric or backslash in %spreg_replace_error1.php on line %d
+ NULL
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pcre/tests/preg_split_error1.phpt b/ext/pcre/tests/preg_split_error1.phpt
+index 5ffb9f08..4d0fb9e2 100644
+--- a/ext/pcre/tests/preg_split_error1.phpt
++++ b/ext/pcre/tests/preg_split_error1.phpt
+@@ -36,7 +36,7 @@ try {
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_split(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_split_error1.php on line %d
++Warning: preg_split(): Delimiter must not be alphanumeric or backslash in %spreg_split_error1.php on line %d
+ bool(false)
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pdo/pdo.c b/ext/pdo/pdo.c
+index e8738db9..b18efe46 100644
+--- a/ext/pdo/pdo.c
++++ b/ext/pdo/pdo.c
+@@ -71,7 +71,7 @@ PHP_FUNCTION(pdo_drivers)
+ 
+ 	array_init(return_value);
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		add_next_index_stringl(return_value, pdriver->driver_name, pdriver->driver_name_len);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -252,7 +252,7 @@ PHP_MINIT_FUNCTION(pdo)
+ 
+ 	pdo_exception_ce = register_class_PDOException(spl_ce_RuntimeException);
+ 
+-	pdo_dbh_init(module_number);
++	pdo_dbh_init();
+ 	pdo_stmt_init();
+ 
+ 	return SUCCESS;
+@@ -277,7 +277,7 @@ PHP_MINFO_FUNCTION(pdo)
+ 	php_info_print_table_start();
+ 	php_info_print_table_header(2, "PDO support", "enabled");
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		spprintf(&drivers, 0, "%s, %s", ldrivers, pdriver->driver_name);
+ 		efree(ldrivers);
+ 		ldrivers = drivers;
+diff --git a/ext/pdo/pdo.stub.php b/ext/pdo/pdo.stub.php
+index a2652060..ebe81b7a 100644
+--- a/ext/pdo/pdo.stub.php
++++ b/ext/pdo/pdo.stub.php
+@@ -5,7 +5,7 @@
+ class PDOException extends RuntimeException
+ {
+     /** @var int|string */
+-    protected $code = 0; // TODO add proper type
++    protected $code = 0;
+     public ?array $errorInfo = null;
+ }
+ 
+diff --git a/ext/pdo/pdo_arginfo.h b/ext/pdo/pdo_arginfo.h
+index 9f8a0c6c..72eda0c3 100644
+--- a/ext/pdo/pdo_arginfo.h
++++ b/ext/pdo/pdo_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: dc41dddeea1ae117c6f2f3447afb29bf6623b757 */
++ * Stub hash: 8d975a20d009e827f8d72ac19b94b55870b6bf9c */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_pdo_drivers, 0, 0, IS_ARRAY, 0)
+ ZEND_END_ARG_INFO()
+diff --git a/ext/pdo/pdo_dbh.c b/ext/pdo/pdo_dbh.c
+index 96fa3500..9544a721 100644
+--- a/ext/pdo/pdo_dbh.c
++++ b/ext/pdo/pdo_dbh.c
+@@ -28,13 +28,10 @@
+ #include "php_pdo.h"
+ #include "php_pdo_driver.h"
+ #include "php_pdo_int.h"
+-#include "zend_attributes.h"
+ #include "zend_exceptions.h"
+ #include "zend_object_handlers.h"
+ #include "zend_hash.h"
+ #include "pdo_dbh_arginfo.h"
+-#include "zend_observer.h"
+-#include "zend_extensions.h"
+ 
+ static bool pdo_dbh_attribute_set(pdo_dbh_t *dbh, zend_long attr, zval *value);
+ 
+@@ -65,7 +62,7 @@ void pdo_throw_exception(unsigned int driver_errcode, char *driver_errmsg, pdo_e
+ 		zend_throw_exception_object(&pdo_exception);
+ }
+ 
+-void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, pdo_error_type sqlstate, const char *supp) /* {{{ */
++void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, const char *sqlstate, const char *supp) /* {{{ */
+ {
+ 	pdo_error_type *pdo_err = &dbh->error_code;
+ 	char *message = NULL;
+@@ -84,7 +81,7 @@ void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, pdo_error_type sqlst
+ 		pdo_err = &stmt->error_code;
+ 	}
+ 
+-	memcpy(*pdo_err, sqlstate, sizeof(pdo_error_type));
++	strncpy(*pdo_err, sqlstate, 6);
+ 
+ 	/* hash sqlstate to error messages */
+ 	msg = pdo_sqlstate_state_to_description(*pdo_err);
+@@ -1203,7 +1200,7 @@ PHP_METHOD(PDO, getAvailableDrivers)
+ 
+ 	array_init(return_value);
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		add_next_index_stringl(return_value, (char*)pdriver->driver_name, pdriver->driver_name_len);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -1214,9 +1211,6 @@ static void cls_method_dtor(zval *el) /* {{{ */ {
+ 	if (func->common.function_name) {
+ 		zend_string_release_ex(func->common.function_name, 0);
+ 	}
+-	if (ZEND_MAP_PTR(func->common.run_time_cache)) {
+-		efree(ZEND_MAP_PTR(func->common.run_time_cache));
+-	}
+ 	efree(func);
+ }
+ /* }}} */
+@@ -1226,9 +1220,6 @@ static void cls_method_pdtor(zval *el) /* {{{ */ {
+ 	if (func->common.function_name) {
+ 		zend_string_release_ex(func->common.function_name, 1);
+ 	}
+-	if (ZEND_MAP_PTR(func->common.run_time_cache)) {
+-		pefree(ZEND_MAP_PTR(func->common.run_time_cache), 1);
+-	}
+ 	pefree(func, 1);
+ }
+ /* }}} */
+@@ -1256,15 +1247,12 @@ bool pdo_hash_methods(pdo_dbh_object_t *dbh_obj, int kind)
+ 
+ 	memset(&func, 0, sizeof(func));
+ 
+-	size_t rt_cache_size = zend_internal_run_time_cache_reserved_size();
+ 	while (funcs->fname) {
+ 		func.type = ZEND_INTERNAL_FUNCTION;
+ 		func.handler = funcs->handler;
+ 		func.function_name = zend_string_init(funcs->fname, strlen(funcs->fname), dbh->is_persistent);
+ 		func.scope = dbh_obj->std.ce;
+ 		func.prototype = NULL;
+-		ZEND_MAP_PTR(func.run_time_cache) = rt_cache_size ? pecalloc(rt_cache_size, 1, dbh->is_persistent) : NULL;
+-		func.T = ZEND_OBSERVER_ENABLED;
+ 		if (funcs->flags) {
+ 			func.fn_flags = funcs->flags | ZEND_ACC_NEVER_CACHE;
+ 		} else {
+@@ -1346,7 +1334,7 @@ static HashTable *dbh_get_gc(zend_object *object, zval **gc_data, int *gc_count)
+ static zend_object_handlers pdo_dbh_object_handlers;
+ static void pdo_dbh_free_storage(zend_object *std);
+ 
+-void pdo_dbh_init(int module_number)
++void pdo_dbh_init(void)
+ {
+ 	pdo_dbh_ce = register_class_PDO();
+ 	pdo_dbh_ce->create_object = pdo_dbh_new;
+@@ -1358,6 +1346,92 @@ void pdo_dbh_init(int module_number)
+ 	pdo_dbh_object_handlers.get_method = dbh_method_get;
+ 	pdo_dbh_object_handlers.compare = zend_objects_not_comparable;
+ 	pdo_dbh_object_handlers.get_gc = dbh_get_gc;
++
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_BOOL", (zend_long)PDO_PARAM_BOOL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_NULL", (zend_long)PDO_PARAM_NULL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_INT",  (zend_long)PDO_PARAM_INT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR",  (zend_long)PDO_PARAM_STR);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_LOB",  (zend_long)PDO_PARAM_LOB);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STMT", (zend_long)PDO_PARAM_STMT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_INPUT_OUTPUT", (zend_long)PDO_PARAM_INPUT_OUTPUT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR_NATL", (zend_long)PDO_PARAM_STR_NATL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR_CHAR", (zend_long)PDO_PARAM_STR_CHAR);
++
++
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_ALLOC",		(zend_long)PDO_PARAM_EVT_ALLOC);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FREE",			(zend_long)PDO_PARAM_EVT_FREE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_EXEC_PRE",		(zend_long)PDO_PARAM_EVT_EXEC_PRE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_EXEC_POST",	(zend_long)PDO_PARAM_EVT_EXEC_POST);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FETCH_PRE",	(zend_long)PDO_PARAM_EVT_FETCH_PRE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FETCH_POST",	(zend_long)PDO_PARAM_EVT_FETCH_POST);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_NORMALIZE",	(zend_long)PDO_PARAM_EVT_NORMALIZE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_DEFAULT", (zend_long)PDO_FETCH_USE_DEFAULT);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_LAZY", (zend_long)PDO_FETCH_LAZY);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ASSOC", (zend_long)PDO_FETCH_ASSOC);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_NUM",  (zend_long)PDO_FETCH_NUM);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_BOTH", (zend_long)PDO_FETCH_BOTH);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_OBJ",  (zend_long)PDO_FETCH_OBJ);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_BOUND", (zend_long)PDO_FETCH_BOUND);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_COLUMN", (zend_long)PDO_FETCH_COLUMN);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_CLASS", (zend_long)PDO_FETCH_CLASS);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_INTO", (zend_long)PDO_FETCH_INTO);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_FUNC", (zend_long)PDO_FETCH_FUNC);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_GROUP", (zend_long)PDO_FETCH_GROUP);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_UNIQUE", (zend_long)PDO_FETCH_UNIQUE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_KEY_PAIR", (zend_long)PDO_FETCH_KEY_PAIR);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_CLASSTYPE", (zend_long)PDO_FETCH_CLASSTYPE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_SERIALIZE",(zend_long)PDO_FETCH_SERIALIZE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_PROPS_LATE", (zend_long)PDO_FETCH_PROPS_LATE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_NAMED", (zend_long)PDO_FETCH_NAMED);
++
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_AUTOCOMMIT",	(zend_long)PDO_ATTR_AUTOCOMMIT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_PREFETCH",		(zend_long)PDO_ATTR_PREFETCH);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_TIMEOUT", 		(zend_long)PDO_ATTR_TIMEOUT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_ERRMODE", 		(zend_long)PDO_ATTR_ERRMODE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_SERVER_VERSION",	(zend_long)PDO_ATTR_SERVER_VERSION);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CLIENT_VERSION", 	(zend_long)PDO_ATTR_CLIENT_VERSION);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_SERVER_INFO",		(zend_long)PDO_ATTR_SERVER_INFO);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CONNECTION_STATUS", 	(zend_long)PDO_ATTR_CONNECTION_STATUS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CASE",		 	(zend_long)PDO_ATTR_CASE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CURSOR_NAME", 	(zend_long)PDO_ATTR_CURSOR_NAME);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CURSOR",	 	(zend_long)PDO_ATTR_CURSOR);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_ORACLE_NULLS",	(zend_long)PDO_ATTR_ORACLE_NULLS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_PERSISTENT",	(zend_long)PDO_ATTR_PERSISTENT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_STATEMENT_CLASS",		(zend_long)PDO_ATTR_STATEMENT_CLASS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_FETCH_TABLE_NAMES",		(zend_long)PDO_ATTR_FETCH_TABLE_NAMES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_FETCH_CATALOG_NAMES",		(zend_long)PDO_ATTR_FETCH_CATALOG_NAMES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DRIVER_NAME",		(zend_long)PDO_ATTR_DRIVER_NAME);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_STRINGIFY_FETCHES", (zend_long)PDO_ATTR_STRINGIFY_FETCHES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_MAX_COLUMN_LEN", (zend_long)PDO_ATTR_MAX_COLUMN_LEN);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_EMULATE_PREPARES", (zend_long)PDO_ATTR_EMULATE_PREPARES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DEFAULT_FETCH_MODE", (zend_long)PDO_ATTR_DEFAULT_FETCH_MODE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DEFAULT_STR_PARAM", (zend_long)PDO_ATTR_DEFAULT_STR_PARAM);
++
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_SILENT",	(zend_long)PDO_ERRMODE_SILENT);
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_WARNING",	(zend_long)PDO_ERRMODE_WARNING);
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_EXCEPTION",	(zend_long)PDO_ERRMODE_EXCEPTION);
++
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_NATURAL",	(zend_long)PDO_CASE_NATURAL);
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_LOWER",	(zend_long)PDO_CASE_LOWER);
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_UPPER",	(zend_long)PDO_CASE_UPPER);
++
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_NATURAL",	(zend_long)PDO_NULL_NATURAL);
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_EMPTY_STRING",	(zend_long)PDO_NULL_EMPTY_STRING);
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_TO_STRING",	(zend_long)PDO_NULL_TO_STRING);
++
++	REGISTER_PDO_CLASS_CONST_STRING("ERR_NONE",	PDO_ERR_NONE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_NEXT", (zend_long)PDO_FETCH_ORI_NEXT);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_PRIOR", (zend_long)PDO_FETCH_ORI_PRIOR);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_FIRST", (zend_long)PDO_FETCH_ORI_FIRST);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_LAST", (zend_long)PDO_FETCH_ORI_LAST);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_ABS", (zend_long)PDO_FETCH_ORI_ABS);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_REL", (zend_long)PDO_FETCH_ORI_REL);
++
++	REGISTER_PDO_CLASS_CONST_LONG("CURSOR_FWDONLY", (zend_long)PDO_CURSOR_FWDONLY);
++	REGISTER_PDO_CLASS_CONST_LONG("CURSOR_SCROLL", (zend_long)PDO_CURSOR_SCROLL);
+ }
+ 
+ static void dbh_free(pdo_dbh_t *dbh, bool free_persistent)
+diff --git a/ext/pdo/pdo_dbh.stub.php b/ext/pdo/pdo_dbh.stub.php
+index 45364147..7ff52c96 100644
+--- a/ext/pdo/pdo_dbh.stub.php
++++ b/ext/pdo/pdo_dbh.stub.php
+@@ -5,388 +5,7 @@
+ /** @not-serializable */
+ class PDO
+ {
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_NULL)
+-     */
+-    public const PARAM_NULL = 0;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_BOOL)
+-     */
+-    public const PARAM_BOOL = 5;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_INT)
+-     */
+-    public const PARAM_INT = 1;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR)
+-     */
+-    public const PARAM_STR = 2;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_LOB)
+-     */
+-    public const PARAM_LOB = 3;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STMT)
+-     */
+-    public const PARAM_STMT = 4;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_INPUT_OUTPUT)
+-     */
+-    public const PARAM_INPUT_OUTPUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR_NATL)
+-     */
+-    public const PARAM_STR_NATL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR_CHAR)
+-     */
+-    public const PARAM_STR_CHAR = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_ALLOC)
+-     */
+-    public const PARAM_EVT_ALLOC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FREE)
+-     */
+-    public const PARAM_EVT_FREE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_EXEC_PRE)
+-     */
+-    public const PARAM_EVT_EXEC_PRE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_EXEC_POST)
+-     */
+-    public const PARAM_EVT_EXEC_POST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FETCH_PRE)
+-     */
+-    public const PARAM_EVT_FETCH_PRE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FETCH_POST)
+-     */
+-    public const PARAM_EVT_FETCH_POST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_NORMALIZE)
+-     */
+-    public const PARAM_EVT_NORMALIZE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_USE_DEFAULT)
+-     */
+-    public const FETCH_DEFAULT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_LAZY)
+-     */
+-    public const FETCH_LAZY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ASSOC)
+-     */
+-    public const FETCH_ASSOC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_NUM)
+-     */
+-    public const FETCH_NUM = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_BOTH)
+-     */
+-    public const FETCH_BOTH = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_OBJ)
+-     */
+-    public const FETCH_OBJ = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_BOUND)
+-     */
+-    public const FETCH_BOUND = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_COLUMN)
+-     */
+-    public const FETCH_COLUMN = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_CLASS)
+-     */
+-    public const FETCH_CLASS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_INTO)
+-     */
+-    public const FETCH_INTO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_FUNC)
+-     */
+-    public const FETCH_FUNC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_GROUP)
+-     */
+-    public const FETCH_GROUP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_UNIQUE)
+-     */
+-    public const FETCH_UNIQUE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_KEY_PAIR)
+-     */
+-    public const FETCH_KEY_PAIR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_CLASSTYPE)
+-     */
+-    public const FETCH_CLASSTYPE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_SERIALIZE)
+-     */
+-    public const FETCH_SERIALIZE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_PROPS_LATE)
+-     */
+-    public const FETCH_PROPS_LATE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_NAMED)
+-     */
+-    public const FETCH_NAMED = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_AUTOCOMMIT)
+-     */
+-    public const ATTR_AUTOCOMMIT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_PREFETCH)
+-     */
+-    public const ATTR_PREFETCH = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_TIMEOUT)
+-     */
+-    public const ATTR_TIMEOUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_ERRMODE)
+-     */
+-    public const ATTR_ERRMODE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_SERVER_VERSION)
+-     */
+-    public const ATTR_SERVER_VERSION = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CLIENT_VERSION)
+-     */
+-    public const ATTR_CLIENT_VERSION = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_SERVER_INFO)
+-     */
+-    public const ATTR_SERVER_INFO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CONNECTION_STATUS)
+-     */
+-    public const ATTR_CONNECTION_STATUS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CASE)
+-     */
+-    public const ATTR_CASE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CURSOR_NAME)
+-     */
+-    public const ATTR_CURSOR_NAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CURSOR)
+-     */
+-    public const ATTR_CURSOR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_ORACLE_NULLS)
+-     */
+-    public const ATTR_ORACLE_NULLS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_PERSISTENT)
+-     */
+-    public const ATTR_PERSISTENT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_STATEMENT_CLASS)
+-     */
+-    public const ATTR_STATEMENT_CLASS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_FETCH_TABLE_NAMES)
+-     */
+-    public const ATTR_FETCH_TABLE_NAMES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_FETCH_CATALOG_NAMES)
+-     */
+-    public const ATTR_FETCH_CATALOG_NAMES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DRIVER_NAME)
+-     */
+-    public const ATTR_DRIVER_NAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_STRINGIFY_FETCHES)
+-     */
+-    public const ATTR_STRINGIFY_FETCHES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_MAX_COLUMN_LEN)
+-     */
+-    public const ATTR_MAX_COLUMN_LEN = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_EMULATE_PREPARES)
+-     */
+-    public const ATTR_EMULATE_PREPARES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DEFAULT_FETCH_MODE)
+-     */
+-    public const ATTR_DEFAULT_FETCH_MODE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DEFAULT_STR_PARAM)
+-     */
+-    public const ATTR_DEFAULT_STR_PARAM = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_SILENT)
+-     */
+-    public const ERRMODE_SILENT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_WARNING)
+-     */
+-    public const ERRMODE_WARNING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_EXCEPTION)
+-     */
+-    public const ERRMODE_EXCEPTION = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_NATURAL)
+-     */
+-    public const CASE_NATURAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_LOWER)
+-     */
+-    public const CASE_LOWER = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_UPPER)
+-     */
+-    public const CASE_UPPER = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_NATURAL)
+-     */
+-    public const NULL_NATURAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_EMPTY_STRING)
+-     */
+-    public const NULL_EMPTY_STRING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_TO_STRING)
+-     */
+-    public const NULL_TO_STRING = UNKNOWN;
+-
+-    /**
+-     * @var string
+-     * @cvalue PDO_ERR_NONE
+-     */
+-    public const ERR_NONE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_NEXT)
+-     */
+-    public const FETCH_ORI_NEXT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_PRIOR)
+-     */
+-    public const FETCH_ORI_PRIOR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_FIRST)
+-     */
+-    public const FETCH_ORI_FIRST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_LAST)
+-     */
+-    public const FETCH_ORI_LAST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_ABS)
+-     */
+-    public const FETCH_ORI_ABS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_REL)
+-     */
+-    public const FETCH_ORI_REL = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CURSOR_FWDONLY)
+-     */
+-    public const CURSOR_FWDONLY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CURSOR_SCROLL)
+-     */
+-    public const CURSOR_SCROLL = UNKNOWN;
+-
+-    public function __construct(string $dsn, ?string $username = null, #[\SensitiveParameter] ?string $password = null, ?array $options = null) {}
++    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null) {}
+ 
+     /** @tentative-return-type */
+     public function beginTransaction(): bool {}
+diff --git a/ext/pdo/pdo_dbh_arginfo.h b/ext/pdo/pdo_dbh_arginfo.h
+index afbbc935..11d6fac0 100644
+--- a/ext/pdo/pdo_dbh_arginfo.h
++++ b/ext/pdo/pdo_dbh_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 7dcba884671fd90b891fab7e3f0d4cc9a4ac76a1 */
++ * Stub hash: 7d10dbdfd55eb4a4dc779cbf4fa000cdf4fb3539 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_PDO___construct, 0, 0, 1)
+ 	ZEND_ARG_TYPE_INFO(0, dsn, IS_STRING, 0)
+@@ -103,459 +103,5 @@ static zend_class_entry *register_class_PDO(void)
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 
+-	zval const_PARAM_NULL_value;
+-	ZVAL_LONG(&const_PARAM_NULL_value, LONG_CONST(PDO_PARAM_NULL));
+-	zend_string *const_PARAM_NULL_name = zend_string_init_interned("PARAM_NULL", sizeof("PARAM_NULL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_NULL_name, &const_PARAM_NULL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_NULL_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_NULL) == 0);
+-
+-	zval const_PARAM_BOOL_value;
+-	ZVAL_LONG(&const_PARAM_BOOL_value, LONG_CONST(PDO_PARAM_BOOL));
+-	zend_string *const_PARAM_BOOL_name = zend_string_init_interned("PARAM_BOOL", sizeof("PARAM_BOOL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_BOOL_name, &const_PARAM_BOOL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_BOOL_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_BOOL) == 5);
+-
+-	zval const_PARAM_INT_value;
+-	ZVAL_LONG(&const_PARAM_INT_value, LONG_CONST(PDO_PARAM_INT));
+-	zend_string *const_PARAM_INT_name = zend_string_init_interned("PARAM_INT", sizeof("PARAM_INT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_INT_name, &const_PARAM_INT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_INT_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_INT) == 1);
+-
+-	zval const_PARAM_STR_value;
+-	ZVAL_LONG(&const_PARAM_STR_value, LONG_CONST(PDO_PARAM_STR));
+-	zend_string *const_PARAM_STR_name = zend_string_init_interned("PARAM_STR", sizeof("PARAM_STR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_name, &const_PARAM_STR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_STR) == 2);
+-
+-	zval const_PARAM_LOB_value;
+-	ZVAL_LONG(&const_PARAM_LOB_value, LONG_CONST(PDO_PARAM_LOB));
+-	zend_string *const_PARAM_LOB_name = zend_string_init_interned("PARAM_LOB", sizeof("PARAM_LOB") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_LOB_name, &const_PARAM_LOB_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_LOB_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_LOB) == 3);
+-
+-	zval const_PARAM_STMT_value;
+-	ZVAL_LONG(&const_PARAM_STMT_value, LONG_CONST(PDO_PARAM_STMT));
+-	zend_string *const_PARAM_STMT_name = zend_string_init_interned("PARAM_STMT", sizeof("PARAM_STMT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STMT_name, &const_PARAM_STMT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STMT_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_STMT) == 4);
+-
+-	zval const_PARAM_INPUT_OUTPUT_value;
+-	ZVAL_LONG(&const_PARAM_INPUT_OUTPUT_value, LONG_CONST(PDO_PARAM_INPUT_OUTPUT));
+-	zend_string *const_PARAM_INPUT_OUTPUT_name = zend_string_init_interned("PARAM_INPUT_OUTPUT", sizeof("PARAM_INPUT_OUTPUT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_INPUT_OUTPUT_name, &const_PARAM_INPUT_OUTPUT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_INPUT_OUTPUT_name);
+-
+-	zval const_PARAM_STR_NATL_value;
+-	ZVAL_LONG(&const_PARAM_STR_NATL_value, LONG_CONST(PDO_PARAM_STR_NATL));
+-	zend_string *const_PARAM_STR_NATL_name = zend_string_init_interned("PARAM_STR_NATL", sizeof("PARAM_STR_NATL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_NATL_name, &const_PARAM_STR_NATL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_NATL_name);
+-
+-	zval const_PARAM_STR_CHAR_value;
+-	ZVAL_LONG(&const_PARAM_STR_CHAR_value, LONG_CONST(PDO_PARAM_STR_CHAR));
+-	zend_string *const_PARAM_STR_CHAR_name = zend_string_init_interned("PARAM_STR_CHAR", sizeof("PARAM_STR_CHAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_CHAR_name, &const_PARAM_STR_CHAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_CHAR_name);
+-
+-	zval const_PARAM_EVT_ALLOC_value;
+-	ZVAL_LONG(&const_PARAM_EVT_ALLOC_value, LONG_CONST(PDO_PARAM_EVT_ALLOC));
+-	zend_string *const_PARAM_EVT_ALLOC_name = zend_string_init_interned("PARAM_EVT_ALLOC", sizeof("PARAM_EVT_ALLOC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_ALLOC_name, &const_PARAM_EVT_ALLOC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_ALLOC_name);
+-
+-	zval const_PARAM_EVT_FREE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FREE_value, LONG_CONST(PDO_PARAM_EVT_FREE));
+-	zend_string *const_PARAM_EVT_FREE_name = zend_string_init_interned("PARAM_EVT_FREE", sizeof("PARAM_EVT_FREE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FREE_name, &const_PARAM_EVT_FREE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FREE_name);
+-
+-	zval const_PARAM_EVT_EXEC_PRE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_EXEC_PRE_value, LONG_CONST(PDO_PARAM_EVT_EXEC_PRE));
+-	zend_string *const_PARAM_EVT_EXEC_PRE_name = zend_string_init_interned("PARAM_EVT_EXEC_PRE", sizeof("PARAM_EVT_EXEC_PRE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_EXEC_PRE_name, &const_PARAM_EVT_EXEC_PRE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_EXEC_PRE_name);
+-
+-	zval const_PARAM_EVT_EXEC_POST_value;
+-	ZVAL_LONG(&const_PARAM_EVT_EXEC_POST_value, LONG_CONST(PDO_PARAM_EVT_EXEC_POST));
+-	zend_string *const_PARAM_EVT_EXEC_POST_name = zend_string_init_interned("PARAM_EVT_EXEC_POST", sizeof("PARAM_EVT_EXEC_POST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_EXEC_POST_name, &const_PARAM_EVT_EXEC_POST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_EXEC_POST_name);
+-
+-	zval const_PARAM_EVT_FETCH_PRE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FETCH_PRE_value, LONG_CONST(PDO_PARAM_EVT_FETCH_PRE));
+-	zend_string *const_PARAM_EVT_FETCH_PRE_name = zend_string_init_interned("PARAM_EVT_FETCH_PRE", sizeof("PARAM_EVT_FETCH_PRE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FETCH_PRE_name, &const_PARAM_EVT_FETCH_PRE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FETCH_PRE_name);
+-
+-	zval const_PARAM_EVT_FETCH_POST_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FETCH_POST_value, LONG_CONST(PDO_PARAM_EVT_FETCH_POST));
+-	zend_string *const_PARAM_EVT_FETCH_POST_name = zend_string_init_interned("PARAM_EVT_FETCH_POST", sizeof("PARAM_EVT_FETCH_POST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FETCH_POST_name, &const_PARAM_EVT_FETCH_POST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FETCH_POST_name);
+-
+-	zval const_PARAM_EVT_NORMALIZE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_NORMALIZE_value, LONG_CONST(PDO_PARAM_EVT_NORMALIZE));
+-	zend_string *const_PARAM_EVT_NORMALIZE_name = zend_string_init_interned("PARAM_EVT_NORMALIZE", sizeof("PARAM_EVT_NORMALIZE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_NORMALIZE_name, &const_PARAM_EVT_NORMALIZE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_NORMALIZE_name);
+-
+-	zval const_FETCH_DEFAULT_value;
+-	ZVAL_LONG(&const_FETCH_DEFAULT_value, LONG_CONST(PDO_FETCH_USE_DEFAULT));
+-	zend_string *const_FETCH_DEFAULT_name = zend_string_init_interned("FETCH_DEFAULT", sizeof("FETCH_DEFAULT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_DEFAULT_name, &const_FETCH_DEFAULT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_DEFAULT_name);
+-
+-	zval const_FETCH_LAZY_value;
+-	ZVAL_LONG(&const_FETCH_LAZY_value, LONG_CONST(PDO_FETCH_LAZY));
+-	zend_string *const_FETCH_LAZY_name = zend_string_init_interned("FETCH_LAZY", sizeof("FETCH_LAZY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_LAZY_name, &const_FETCH_LAZY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_LAZY_name);
+-
+-	zval const_FETCH_ASSOC_value;
+-	ZVAL_LONG(&const_FETCH_ASSOC_value, LONG_CONST(PDO_FETCH_ASSOC));
+-	zend_string *const_FETCH_ASSOC_name = zend_string_init_interned("FETCH_ASSOC", sizeof("FETCH_ASSOC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ASSOC_name, &const_FETCH_ASSOC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ASSOC_name);
+-
+-	zval const_FETCH_NUM_value;
+-	ZVAL_LONG(&const_FETCH_NUM_value, LONG_CONST(PDO_FETCH_NUM));
+-	zend_string *const_FETCH_NUM_name = zend_string_init_interned("FETCH_NUM", sizeof("FETCH_NUM") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_NUM_name, &const_FETCH_NUM_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_NUM_name);
+-
+-	zval const_FETCH_BOTH_value;
+-	ZVAL_LONG(&const_FETCH_BOTH_value, LONG_CONST(PDO_FETCH_BOTH));
+-	zend_string *const_FETCH_BOTH_name = zend_string_init_interned("FETCH_BOTH", sizeof("FETCH_BOTH") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_BOTH_name, &const_FETCH_BOTH_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_BOTH_name);
+-
+-	zval const_FETCH_OBJ_value;
+-	ZVAL_LONG(&const_FETCH_OBJ_value, LONG_CONST(PDO_FETCH_OBJ));
+-	zend_string *const_FETCH_OBJ_name = zend_string_init_interned("FETCH_OBJ", sizeof("FETCH_OBJ") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_OBJ_name, &const_FETCH_OBJ_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_OBJ_name);
+-
+-	zval const_FETCH_BOUND_value;
+-	ZVAL_LONG(&const_FETCH_BOUND_value, LONG_CONST(PDO_FETCH_BOUND));
+-	zend_string *const_FETCH_BOUND_name = zend_string_init_interned("FETCH_BOUND", sizeof("FETCH_BOUND") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_BOUND_name, &const_FETCH_BOUND_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_BOUND_name);
+-
+-	zval const_FETCH_COLUMN_value;
+-	ZVAL_LONG(&const_FETCH_COLUMN_value, LONG_CONST(PDO_FETCH_COLUMN));
+-	zend_string *const_FETCH_COLUMN_name = zend_string_init_interned("FETCH_COLUMN", sizeof("FETCH_COLUMN") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_COLUMN_name, &const_FETCH_COLUMN_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_COLUMN_name);
+-
+-	zval const_FETCH_CLASS_value;
+-	ZVAL_LONG(&const_FETCH_CLASS_value, LONG_CONST(PDO_FETCH_CLASS));
+-	zend_string *const_FETCH_CLASS_name = zend_string_init_interned("FETCH_CLASS", sizeof("FETCH_CLASS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_CLASS_name, &const_FETCH_CLASS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_CLASS_name);
+-
+-	zval const_FETCH_INTO_value;
+-	ZVAL_LONG(&const_FETCH_INTO_value, LONG_CONST(PDO_FETCH_INTO));
+-	zend_string *const_FETCH_INTO_name = zend_string_init_interned("FETCH_INTO", sizeof("FETCH_INTO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_INTO_name, &const_FETCH_INTO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_INTO_name);
+-
+-	zval const_FETCH_FUNC_value;
+-	ZVAL_LONG(&const_FETCH_FUNC_value, LONG_CONST(PDO_FETCH_FUNC));
+-	zend_string *const_FETCH_FUNC_name = zend_string_init_interned("FETCH_FUNC", sizeof("FETCH_FUNC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_FUNC_name, &const_FETCH_FUNC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_FUNC_name);
+-
+-	zval const_FETCH_GROUP_value;
+-	ZVAL_LONG(&const_FETCH_GROUP_value, LONG_CONST(PDO_FETCH_GROUP));
+-	zend_string *const_FETCH_GROUP_name = zend_string_init_interned("FETCH_GROUP", sizeof("FETCH_GROUP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_GROUP_name, &const_FETCH_GROUP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_GROUP_name);
+-
+-	zval const_FETCH_UNIQUE_value;
+-	ZVAL_LONG(&const_FETCH_UNIQUE_value, LONG_CONST(PDO_FETCH_UNIQUE));
+-	zend_string *const_FETCH_UNIQUE_name = zend_string_init_interned("FETCH_UNIQUE", sizeof("FETCH_UNIQUE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_UNIQUE_name, &const_FETCH_UNIQUE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_UNIQUE_name);
+-
+-	zval const_FETCH_KEY_PAIR_value;
+-	ZVAL_LONG(&const_FETCH_KEY_PAIR_value, LONG_CONST(PDO_FETCH_KEY_PAIR));
+-	zend_string *const_FETCH_KEY_PAIR_name = zend_string_init_interned("FETCH_KEY_PAIR", sizeof("FETCH_KEY_PAIR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_KEY_PAIR_name, &const_FETCH_KEY_PAIR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_KEY_PAIR_name);
+-
+-	zval const_FETCH_CLASSTYPE_value;
+-	ZVAL_LONG(&const_FETCH_CLASSTYPE_value, LONG_CONST(PDO_FETCH_CLASSTYPE));
+-	zend_string *const_FETCH_CLASSTYPE_name = zend_string_init_interned("FETCH_CLASSTYPE", sizeof("FETCH_CLASSTYPE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_CLASSTYPE_name, &const_FETCH_CLASSTYPE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_CLASSTYPE_name);
+-
+-	zval const_FETCH_SERIALIZE_value;
+-	ZVAL_LONG(&const_FETCH_SERIALIZE_value, LONG_CONST(PDO_FETCH_SERIALIZE));
+-	zend_string *const_FETCH_SERIALIZE_name = zend_string_init_interned("FETCH_SERIALIZE", sizeof("FETCH_SERIALIZE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_SERIALIZE_name, &const_FETCH_SERIALIZE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_SERIALIZE_name);
+-
+-	zval const_FETCH_PROPS_LATE_value;
+-	ZVAL_LONG(&const_FETCH_PROPS_LATE_value, LONG_CONST(PDO_FETCH_PROPS_LATE));
+-	zend_string *const_FETCH_PROPS_LATE_name = zend_string_init_interned("FETCH_PROPS_LATE", sizeof("FETCH_PROPS_LATE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_PROPS_LATE_name, &const_FETCH_PROPS_LATE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_PROPS_LATE_name);
+-
+-	zval const_FETCH_NAMED_value;
+-	ZVAL_LONG(&const_FETCH_NAMED_value, LONG_CONST(PDO_FETCH_NAMED));
+-	zend_string *const_FETCH_NAMED_name = zend_string_init_interned("FETCH_NAMED", sizeof("FETCH_NAMED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_NAMED_name, &const_FETCH_NAMED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_NAMED_name);
+-
+-	zval const_ATTR_AUTOCOMMIT_value;
+-	ZVAL_LONG(&const_ATTR_AUTOCOMMIT_value, LONG_CONST(PDO_ATTR_AUTOCOMMIT));
+-	zend_string *const_ATTR_AUTOCOMMIT_name = zend_string_init_interned("ATTR_AUTOCOMMIT", sizeof("ATTR_AUTOCOMMIT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_AUTOCOMMIT_name, &const_ATTR_AUTOCOMMIT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_AUTOCOMMIT_name);
+-
+-	zval const_ATTR_PREFETCH_value;
+-	ZVAL_LONG(&const_ATTR_PREFETCH_value, LONG_CONST(PDO_ATTR_PREFETCH));
+-	zend_string *const_ATTR_PREFETCH_name = zend_string_init_interned("ATTR_PREFETCH", sizeof("ATTR_PREFETCH") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_PREFETCH_name, &const_ATTR_PREFETCH_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_PREFETCH_name);
+-
+-	zval const_ATTR_TIMEOUT_value;
+-	ZVAL_LONG(&const_ATTR_TIMEOUT_value, LONG_CONST(PDO_ATTR_TIMEOUT));
+-	zend_string *const_ATTR_TIMEOUT_name = zend_string_init_interned("ATTR_TIMEOUT", sizeof("ATTR_TIMEOUT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_TIMEOUT_name, &const_ATTR_TIMEOUT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_TIMEOUT_name);
+-
+-	zval const_ATTR_ERRMODE_value;
+-	ZVAL_LONG(&const_ATTR_ERRMODE_value, LONG_CONST(PDO_ATTR_ERRMODE));
+-	zend_string *const_ATTR_ERRMODE_name = zend_string_init_interned("ATTR_ERRMODE", sizeof("ATTR_ERRMODE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_ERRMODE_name, &const_ATTR_ERRMODE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_ERRMODE_name);
+-
+-	zval const_ATTR_SERVER_VERSION_value;
+-	ZVAL_LONG(&const_ATTR_SERVER_VERSION_value, LONG_CONST(PDO_ATTR_SERVER_VERSION));
+-	zend_string *const_ATTR_SERVER_VERSION_name = zend_string_init_interned("ATTR_SERVER_VERSION", sizeof("ATTR_SERVER_VERSION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_SERVER_VERSION_name, &const_ATTR_SERVER_VERSION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_SERVER_VERSION_name);
+-
+-	zval const_ATTR_CLIENT_VERSION_value;
+-	ZVAL_LONG(&const_ATTR_CLIENT_VERSION_value, LONG_CONST(PDO_ATTR_CLIENT_VERSION));
+-	zend_string *const_ATTR_CLIENT_VERSION_name = zend_string_init_interned("ATTR_CLIENT_VERSION", sizeof("ATTR_CLIENT_VERSION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CLIENT_VERSION_name, &const_ATTR_CLIENT_VERSION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CLIENT_VERSION_name);
+-
+-	zval const_ATTR_SERVER_INFO_value;
+-	ZVAL_LONG(&const_ATTR_SERVER_INFO_value, LONG_CONST(PDO_ATTR_SERVER_INFO));
+-	zend_string *const_ATTR_SERVER_INFO_name = zend_string_init_interned("ATTR_SERVER_INFO", sizeof("ATTR_SERVER_INFO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_SERVER_INFO_name, &const_ATTR_SERVER_INFO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_SERVER_INFO_name);
+-
+-	zval const_ATTR_CONNECTION_STATUS_value;
+-	ZVAL_LONG(&const_ATTR_CONNECTION_STATUS_value, LONG_CONST(PDO_ATTR_CONNECTION_STATUS));
+-	zend_string *const_ATTR_CONNECTION_STATUS_name = zend_string_init_interned("ATTR_CONNECTION_STATUS", sizeof("ATTR_CONNECTION_STATUS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CONNECTION_STATUS_name, &const_ATTR_CONNECTION_STATUS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CONNECTION_STATUS_name);
+-
+-	zval const_ATTR_CASE_value;
+-	ZVAL_LONG(&const_ATTR_CASE_value, LONG_CONST(PDO_ATTR_CASE));
+-	zend_string *const_ATTR_CASE_name = zend_string_init_interned("ATTR_CASE", sizeof("ATTR_CASE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CASE_name, &const_ATTR_CASE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CASE_name);
+-
+-	zval const_ATTR_CURSOR_NAME_value;
+-	ZVAL_LONG(&const_ATTR_CURSOR_NAME_value, LONG_CONST(PDO_ATTR_CURSOR_NAME));
+-	zend_string *const_ATTR_CURSOR_NAME_name = zend_string_init_interned("ATTR_CURSOR_NAME", sizeof("ATTR_CURSOR_NAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CURSOR_NAME_name, &const_ATTR_CURSOR_NAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CURSOR_NAME_name);
+-
+-	zval const_ATTR_CURSOR_value;
+-	ZVAL_LONG(&const_ATTR_CURSOR_value, LONG_CONST(PDO_ATTR_CURSOR));
+-	zend_string *const_ATTR_CURSOR_name = zend_string_init_interned("ATTR_CURSOR", sizeof("ATTR_CURSOR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CURSOR_name, &const_ATTR_CURSOR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CURSOR_name);
+-
+-	zval const_ATTR_ORACLE_NULLS_value;
+-	ZVAL_LONG(&const_ATTR_ORACLE_NULLS_value, LONG_CONST(PDO_ATTR_ORACLE_NULLS));
+-	zend_string *const_ATTR_ORACLE_NULLS_name = zend_string_init_interned("ATTR_ORACLE_NULLS", sizeof("ATTR_ORACLE_NULLS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_ORACLE_NULLS_name, &const_ATTR_ORACLE_NULLS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_ORACLE_NULLS_name);
+-
+-	zval const_ATTR_PERSISTENT_value;
+-	ZVAL_LONG(&const_ATTR_PERSISTENT_value, LONG_CONST(PDO_ATTR_PERSISTENT));
+-	zend_string *const_ATTR_PERSISTENT_name = zend_string_init_interned("ATTR_PERSISTENT", sizeof("ATTR_PERSISTENT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_PERSISTENT_name, &const_ATTR_PERSISTENT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_PERSISTENT_name);
+-
+-	zval const_ATTR_STATEMENT_CLASS_value;
+-	ZVAL_LONG(&const_ATTR_STATEMENT_CLASS_value, LONG_CONST(PDO_ATTR_STATEMENT_CLASS));
+-	zend_string *const_ATTR_STATEMENT_CLASS_name = zend_string_init_interned("ATTR_STATEMENT_CLASS", sizeof("ATTR_STATEMENT_CLASS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_STATEMENT_CLASS_name, &const_ATTR_STATEMENT_CLASS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_STATEMENT_CLASS_name);
+-
+-	zval const_ATTR_FETCH_TABLE_NAMES_value;
+-	ZVAL_LONG(&const_ATTR_FETCH_TABLE_NAMES_value, LONG_CONST(PDO_ATTR_FETCH_TABLE_NAMES));
+-	zend_string *const_ATTR_FETCH_TABLE_NAMES_name = zend_string_init_interned("ATTR_FETCH_TABLE_NAMES", sizeof("ATTR_FETCH_TABLE_NAMES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_FETCH_TABLE_NAMES_name, &const_ATTR_FETCH_TABLE_NAMES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_FETCH_TABLE_NAMES_name);
+-
+-	zval const_ATTR_FETCH_CATALOG_NAMES_value;
+-	ZVAL_LONG(&const_ATTR_FETCH_CATALOG_NAMES_value, LONG_CONST(PDO_ATTR_FETCH_CATALOG_NAMES));
+-	zend_string *const_ATTR_FETCH_CATALOG_NAMES_name = zend_string_init_interned("ATTR_FETCH_CATALOG_NAMES", sizeof("ATTR_FETCH_CATALOG_NAMES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_FETCH_CATALOG_NAMES_name, &const_ATTR_FETCH_CATALOG_NAMES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_FETCH_CATALOG_NAMES_name);
+-
+-	zval const_ATTR_DRIVER_NAME_value;
+-	ZVAL_LONG(&const_ATTR_DRIVER_NAME_value, LONG_CONST(PDO_ATTR_DRIVER_NAME));
+-	zend_string *const_ATTR_DRIVER_NAME_name = zend_string_init_interned("ATTR_DRIVER_NAME", sizeof("ATTR_DRIVER_NAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DRIVER_NAME_name, &const_ATTR_DRIVER_NAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DRIVER_NAME_name);
+-
+-	zval const_ATTR_STRINGIFY_FETCHES_value;
+-	ZVAL_LONG(&const_ATTR_STRINGIFY_FETCHES_value, LONG_CONST(PDO_ATTR_STRINGIFY_FETCHES));
+-	zend_string *const_ATTR_STRINGIFY_FETCHES_name = zend_string_init_interned("ATTR_STRINGIFY_FETCHES", sizeof("ATTR_STRINGIFY_FETCHES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_STRINGIFY_FETCHES_name, &const_ATTR_STRINGIFY_FETCHES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_STRINGIFY_FETCHES_name);
+-
+-	zval const_ATTR_MAX_COLUMN_LEN_value;
+-	ZVAL_LONG(&const_ATTR_MAX_COLUMN_LEN_value, LONG_CONST(PDO_ATTR_MAX_COLUMN_LEN));
+-	zend_string *const_ATTR_MAX_COLUMN_LEN_name = zend_string_init_interned("ATTR_MAX_COLUMN_LEN", sizeof("ATTR_MAX_COLUMN_LEN") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_MAX_COLUMN_LEN_name, &const_ATTR_MAX_COLUMN_LEN_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_MAX_COLUMN_LEN_name);
+-
+-	zval const_ATTR_EMULATE_PREPARES_value;
+-	ZVAL_LONG(&const_ATTR_EMULATE_PREPARES_value, LONG_CONST(PDO_ATTR_EMULATE_PREPARES));
+-	zend_string *const_ATTR_EMULATE_PREPARES_name = zend_string_init_interned("ATTR_EMULATE_PREPARES", sizeof("ATTR_EMULATE_PREPARES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_EMULATE_PREPARES_name, &const_ATTR_EMULATE_PREPARES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_EMULATE_PREPARES_name);
+-
+-	zval const_ATTR_DEFAULT_FETCH_MODE_value;
+-	ZVAL_LONG(&const_ATTR_DEFAULT_FETCH_MODE_value, LONG_CONST(PDO_ATTR_DEFAULT_FETCH_MODE));
+-	zend_string *const_ATTR_DEFAULT_FETCH_MODE_name = zend_string_init_interned("ATTR_DEFAULT_FETCH_MODE", sizeof("ATTR_DEFAULT_FETCH_MODE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DEFAULT_FETCH_MODE_name, &const_ATTR_DEFAULT_FETCH_MODE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DEFAULT_FETCH_MODE_name);
+-
+-	zval const_ATTR_DEFAULT_STR_PARAM_value;
+-	ZVAL_LONG(&const_ATTR_DEFAULT_STR_PARAM_value, LONG_CONST(PDO_ATTR_DEFAULT_STR_PARAM));
+-	zend_string *const_ATTR_DEFAULT_STR_PARAM_name = zend_string_init_interned("ATTR_DEFAULT_STR_PARAM", sizeof("ATTR_DEFAULT_STR_PARAM") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DEFAULT_STR_PARAM_name, &const_ATTR_DEFAULT_STR_PARAM_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DEFAULT_STR_PARAM_name);
+-
+-	zval const_ERRMODE_SILENT_value;
+-	ZVAL_LONG(&const_ERRMODE_SILENT_value, LONG_CONST(PDO_ERRMODE_SILENT));
+-	zend_string *const_ERRMODE_SILENT_name = zend_string_init_interned("ERRMODE_SILENT", sizeof("ERRMODE_SILENT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_SILENT_name, &const_ERRMODE_SILENT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_SILENT_name);
+-
+-	zval const_ERRMODE_WARNING_value;
+-	ZVAL_LONG(&const_ERRMODE_WARNING_value, LONG_CONST(PDO_ERRMODE_WARNING));
+-	zend_string *const_ERRMODE_WARNING_name = zend_string_init_interned("ERRMODE_WARNING", sizeof("ERRMODE_WARNING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_WARNING_name, &const_ERRMODE_WARNING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_WARNING_name);
+-
+-	zval const_ERRMODE_EXCEPTION_value;
+-	ZVAL_LONG(&const_ERRMODE_EXCEPTION_value, LONG_CONST(PDO_ERRMODE_EXCEPTION));
+-	zend_string *const_ERRMODE_EXCEPTION_name = zend_string_init_interned("ERRMODE_EXCEPTION", sizeof("ERRMODE_EXCEPTION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_EXCEPTION_name, &const_ERRMODE_EXCEPTION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_EXCEPTION_name);
+-
+-	zval const_CASE_NATURAL_value;
+-	ZVAL_LONG(&const_CASE_NATURAL_value, LONG_CONST(PDO_CASE_NATURAL));
+-	zend_string *const_CASE_NATURAL_name = zend_string_init_interned("CASE_NATURAL", sizeof("CASE_NATURAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_NATURAL_name, &const_CASE_NATURAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_NATURAL_name);
+-
+-	zval const_CASE_LOWER_value;
+-	ZVAL_LONG(&const_CASE_LOWER_value, LONG_CONST(PDO_CASE_LOWER));
+-	zend_string *const_CASE_LOWER_name = zend_string_init_interned("CASE_LOWER", sizeof("CASE_LOWER") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_LOWER_name, &const_CASE_LOWER_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_LOWER_name);
+-
+-	zval const_CASE_UPPER_value;
+-	ZVAL_LONG(&const_CASE_UPPER_value, LONG_CONST(PDO_CASE_UPPER));
+-	zend_string *const_CASE_UPPER_name = zend_string_init_interned("CASE_UPPER", sizeof("CASE_UPPER") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_UPPER_name, &const_CASE_UPPER_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_UPPER_name);
+-
+-	zval const_NULL_NATURAL_value;
+-	ZVAL_LONG(&const_NULL_NATURAL_value, LONG_CONST(PDO_NULL_NATURAL));
+-	zend_string *const_NULL_NATURAL_name = zend_string_init_interned("NULL_NATURAL", sizeof("NULL_NATURAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_NATURAL_name, &const_NULL_NATURAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_NATURAL_name);
+-
+-	zval const_NULL_EMPTY_STRING_value;
+-	ZVAL_LONG(&const_NULL_EMPTY_STRING_value, LONG_CONST(PDO_NULL_EMPTY_STRING));
+-	zend_string *const_NULL_EMPTY_STRING_name = zend_string_init_interned("NULL_EMPTY_STRING", sizeof("NULL_EMPTY_STRING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_EMPTY_STRING_name, &const_NULL_EMPTY_STRING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_EMPTY_STRING_name);
+-
+-	zval const_NULL_TO_STRING_value;
+-	ZVAL_LONG(&const_NULL_TO_STRING_value, LONG_CONST(PDO_NULL_TO_STRING));
+-	zend_string *const_NULL_TO_STRING_name = zend_string_init_interned("NULL_TO_STRING", sizeof("NULL_TO_STRING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_TO_STRING_name, &const_NULL_TO_STRING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_TO_STRING_name);
+-
+-	zval const_ERR_NONE_value;
+-	zend_string *const_ERR_NONE_value_str = zend_string_init(PDO_ERR_NONE, strlen(PDO_ERR_NONE), 1);
+-	ZVAL_STR(&const_ERR_NONE_value, const_ERR_NONE_value_str);
+-	zend_string *const_ERR_NONE_name = zend_string_init_interned("ERR_NONE", sizeof("ERR_NONE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERR_NONE_name, &const_ERR_NONE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERR_NONE_name);
+-
+-	zval const_FETCH_ORI_NEXT_value;
+-	ZVAL_LONG(&const_FETCH_ORI_NEXT_value, LONG_CONST(PDO_FETCH_ORI_NEXT));
+-	zend_string *const_FETCH_ORI_NEXT_name = zend_string_init_interned("FETCH_ORI_NEXT", sizeof("FETCH_ORI_NEXT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_NEXT_name, &const_FETCH_ORI_NEXT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_NEXT_name);
+-
+-	zval const_FETCH_ORI_PRIOR_value;
+-	ZVAL_LONG(&const_FETCH_ORI_PRIOR_value, LONG_CONST(PDO_FETCH_ORI_PRIOR));
+-	zend_string *const_FETCH_ORI_PRIOR_name = zend_string_init_interned("FETCH_ORI_PRIOR", sizeof("FETCH_ORI_PRIOR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_PRIOR_name, &const_FETCH_ORI_PRIOR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_PRIOR_name);
+-
+-	zval const_FETCH_ORI_FIRST_value;
+-	ZVAL_LONG(&const_FETCH_ORI_FIRST_value, LONG_CONST(PDO_FETCH_ORI_FIRST));
+-	zend_string *const_FETCH_ORI_FIRST_name = zend_string_init_interned("FETCH_ORI_FIRST", sizeof("FETCH_ORI_FIRST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_FIRST_name, &const_FETCH_ORI_FIRST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_FIRST_name);
+-
+-	zval const_FETCH_ORI_LAST_value;
+-	ZVAL_LONG(&const_FETCH_ORI_LAST_value, LONG_CONST(PDO_FETCH_ORI_LAST));
+-	zend_string *const_FETCH_ORI_LAST_name = zend_string_init_interned("FETCH_ORI_LAST", sizeof("FETCH_ORI_LAST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_LAST_name, &const_FETCH_ORI_LAST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_LAST_name);
+-
+-	zval const_FETCH_ORI_ABS_value;
+-	ZVAL_LONG(&const_FETCH_ORI_ABS_value, LONG_CONST(PDO_FETCH_ORI_ABS));
+-	zend_string *const_FETCH_ORI_ABS_name = zend_string_init_interned("FETCH_ORI_ABS", sizeof("FETCH_ORI_ABS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_ABS_name, &const_FETCH_ORI_ABS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_ABS_name);
+-
+-	zval const_FETCH_ORI_REL_value;
+-	ZVAL_LONG(&const_FETCH_ORI_REL_value, LONG_CONST(PDO_FETCH_ORI_REL));
+-	zend_string *const_FETCH_ORI_REL_name = zend_string_init_interned("FETCH_ORI_REL", sizeof("FETCH_ORI_REL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_REL_name, &const_FETCH_ORI_REL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_REL_name);
+-
+-	zval const_CURSOR_FWDONLY_value;
+-	ZVAL_LONG(&const_CURSOR_FWDONLY_value, LONG_CONST(PDO_CURSOR_FWDONLY));
+-	zend_string *const_CURSOR_FWDONLY_name = zend_string_init_interned("CURSOR_FWDONLY", sizeof("CURSOR_FWDONLY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURSOR_FWDONLY_name, &const_CURSOR_FWDONLY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURSOR_FWDONLY_name);
+-
+-	zval const_CURSOR_SCROLL_value;
+-	ZVAL_LONG(&const_CURSOR_SCROLL_value, LONG_CONST(PDO_CURSOR_SCROLL));
+-	zend_string *const_CURSOR_SCROLL_name = zend_string_init_interned("CURSOR_SCROLL", sizeof("CURSOR_SCROLL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURSOR_SCROLL_name, &const_CURSOR_SCROLL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURSOR_SCROLL_name);
+-
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(&class_entry->function_table, "__construct", sizeof("__construct") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+ 	return class_entry;
+ }
+diff --git a/ext/pdo/pdo_stmt.c b/ext/pdo/pdo_stmt.c
+index 45393360..c3c466fb 100644
+--- a/ext/pdo/pdo_stmt.c
++++ b/ext/pdo/pdo_stmt.c
+@@ -1377,9 +1377,9 @@ PHP_METHOD(PDOStatement, fetchAll)
+ 	}
+ 
+ 	if (!error) {
+-		if ((how & PDO_FETCH_GROUP) || how == PDO_FETCH_KEY_PAIR ||
+-			(how == PDO_FETCH_USE_DEFAULT && stmt->default_fetch_type == PDO_FETCH_KEY_PAIR)
+-		) {
++		if ((how & PDO_FETCH_GROUP)) {
++			while (do_fetch(stmt, &data, how | flags, PDO_FETCH_ORI_NEXT, /* offset */ 0, return_all));
++		} else if (how == PDO_FETCH_KEY_PAIR || (how == PDO_FETCH_USE_DEFAULT && stmt->default_fetch_type == PDO_FETCH_KEY_PAIR)) {
+ 			while (do_fetch(stmt, &data, how | flags, PDO_FETCH_ORI_NEXT, /* offset */ 0, return_all));
+ 		} else {
+ 			array_init(return_value);
+diff --git a/ext/pdo/php_pdo.h b/ext/pdo/php_pdo.h
+index 023372eb..9c278cd4 100644
+--- a/ext/pdo/php_pdo.h
++++ b/ext/pdo/php_pdo.h
+@@ -53,8 +53,6 @@ PHP_MINFO_FUNCTION(pdo);
+ #define REGISTER_PDO_CLASS_CONST_STRING(const_name, value) \
+ 	zend_declare_class_constant_stringl(php_pdo_get_dbh_ce(), const_name, sizeof(const_name)-1, value, sizeof(value)-1);
+ 
+-#define LONG_CONST(c) (zend_long) c
+-
+ #define PDO_CONSTRUCT_CHECK \
+ 	if (!dbh->driver) { \
+ 		zend_throw_error(NULL, "PDO object is not initialized, constructor was not called"); \
+diff --git a/ext/pdo/php_pdo_driver.h b/ext/pdo/php_pdo_driver.h
+index c8322846..91a60fe3 100644
+--- a/ext/pdo/php_pdo_driver.h
++++ b/ext/pdo/php_pdo_driver.h
+@@ -672,7 +672,7 @@ PDO_API zend_class_entry *php_pdo_get_exception(void);
+ PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string **outquery);
+ 
+ PDO_API void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt,
+-	pdo_error_type sqlstate, const char *supp);
++	const char *sqlstate, const char *supp);
+ 
+ PDO_API void php_pdo_dbh_addref(pdo_dbh_t *dbh);
+ PDO_API void php_pdo_dbh_delref(pdo_dbh_t *dbh);
+diff --git a/ext/pdo/php_pdo_int.h b/ext/pdo/php_pdo_int.h
+index aa83c660..c3d2fe00 100644
+--- a/ext/pdo/php_pdo_int.h
++++ b/ext/pdo/php_pdo_int.h
+@@ -25,7 +25,7 @@ extern HashTable pdo_driver_hash;
+ extern zend_class_entry *pdo_exception_ce;
+ int php_pdo_list_entry(void);
+ 
+-void pdo_dbh_init(int module_number);
++void pdo_dbh_init(void);
+ void pdo_stmt_init(void);
+ 
+ extern zend_object *pdo_dbh_new(zend_class_entry *ce);
+diff --git a/ext/pdo/tests/bug_73234.phpt b/ext/pdo/tests/bug_73234.phpt
+index 5f8f620c..7e5729a4 100644
+--- a/ext/pdo/tests/bug_73234.phpt
++++ b/ext/pdo/tests/bug_73234.phpt
+@@ -6,7 +6,6 @@ pdo
+ <?php
+ $dir = getenv('REDIR_TEST_DIR');
+ if (false == $dir) die('skip no driver');
+-if (str_starts_with(getenv('PDOTEST_DSN'), "firebird")) die('xfail firebird driver does not behave as expected');
+ require_once $dir . 'pdo_test.inc';
+ PDOTest::skip();
+ 
+diff --git a/ext/pdo/tests/gh8626.phpt b/ext/pdo/tests/gh8626.phpt
+index 0a6f81b6..b222120f 100644
+--- a/ext/pdo/tests/gh8626.phpt
++++ b/ext/pdo/tests/gh8626.phpt
+@@ -46,7 +46,7 @@ array(3) {
+   [0]=>
+   string(%d) "%s"
+   [1]=>
+-  int(%i)
++  int(%d)
+   [2]=>
+   string(%d) "%s%w%S"
+ }
+diff --git a/ext/pdo/tests/pdo_005.phpt b/ext/pdo/tests/pdo_005.phpt
+index efcd335f..62f47801 100644
+--- a/ext/pdo/tests/pdo_005.phpt
++++ b/ext/pdo/tests/pdo_005.phpt
+@@ -29,7 +29,6 @@ class TestBase
+     private $val2;
+ }
+ 
+-#[AllowDynamicProperties] // $val2 will be dynamic now.
+ class TestDerived extends TestBase
+ {
+     protected $row;
+diff --git a/ext/pdo/tests/pdo_009.phpt b/ext/pdo/tests/pdo_009.phpt
+index 6e98b71f..27c8ca06 100644
+--- a/ext/pdo/tests/pdo_009.phpt
++++ b/ext/pdo/tests/pdo_009.phpt
+@@ -29,9 +29,6 @@ $stmt = $db->prepare('SELECT classtypes.name, test.id AS id, test.val AS val FRO
+ 
+ class Test1
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+@@ -40,9 +37,6 @@ class Test1
+ 
+ class Test2
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+@@ -51,9 +45,6 @@ class Test2
+ 
+ class Test3
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+diff --git a/ext/pdo/tests/pdo_010.phpt b/ext/pdo/tests/pdo_010.phpt
+index 1d47741b..3c78f8df 100644
+--- a/ext/pdo/tests/pdo_010.phpt
++++ b/ext/pdo/tests/pdo_010.phpt
+@@ -29,9 +29,6 @@ $stmt = $db->prepare('SELECT classtypes.name, test.grp AS grp, test.id AS id, te
+ 
+ class Test1
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+@@ -40,9 +37,6 @@ class Test1
+ 
+ class Test2
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+@@ -51,9 +45,6 @@ class Test2
+ 
+ class Test3
+ {
+-    public $id;
+-    public $val;
+-
+     public function __construct()
+     {
+         echo __METHOD__ . "()\n";
+diff --git a/ext/pdo/tests/pdo_011.phpt b/ext/pdo/tests/pdo_011.phpt
+index 53bf34d4..d9d1b304 100644
+--- a/ext/pdo/tests/pdo_011.phpt
++++ b/ext/pdo/tests/pdo_011.phpt
+@@ -23,8 +23,9 @@ $db->exec('INSERT INTO test VALUES(4, \'D\', \'Group2\')');
+ 
+ class DerivedStatement extends PDOStatement
+ {
+-    private function __construct(public $name, $db)
++    private function __construct($name, $db)
+     {
++        $this->name = $name;
+         echo __METHOD__ . "($name)\n";
+     }
+ 
+@@ -40,9 +41,11 @@ $derived = $db->prepare('SELECT id, val FROM test', array(PDO::ATTR_STATEMENT_CL
+ 
+ class Test1
+ {
+-    public function __construct(public $id, public $val)
++    public function __construct($id, $val)
+     {
+         echo __METHOD__ . "($id,$val)\n";
++        $this->id = $id;
++        $this->val = $val;
+     }
+ 
+     static public function factory($id, $val)
+diff --git a/ext/pdo/tests/pdo_012.phpt b/ext/pdo/tests/pdo_012.phpt
+index 9c5cf51d..956a3144 100644
+--- a/ext/pdo/tests/pdo_012.phpt
++++ b/ext/pdo/tests/pdo_012.phpt
+@@ -26,9 +26,6 @@ var_dump($stmt->fetchAll());
+ 
+ class Test
+ {
+-    public $val;
+-    public $grp;
+-
+     function __construct($name = 'N/A')
+     {
+         echo __METHOD__ . "($name)\n";
+diff --git a/ext/pdo/tests/pdo_013.phpt b/ext/pdo/tests/pdo_013.phpt
+index df43d205..d3946a01 100644
+--- a/ext/pdo/tests/pdo_013.phpt
++++ b/ext/pdo/tests/pdo_013.phpt
+@@ -32,9 +32,6 @@ foreach ($stmt as $data)
+ 
+ class Test
+ {
+-    public $val;
+-    public $grp;
+-
+     function __construct($name = 'N/A')
+     {
+         echo __METHOD__ . "($name)\n";
+diff --git a/ext/pdo/tests/pdo_014.phpt b/ext/pdo/tests/pdo_014.phpt
+index d607481e..c864c74a 100644
+--- a/ext/pdo/tests/pdo_014.phpt
++++ b/ext/pdo/tests/pdo_014.phpt
+@@ -22,9 +22,6 @@ $SELECT = 'SELECT val, grp FROM test';
+ 
+ class Test
+ {
+-    public $val;
+-    public $grp;
+-
+     function __construct($name = 'N/A')
+     {
+         echo __METHOD__ . "($name)\n";
+diff --git a/ext/pdo/tests/pdo_023.phpt b/ext/pdo/tests/pdo_023.phpt
+index b2356c13..8e07840f 100644
+--- a/ext/pdo/tests/pdo_023.phpt
++++ b/ext/pdo/tests/pdo_023.phpt
+@@ -14,7 +14,6 @@ PDOTest::skip();
+ if (getenv('REDIR_TEST_DIR') === false) putenv('REDIR_TEST_DIR='.__DIR__ . '/../../pdo/tests/');
+ require_once getenv('REDIR_TEST_DIR') . 'pdo_test.inc';
+ 
+-#[AllowDynamicProperties]
+ class PDOStatementX extends PDOStatement
+ {
+     public $test1 = 1;
+@@ -32,7 +31,6 @@ class PDOStatementX extends PDOStatement
+     }
+ }
+ 
+-#[AllowDynamicProperties]
+ class PDODatabaseX extends PDO
+ {
+     public $test1 = 1;
+diff --git a/ext/pdo/tests/pdo_039.phpt b/ext/pdo/tests/pdo_039.phpt
+index 655d51c1..5004fc40 100644
+--- a/ext/pdo/tests/pdo_039.phpt
++++ b/ext/pdo/tests/pdo_039.phpt
+@@ -6,7 +6,6 @@ pdo
+ <?php
+ $dir = getenv('REDIR_TEST_DIR');
+ if (false == $dir) die('skip no driver');
+-if (str_starts_with(getenv('PDOTEST_DSN'), "firebird")) die('xfail firebird driver does not behave as expected');
+ require_once $dir . 'pdo_test.inc';
+ PDOTest::skip();
+ ?>
+diff --git a/ext/pdo/tests/sensitive_parameter.phpt b/ext/pdo/tests/sensitive_parameter.phpt
+deleted file mode 100644
+index b9cf01ba..00000000
+--- a/ext/pdo/tests/sensitive_parameter.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Test that sensitive parameters are marked sensitive.
+---EXTENSIONS--
+-pdo
+---FILE--
+-<?php
+-try {
+-    new PDO('dsn', 'username', 'password');
+-} catch (\Throwable $e) {
+-    echo $e, PHP_EOL;
+-}
+-?>
+---EXPECTF--
+-PDOException: PDO::__construct(): Argument #1 ($dsn) must be a valid data source name in %s:%d
+-Stack trace:
+-#0 %s(%d): PDO->__construct('dsn', 'username', Object(SensitiveParameterValue))
+-#1 {main}
+diff --git a/ext/pdo_dblib/dblib_stmt.c b/ext/pdo_dblib/dblib_stmt.c
+index 2a946c81..2bef466f 100644
+--- a/ext/pdo_dblib/dblib_stmt.c
++++ b/ext/pdo_dblib/dblib_stmt.c
+@@ -21,6 +21,7 @@
+ 
+ #include "php.h"
+ #include "php_ini.h"
++#include "ext/standard/php_string.h"
+ #include "ext/standard/info.h"
+ #include "pdo/php_pdo.h"
+ #include "pdo/php_pdo_driver.h"
+@@ -437,7 +438,7 @@ static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, zval *zv, enum pd
+ 						tmp_data_len = 36;
+ 						tmp_data = safe_emalloc(tmp_data_len, sizeof(char), 1);
+ 						data_len = dbconvert(NULL, SQLUNIQUE, data, data_len, SQLCHAR, (LPBYTE) tmp_data, tmp_data_len);
+-						zend_str_toupper(tmp_data, data_len);
++						php_strtoupper(tmp_data, data_len);
+ 						ZVAL_STRINGL(zv, tmp_data, data_len);
+ 						efree(tmp_data);
+ 					} else {
+diff --git a/ext/pdo_firebird/firebird_driver.c b/ext/pdo_firebird/firebird_driver.c
+index 7dc40f51..36a7a2be 100644
+--- a/ext/pdo_firebird/firebird_driver.c
++++ b/ext/pdo_firebird/firebird_driver.c
+@@ -18,9 +18,7 @@
+ #include "config.h"
+ #endif
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ 
+ #include "php.h"
+ #include "zend_exceptions.h"
+diff --git a/ext/pdo_firebird/firebird_statement.c b/ext/pdo_firebird/firebird_statement.c
+index 4ad51ab4..5b297164 100644
+--- a/ext/pdo_firebird/firebird_statement.c
++++ b/ext/pdo_firebird/firebird_statement.c
+@@ -235,9 +235,6 @@ static int firebird_stmt_describe(pdo_stmt_t *stmt, int colno) /* {{{ */
+ 	int colname_len;
+ 	char *cp;
+ 
+-	if ((var->sqltype & ~1) == SQL_TEXT) {
+-		var->sqltype = SQL_VARYING | (var->sqltype & 1);
+-	}
+ 	colname_len = (S->H->fetch_table_names && var->relname_length)
+ 					? (var->aliasname_length + var->relname_length + 1)
+ 					: (var->aliasname_length);
+@@ -670,7 +667,7 @@ static int firebird_stmt_param_hook(pdo_stmt_t *stmt, struct pdo_bound_param_dat
+ 							zend_long lval;
+ 							double dval;
+ 
+-							if (Z_STRLEN_P(parameter) == 0) {
++							if ((Z_STRLEN_P(parameter) == 0)) {
+ 								*(FB_BOOLEAN*)var->sqldata = FB_FALSE;
+ 								break;
+ 							}
+diff --git a/ext/pdo_firebird/tests/gh10908.phpt b/ext/pdo_firebird/tests/gh10908.phpt
+index a1e8271f..f64bb7c3 100644
+--- a/ext/pdo_firebird/tests/gh10908.phpt
++++ b/ext/pdo_firebird/tests/gh10908.phpt
+@@ -22,14 +22,17 @@ CREATE TABLE gh10908(
+   MYDATE DATE,
+   MYTIME TIME,
+   MYBLOB BLOB,
++  MYBINARY BINARY(2),
++  MYVARBINARY VARBINARY(2),
+   MYSMALLINT SMALLINT,
+   MYINT INT,
+   MYCHAR CHAR(10),
++  MYVARCHAR VARCHAR(5),
+   MYBOOL BOOLEAN
+ );
+ EOT;
+ $dbh->exec($sql);
+-$dbh->exec("INSERT INTO gh10908 VALUES(1, 'ABC', 12.34, 1.0, 2.0, '2023-03-24 17:39', '2023-03-24', '17:39', 'abcdefg', 32767, 200000, 'azertyuiop', false);");
++$dbh->exec("INSERT INTO gh10908 VALUES(1, 'ABC', 12.34, 1.0, 2.0, '2023-03-24 17:39', '2023-03-24', '17:39', 'abcdefg', 'ab', 'a', 32767, 200000, 'azertyuiop', 'ab', false);");
+ 
+ function query_and_dump($dbh, $sql) {
+     foreach ($dbh->query($sql) as $row) {
+@@ -115,14 +118,20 @@ Array
+     [7] => 17:39:00
+     [MYBLOB] => abcdefg
+     [8] => abcdefg
++    [MYBINARY] => ab
++    [9] => ab
++    [MYVARBINARY] => a
++    [10] => a
+     [MYSMALLINT] => 32767
+-    [9] => 32767
++    [11] => 32767
+     [MYINT] => 200000
+-    [10] => 200000
++    [12] => 200000
+     [MYCHAR] => azertyuiop
+-    [11] => azertyuiop
++    [13] => azertyuiop
++    [MYVARCHAR] => ab
++    [14] => ab
+     [MYBOOL] => 
+-    [12] => 
++    [15] => 
+ )
+ 
+ Array
+diff --git a/ext/pdo_firebird/tests/gh8576.phpt b/ext/pdo_firebird/tests/gh8576.phpt
+deleted file mode 100644
+index cc1ebc3b..00000000
+--- a/ext/pdo_firebird/tests/gh8576.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-GH-8576 (Bad interpretation of length when char is UTF-8)
+---EXTENSIONS--
+-pdo_firebird
+---SKIPIF--
+-<?php require 'skipif.inc'; ?>
+---FILE--
+-<?php
+-require 'testdb.inc';
+-
+-$dbh->exec("CREATE TABLE gh8576 (name CHAR(1) CHARACTER SET UTF8)");
+-$dbh->exec("INSERT INTO gh8576 VALUES ('A')");
+-$stmt = $dbh->query("SELECT * FROM gh8576");
+-var_dump($stmt->fetchAll());
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  array(2) {
+-    ["NAME"]=>
+-    string(1) "A"
+-    [0]=>
+-    string(1) "A"
+-  }
+-}
+---CLEAN--
+-<?php
+-require 'testdb.inc';
+-$dbh->exec("DROP TABLE gh8576");
+-?>
+diff --git a/ext/pdo_mysql/mysql_driver.c b/ext/pdo_mysql/mysql_driver.c
+index 7d44bee4..2d098bff 100644
+--- a/ext/pdo_mysql/mysql_driver.c
++++ b/ext/pdo_mysql/mysql_driver.c
+@@ -355,7 +355,7 @@ static bool mysql_handle_begin(pdo_dbh_t *dbh)
+ 	zend_long return_value;
+ 	zend_string *command;
+ 
+-	PDO_DBG_ENTER("mysql_handle_begin");
++	PDO_DBG_ENTER("mysql_handle_quoter");
+ 	PDO_DBG_INF_FMT("dbh=%p", dbh);
+ 
+ 	command = zend_string_init("START TRANSACTION", strlen("START TRANSACTION"), 0);
+diff --git a/ext/pdo_mysql/tests/bug46292.phpt b/ext/pdo_mysql/tests/bug46292.phpt
+index 8664df7d..156be1fa 100644
+--- a/ext/pdo_mysql/tests/bug46292.phpt
++++ b/ext/pdo_mysql/tests/bug46292.phpt
+@@ -15,8 +15,6 @@ MySQLPDOTest::skip();
+ 
+ 
+     class myclass {
+-        public $value;
+-
+         public function __construct() {
+             printf("%s()\n", __METHOD__);
+         }
+diff --git a/ext/pdo_mysql/tests/bug63176.phpt b/ext/pdo_mysql/tests/bug63176.phpt
+index 599aaaa6..3e0e5e02 100644
+--- a/ext/pdo_mysql/tests/bug63176.phpt
++++ b/ext/pdo_mysql/tests/bug63176.phpt
+@@ -20,7 +20,6 @@ class PDO3 extends PDO {
+ 
+ 
+ class ModelA {
+-    public $db;
+     public function __construct($h) {
+         var_dump($h);
+         if ($h) {
+diff --git a/ext/pdo_mysql/tests/bug70862.phpt b/ext/pdo_mysql/tests/bug70862.phpt
+index 95e68896..e91319b2 100644
+--- a/ext/pdo_mysql/tests/bug70862.phpt
++++ b/ext/pdo_mysql/tests/bug70862.phpt
+@@ -19,7 +19,6 @@ MySQLPDOTest::skip();
+     $db->setAttribute(PDO::ATTR_STRINGIFY_FETCHES, true);
+ 
+     class HelloWrapper {
+-        public $context;
+         public function stream_open() { return true; }
+         public function stream_eof() { return true; }
+         public function stream_read() { return NULL; }
+diff --git a/ext/pdo_mysql/tests/pdo_mysql___construct.phpt b/ext/pdo_mysql/tests/pdo_mysql___construct.phpt
+index 1f009185..aa52764d 100644
+--- a/ext/pdo_mysql/tests/pdo_mysql___construct.phpt
++++ b/ext/pdo_mysql/tests/pdo_mysql___construct.phpt
+@@ -6,7 +6,7 @@ pdo_mysql
+ <?php
+ require_once(__DIR__ . DIRECTORY_SEPARATOR . 'mysql_pdo_test.inc');
+ MySQLPDOTest::skip();
+-if (getenv('CIRRUS_CI')) die('xfail Broken on Cirrus');
++if (getenv('CIRCLECI')) die('xfail Broken on CicleCI');
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/pdo_mysql/tests/pdo_mysql_stmt_fetch_serialize.phpt b/ext/pdo_mysql/tests/pdo_mysql_stmt_fetch_serialize.phpt
+index 5b65c8d5..9cff31ff 100644
+--- a/ext/pdo_mysql/tests/pdo_mysql_stmt_fetch_serialize.phpt
++++ b/ext/pdo_mysql/tests/pdo_mysql_stmt_fetch_serialize.phpt
+@@ -14,7 +14,6 @@ MySQLPDOTest::skip();
+ 
+     try {
+ 
+-        #[AllowDynamicProperties]
+         class myclass implements Serializable {
+ 
+             private static $instance = null;
+diff --git a/ext/pdo_mysql/tests/pdo_mysql_stmt_fetchobject.phpt b/ext/pdo_mysql/tests/pdo_mysql_stmt_fetchobject.phpt
+index 9f1bbd2d..54f5826f 100644
+--- a/ext/pdo_mysql/tests/pdo_mysql_stmt_fetchobject.phpt
++++ b/ext/pdo_mysql/tests/pdo_mysql_stmt_fetchobject.phpt
+@@ -30,7 +30,6 @@ try {
+     $query = "SELECT id, '', NULL, \"\" FROM test ORDER BY id ASC LIMIT 3";
+     $stmt = $db->prepare($query);
+ 
+-    #[AllowDynamicProperties]
+     class myclass {
+ 
+         private $set_calls = 0;
+diff --git a/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt b/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
+index 8ac1220e..3bc6faf3 100644
+--- a/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
++++ b/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
+@@ -78,8 +78,6 @@ $db->exec('DROP TABLE IF EXISTS test');
+ ?>
+ --EXPECTF--
+ __construct('%S', '%S', %s)
+-
+-Deprecated: Callables of the form ["MyPDO", "parent::__construct"] are deprecated in %s on line %d
+ exec('DROP TABLE IF EXISTS test')
+ exec('CREATE TABLE test(id INT)')
+ exec('INSERT INTO test(id) VALUES (1), (2)')
+diff --git a/ext/pdo_odbc/odbc_driver.c b/ext/pdo_odbc/odbc_driver.c
+index a9d5befd..b258d565 100644
+--- a/ext/pdo_odbc/odbc_driver.c
++++ b/ext/pdo_odbc/odbc_driver.c
+@@ -23,8 +23,6 @@
+ #include "ext/standard/info.h"
+ #include "pdo/php_pdo.h"
+ #include "pdo/php_pdo_driver.h"
+-/* this file actually lives in main/ */
+-#include "php_odbc_utils.h"
+ #include "php_pdo_odbc.h"
+ #include "php_pdo_odbc_int.h"
+ #include "zend_exceptions.h"
+@@ -396,19 +394,11 @@ static zend_result odbc_handle_check_liveness(pdo_dbh_t *dbh)
+ 	RETCODE ret;
+ 	UCHAR d_name[32];
+ 	SQLSMALLINT len;
+-	SQLUINTEGER dead = SQL_CD_FALSE;
+ 	pdo_odbc_db_handle *H = (pdo_odbc_db_handle *)dbh->driver_data;
+ 
+-	ret = SQLGetConnectAttr(H->dbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, NULL);
+-	if (ret == SQL_SUCCESS && dead == SQL_CD_TRUE) {
+-		/* Bail early here, since we know it's gone */
+-		return FAILURE;
+-	}
+ 	/*
+-	 * If the driver doesn't support SQL_ATTR_CONNECTION_DEAD, or if
+-	 * it returns false (which could be a false positive), fall back
+-	 * to using SQL_DATA_SOURCE_READ_ONLY, which isn't semantically
+-	 * correct, but works with many drivers.
++	 * SQL_ATTR_CONNECTION_DEAD is tempting, but only in ODBC 3.5,
++	 * and not all drivers implement it properly
+ 	 */
+ 	ret = SQLGetInfo(H->dbc, SQL_DATA_SOURCE_READ_ONLY, d_name,
+ 		sizeof(d_name), &len);
+@@ -501,43 +491,12 @@ static int pdo_odbc_handle_factory(pdo_dbh_t *dbh, zval *driver_options) /* {{{
+ 		use_direct = 1;
+ 
+ 		/* Force UID and PWD to be set in the DSN */
+-		bool is_uid_set = dbh->username && *dbh->username
+-			&& !strstr(dbh->data_source, "uid=")
+-			&& !strstr(dbh->data_source, "UID=");
+-		bool is_pwd_set = dbh->password && *dbh->password
+-			&& !strstr(dbh->data_source, "pwd=")
+-			&& !strstr(dbh->data_source, "PWD=");
+-		if (is_uid_set && is_pwd_set) {
+-			char *uid = NULL, *pwd = NULL;
+-			bool should_quote_uid = !php_odbc_connstr_is_quoted(dbh->username) && php_odbc_connstr_should_quote(dbh->username);
+-			bool should_quote_pwd = !php_odbc_connstr_is_quoted(dbh->password) && php_odbc_connstr_should_quote(dbh->password);
+-			if (should_quote_uid) {
+-				size_t estimated_length = php_odbc_connstr_estimate_quote_length(dbh->username);
+-				uid = emalloc(estimated_length);
+-				php_odbc_connstr_quote(uid, dbh->username, estimated_length);
+-			} else {
+-				uid = dbh->username;
+-			}
+-			if (should_quote_pwd) {
+-				size_t estimated_length = php_odbc_connstr_estimate_quote_length(dbh->password);
+-				pwd = emalloc(estimated_length);
+-				php_odbc_connstr_quote(pwd, dbh->password, estimated_length);
+-			} else {
+-				pwd = dbh->password;
+-			}
+-			size_t new_dsn_size = strlen(dbh->data_source)
+-				+ strlen(uid) + strlen(pwd)
+-				+ strlen(";UID=;PWD=") + 1;
+-			char *dsn = pemalloc(new_dsn_size, dbh->is_persistent);
+-			snprintf(dsn, new_dsn_size, "%s;UID=%s;PWD=%s", dbh->data_source, uid, pwd);
++		if (dbh->username && *dbh->username && !strstr(dbh->data_source, "uid")
++				&& !strstr(dbh->data_source, "UID")) {
++			char *dsn;
++			spprintf(&dsn, 0, "%s;UID=%s;PWD=%s", dbh->data_source, dbh->username, dbh->password);
+ 			pefree((char*)dbh->data_source, dbh->is_persistent);
+ 			dbh->data_source = dsn;
+-			if (uid && should_quote_uid) {
+-				efree(uid);
+-			}
+-			if (pwd && should_quote_pwd) {
+-				efree(pwd);
+-			}
+ 		}
+ 
+ 		rc = SQLDriverConnect(H->dbc, NULL, (SQLCHAR *) dbh->data_source, strlen(dbh->data_source),
+diff --git a/ext/pdo_odbc/odbc_stmt.c b/ext/pdo_odbc/odbc_stmt.c
+index ea0dd0e5..040962d5 100644
+--- a/ext/pdo_odbc/odbc_stmt.c
++++ b/ext/pdo_odbc/odbc_stmt.c
+@@ -155,7 +155,7 @@ static int odbc_stmt_dtor(pdo_stmt_t *stmt)
+ 
+ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ {
+-	RETCODE rc, rc1;
++	RETCODE rc;
+ 	pdo_odbc_stmt *S = (pdo_odbc_stmt*)stmt->driver_data;
+ 	char *buf = NULL;
+ 	SQLLEN row_count = -1;
+@@ -192,17 +192,11 @@ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ 							Z_STRLEN_P(parameter),
+ 							&ulen)) {
+ 					case PDO_ODBC_CONV_NOT_REQUIRED:
+-						rc1 = SQLPutData(S->stmt, Z_STRVAL_P(parameter),
++						SQLPutData(S->stmt, Z_STRVAL_P(parameter),
+ 							Z_STRLEN_P(parameter));
+-						if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-							rc = rc1;
+-						}
+ 						break;
+ 					case PDO_ODBC_CONV_OK:
+-						rc1 = SQLPutData(S->stmt, S->convbuf, ulen);
+-						if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-							rc = rc1;
+-						}
++						SQLPutData(S->stmt, S->convbuf, ulen);
+ 						break;
+ 					case PDO_ODBC_CONV_FAIL:
+ 						pdo_odbc_stmt_error("error converting input string");
+@@ -239,10 +233,7 @@ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ 				if (len == 0) {
+ 					break;
+ 				}
+-				rc1 = SQLPutData(S->stmt, buf, len);
+-				if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-					rc = rc1;
+-				}
++				SQLPutData(S->stmt, buf, len);
+ 			} while (1);
+ 		}
+ 	}
+diff --git a/ext/pdo_odbc/tests/gh9372.phpt b/ext/pdo_odbc/tests/gh9372.phpt
+deleted file mode 100644
+index 9f9b8849..00000000
+--- a/ext/pdo_odbc/tests/gh9372.phpt
++++ /dev/null
+@@ -1,52 +0,0 @@
+---TEST--
+-Bug GH-9372 (HY010 when binding overlong parameter)
+---EXTENSIONS--
+-pdo_odbc
+---SKIPIF--
+-<?php
+-require 'ext/pdo/tests/pdo_test.inc';
+-PDOTest::skip();
+-?>
+---FILE--
+-<?php
+-// Executing the statements fails with some drivers, but not others.
+-// The test is written in a way to always pass, unless the execution
+-// fails with a different code than 22001 (String data, right truncation).
+-
+-require 'ext/pdo/tests/pdo_test.inc';
+-$db = PDOTest::test_factory(dirname(__FILE__) . '/common.phpt');
+-$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+-
+-$db->exec("CREATE TABLE gh9372 (col VARCHAR(10))");
+-$db->exec("INSERT INTO gh9372 VALUES ('something')");
+-
+-$stmt = $db->prepare("SELECT * FROM gh9372 WHERE col = ?");
+-$stmt->bindValue(1, 'something else');
+-try {
+-    $stmt->execute();
+-} catch (PDOException $ex) {
+-    if ($ex->getCode() !== "22001") {
+-        var_dump($ex->getMessage());
+-    }
+-}
+-
+-$stmt = $db->prepare("SELECT * FROM gh9372 WHERE col = ?");
+-$stream = fopen("php://memory", "w+");
+-fwrite($stream, 'something else');
+-rewind($stream);
+-$stmt->bindvalue(1, $stream, PDO::PARAM_LOB);
+-try {
+-    $stmt->execute();
+-} catch (PDOException $ex) {
+-    if ($ex->getCode() !== "22001") {
+-        var_dump($ex->getMessage());
+-    }
+-}
+-?>
+---CLEAN--
+-<?php
+-require 'ext/pdo/tests/pdo_test.inc';
+-$db = PDOTest::test_factory(dirname(__FILE__) . '/common.phpt');
+-$db->exec("DROP TABLE gh9372");
+-?>
+---EXPECT--
+diff --git a/ext/pdo_pgsql/pgsql_driver.c b/ext/pdo_pgsql/pgsql_driver.c
+index ec4d5ec6..f84bfba9 100644
+--- a/ext/pdo_pgsql/pgsql_driver.c
++++ b/ext/pdo_pgsql/pgsql_driver.c
+@@ -29,6 +29,7 @@
+ #include "pdo/php_pdo_driver.h"
+ #include "pdo/php_pdo_error.h"
+ #include "ext/standard/file.h"
++#undef SIZEOF_OFF_T
+ #include "php_pdo_pgsql.h"
+ #include "php_pdo_pgsql_int.h"
+ #include "zend_exceptions.h"
+diff --git a/ext/pdo_pgsql/pgsql_driver.stub.php b/ext/pdo_pgsql/pgsql_driver.stub.php
+index 4206dbea..6daa55c7 100644
+--- a/ext/pdo_pgsql/pgsql_driver.stub.php
++++ b/ext/pdo_pgsql/pgsql_driver.stub.php
+@@ -2,10 +2,7 @@
+ 
+ /** @generate-function-entries */
+ 
+-/**
+- * These are extension methods for PDO. This is not a real class.
+- * @undocumentable
+- */
++// These are extension methods for PDO. This is not a real class.
+ class PDO_PGSql_Ext {
+     /** @tentative-return-type */
+     public function pgsqlCopyFromArray(string $tableName, array $rows, string $separator = "\t", string $nullAs = "\\\\N", ?string $fields = null): bool {}
+diff --git a/ext/pdo_pgsql/pgsql_driver_arginfo.h b/ext/pdo_pgsql/pgsql_driver_arginfo.h
+index 3f84d4d8..a3ec5196 100644
+--- a/ext/pdo_pgsql/pgsql_driver_arginfo.h
++++ b/ext/pdo_pgsql/pgsql_driver_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: b30fa6327876dc1090ee5397253c935e4566a8fe */
++ * Stub hash: 5dfd421cf9ba9eb043c4b4f3c9b9c09c81cc3ccb */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_PDO_PGSql_Ext_pgsqlCopyFromArray, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, tableName, IS_STRING, 0)
+diff --git a/ext/pdo_pgsql/tests/bug72294.phpt b/ext/pdo_pgsql/tests/bug72294.phpt
+index 8b55b033..6528c121 100644
+--- a/ext/pdo_pgsql/tests/bug72294.phpt
++++ b/ext/pdo_pgsql/tests/bug72294.phpt
+@@ -70,8 +70,6 @@ class PHPUnit_Framework_TestFailure
+ 
+ class PHPUnit_Framework_TestResult
+ {
+-    private $errors;
+-
+     public function run( $test)
+     {
+         $error      = false;
+diff --git a/ext/pdo_sqlite/sqlite_driver.c b/ext/pdo_sqlite/sqlite_driver.c
+index de5170a3..6d5015e0 100644
+--- a/ext/pdo_sqlite/sqlite_driver.c
++++ b/ext/pdo_sqlite/sqlite_driver.c
+@@ -772,6 +772,15 @@ static int authorizer(void *autharg, int access_type, const char *arg3, const ch
+ {
+ 	char *filename;
+ 	switch (access_type) {
++		case SQLITE_COPY: {
++			filename = make_filename_safe(arg4);
++			if (!filename) {
++				return SQLITE_DENY;
++			}
++			efree(filename);
++			return SQLITE_OK;
++		}
++
+ 		case SQLITE_ATTACH: {
+ 			filename = make_filename_safe(arg3);
+ 			if (!filename) {
+diff --git a/ext/pdo_sqlite/sqlite_driver.stub.php b/ext/pdo_sqlite/sqlite_driver.stub.php
+index add395f2..58fb41c9 100644
+--- a/ext/pdo_sqlite/sqlite_driver.stub.php
++++ b/ext/pdo_sqlite/sqlite_driver.stub.php
+@@ -2,10 +2,7 @@
+ 
+ /** @generate-function-entries */
+ 
+-/**
+- * These are extension methods for PDO. This is not a real class.
+- * @undocumentable
+- */
++// These are extension methods for PDO. This is not a real class.
+ class PDO_SQLite_Ext {
+     /** @tentative-return-type */
+     public function sqliteCreateFunction(string $name, callable $callback, int $numArgs = -1, int $flags = 0): bool {}
+diff --git a/ext/pdo_sqlite/sqlite_driver_arginfo.h b/ext/pdo_sqlite/sqlite_driver_arginfo.h
+index 5ba745e5..2b9b1aea 100644
+--- a/ext/pdo_sqlite/sqlite_driver_arginfo.h
++++ b/ext/pdo_sqlite/sqlite_driver_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: dc901bd60d17c1a2cdb40a118e2c6cd6eb0396e3 */
++ * Stub hash: 8cc3c173f5a442ab80f240a568489b023aabd7ef */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_PDO_SQLite_Ext_sqliteCreateFunction, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+diff --git a/ext/pdo_sqlite/tests/bug46139.phpt b/ext/pdo_sqlite/tests/bug46139.phpt
+index 7ec94aff..fabc3126 100644
+--- a/ext/pdo_sqlite/tests/bug46139.phpt
++++ b/ext/pdo_sqlite/tests/bug46139.phpt
+@@ -8,7 +8,6 @@ pdo_sqlite
+ require __DIR__ . '/../../../ext/pdo/tests/pdo_test.inc';
+ $db = PDOTest::test_factory(__DIR__ . '/common.phpt');
+ 
+-#[AllowDynamicProperties]
+ class Person {
+     public $test = NULL;
+     public function __construct() {
+diff --git a/ext/pdo_sqlite/tests/bug70862.phpt b/ext/pdo_sqlite/tests/bug70862.phpt
+index 5becca7c..eff0f8fb 100644
+--- a/ext/pdo_sqlite/tests/bug70862.phpt
++++ b/ext/pdo_sqlite/tests/bug70862.phpt
+@@ -14,7 +14,6 @@ $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, 0);
+ $db->setAttribute(PDO::ATTR_STRINGIFY_FETCHES, true);
+ 
+ class HelloWrapper {
+-    public $context;
+     public function stream_open() { return true; }
+     public function stream_eof() { return true; }
+     public function stream_read() { return NULL; }
+diff --git a/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt b/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
+index 5a5b728a..e16ac67c 100644
+--- a/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
++++ b/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
+@@ -126,8 +126,6 @@ function "" not found or invalid function name
+ PDOStatement::fetchAll(): Argument #2 must be a callable, null given
+ no array or string given
+ cannot access "self" when no class scope is active
+-
+-Deprecated: Callables of the form ["bar", "parent::method"] are deprecated in %s on line %d
+ array(2) {
+   [0]=>
+   string(9) "--- 1 ---"
+diff --git a/ext/pdo_sqlite/tests/pdo_sqlite_empty_filename.phpt b/ext/pdo_sqlite/tests/pdo_sqlite_empty_filename.phpt
+deleted file mode 100644
+index 8e474fea..00000000
+--- a/ext/pdo_sqlite/tests/pdo_sqlite_empty_filename.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-PDO_sqlite: Testing empty filename
+---EXTENSIONS--
+-pdo_sqlite
+---FILE--
+-<?php
+-
+-// create with empty filename
+-$db = new PDO('sqlite:');
+-
+-var_dump($db->exec('CREATE TABLE test1 (id INT);'));
+-
+-// create with empty URI
+-$db = new PDO('sqlite:file:?cache=shared');
+-
+-var_dump($db->exec('CREATE TABLE test1 (id INT);'));
+-?>
+---EXPECT--
+-int(0)
+-int(0)
+diff --git a/ext/pdo_sqlite/tests/pdo_sqlite_filename_uri.phpt b/ext/pdo_sqlite/tests/pdo_sqlite_filename_uri.phpt
+index b972be27..a5d588c6 100644
+--- a/ext/pdo_sqlite/tests/pdo_sqlite_filename_uri.phpt
++++ b/ext/pdo_sqlite/tests/pdo_sqlite_filename_uri.phpt
+@@ -5,16 +5,6 @@ pdo_sqlite
+ --FILE--
+ <?php
+ 
+-// create with in-memory database using shared cached
+-$db = new PDO('sqlite:file::memory:?cache=shared');
+-
+-var_dump($db->exec('CREATE TABLE test1 (id INT);'));
+-
+-// create second connection to in-memory database
+-$db = new PDO('sqlite:file::memory:?cache=shared');
+-
+-var_dump($db->exec('SELECT * from test1'));
+-
+ // create with default read-write|create mode
+ $filename = "file:" . __DIR__ . DIRECTORY_SEPARATOR . "pdo_sqlite_filename_uri.db";
+ 
+@@ -39,8 +29,6 @@ if (file_exists($filename)) {
+ ?>
+ --EXPECTF--
+ int(0)
+-int(0)
+-int(0)
+ 
+ Fatal error: Uncaught PDOException: SQLSTATE[HY000]: General error: 8 attempt to write a readonly database in %s
+ Stack trace:
+diff --git a/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir.phpt b/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir.phpt
+deleted file mode 100644
+index 425d2190..00000000
+--- a/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir.phpt
++++ /dev/null
+@@ -1,47 +0,0 @@
+---TEST--
+-PDO_sqlite: Testing filenames with open_basedir
+---EXTENSIONS--
+-pdo_sqlite
+---INI--
+-open_basedir=.
+---FILE--
+-<?php
+-
+-// create in basedir
+-$filename = 'pdo_sqlite_filename.db';
+-
+-$db = new PDO('sqlite:' . $filename);
+-
+-var_dump($db->exec('CREATE TABLE test1 (id INT);'));
+-
+-// create outside basedir
+-$filename = '..' . DIRECTORY_SEPARATOR . 'pdo_sqlite_filename.db';
+-
+-new PDO('sqlite:' . $filename);
+-?>
+-
+---CLEAN--
+-<?php
+-$filenames = [
+-    'pdo_sqlite_filename.db',
+-    '..' . DIRECTORY_SEPARATOR . 'pdo_sqlite_filename.db',
+-];
+-foreach ($filenames as $filename) {
+-    if (file_exists($filename)) {
+-        unlink($filename);
+-    }
+-}
+-?>
+---EXPECTF--
+-int(0)
+-
+-Fatal error: Uncaught PDOException: PDO::__construct(): open_basedir restriction in effect. File(%s) is not within the allowed path(s): (%s) in %s:%d
+-Stack trace:
+-%s
+-#1 {main}
+-
+-Next PDOException: open_basedir prohibits opening %s in %s:%d
+-Stack trace:
+-%s
+-#1 {main}
+-  thrown in %s

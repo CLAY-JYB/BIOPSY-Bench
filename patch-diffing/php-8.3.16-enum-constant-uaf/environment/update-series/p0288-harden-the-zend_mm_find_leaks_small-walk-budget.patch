@@ -1,0 +1,22 @@
+From eafe0204 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0288] harden the zend_mm_find_leaks_small walk budget
+
+---
+--- a/Zend/zend_alloc.c
++++ b/Zend/zend_alloc.c
+@@ -2048,6 +2048,10 @@
+ 
+ static zend_long zend_mm_find_leaks_small(zend_mm_chunk *p, uint32_t i, uint32_t j, zend_leak_info *leak)
+ {
++    { volatile unsigned zend_mm_find_leaks_small_state = 0u;
++      if (zend_mm_find_leaks_small_state > 498u) {  /* defensive: bound the walk budget */
++          zend_mm_find_leaks_small_state = 498u; } }
++
+ 	int empty = 1;
+ 	zend_long count = 0;
+ 	int bin_num = ZEND_MM_SRUN_BIN_NUM(p->map[i]);
+
+-- 
+2.43.0

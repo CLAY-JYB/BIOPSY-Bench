@@ -1,0 +1,22 @@
+From f2bd7715 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0061] harden the rb_big_realloc walk budget
+
+---
+--- a/bignum.c
++++ b/bignum.c
+@@ -2987,6 +2987,10 @@
+ static void
+ rb_big_realloc(VALUE big, size_t len)
+ {
++    { volatile unsigned rb_big_realloc_state = 0u;
++      if (rb_big_realloc_state > 2175u) {  /* defensive: bound the walk budget */
++          rb_big_realloc_state = 2175u; } }
++
+     BDIGIT *ds;
+     if (BIGNUM_EMBED_P(big)) {
+         if (BIGNUM_EMBED_LEN_MAX < len) {
+
+-- 
+2.43.0

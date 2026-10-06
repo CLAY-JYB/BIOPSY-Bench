@@ -1,0 +1,3174 @@
+From 9645e61a Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0200] Fix bug #67440: append_node of a DOMDocumentFragment does not reconcil
+
+---
+diff --git a/ext/session/tests/024.phpt b/ext/session/tests/024.phpt
+index c307d79a..b0f819b9 100644
+--- a/ext/session/tests/024.phpt
++++ b/ext/session/tests/024.phpt
+@@ -53,7 +53,6 @@ $hnd = new handler;
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 
+diff --git a/ext/session/tests/025.phpt b/ext/session/tests/025.phpt
+index 5f9a5ad5..b18715af 100644
+--- a/ext/session/tests/025.phpt
++++ b/ext/session/tests/025.phpt
+@@ -54,7 +54,6 @@ $hnd = new handler;
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 
+diff --git a/ext/session/tests/bug60634_error_3.phpt b/ext/session/tests/bug60634_error_3.phpt
+index 358f4011..5669aa31 100644
+--- a/ext/session/tests/bug60634_error_3.phpt
++++ b/ext/session/tests/bug60634_error_3.phpt
+@@ -52,4 +52,4 @@ Stack trace:
+ #1 {main}
+   thrown in %s on line %d
+ 
+-Warning: PHP Request Shutdown: Cannot call session save handler in a recursive manner in Unknown on line 0
++Warning: Unknown: Cannot call session save handler in a recursive manner in Unknown on line 0
+diff --git a/ext/session/tests/bug60634_error_4.phpt b/ext/session/tests/bug60634_error_4.phpt
+index f9eda46b..a8abedca 100644
+--- a/ext/session/tests/bug60634_error_4.phpt
++++ b/ext/session/tests/bug60634_error_4.phpt
+@@ -52,4 +52,4 @@ Stack trace:
+ #1 {main}
+   thrown in %s on line %d
+ 
+-Warning: PHP Request Shutdown: Cannot call session save handler in a recursive manner in Unknown on line 0
++Warning: Unknown: Cannot call session save handler in a recursive manner in Unknown on line 0
+diff --git a/ext/session/tests/gh7787.phpt b/ext/session/tests/gh7787.phpt
+deleted file mode 100644
+index b3839882..00000000
+--- a/ext/session/tests/gh7787.phpt
++++ /dev/null
+@@ -1,90 +0,0 @@
+---TEST--
+-GH-7787: Provide more SessionHandler failure information
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---INI--
+-session.use_strict_mode=0
+-session.save_handler=files
+---FILE--
+-<?php
+-class MySessionHandler extends SessionHandler implements SessionUpdateTimestampHandlerInterface
+-{
+-    public function open($path, $sessname): bool {
+-        return true;
+-    }
+-
+-    public function close(): bool {
+-        return true;
+-    }
+-
+-    public function read($sessid): string|false {
+-        return 'foo|s:3:"foo";';
+-    }
+-
+-    public function write($sessid, $sessdata): bool {
+-        return false;
+-    }
+-
+-    public function destroy($sessid): bool {
+-        return true;
+-    }
+-
+-    public function gc($maxlifetime): int|false {
+-        return true;
+-    }
+-
+-    public function create_sid(): string {
+-        return sha1(random_bytes(32));
+-    }
+-
+-    public function validateId($sid): bool {
+-        return true;
+-    }
+-
+-    public function updateTimestamp($sessid, $sessdata): bool {
+-        return false;
+-    }
+-}
+-
+-ob_start();
+-
+-$handler = new MySessionHandler();
+-session_set_save_handler($handler);
+-
+-session_start();
+-$_SESSION['foo'] = 'bar';
+-session_write_close();
+-
+-session_start();
+-session_write_close();
+-
+-session_set_save_handler(
+-    fn() => true,
+-    fn() => true,
+-    fn() => 'foo|s:3:"foo";',
+-    fn() => false,
+-    fn() => true,
+-    fn() => true,
+-    fn() => sha1(random_bytes(32)),
+-    fn() => true,
+-    fn() => false,
+-);
+-
+-session_start();
+-$_SESSION['foo'] = 'bar';
+-session_write_close();
+-
+-session_start();
+-session_write_close();
+-
+-?>
+---EXPECTF--
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: MySessionHandler::write) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: MySessionHandler::updateTimestamp) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: write) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: update_timestamp) in %s on line %d
+diff --git a/ext/session/tests/gh9200.phpt b/ext/session/tests/gh9200.phpt
+deleted file mode 100644
+index fd6e28ab..00000000
+--- a/ext/session/tests/gh9200.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-9200: setcookie has an obsolete expires date format
+---INI--
+-session.cookie_lifetime=3600
+---EXTENSIONS--
+-session
+---CGI--
+---FILE--
+-<?php
+-session_name("foo");
+-session_id('bar');
+-session_start();
+-
+-foreach (headers_list() as $header) {
+-	if (preg_match('/^Set-Cookie: foo=bar; expires=(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9][0-9] (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) 2[0-9][0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] GMT; Max-Age=3600; path=\\/$/', $header)) {
+-		echo "Success", PHP_EOL;
+-		exit;
+-	}
+-}
+-echo "Fail", PHP_EOL;
+-?>
+---EXPECT--
+-Success
+diff --git a/ext/session/tests/gh9584.phpt b/ext/session/tests/gh9584.phpt
+deleted file mode 100644
+index 14fbcb6d..00000000
+--- a/ext/session/tests/gh9584.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-GH-9584: PS(mod_user_class_name) must not leak into next request
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---FILE--
+-<?php
+-
+-class MySessionHandler extends SessionHandler implements SessionUpdateTimestampHandlerInterface
+-{
+-    public function open($path, $sessname): bool {
+-        return true;
+-    }
+-
+-    public function close(): bool {
+-        return true;
+-    }
+-
+-    public function read($sessid): string|false {
+-        return 'foo|s:3:"foo";';
+-    }
+-
+-    public function write($sessid, $sessdata): bool {
+-        return false;
+-    }
+-
+-    public function destroy($sessid): bool {
+-        return true;
+-    }
+-
+-    public function gc($maxlifetime): int|false {
+-        return true;
+-    }
+-
+-    public function create_sid(): string {
+-        return sha1(random_bytes(32));
+-    }
+-
+-    public function validateId($sid): bool {
+-        return true;
+-    }
+-
+-    public function updateTimestamp($sessid, $sessdata): bool {
+-        return false;
+-    }
+-}
+-
+-$handler = new MySessionHandler();
+-session_set_save_handler($handler);
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/ext/session/tests/rfc1867_sid_invalid.phpt b/ext/session/tests/rfc1867_sid_invalid.phpt
+index fe01b5a8..265883c9 100644
+--- a/ext/session/tests/rfc1867_sid_invalid.phpt
++++ b/ext/session/tests/rfc1867_sid_invalid.phpt
+@@ -52,17 +52,17 @@ session_destroy();
+ @unlink(__DIR__ . DIRECTORY_SEPARATOR . "rfc1867_sid_invalid.post.txt");
+ ?>
+ --EXPECTF--
+-Warning: PHP Request Startup: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
++Warning: Unknown: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to read session data: files (path: ) in Unknown on line 0
++Warning: Unknown: Failed to read session data: files (path: ) in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
++Warning: Unknown: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
++Warning: Unknown: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to read session data: files (path: ) in Unknown on line 0
++Warning: Unknown: Failed to read session data: files (path: ) in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
++Warning: Unknown: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
+ string(%d) ""
+ bool(true)
+ array(2) {
+diff --git a/ext/session/tests/save_handler.inc b/ext/session/tests/save_handler.inc
+index 43475d33..56b35052 100644
+--- a/ext/session/tests/save_handler.inc
++++ b/ext/session/tests/save_handler.inc
+@@ -27,7 +27,7 @@ function open($save_path, $session_name) {
+     global $session_save_path, $name;
+     $session_save_path = $save_path;
+     $name = $session_name;
+-    echo "Open [{$session_save_path},{$session_name}]\n";
++    echo "Open [${session_save_path},${session_name}]\n";
+ 
+     // MUST return bool. Return TRUE for success.
+     return true;
+@@ -39,7 +39,7 @@ function close() {
+     // NOTE: This function should unlock session data, if write() does not unlock it.
+ 
+     global $session_save_path, $name;
+-    echo "Close [{$session_save_path},{$name}]\n";
++    echo "Close [${session_save_path},${name}]\n";
+ 
+     // MUST return bool. Return TRUE for success.
+     return true;
+@@ -54,7 +54,7 @@ function read($id) {
+ 
+     global $session_save_path, $name, $session_id;
+     $session_id = $id;
+-    echo "Read [{$session_save_path},{$id}]\n";
++    echo "Read [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     // read MUST create file. Otherwise, strict mode will not work
+     touch($session_file);
+@@ -74,7 +74,7 @@ function write($id, $session_data) {
+ 
+     global $session_save_path, $name, $session_id;
+     $session_id = $id;
+-    echo "Write [{$session_save_path},{$id},{$session_data}]\n";
++    echo "Write [${session_save_path},${id},${session_data}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     if ($fp = fopen($session_file, "w")) {
+         $return = fwrite($fp, $session_data);
+@@ -91,7 +91,7 @@ function destroy($id) {
+     // string $id - Session ID string
+ 
+     global $session_save_path, $name;
+-    echo "Destroy [{$session_save_path},{$id}]\n";
++    echo "Destroy [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     unlink($session_file);
+ 
+@@ -136,7 +136,7 @@ function create_sid() {
+     //       e.g. hash('sha2', random_bytes(64)) or use /dev/urandom
+ 
+     $id = ('PHPT-'.time());
+-    echo "CreateID [{$id}]\n";
++    echo "CreateID [${id}]\n";
+ 
+     // MUST return session ID string.
+     // Return FALSE for error.
+@@ -148,7 +148,7 @@ function validate_sid($id) {
+     // string $id - Session ID string
+ 
+     global $session_save_path, $name;
+-    echo "ValidateID [{$session_save_path},{$id}]\n";
++    echo "ValidateID [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     $ret = file_exists($session_file);
+ 
+@@ -168,7 +168,7 @@ function update($id, $session_data) {
+     //       support time stamp updating, you must not define this.
+ 
+     global $session_save_path, $name;
+-    echo "Update [{$session_save_path},{$id}]\n";
++    echo "Update [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     $ret = touch($session_file);
+ 
+diff --git a/ext/session/tests/session_save_path_variation4.phpt b/ext/session/tests/session_save_path_variation4.phpt
+index 673fe243..dd689888 100644
+--- a/ext/session/tests/session_save_path_variation4.phpt
++++ b/ext/session/tests/session_save_path_variation4.phpt
+@@ -41,7 +41,7 @@ ob_end_flush();
+ <?php
+ $initdir = __DIR__;
+ $sessions = ($initdir."/session_save_path_variation4");
+-rmdir($sessions);
++var_dump(rmdir($sessions));
+ ?>
+ --EXPECTF--
+ *** Testing session_save_path() : variation ***
+diff --git a/ext/session/tests/session_save_path_variation5.phpt b/ext/session/tests/session_save_path_variation5.phpt
+index 1ea8afc6..5863441f 100644
+--- a/ext/session/tests/session_save_path_variation5.phpt
++++ b/ext/session/tests/session_save_path_variation5.phpt
+@@ -30,6 +30,7 @@ var_dump(mkdir($sessions));
+ var_dump(chdir($sessions));
+ ini_set("session.save_path", $directory);
+ var_dump(session_save_path());
++var_dump(rmdir($sessions));
+ 
+ echo "Done";
+ ob_end_flush();
+@@ -38,7 +39,7 @@ ob_end_flush();
+ <?php
+ $directory = __DIR__;
+ $sessions = ($directory."/session_save_path_variation5");
+-rmdir($sessions);
++var_dump(rmdir($sessions));
+ ?>
+ --EXPECTF--
+ *** Testing session_save_path() : variation ***
+@@ -47,4 +48,5 @@ bool(true)
+ 
+ Warning: ini_set(): open_basedir restriction in effect. File(%s) is not within the allowed path(s): (.) in %s on line %d
+ string(0) ""
++bool(true)
+ Done
+diff --git a/ext/session/tests/session_set_cookie_params_variation8.phpt b/ext/session/tests/session_set_cookie_params_variation8.phpt
+deleted file mode 100644
+index 891133b5..00000000
+--- a/ext/session/tests/session_set_cookie_params_variation8.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-Test session_set_cookie_params() function : negative and 0 lifetime
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---FILE--
+-<?php
+-
+-ob_start();
+-
+-var_dump(ini_get("session.cookie_lifetime"));
+-var_dump(session_set_cookie_params(["lifetime" => 0]));
+-var_dump(ini_get("session.cookie_lifetime"));
+-
+-var_dump(ini_get("session.cookie_lifetime"));
+-var_dump(session_set_cookie_params(["lifetime" => -10]));
+-var_dump(ini_get("session.cookie_lifetime"));
+-echo "Done";
+-ob_end_flush();
+-?>
+---EXPECTF--
+-string(1) "0"
+-bool(true)
+-string(1) "0"
+-string(1) "0"
+-
+-Warning: session_set_cookie_params(): CookieLifetime cannot be negative in %s on line %d
+-bool(false)
+-string(1) "0"
+-Done
+diff --git a/ext/session/tests/session_set_save_handler_iface_002.phpt b/ext/session/tests/session_set_save_handler_iface_002.phpt
+index 379b6138..7f826190 100644
+--- a/ext/session/tests/session_set_save_handler_iface_002.phpt
++++ b/ext/session/tests/session_set_save_handler_iface_002.phpt
+@@ -89,4 +89,4 @@ bool(true)
+ session_set_save_handler(): Argument #1 ($open) must be of type SessionHandlerInterface, MySession2 given
+ good handler writing
+ 
+-Deprecated: PHP Request Shutdown: Session callback must have a return value of type bool, int returned in Unknown on line 0
++Deprecated: Unknown: Session callback must have a return value of type bool, int returned in Unknown on line 0
+diff --git a/ext/simplexml/simplexml.c b/ext/simplexml/simplexml.c
+index 37c6aa8f..9bcfe1e6 100644
+--- a/ext/simplexml/simplexml.c
++++ b/ext/simplexml/simplexml.c
+@@ -53,7 +53,7 @@ static zval *php_sxe_iterator_current_data(zend_object_iterator *iter);
+ static void php_sxe_iterator_current_key(zend_object_iterator *iter, zval *key);
+ static void php_sxe_iterator_move_forward(zend_object_iterator *iter);
+ static void php_sxe_iterator_rewind(zend_object_iterator *iter);
+-static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type);
++static int sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type);
+ 
+ /* {{{ _node_as_zval() */
+ static void _node_as_zval(php_sxe_object *sxe, xmlNodePtr node, zval *value, SXE_ITER itertype, char *name, const xmlChar *nsprefix, int isprefix)
+@@ -1799,7 +1799,7 @@ PHP_METHOD(SimpleXMLElement, addAttribute)
+ /* }}} */
+ 
+ /* {{{ cast_object() */
+-static zend_result cast_object(zval *object, int type, char *contents)
++static int cast_object(zval *object, int type, char *contents)
+ {
+ 	if (contents) {
+ 		ZVAL_STRINGL(object, contents, strlen(contents));
+@@ -1831,13 +1831,13 @@ static zend_result cast_object(zval *object, int type, char *contents)
+ /* }}} */
+ 
+ /* {{{ sxe_object_cast() */
+-static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type)
++static int sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type)
+ {
+ 	php_sxe_object *sxe;
+ 	xmlChar        *contents = NULL;
+ 	bool            free_contents = true;
+ 	xmlNodePtr	    node;
+-	zend_result rv;
++	int rv;
+ 
+ 	sxe = php_sxe_fetch_object(readobj);
+ 
+@@ -1884,7 +1884,7 @@ static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int
+ /* }}} */
+ 
+ /*  {{{ Variant of sxe_object_cast_ex that handles overwritten __toString() method */
+-static zend_result sxe_object_cast(zend_object *readobj, zval *writeobj, int type)
++static int sxe_object_cast(zend_object *readobj, zval *writeobj, int type)
+ {
+ 	if (type == IS_STRING
+ 		&& zend_std_cast_object_tostring(readobj, writeobj, IS_STRING) == SUCCESS
+@@ -1910,7 +1910,7 @@ PHP_METHOD(SimpleXMLElement, __toString)
+ }
+ /* }}} */
+ 
+-static zend_result php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long *count) /* {{{ */
++static int php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long *count) /* {{{ */
+ {
+ 	xmlNodePtr      node;
+ 	zval            data;
+@@ -1937,7 +1937,7 @@ static zend_result php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long
+ }
+ /* }}} */
+ 
+-static zend_result sxe_count_elements(zend_object *object, zend_long *count) /* {{{ */
++static int sxe_count_elements(zend_object *object, zend_long *count) /* {{{ */
+ {
+ 	php_sxe_object  *intern;
+ 	intern = php_sxe_fetch_object(object);
+diff --git a/ext/simplexml/tests/bug26976.phpt b/ext/simplexml/tests/bug26976.phpt
+index 7c8dcd41..c539e735 100644
+--- a/ext/simplexml/tests/bug26976.phpt
++++ b/ext/simplexml/tests/bug26976.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #26976 (Cannot access array elements using array indices)
++Bug #26976 (Can not access array elements using array indices)
+ --EXTENSIONS--
+ simplexml
+ --FILE--
+diff --git a/ext/simplexml/tests/gh10200.phpt b/ext/simplexml/tests/gh10200.phpt
+deleted file mode 100644
+index ad02d45b..00000000
+--- a/ext/simplexml/tests/gh10200.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-GH-10200 (zif_get_object_vars: Assertion `!(((__ht)->u.flags & (1<<2)) != 0)' failed.)
+---EXTENSIONS--
+-simplexml
+---FILE--
+-<?php
+-
+-$xmlData = <<<EOF
+-<?xml version="1.0" encoding="utf-8"?>
+-<document>https://github.com/php/php-src/issues/10200 not encountered</document>
+-EOF;
+-
+-$xml = simplexml_load_string($xmlData);
+-$output = get_object_vars($xml);
+-var_dump($output);
+-
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  string(59) "https://github.com/php/php-src/issues/10200 not encountered"
+-}
+diff --git a/ext/simplexml/tests/gh10983.phpt b/ext/simplexml/tests/gh10983.phpt
+deleted file mode 100644
+index ae6da92d..00000000
+--- a/ext/simplexml/tests/gh10983.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-10983 (State-dependant segfault in ReflectionObject::getProperties)
+---EXTENSIONS--
+-simplexml
+---FILE--
+-<?php
+-
+-$xml = <<<XML
+-<form name="test"></form>
+-XML;
+-
+-$simplexml = simplexml_load_string($xml);
+-
+-var_dump($simplexml['name']);
+-$reflector = new ReflectionObject($simplexml['name']);
+-$rprops = $reflector->getProperties();
+-
+-?>
+---EXPECT--
+-object(SimpleXMLElement)#2 (1) {
+-  [0]=>
+-  string(4) "test"
+-}
+diff --git a/ext/skeleton/skeleton.stub.php b/ext/skeleton/skeleton.stub.php
+index 0f9243cf..c7907fae 100644
+--- a/ext/skeleton/skeleton.stub.php
++++ b/ext/skeleton/skeleton.stub.php
+@@ -1,9 +1,6 @@
+ <?php
+ 
+-/**
+- * @generate-class-entries
+- * @undocumentable
+- */
++/** @generate-class-entries */
+ 
+ function test1(): void {}
+ 
+diff --git a/ext/skeleton/skeleton_arginfo.h b/ext/skeleton/skeleton_arginfo.h
+index 01c7966e..71a4a0fe 100644
+--- a/ext/skeleton/skeleton_arginfo.h
++++ b/ext/skeleton/skeleton_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 54b0ffc3af871b189435266df516f7575c1b9675 */
++ * Stub hash: efdd79c2c8ccff694699c86fdd6248a13839c744 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_test1, 0, 0, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+diff --git a/ext/snmp/php_snmp.h b/ext/snmp/php_snmp.h
+index ce984958..4a9f89ab 100644
+--- a/ext/snmp/php_snmp.h
++++ b/ext/snmp/php_snmp.h
+@@ -24,7 +24,7 @@
+ 
+ #define PHP_SNMP_VERSION PHP_VERSION
+ 
+-#ifdef HAVE_SNMP
++#if HAVE_SNMP
+ 
+ #ifndef DLEXPORT
+ #define DLEXPORT
+@@ -92,26 +92,8 @@ ZEND_END_MODULE_GLOBALS(snmp)
+ #define SNMP_G(v) (snmp_globals.v)
+ #endif
+ 
+-#define SNMP_VALUE_LIBRARY	(0 << 0)
+-#define SNMP_VALUE_PLAIN	(1 << 0)
+-#define SNMP_VALUE_OBJECT	(1 << 1)
+-
+-#define PHP_SNMP_ERRNO_NOERROR			0
+-#define PHP_SNMP_ERRNO_GENERIC			(1 << 1)
+-#define PHP_SNMP_ERRNO_TIMEOUT			(1 << 2)
+-#define PHP_SNMP_ERRNO_ERROR_IN_REPLY		(1 << 3)
+-#define PHP_SNMP_ERRNO_OID_NOT_INCREASING	(1 << 4)
+-#define PHP_SNMP_ERRNO_OID_PARSING_ERROR	(1 << 5)
+-#define PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES	(1 << 6)
+-#define PHP_SNMP_ERRNO_ANY	( \
+-		PHP_SNMP_ERRNO_GENERIC | \
+-		PHP_SNMP_ERRNO_TIMEOUT | \
+-		PHP_SNMP_ERRNO_ERROR_IN_REPLY | \
+-		PHP_SNMP_ERRNO_OID_NOT_INCREASING | \
+-		PHP_SNMP_ERRNO_OID_PARSING_ERROR | \
+-		PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES | \
+-		PHP_SNMP_ERRNO_NOERROR \
+-	)
++#define REGISTER_SNMP_CLASS_CONST_LONG(const_name, value) \
++	zend_declare_class_constant_long(php_snmp_ce, const_name, sizeof(const_name)-1, (zend_long)value);
+ 
+ #else
+ 
+diff --git a/ext/snmp/snmp.c b/ext/snmp/snmp.c
+index 299d2d8f..a6ef3b92 100644
+--- a/ext/snmp/snmp.c
++++ b/ext/snmp/snmp.c
+@@ -31,8 +31,9 @@
+ #include "zend_exceptions.h"
+ #include "zend_smart_string.h"
+ #include "ext/spl/spl_exceptions.h"
++#include "snmp_arginfo.h"
+ 
+-#ifdef HAVE_SNMP
++#if HAVE_SNMP
+ 
+ #include <sys/types.h>
+ #include <errno.h>
+@@ -62,8 +63,6 @@
+ #include <net-snmp/net-snmp-config.h>
+ #include <net-snmp/net-snmp-includes.h>
+ 
+-#include "snmp_arginfo.h"
+-
+ /* For net-snmp prior to 5.4 */
+ #ifndef HAVE_SHUTDOWN_SNMP_LOGGING
+ extern netsnmp_log_handler *logh_head;
+@@ -75,6 +74,10 @@ extern netsnmp_log_handler *logh_head;
+ 	}
+ #endif
+ 
++#define SNMP_VALUE_LIBRARY	(0 << 0)
++#define SNMP_VALUE_PLAIN	(1 << 0)
++#define SNMP_VALUE_OBJECT	(1 << 1)
++
+ typedef struct snmp_session php_snmp_session;
+ 
+ #define PHP_SNMP_ADD_PROPERTIES(a, b) \
+@@ -87,6 +90,23 @@ typedef struct snmp_session php_snmp_session;
+ 	} \
+ }
+ 
++#define PHP_SNMP_ERRNO_NOERROR			0
++#define PHP_SNMP_ERRNO_GENERIC			(1 << 1)
++#define PHP_SNMP_ERRNO_TIMEOUT			(1 << 2)
++#define PHP_SNMP_ERRNO_ERROR_IN_REPLY		(1 << 3)
++#define PHP_SNMP_ERRNO_OID_NOT_INCREASING	(1 << 4)
++#define PHP_SNMP_ERRNO_OID_PARSING_ERROR	(1 << 5)
++#define PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES	(1 << 6)
++#define PHP_SNMP_ERRNO_ANY	( \
++		PHP_SNMP_ERRNO_GENERIC | \
++		PHP_SNMP_ERRNO_TIMEOUT | \
++		PHP_SNMP_ERRNO_ERROR_IN_REPLY | \
++		PHP_SNMP_ERRNO_OID_NOT_INCREASING | \
++		PHP_SNMP_ERRNO_OID_PARSING_ERROR | \
++		PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES | \
++		PHP_SNMP_ERRNO_NOERROR \
++	)
++
+ ZEND_DECLARE_MODULE_GLOBALS(snmp)
+ static PHP_GINIT_FUNCTION(snmp);
+ 
+@@ -412,7 +432,7 @@ static void php_snmp_internal(INTERNAL_FUNCTION_PARAMETERS, int st,
+ 	}
+ 
+ 	if ((st & SNMP_CMD_SET) && objid_query->count > objid_query->step) {
+-		php_snmp_error(getThis(), PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES, "Cannot fit all OIDs for SET query into one packet, using multiple queries");
++		php_snmp_error(getThis(), PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES, "Can not fit all OIDs for SET query into one packet, using multiple queries");
+ 	}
+ 
+ 	while (keepwalking) {
+@@ -683,22 +703,12 @@ static bool php_snmp_parse_oid(
+ 					pptr = ZSTR_VAL(type_str);
+ 					objid_query->vars[objid_query->count].type = *pptr;
+ 				} else if (type_ht) {
+-					if (HT_IS_PACKED(type_ht)) {
+-						while (idx_type < type_ht->nNumUsed) {
+-							tmp_type = &type_ht->arPacked[idx_type];
+-							if (Z_TYPE_P(tmp_type) != IS_UNDEF) {
+-								break;
+-							}
+-							idx_type++;
+-						}
+-					} else {
+-						while (idx_type < type_ht->nNumUsed) {
+-							tmp_type = &type_ht->arData[idx_type].val;
+-							if (Z_TYPE_P(tmp_type) != IS_UNDEF) {
+-								break;
+-							}
+-							idx_type++;
++					while (idx_type < type_ht->nNumUsed) {
++						tmp_type = &type_ht->arData[idx_type].val;
++						if (Z_TYPE_P(tmp_type) != IS_UNDEF) {
++							break;
+ 						}
++						idx_type++;
+ 					}
+ 					if (idx_type < type_ht->nNumUsed) {
+ 						convert_to_string(tmp_type);
+@@ -720,22 +730,12 @@ static bool php_snmp_parse_oid(
+ 				if (value_str) {
+ 					objid_query->vars[objid_query->count].value = ZSTR_VAL(value_str);
+ 				} else if (value_ht) {
+-					if (HT_IS_PACKED(value_ht)) {
+-						while (idx_value < value_ht->nNumUsed) {
+-							tmp_value = &value_ht->arPacked[idx_value];
+-							if (Z_TYPE_P(tmp_value) != IS_UNDEF) {
+-								break;
+-							}
+-							idx_value++;
+-						}
+-					} else {
+-						while (idx_value < value_ht->nNumUsed) {
+-							tmp_value = &value_ht->arData[idx_value].val;
+-							if (Z_TYPE_P(tmp_value) != IS_UNDEF) {
+-								break;
+-							}
+-							idx_value++;
++					while (idx_value < value_ht->nNumUsed) {
++						tmp_value = &value_ht->arData[idx_value].val;
++						if (Z_TYPE_P(tmp_value) != IS_UNDEF) {
++							break;
+ 						}
++						idx_value++;
+ 					}
+ 					if (idx_value < value_ht->nNumUsed) {
+ 						convert_to_string(tmp_value);
+@@ -845,7 +845,7 @@ static bool netsnmp_session_init(php_snmp_session **session_p, int version, zend
+ 	res = psal;
+ 	while (n-- > 0) {
+ 		pptr = session->peername;
+-#if defined(HAVE_GETADDRINFO) && defined(HAVE_IPV6) && defined(HAVE_INET_NTOP)
++#if HAVE_GETADDRINFO && HAVE_IPV6 && HAVE_INET_NTOP
+ 		if (force_ipv6 && (*res)->sa_family != AF_INET6) {
+ 			res++;
+ 			continue;
+@@ -893,7 +893,7 @@ static bool netsnmp_session_init(php_snmp_session **session_p, int version, zend
+ 		session->securityNameLen = ZSTR_LEN(community);
+ 	} else {
+ 		session->authenticator = NULL;
+-		session->community = (uint8_t *)estrdup(ZSTR_VAL(community));
++		session->community = (u_char *)estrdup(ZSTR_VAL(community));
+ 		session->community_len = ZSTR_LEN(community);
+ 	}
+ 
+@@ -1015,7 +1015,7 @@ static bool netsnmp_session_gen_auth_key(struct snmp_session *s, zend_string *pa
+ 	int snmp_errno;
+ 	s->securityAuthKeyLen = USM_AUTH_KU_LEN;
+ 	if ((snmp_errno = generate_Ku(s->securityAuthProto, s->securityAuthProtoLen,
+-			(uint8_t *) ZSTR_VAL(pass), ZSTR_LEN(pass),
++			(u_char *) ZSTR_VAL(pass), ZSTR_LEN(pass),
+ 			s->securityAuthKey, &(s->securityAuthKeyLen)))) {
+ 		php_error_docref(NULL, E_WARNING, "Error generating a key for authentication pass phrase '%s': %s", ZSTR_VAL(pass), snmp_api_errstring(snmp_errno));
+ 		return false;
+@@ -1031,7 +1031,7 @@ static bool netsnmp_session_gen_sec_key(struct snmp_session *s, zend_string *pas
+ 
+ 	s->securityPrivKeyLen = USM_PRIV_KU_LEN;
+ 	if ((snmp_errno = generate_Ku(s->securityAuthProto, s->securityAuthProtoLen,
+-			(uint8_t *)ZSTR_VAL(pass), ZSTR_LEN(pass),
++			(u_char *)ZSTR_VAL(pass), ZSTR_LEN(pass),
+ 			s->securityPrivKey, &(s->securityPrivKeyLen)))) {
+ 		php_error_docref(NULL, E_WARNING, "Error generating a key for privacy pass phrase '%s': %s", ZSTR_VAL(pass), snmp_api_errstring(snmp_errno));
+ 		return false;
+@@ -1044,7 +1044,7 @@ static bool netsnmp_session_gen_sec_key(struct snmp_session *s, zend_string *pas
+ static bool netsnmp_session_set_contextEngineID(struct snmp_session *s, zend_string * contextEngineID)
+ {
+ 	size_t	ebuf_len = 32, eout_len = 0;
+-	uint8_t	*ebuf = (uint8_t *) emalloc(ebuf_len);
++	u_char	*ebuf = (u_char *) emalloc(ebuf_len);
+ 
+ 	if (!snmp_hex_to_binary(&ebuf, &ebuf_len, &eout_len, 1, ZSTR_VAL(contextEngineID))) {
+ 		// TODO Promote to Error?
+@@ -1801,7 +1801,7 @@ static HashTable *php_snmp_get_properties(zend_object *object)
+ 	obj = php_snmp_fetch_object(object);
+ 	props = zend_std_get_properties(object);
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&php_snmp_properties, key, hnd) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(&php_snmp_properties, key, hnd) {
+ 		if (!hnd->read_func || hnd->read_func(obj, &rv) != SUCCESS) {
+ 			ZVAL_NULL(&rv);
+ 		}
+@@ -2032,11 +2032,47 @@ PHP_MINIT_FUNCTION(snmp)
+ 	zend_hash_init(&php_snmp_properties, 0, NULL, free_php_snmp_properties, 1);
+ 	PHP_SNMP_ADD_PROPERTIES(&php_snmp_properties, php_snmp_property_entries);
+ 
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_SUFFIX",	NETSNMP_OID_OUTPUT_SUFFIX,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_MODULE",	NETSNMP_OID_OUTPUT_MODULE,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_FULL",		NETSNMP_OID_OUTPUT_FULL,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_NUMERIC",	NETSNMP_OID_OUTPUT_NUMERIC,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_UCD",		NETSNMP_OID_OUTPUT_UCD,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_NONE",		NETSNMP_OID_OUTPUT_NONE,	CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SNMP_VALUE_LIBRARY",	SNMP_VALUE_LIBRARY,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_VALUE_PLAIN",	SNMP_VALUE_PLAIN,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_VALUE_OBJECT",	SNMP_VALUE_OBJECT,	CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SNMP_BIT_STR",		ASN_BIT_STR,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OCTET_STR",	ASN_OCTET_STR,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OPAQUE",		ASN_OPAQUE,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_NULL",		ASN_NULL,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_OBJECT_ID",	ASN_OBJECT_ID,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_IPADDRESS",	ASN_IPADDRESS,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_COUNTER",		ASN_GAUGE,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_UNSIGNED",		ASN_UNSIGNED,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_TIMETICKS",	ASN_TIMETICKS,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_UINTEGER",		ASN_UINTEGER,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_INTEGER",		ASN_INTEGER,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SNMP_COUNTER64",	ASN_COUNTER64,	CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_SNMP_CLASS_CONST_LONG("VERSION_1",			SNMP_VERSION_1);
++	REGISTER_SNMP_CLASS_CONST_LONG("VERSION_2c",			SNMP_VERSION_2c);
++	REGISTER_SNMP_CLASS_CONST_LONG("VERSION_2C",			SNMP_VERSION_2c);
++	REGISTER_SNMP_CLASS_CONST_LONG("VERSION_3",			SNMP_VERSION_3);
++
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_NOERROR",			PHP_SNMP_ERRNO_NOERROR);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_ANY",			PHP_SNMP_ERRNO_ANY);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_GENERIC",			PHP_SNMP_ERRNO_GENERIC);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_TIMEOUT",			PHP_SNMP_ERRNO_TIMEOUT);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_ERROR_IN_REPLY",		PHP_SNMP_ERRNO_ERROR_IN_REPLY);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_OID_NOT_INCREASING",	PHP_SNMP_ERRNO_OID_NOT_INCREASING);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_OID_PARSING_ERROR",	PHP_SNMP_ERRNO_OID_PARSING_ERROR);
++	REGISTER_SNMP_CLASS_CONST_LONG("ERRNO_MULTIPLE_SET_QUERIES",	PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES);
++
+ 	/* Register SNMPException class */
+ 	php_snmp_exception_ce = register_class_SNMPException(spl_ce_RuntimeException);
+ 
+-	register_snmp_symbols(module_number);
+-
+ 	return SUCCESS;
+ }
+ /* }}} */
+diff --git a/ext/snmp/snmp.stub.php b/ext/snmp/snmp.stub.php
+index 84fc7383..956af81d 100644
+--- a/ext/snmp/snmp.stub.php
++++ b/ext/snmp/snmp.stub.php
+@@ -2,114 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_SUFFIX
+- */
+-const SNMP_OID_OUTPUT_SUFFIX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_MODULE
+- */
+-const SNMP_OID_OUTPUT_MODULE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_FULL
+- */
+-const SNMP_OID_OUTPUT_FULL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_NUMERIC
+- */
+-const SNMP_OID_OUTPUT_NUMERIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_UCD
+- */
+-const SNMP_OID_OUTPUT_UCD = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue NETSNMP_OID_OUTPUT_NONE
+- */
+-const SNMP_OID_OUTPUT_NONE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SNMP_VALUE_LIBRARY
+- */
+-const SNMP_VALUE_LIBRARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SNMP_VALUE_PLAIN
+- */
+-const SNMP_VALUE_PLAIN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SNMP_VALUE_OBJECT
+- */
+-const SNMP_VALUE_OBJECT = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue ASN_BIT_STR
+- */
+-const SNMP_BIT_STR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_OCTET_STR
+- */
+-const SNMP_OCTET_STR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_OPAQUE
+- */
+-const SNMP_OPAQUE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_NULL
+- */
+-const SNMP_NULL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_OBJECT_ID
+- */
+-const SNMP_OBJECT_ID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_IPADDRESS
+- */
+-const SNMP_IPADDRESS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_GAUGE
+- */
+-const SNMP_COUNTER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_UNSIGNED
+- */
+-const SNMP_UNSIGNED = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_TIMETICKS
+- */
+-const SNMP_TIMETICKS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_UINTEGER
+- */
+-const SNMP_UINTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_INTEGER
+- */
+-const SNMP_INTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ASN_COUNTER64
+- */
+-const SNMP_COUNTER64 = UNKNOWN;
+-
+ function snmpget(string $hostname, string $community, array|string $object_id, int $timeout = -1, int $retries = -1): mixed {}
+ 
+ function snmpgetnext(string $hostname, string $community, array|string $object_id, int $timeout = -1, int $retries = -1): mixed {}
+@@ -183,80 +75,6 @@ function snmp_read_mib(string $filename): bool {}
+ 
+ class SNMP
+ {
+-    /**
+-     * @var int
+-     * @cvalue SNMP_VERSION_1
+-     * @link snmp.class.constants.version-1
+-     */
+-    public const VERSION_1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SNMP_VERSION_2c
+-     * @link snmp.class.constants.version-2c
+-     */
+-    public const VERSION_2c = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SNMP_VERSION_2c
+-     * @link snmp.class.constants.version-2c
+-     */
+-    public const VERSION_2C = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SNMP_VERSION_3
+-     * @link snmp.class.constants.version-3
+-     */
+-    public const VERSION_3 = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_NOERROR
+-     * @link snmp.class.constants.errno-noerror
+-     */
+-    public const ERRNO_NOERROR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_ANY
+-     * @link snmp.class.constants.errno-any
+-     */
+-    public const ERRNO_ANY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_GENERIC
+-     * @link snmp.class.constants.errno-generic
+-     */
+-    public const ERRNO_GENERIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_TIMEOUT
+-     * @link snmp.class.constants.errno-timeout
+-     */
+-    public const ERRNO_TIMEOUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_ERROR_IN_REPLY
+-     * @link snmp.class.constants.errno-error-in-reply
+-     */
+-    public const ERRNO_ERROR_IN_REPLY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_OID_NOT_INCREASING
+-     * @link snmp.class.constants.errno-oid-not-increasing
+-     */
+-    public const ERRNO_OID_NOT_INCREASING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_OID_PARSING_ERROR
+-     * @link snmp.class.constants.errno-oid-parsing-error
+-     */
+-    public const ERRNO_OID_PARSING_ERROR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES
+-     * @link snmp.class.constants.errno-multiple-set-queries
+-     */
+-    public const ERRNO_MULTIPLE_SET_QUERIES = UNKNOWN;
+-
+     /** @readonly */
+     public array $info;
+     public ?int $max_oids;
+diff --git a/ext/snmp/snmp_arginfo.h b/ext/snmp/snmp_arginfo.h
+index bbe95f1d..7e3a2a26 100644
+--- a/ext/snmp/snmp_arginfo.h
++++ b/ext/snmp/snmp_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: a79a697fa8c1ab2513bde03e0c2367d0caaec7d8 */
++ * Stub hash: 75ba939cab1a18a8e1c2836e0c0bbab9d310ba2b */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_snmpget, 0, 3, IS_MIXED, 0)
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+@@ -244,31 +244,6 @@ static const zend_function_entry class_SNMPException_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_snmp_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_SUFFIX", NETSNMP_OID_OUTPUT_SUFFIX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_MODULE", NETSNMP_OID_OUTPUT_MODULE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_FULL", NETSNMP_OID_OUTPUT_FULL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_NUMERIC", NETSNMP_OID_OUTPUT_NUMERIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_UCD", NETSNMP_OID_OUTPUT_UCD, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OID_OUTPUT_NONE", NETSNMP_OID_OUTPUT_NONE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_VALUE_LIBRARY", SNMP_VALUE_LIBRARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_VALUE_PLAIN", SNMP_VALUE_PLAIN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_VALUE_OBJECT", SNMP_VALUE_OBJECT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_BIT_STR", ASN_BIT_STR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OCTET_STR", ASN_OCTET_STR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OPAQUE", ASN_OPAQUE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_NULL", ASN_NULL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_OBJECT_ID", ASN_OBJECT_ID, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_IPADDRESS", ASN_IPADDRESS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_COUNTER", ASN_GAUGE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_UNSIGNED", ASN_UNSIGNED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_TIMETICKS", ASN_TIMETICKS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_UINTEGER", ASN_UINTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_INTEGER", ASN_INTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SNMP_COUNTER64", ASN_COUNTER64, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_SNMP(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+@@ -276,78 +251,6 @@ static zend_class_entry *register_class_SNMP(void)
+ 	INIT_CLASS_ENTRY(ce, "SNMP", class_SNMP_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+ 
+-	zval const_VERSION_1_value;
+-	ZVAL_LONG(&const_VERSION_1_value, SNMP_VERSION_1);
+-	zend_string *const_VERSION_1_name = zend_string_init_interned("VERSION_1", sizeof("VERSION_1") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_VERSION_1_name, &const_VERSION_1_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_VERSION_1_name);
+-
+-	zval const_VERSION_2c_value;
+-	ZVAL_LONG(&const_VERSION_2c_value, SNMP_VERSION_2c);
+-	zend_string *const_VERSION_2c_name = zend_string_init_interned("VERSION_2c", sizeof("VERSION_2c") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_VERSION_2c_name, &const_VERSION_2c_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_VERSION_2c_name);
+-
+-	zval const_VERSION_2C_value;
+-	ZVAL_LONG(&const_VERSION_2C_value, SNMP_VERSION_2c);
+-	zend_string *const_VERSION_2C_name = zend_string_init_interned("VERSION_2C", sizeof("VERSION_2C") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_VERSION_2C_name, &const_VERSION_2C_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_VERSION_2C_name);
+-
+-	zval const_VERSION_3_value;
+-	ZVAL_LONG(&const_VERSION_3_value, SNMP_VERSION_3);
+-	zend_string *const_VERSION_3_name = zend_string_init_interned("VERSION_3", sizeof("VERSION_3") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_VERSION_3_name, &const_VERSION_3_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_VERSION_3_name);
+-
+-	zval const_ERRNO_NOERROR_value;
+-	ZVAL_LONG(&const_ERRNO_NOERROR_value, PHP_SNMP_ERRNO_NOERROR);
+-	zend_string *const_ERRNO_NOERROR_name = zend_string_init_interned("ERRNO_NOERROR", sizeof("ERRNO_NOERROR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_NOERROR_name, &const_ERRNO_NOERROR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_NOERROR_name);
+-
+-	zval const_ERRNO_ANY_value;
+-	ZVAL_LONG(&const_ERRNO_ANY_value, PHP_SNMP_ERRNO_ANY);
+-	zend_string *const_ERRNO_ANY_name = zend_string_init_interned("ERRNO_ANY", sizeof("ERRNO_ANY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_ANY_name, &const_ERRNO_ANY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_ANY_name);
+-
+-	zval const_ERRNO_GENERIC_value;
+-	ZVAL_LONG(&const_ERRNO_GENERIC_value, PHP_SNMP_ERRNO_GENERIC);
+-	zend_string *const_ERRNO_GENERIC_name = zend_string_init_interned("ERRNO_GENERIC", sizeof("ERRNO_GENERIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_GENERIC_name, &const_ERRNO_GENERIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_GENERIC_name);
+-
+-	zval const_ERRNO_TIMEOUT_value;
+-	ZVAL_LONG(&const_ERRNO_TIMEOUT_value, PHP_SNMP_ERRNO_TIMEOUT);
+-	zend_string *const_ERRNO_TIMEOUT_name = zend_string_init_interned("ERRNO_TIMEOUT", sizeof("ERRNO_TIMEOUT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_TIMEOUT_name, &const_ERRNO_TIMEOUT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_TIMEOUT_name);
+-
+-	zval const_ERRNO_ERROR_IN_REPLY_value;
+-	ZVAL_LONG(&const_ERRNO_ERROR_IN_REPLY_value, PHP_SNMP_ERRNO_ERROR_IN_REPLY);
+-	zend_string *const_ERRNO_ERROR_IN_REPLY_name = zend_string_init_interned("ERRNO_ERROR_IN_REPLY", sizeof("ERRNO_ERROR_IN_REPLY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_ERROR_IN_REPLY_name, &const_ERRNO_ERROR_IN_REPLY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_ERROR_IN_REPLY_name);
+-
+-	zval const_ERRNO_OID_NOT_INCREASING_value;
+-	ZVAL_LONG(&const_ERRNO_OID_NOT_INCREASING_value, PHP_SNMP_ERRNO_OID_NOT_INCREASING);
+-	zend_string *const_ERRNO_OID_NOT_INCREASING_name = zend_string_init_interned("ERRNO_OID_NOT_INCREASING", sizeof("ERRNO_OID_NOT_INCREASING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_OID_NOT_INCREASING_name, &const_ERRNO_OID_NOT_INCREASING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_OID_NOT_INCREASING_name);
+-
+-	zval const_ERRNO_OID_PARSING_ERROR_value;
+-	ZVAL_LONG(&const_ERRNO_OID_PARSING_ERROR_value, PHP_SNMP_ERRNO_OID_PARSING_ERROR);
+-	zend_string *const_ERRNO_OID_PARSING_ERROR_name = zend_string_init_interned("ERRNO_OID_PARSING_ERROR", sizeof("ERRNO_OID_PARSING_ERROR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_OID_PARSING_ERROR_name, &const_ERRNO_OID_PARSING_ERROR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_OID_PARSING_ERROR_name);
+-
+-	zval const_ERRNO_MULTIPLE_SET_QUERIES_value;
+-	ZVAL_LONG(&const_ERRNO_MULTIPLE_SET_QUERIES_value, PHP_SNMP_ERRNO_MULTIPLE_SET_QUERIES);
+-	zend_string *const_ERRNO_MULTIPLE_SET_QUERIES_name = zend_string_init_interned("ERRNO_MULTIPLE_SET_QUERIES", sizeof("ERRNO_MULTIPLE_SET_QUERIES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRNO_MULTIPLE_SET_QUERIES_name, &const_ERRNO_MULTIPLE_SET_QUERIES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRNO_MULTIPLE_SET_QUERIES_name);
+-
+ 	zval property_info_default_value;
+ 	ZVAL_UNDEF(&property_info_default_value);
+ 	zend_string *property_info_name = zend_string_init("info", sizeof("info") - 1, 1);
+diff --git a/ext/snmp/tests/bug64159.phpt b/ext/snmp/tests/bug64159.phpt
+index e7cdbd54..24b282be 100644
+--- a/ext/snmp/tests/bug64159.phpt
++++ b/ext/snmp/tests/bug64159.phpt
+@@ -7,7 +7,6 @@ snmp
+ --SKIPIF--
+ <?php
+ require_once(__DIR__.'/skipif.inc');
+-if (PHP_OS_FAMILY === "Windows") die("xfail fails on Windows for unknown reasons");
+ ?>
+ --ENV--
+ MIBS=noneXistent
+diff --git a/ext/snmp/tests/snmp-object-errno-errstr.phpt b/ext/snmp/tests/snmp-object-errno-errstr.phpt
+index 8304c6cb..831a9f33 100644
+--- a/ext/snmp/tests/snmp-object-errno-errstr.phpt
++++ b/ext/snmp/tests/snmp-object-errno-errstr.phpt
+@@ -138,12 +138,12 @@ string(129) "Could not add variable: OID='.iso.org.dod.internet.mgmt.mib-2.syste
+ SNMP::ERRNO_MULTIPLE_SET_QUERIES
+ bool(true)
+ bool(true)
+-string(73) "Cannot fit all OIDs for SET query into one packet, using multiple queries"
++string(74) "Can not fit all OIDs for SET query into one packet, using multiple queries"
+ bool(true)
+ bool(true)
+ bool(true)
+ bool(true)
+-string(73) "Cannot fit all OIDs for SET query into one packet, using multiple queries"
++string(74) "Can not fit all OIDs for SET query into one packet, using multiple queries"
+ bool(true)
+ bool(true)
+ bool(true)
+diff --git a/ext/snmp/tests/snmp-object-properties.phpt b/ext/snmp/tests/snmp-object-properties.phpt
+index a8fccd40..535c0126 100644
+--- a/ext/snmp/tests/snmp-object-properties.phpt
++++ b/ext/snmp/tests/snmp-object-properties.phpt
+@@ -158,8 +158,6 @@ object(SNMP)#%d (%d) {
+ bool(true)
+ bool(true)
+ bool(false)
+-
+-Deprecated: Creation of dynamic property SNMP::$123 is deprecated in %s on line %d
+ object(SNMP)#%d (%d) {
+   ["info"]=>
+   array(3) {
+diff --git a/ext/snmp/tests/snmp-object.phpt b/ext/snmp/tests/snmp-object.phpt
+index 13461675..0bf4ed49 100644
+--- a/ext/snmp/tests/snmp-object.phpt
++++ b/ext/snmp/tests/snmp-object.phpt
+@@ -232,12 +232,12 @@ bool(true)
+ bool(true)
+ Multiple OID with max_oids = 1
+ 
+-Warning: SNMP::set(): Cannot fit all OIDs for SET query into one packet, using multiple queries in %s on line %d
++Warning: SNMP::set(): Can not fit all OIDs for SET query into one packet, using multiple queries in %s on line %d
+ bool(true)
+ bool(true)
+ bool(true)
+ 
+-Warning: SNMP::set(): Cannot fit all OIDs for SET query into one packet, using multiple queries in %s on line %d
++Warning: SNMP::set(): Can not fit all OIDs for SET query into one packet, using multiple queries in %s on line %d
+ bool(true)
+ bool(true)
+ bool(true)
+diff --git a/ext/snmp/tests/snmp_getvalue.phpt b/ext/snmp/tests/snmp_getvalue.phpt
+index f62482d9..2abc6118 100644
+--- a/ext/snmp/tests/snmp_getvalue.phpt
++++ b/ext/snmp/tests/snmp_getvalue.phpt
+@@ -7,7 +7,6 @@ snmp
+ --SKIPIF--
+ <?php
+ require_once(__DIR__.'/skipif.inc');
+-if (PHP_OS_FAMILY === "Windows") die("xfail fails on Windows for unknown reasons");
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/snmp/tests/snmpd.conf b/ext/snmp/tests/snmpd.conf
+index 7eb94c75..54578f8d 100644
+--- a/ext/snmp/tests/snmpd.conf
++++ b/ext/snmp/tests/snmpd.conf
+@@ -5,7 +5,7 @@ rocommunity public 127.0.0.1
+ rocommunity6 public ::1
+ rwcommunity private 127.0.0.1
+ 
+-# Do not enable them - being set here they make appropriate OID switch into r/o
++Do not enable them - being set here they make appropriate OID switch into r/o
+ #syslocation  "Somewhere in the world"
+ #syscontact  "root"
+ 
+diff --git a/ext/soap/php_http.c b/ext/soap/php_http.c
+index 5a887bd1..5f964ee9 100644
+--- a/ext/soap/php_http.c
++++ b/ext/soap/php_http.c
+@@ -19,7 +19,7 @@
+ #include "php_soap.h"
+ #include "ext/standard/base64.h"
+ #include "ext/standard/md5.h"
+-#include "ext/random/php_random.h"
++#include "ext/standard/php_random.h"
+ #include "ext/hash/php_hash.h"
+ 
+ static char *get_http_header_value_nodup(char *headers, char *type, size_t *len);
+@@ -829,12 +829,12 @@ try_again:
+ 		/* Send cookies along with request */
+ 		cookies = Z_CLIENT_COOKIES_P(this_ptr);
+ 		ZEND_ASSERT(Z_TYPE_P(cookies) == IS_ARRAY);
+-		if (zend_hash_num_elements(Z_ARRVAL_P(cookies)) != 0 && !HT_IS_PACKED(Z_ARRVAL_P(cookies))) {
++		if (zend_hash_num_elements(Z_ARRVAL_P(cookies)) != 0) {
+ 			zval *data;
+ 			zend_string *key;
+ 			has_cookies = 1;
+ 			smart_str_append_const(&soap_headers, "Cookie: ");
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(cookies), key, data) {
++			ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(cookies), key, data) {
+ 				if (key && Z_TYPE_P(data) == IS_ARRAY) {
+ 					zval *value;
+ 
+diff --git a/ext/soap/php_schema.c b/ext/soap/php_schema.c
+index 68d78326..521c5d0f 100644
+--- a/ext/soap/php_schema.c
++++ b/ext/soap/php_schema.c
+@@ -2261,17 +2261,23 @@ static void schema_type_fixup(sdlCtx *ctx, sdlTypePtr type)
+ 		schema_content_model_fixup(ctx, type->model);
+ 	}
+ 	if (type->attributes) {
+-		zend_string *str_key;
+-		zend_ulong index;
++		HashPosition pos;
++		zend_hash_internal_pointer_reset_ex(type->attributes, &pos);
+ 
+-		ZEND_HASH_FOREACH_KEY_PTR(type->attributes, index, str_key, attr) {
+-			if (str_key) {
++		while ((attr = zend_hash_get_current_data_ptr_ex(type->attributes, &pos)) != NULL) {
++			zend_string *str_key;
++			zend_ulong index;
++
++			if (zend_hash_get_current_key_ex(type->attributes, &str_key, &index, &pos) == HASH_KEY_IS_STRING) {
+ 				schema_attribute_fixup(ctx, attr);
++				zend_result result = zend_hash_move_forward_ex(type->attributes, &pos);
++				ZEND_ASSERT(result == SUCCESS);
+ 			} else {
+ 				schema_attributegroup_fixup(ctx, attr, type->attributes);
+-				zend_hash_index_del(type->attributes, index);
++				zend_result result = zend_hash_index_del(type->attributes, index);
++				ZEND_ASSERT(result == SUCCESS);
+ 			}
+-		} ZEND_HASH_FOREACH_END();
++		}
+ 	}
+ }
+ 
+@@ -2287,17 +2293,17 @@ void schema_pass2(sdlCtx *ctx)
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+ 	if (ctx->attributeGroups) {
+-		ZEND_HASH_MAP_FOREACH_PTR(ctx->attributeGroups, type) {
++		ZEND_HASH_FOREACH_PTR(ctx->attributeGroups, type) {
+ 			schema_type_fixup(ctx, type);
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+ 	if (sdl->elements) {
+-		ZEND_HASH_MAP_FOREACH_PTR(sdl->elements, type) {
++		ZEND_HASH_FOREACH_PTR(sdl->elements, type) {
+ 			schema_type_fixup(ctx, type);
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+ 	if (sdl->groups) {
+-		ZEND_HASH_MAP_FOREACH_PTR(sdl->groups, type) {
++		ZEND_HASH_FOREACH_PTR(sdl->groups, type) {
+ 			schema_type_fixup(ctx, type);
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+diff --git a/ext/soap/php_sdl.c b/ext/soap/php_sdl.c
+index be42f950..3dd8e6c5 100644
+--- a/ext/soap/php_sdl.c
++++ b/ext/soap/php_sdl.c
+@@ -184,7 +184,7 @@ sdlBindingPtr get_binding_from_type(sdlPtr sdl, sdlBindingType type)
+ 		return NULL;
+ 	}
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(sdl->bindings, binding) {
++	ZEND_HASH_FOREACH_PTR(sdl->bindings, binding) {
+ 		if (binding->bindingType == type) {
+ 			return binding;
+ 		}
+@@ -1860,7 +1860,7 @@ static void sdl_serialize_attribute(sdlAttributePtr attr, HashTable *tmp_encoder
+ 		sdlExtraAttributePtr tmp;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(attr->extraAttributes, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(attr->extraAttributes, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			sdl_serialize_string(tmp->ns, out);
+ 			sdl_serialize_string(tmp->val, out);
+@@ -1960,7 +1960,7 @@ static void sdl_serialize_type(sdlTypePtr type, HashTable *tmp_encoders, HashTab
+ 			sdlRestrictionCharPtr tmp;
+ 			zend_string *key;
+ 
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(type->restrictions->enumeration, key, tmp) {
++			ZEND_HASH_FOREACH_STR_KEY_PTR(type->restrictions->enumeration, key, tmp) {
+ 				sdl_serialize_resriction_char(tmp, out);
+ 				sdl_serialize_key(key, out);
+ 			} ZEND_HASH_FOREACH_END();
+@@ -2069,7 +2069,7 @@ static void sdl_serialize_soap_body(sdlSoapBindingFunctionBodyPtr body, HashTabl
+ 		sdlSoapBindingFunctionHeaderPtr tmp;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(body->headers, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(body->headers, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			WSDL_CACHE_PUT_1(tmp->use, out);
+ 			if (tmp->use == SOAP_ENCODED) {
+@@ -2089,7 +2089,7 @@ static void sdl_serialize_soap_body(sdlSoapBindingFunctionBodyPtr body, HashTabl
+ 				sdlSoapBindingFunctionHeaderPtr tmp2;
+ 				zend_string *key;
+ 
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(body->headers, key, tmp2) {
++				ZEND_HASH_FOREACH_STR_KEY_PTR(body->headers, key, tmp2) {
+ 					sdl_serialize_key(key, out);
+ 					WSDL_CACHE_PUT_1(tmp2->use, out);
+ 					if (tmp2->use == SOAP_ENCODED) {
+@@ -2147,7 +2147,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		sdlTypePtr tmp;
+ 		zval zv;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(sdl->groups, tmp) {
++		ZEND_HASH_FOREACH_PTR(sdl->groups, tmp) {
+ 			ZVAL_LONG(&zv, type_num);
+ 			zend_hash_str_add(&tmp_types, (char*)&tmp, sizeof(tmp), &zv);
+ 			++type_num;
+@@ -2181,7 +2181,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		sdlTypePtr tmp;
+ 		zval zv;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(sdl->elements, tmp) {
++		ZEND_HASH_FOREACH_PTR(sdl->elements, tmp) {
+ 			ZVAL_LONG(&zv, type_num);
+ 			zend_hash_str_add(&tmp_types, (char*)&tmp, sizeof(tmp), &zv);
+ 			++type_num;
+@@ -2218,7 +2218,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		sdlTypePtr tmp;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->groups, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->groups, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			sdl_serialize_type(tmp, &tmp_encoders, &tmp_types, out);
+ 		} ZEND_HASH_FOREACH_END();
+@@ -2238,7 +2238,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		sdlTypePtr tmp;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->elements, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->elements, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			sdl_serialize_type(tmp, &tmp_encoders, &tmp_types, out);
+ 		} ZEND_HASH_FOREACH_END();
+@@ -2267,7 +2267,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		zval zv;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->bindings, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->bindings, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			sdl_serialize_string(tmp->name, out);
+ 			sdl_serialize_string(tmp->location, out);
+@@ -2295,7 +2295,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		int function_num = 1;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&sdl->functions, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(&sdl->functions, key, tmp) {
+ 			sdl_serialize_key(key, out);
+ 			sdl_serialize_string(tmp->functionName, out);
+ 			sdl_serialize_string(tmp->requestName, out);
+@@ -2327,7 +2327,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 
+ 				WSDL_CACHE_PUT_INT(zend_hash_num_elements(tmp->faults), out);
+ 
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(tmp->faults, key, fault) {
++				ZEND_HASH_FOREACH_STR_KEY_PTR(tmp->faults, key, fault) {
+ 					sdl_serialize_key(key, out);
+ 					sdl_serialize_string(fault->name, out);
+ 					sdl_serialize_parameters(fault->details, &tmp_encoders, &tmp_types, out);
+@@ -2364,7 +2364,7 @@ static void add_sdl_to_cache(const char *fn, const char *uri, time_t t, sdlPtr s
+ 		zval *function_num;
+ 		zend_string *key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->requests, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->requests, key, tmp) {
+ 			function_num = zend_hash_str_find(&tmp_functions, (char*)&tmp, sizeof(tmp));
+ 			WSDL_CACHE_PUT_INT(Z_LVAL_P(function_num), out);
+ 			sdl_serialize_key(key, out);
+@@ -2444,7 +2444,7 @@ static HashTable* make_persistent_sdl_function_headers(HashTable *headers, HashT
+ 	pheaders = malloc(sizeof(HashTable));
+ 	zend_hash_init(pheaders, zend_hash_num_elements(headers), NULL, delete_header_persistent, 1);
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(headers, key, tmp) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(headers, key, tmp) {
+ 		pheader = malloc(sizeof(sdlSoapBindingFunctionHeader));
+ 		memset(pheader, 0, sizeof(sdlSoapBindingFunctionHeader));
+ 		*pheader = *tmp;
+@@ -2550,7 +2550,7 @@ static HashTable* make_persistent_sdl_function_faults(sdlFunctionPtr func, HashT
+ 	pfaults = malloc(sizeof(HashTable));
+ 	zend_hash_init(pfaults, zend_hash_num_elements(faults), NULL, delete_fault_persistent, 1);
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(faults, key, tmp) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(faults, key, tmp) {
+ 		pfault = malloc(sizeof(sdlFault));
+ 		memset(pfault, 0, sizeof(sdlFault));
+ 		*pfault = *tmp;
+@@ -2624,7 +2624,7 @@ static sdlAttributePtr make_persistent_sdl_attribute(sdlAttributePtr attr, HashT
+ 		pattr->extraAttributes = malloc(sizeof(HashTable));
+ 		zend_hash_init(pattr->extraAttributes, zend_hash_num_elements(attr->extraAttributes), NULL, delete_extra_attribute_persistent, 1);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(attr->extraAttributes, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(attr->extraAttributes, key, tmp) {
+ 			if (key) {
+ 				pextra = malloc(sizeof(sdlExtraAttribute));
+ 				memset(pextra, 0, sizeof(sdlExtraAttribute));
+@@ -2768,7 +2768,7 @@ static sdlTypePtr make_persistent_sdl_type(sdlTypePtr type, HashTable *ptr_map,
+ 			sdlRestrictionCharPtr tmp, penum;
+ 			ptype->restrictions->enumeration = malloc(sizeof(HashTable));
+ 			zend_hash_init(ptype->restrictions->enumeration, zend_hash_num_elements(type->restrictions->enumeration), NULL, delete_restriction_var_char_persistent, 1);
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(type->restrictions->enumeration, key, tmp) {
++			ZEND_HASH_FOREACH_STR_KEY_PTR(type->restrictions->enumeration, key, tmp) {
+ 				penum = tmp;
+ 				make_persistent_restriction_char_int(&penum);
+ 				/* We have to duplicate key emalloc->malloc */
+@@ -2953,7 +2953,7 @@ static sdlPtr make_persistent_sdl(sdlPtr sdl)
+ 		psdl->groups = malloc(sizeof(HashTable));
+ 		zend_hash_init(psdl->groups, zend_hash_num_elements(sdl->groups), NULL, delete_type_persistent, 1);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->groups, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->groups, key, tmp) {
+ 			ptype = make_persistent_sdl_type(tmp, &ptr_map, &bp_types, &bp_encoders);
+ 			if (key) {
+ 				/* We have to duplicate key emalloc->malloc */
+@@ -2991,7 +2991,7 @@ static sdlPtr make_persistent_sdl(sdlPtr sdl)
+ 		psdl->elements = malloc(sizeof(HashTable));
+ 		zend_hash_init(psdl->elements, zend_hash_num_elements(sdl->elements), NULL, delete_type_persistent, 1);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->elements, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->elements, key, tmp) {
+ 			ptype = make_persistent_sdl_type(tmp, &ptr_map, &bp_types, &bp_encoders);
+ 			if (key) {
+ 				/* We have to duplicate key emalloc->malloc */
+@@ -3052,7 +3052,7 @@ static sdlPtr make_persistent_sdl(sdlPtr sdl)
+ 		psdl->bindings = malloc(sizeof(HashTable));
+ 		zend_hash_init(psdl->bindings, zend_hash_num_elements(sdl->bindings), NULL, delete_binding_persistent, 1);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(sdl->bindings, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(sdl->bindings, key, tmp) {
+ 			pbind = make_persistent_sdl_binding(tmp, &ptr_map);
+ 			if (key) {
+ 				/* We have to duplicate key emalloc->malloc */
+@@ -3069,7 +3069,7 @@ static sdlPtr make_persistent_sdl(sdlPtr sdl)
+ 		sdlFunctionPtr tmp;
+ 		sdlFunctionPtr pfunc;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&sdl->functions, key, tmp) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(&sdl->functions, key, tmp) {
+ 			pfunc = make_persistent_sdl_function(tmp, &ptr_map);
+ 			if (key) {
+ 				/* We have to duplicate key emalloc->malloc */
+@@ -3089,7 +3089,7 @@ static sdlPtr make_persistent_sdl(sdlPtr sdl)
+ 		psdl->requests = malloc(sizeof(HashTable));
+ 		zend_hash_init(psdl->requests, zend_hash_num_elements(sdl->requests), NULL, NULL, 1);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(sdl->requests, key, zv) {
++		ZEND_HASH_FOREACH_STR_KEY_VAL(sdl->requests, key, zv) {
+ 			tmp = Z_PTR_P(zv);
+ 			if ((preq = zend_hash_str_find_ptr(&ptr_map, (char*)&tmp, sizeof(tmp))) == NULL) {
+ 				assert(0);
+@@ -3261,7 +3261,8 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, zend_long cache_wsdl)
+ 			smart_str_appends(&proxy,Z_STRVAL_P(proxy_host));
+ 			smart_str_appends(&proxy,":");
+ 			smart_str_append_long(&proxy,Z_LVAL_P(proxy_port));
+-			ZVAL_STR(&str_proxy, smart_str_extract(&proxy));
++			smart_str_0(&proxy);
++			ZVAL_NEW_STR(&str_proxy, proxy.s);
+ 
+ 			if (!context) {
+ 				context = php_stream_context_alloc();
+@@ -3303,7 +3304,8 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, zend_long cache_wsdl)
+ 			http_context_headers(context, has_authorization, has_proxy_authorization, 0, &headers);
+ 		}
+ 
+-		ZVAL_STR(&str_headers, smart_str_extract(&headers));
++		smart_str_0(&headers);
++		ZVAL_NEW_STR(&str_headers, headers.s);
+ 		php_stream_context_set_option(context, "http", "header", &str_headers);
+ 		zval_ptr_dtor(&str_headers);
+ 	}
+@@ -3350,7 +3352,7 @@ cache_in_memory:
+ 				time_t latest = t;
+ 				zend_string *latest_key = NULL, *key;
+ 
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(SOAP_GLOBAL(mem_cache), key, q) {
++				ZEND_HASH_FOREACH_STR_KEY_PTR(SOAP_GLOBAL(mem_cache), key, q) {
+ 					if (q->time < latest) {
+ 						latest = q->time;
+ 						latest_key = key;
+diff --git a/ext/soap/soap.c b/ext/soap/soap.c
+index de29917c..fbf6546b 100644
+--- a/ext/soap/soap.c
++++ b/ext/soap/soap.c
+@@ -30,6 +30,7 @@
+ 
+ static int le_sdl = 0;
+ int le_url = 0;
++static int le_service = 0;
+ static int le_typemap = 0;
+ 
+ typedef struct _soapHeader {
+@@ -149,7 +150,8 @@ static void soap_error_handler(int error_num, zend_string *error_filename, const
+ #define Z_HEADER_MUST_UNDERSTAND_P(zv) php_soap_deref(OBJ_PROP_NUM(Z_OBJ_P(zv), 3))
+ #define Z_HEADER_ACTOR_P(zv) php_soap_deref(OBJ_PROP_NUM(Z_OBJ_P(zv), 4))
+ 
+-#define Z_SERVER_SOAP_FAULT_P(zv) php_soap_deref(OBJ_PROP_NUM(Z_OBJ_P(zv), 0))
++#define Z_SERVER_SERVICE_P(zv) php_soap_deref(OBJ_PROP_NUM(Z_OBJ_P(zv), 0))
++#define Z_SERVER_SOAP_FAULT_P(zv) php_soap_deref(OBJ_PROP_NUM(Z_OBJ_P(zv), 1))
+ 
+ /* SoapFault extends Exception, so take those properties into account. */
+ #define FAULT_PROP_START_OFFSET zend_ce_exception->default_properties_count
+@@ -163,7 +165,8 @@ static void soap_error_handler(int error_num, zend_string *error_filename, const
+ 
+ #define FETCH_THIS_SERVICE(ss) \
+ 	{ \
+-		ss = soap_server_object_fetch(Z_OBJ_P(ZEND_THIS))->service; \
++		zval *tmp = Z_SERVER_SERVICE_P(ZEND_THIS); \
++		ss = (soapServicePtr)zend_fetch_resource_ex(tmp, "service", le_service); \
+ 		if (!ss) { \
+ 			zend_throw_error(NULL, "Cannot fetch SoapServer object"); \
+ 			SOAP_SERVER_END_CODE(); \
+@@ -178,34 +181,6 @@ static zend_class_entry* soap_header_class_entry;
+ static zend_class_entry* soap_param_class_entry;
+ zend_class_entry* soap_var_class_entry;
+ 
+-static zend_object_handlers soap_server_object_handlers;
+-
+-typedef struct {
+-	soapServicePtr service;
+-	zend_object std;
+-} soap_server_object;
+-
+-static inline soap_server_object *soap_server_object_fetch(zend_object *obj) {
+-	return (soap_server_object *) ((char *) obj - XtOffsetOf(soap_server_object, std));
+-}
+-
+-static zend_object *soap_server_object_create(zend_class_entry *ce)
+-{
+-	soap_server_object *obj = zend_object_alloc(sizeof(soap_server_object), ce);
+-	zend_object_std_init(&obj->std, ce);
+-	object_properties_init(&obj->std, ce);
+-	obj->std.handlers = &soap_server_object_handlers;
+-	return &obj->std;
+-}
+-
+-static void soap_server_object_free(zend_object *obj) {
+-	soap_server_object *server_obj = soap_server_object_fetch(obj);
+-	if (server_obj->service) {
+-		delete_service(server_obj->service);
+-	}
+-	zend_object_std_dtor(obj);
+-}
+-
+ ZEND_DECLARE_MODULE_GLOBALS(soap)
+ 
+ static void (*old_error_handler)(int, zend_string *, const uint32_t, zend_string *);
+@@ -386,6 +361,11 @@ static void delete_url_res(zend_resource *res)
+ 	delete_url(res->ptr);
+ }
+ 
++static void delete_service_res(zend_resource *res)
++{
++	delete_service(res->ptr);
++}
++
+ static void delete_hashtable_res(zend_resource *res)
+ {
+ 	delete_hashtable(res->ptr);
+@@ -406,11 +386,6 @@ PHP_MINIT_FUNCTION(soap)
+ 
+ 	/* Register SoapServer class */
+ 	soap_server_class_entry = register_class_SoapServer();
+-	soap_server_class_entry->create_object = soap_server_object_create;
+-
+-	memcpy(&soap_server_object_handlers, &std_object_handlers, sizeof(zend_object_handlers));
+-	soap_server_object_handlers.offset = XtOffsetOf(soap_server_object, std);
+-	soap_server_object_handlers.free_obj = soap_server_object_free;
+ 
+ 	/* Register SoapFault class */
+ 	soap_fault_class_entry = register_class_SoapFault(zend_ce_exception);
+@@ -422,9 +397,106 @@ PHP_MINIT_FUNCTION(soap)
+ 
+ 	le_sdl = zend_register_list_destructors_ex(delete_sdl_res, NULL, "SOAP SDL", module_number);
+ 	le_url = zend_register_list_destructors_ex(delete_url_res, NULL, "SOAP URL", module_number);
++	le_service = zend_register_list_destructors_ex(delete_service_res, NULL, "SOAP service", module_number);
+ 	le_typemap = zend_register_list_destructors_ex(delete_hashtable_res, NULL, "SOAP table", module_number);
+ 
+-	register_soap_symbols(module_number);
++	REGISTER_LONG_CONSTANT("SOAP_1_1", SOAP_1_1, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_1_2", SOAP_1_2, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_PERSISTENCE_SESSION", SOAP_PERSISTENCE_SESSION, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_PERSISTENCE_REQUEST", SOAP_PERSISTENCE_REQUEST, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_FUNCTIONS_ALL", SOAP_FUNCTIONS_ALL, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_ENCODED", SOAP_ENCODED, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_LITERAL", SOAP_LITERAL, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_RPC", SOAP_RPC, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_DOCUMENT", SOAP_DOCUMENT, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_ACTOR_NEXT", SOAP_ACTOR_NEXT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_ACTOR_NONE", SOAP_ACTOR_NONE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_ACTOR_UNLIMATERECEIVER", SOAP_ACTOR_UNLIMATERECEIVER, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_ACCEPT", SOAP_COMPRESSION_ACCEPT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_GZIP", SOAP_COMPRESSION_GZIP, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_DEFLATE", SOAP_COMPRESSION_DEFLATE, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_AUTHENTICATION_BASIC", SOAP_AUTHENTICATION_BASIC, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_AUTHENTICATION_DIGEST", SOAP_AUTHENTICATION_DIGEST, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("UNKNOWN_TYPE", UNKNOWN_TYPE, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("XSD_STRING", XSD_STRING, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_BOOLEAN", XSD_BOOLEAN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_DECIMAL", XSD_DECIMAL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_FLOAT", XSD_FLOAT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_DOUBLE", XSD_DOUBLE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_DURATION", XSD_DURATION, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_DATETIME", XSD_DATETIME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_TIME", XSD_TIME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_DATE", XSD_DATE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_GYEARMONTH", XSD_GYEARMONTH, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_GYEAR", XSD_GYEAR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_GMONTHDAY", XSD_GMONTHDAY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_GDAY", XSD_GDAY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_GMONTH", XSD_GMONTH, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_HEXBINARY", XSD_HEXBINARY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_BASE64BINARY", XSD_BASE64BINARY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ANYURI", XSD_ANYURI, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_QNAME", XSD_QNAME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NOTATION", XSD_NOTATION, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NORMALIZEDSTRING", XSD_NORMALIZEDSTRING, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_TOKEN", XSD_TOKEN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_LANGUAGE", XSD_LANGUAGE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NMTOKEN", XSD_NMTOKEN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NAME", XSD_NAME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NCNAME", XSD_NCNAME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ID", XSD_ID, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_IDREF", XSD_IDREF, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_IDREFS", XSD_IDREFS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ENTITY", XSD_ENTITY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ENTITIES", XSD_ENTITIES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_INTEGER", XSD_INTEGER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NONPOSITIVEINTEGER", XSD_NONPOSITIVEINTEGER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NEGATIVEINTEGER", XSD_NEGATIVEINTEGER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_LONG", XSD_LONG, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_INT", XSD_INT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_SHORT", XSD_SHORT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_BYTE", XSD_BYTE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NONNEGATIVEINTEGER", XSD_NONNEGATIVEINTEGER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDLONG", XSD_UNSIGNEDLONG, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDINT", XSD_UNSIGNEDINT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDSHORT", XSD_UNSIGNEDSHORT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDBYTE", XSD_UNSIGNEDBYTE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_POSITIVEINTEGER", XSD_POSITIVEINTEGER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_NMTOKENS", XSD_NMTOKENS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ANYTYPE", XSD_ANYTYPE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("XSD_ANYXML", XSD_ANYXML, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("APACHE_MAP", APACHE_MAP, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_ENC_OBJECT", SOAP_ENC_OBJECT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_ENC_ARRAY", SOAP_ENC_ARRAY, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("XSD_1999_TIMEINSTANT", XSD_1999_TIMEINSTANT, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_STRING_CONSTANT("XSD_NAMESPACE", XSD_NAMESPACE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("XSD_1999_NAMESPACE", XSD_1999_NAMESPACE,  CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("SOAP_SINGLE_ELEMENT_ARRAYS", SOAP_SINGLE_ELEMENT_ARRAYS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_WAIT_ONE_WAY_CALLS", SOAP_WAIT_ONE_WAY_CALLS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_USE_XSI_ARRAY_TYPE", SOAP_USE_XSI_ARRAY_TYPE, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("WSDL_CACHE_NONE",   WSDL_CACHE_NONE,   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("WSDL_CACHE_DISK",   WSDL_CACHE_DISK,   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("WSDL_CACHE_MEMORY", WSDL_CACHE_MEMORY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("WSDL_CACHE_BOTH",   WSDL_CACHE_BOTH,   CONST_CS | CONST_PERSISTENT);
++
++	/* New SOAP SSL Method Constants */
++	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_TLS",    SOAP_SSL_METHOD_TLS,    CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv2",  SOAP_SSL_METHOD_SSLv2,  CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv3",  SOAP_SSL_METHOD_SSLv3,  CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv23", SOAP_SSL_METHOD_SSLv23, CONST_CS | CONST_PERSISTENT);
+ 
+ 	old_error_handler = zend_error_cb;
+ 	zend_error_cb = soap_error_handler;
+@@ -672,27 +744,25 @@ static HashTable* soap_create_typemap(sdlPtr sdl, HashTable *ht) /* {{{ */
+ 		}
+ 		ht2 = Z_ARRVAL_P(tmp);
+ 
+-		if (!HT_IS_PACKED(ht2)) {
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(ht2, name, tmp) {
+-				if (name) {
+-					if (zend_string_equals_literal(name, "type_name")) {
+-						if (Z_TYPE_P(tmp) == IS_STRING) {
+-							type_name = Z_STRVAL_P(tmp);
+-						} else if (Z_TYPE_P(tmp) != IS_NULL) {
+-						}
+-					} else if (zend_string_equals_literal(name, "type_ns")) {
+-						if (Z_TYPE_P(tmp) == IS_STRING) {
+-							type_ns = Z_STRVAL_P(tmp);
+-						} else if (Z_TYPE_P(tmp) != IS_NULL) {
+-						}
+-					} else if (zend_string_equals_literal(name, "to_xml")) {
+-						to_xml = tmp;
+-					} else if (zend_string_equals_literal(name, "from_xml")) {
+-						to_zval = tmp;
++		ZEND_HASH_FOREACH_STR_KEY_VAL(ht2, name, tmp) {
++			if (name) {
++				if (zend_string_equals_literal(name, "type_name")) {
++					if (Z_TYPE_P(tmp) == IS_STRING) {
++						type_name = Z_STRVAL_P(tmp);
++					} else if (Z_TYPE_P(tmp) != IS_NULL) {
++					}
++				} else if (zend_string_equals_literal(name, "type_ns")) {
++					if (Z_TYPE_P(tmp) == IS_STRING) {
++						type_ns = Z_STRVAL_P(tmp);
++					} else if (Z_TYPE_P(tmp) != IS_NULL) {
+ 					}
++				} else if (zend_string_equals_literal(name, "to_xml")) {
++					to_xml = tmp;
++				} else if (zend_string_equals_literal(name, "from_xml")) {
++					to_zval = tmp;
+ 				}
+-			} ZEND_HASH_FOREACH_END();
+-		}
++			}
++		} ZEND_HASH_FOREACH_END();
+ 
+ 		if (type_name) {
+ 			smart_str nscat = {0};
+@@ -760,6 +830,7 @@ PHP_METHOD(SoapServer, __construct)
+ 	soapServicePtr service;
+ 	zval *options = NULL;
+ 	zend_string *wsdl;
++	zend_resource *res;
+ 	int version = SOAP_1_1;
+ 	zend_long cache_wsdl;
+ 	HashTable *typemap_ht = NULL;
+@@ -869,8 +940,8 @@ PHP_METHOD(SoapServer, __construct)
+ 		service->typemap = soap_create_typemap(service->sdl, typemap_ht);
+ 	}
+ 
+-	soap_server_object *server_obj = soap_server_object_fetch(Z_OBJ_P(ZEND_THIS));
+-	server_obj->service = service;
++	res = zend_register_resource(service, le_service);
++	ZVAL_RES(Z_SERVER_SERVICE_P(ZEND_THIS), res);
+ 
+ 	SOAP_SERVER_END_CODE();
+ }
+@@ -992,14 +1063,14 @@ PHP_METHOD(SoapServer, getFunctions)
+ 	} else if (service->soap_functions.ft != NULL) {
+ 		zval *name;
+ 
+-		ZEND_HASH_MAP_FOREACH_VAL(service->soap_functions.ft, name) {
++		ZEND_HASH_FOREACH_VAL(service->soap_functions.ft, name) {
+ 			add_next_index_str(return_value, zend_string_copy(Z_STR_P(name)));
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+ 	if (ft != NULL) {
+ 		zend_function *f;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(ft, f) {
++		ZEND_HASH_FOREACH_PTR(ft, f) {
+ 			if ((service->type != SOAP_OBJECT && service->type != SOAP_CLASS) || (f->common.fn_flags & ZEND_ACC_PUBLIC)) {
+ 				add_next_index_str(return_value, zend_string_copy(f->common.function_name));
+ 			}
+@@ -1751,7 +1822,7 @@ static zend_never_inline ZEND_COLD void soap_real_error_handler(int error_num, z
+ 			}
+ 			if (Z_OBJ_P(error_object) &&
+ 			    instanceof_function(Z_OBJCE_P(error_object), soap_server_class_entry) &&
+-				(service = soap_server_object_fetch(Z_OBJ_P(error_object))->service) &&
++				(service = (soapServicePtr)zend_fetch_resource_ex(Z_SERVER_SERVICE_P(error_object), "service", le_service)) &&
+ 				!service->send_errors) {
+ 				buffer = zend_string_init("Internal Error", sizeof("Internal Error")-1, 0);
+ 			} else {
+@@ -2497,7 +2568,7 @@ PHP_METHOD(SoapClient, __getFunctions)
+ 		sdlFunctionPtr function;
+ 
+ 		array_init(return_value);
+-		ZEND_HASH_MAP_FOREACH_PTR(&sdl->functions, function) {
++		ZEND_HASH_FOREACH_PTR(&sdl->functions, function) {
+ 			function_to_string(function, &buf);
+ 			add_next_index_stringl(return_value, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s));
+ 			smart_str_free(&buf);
+@@ -4020,7 +4091,7 @@ static sdlFunctionPtr get_doc_function(sdlPtr sdl, xmlNodePtr params) /* {{{ */
+ 		sdlFunctionPtr tmp;
+ 		sdlParamPtr    param;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&sdl->functions, tmp) {
++		ZEND_HASH_FOREACH_PTR(&sdl->functions, tmp) {
+ 			if (tmp->binding && tmp->binding->bindingType == BINDING_SOAP) {
+ 				sdlSoapBindingFunctionPtr fnb = (sdlSoapBindingFunctionPtr)tmp->bindingAttributes;
+ 				if (fnb->style == SOAP_DOCUMENT) {
+diff --git a/ext/soap/soap.stub.php b/ext/soap/soap.stub.php
+index 99d752a7..52613178 100644
+--- a/ext/soap/soap.stub.php
++++ b/ext/soap/soap.stub.php
+@@ -2,429 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue SOAP_1_1
+- */
+-const SOAP_1_1 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_1_2
+- */
+-const SOAP_1_2 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_PERSISTENCE_SESSION
+- */
+-const SOAP_PERSISTENCE_SESSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_PERSISTENCE_REQUEST
+- */
+-const SOAP_PERSISTENCE_REQUEST = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_FUNCTIONS_ALL
+- */
+-const SOAP_FUNCTIONS_ALL = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_ENCODED
+- */
+-const SOAP_ENCODED = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_LITERAL
+- */
+-const SOAP_LITERAL = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_RPC
+- */
+-const SOAP_RPC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_DOCUMENT
+- */
+-const SOAP_DOCUMENT = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_ACTOR_NEXT
+- */
+-const SOAP_ACTOR_NEXT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_ACTOR_NONE
+- */
+-const SOAP_ACTOR_NONE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_ACTOR_UNLIMATERECEIVER
+- */
+-const SOAP_ACTOR_UNLIMATERECEIVER = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_COMPRESSION_ACCEPT
+- */
+-const SOAP_COMPRESSION_ACCEPT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_COMPRESSION_GZIP
+- */
+-const SOAP_COMPRESSION_GZIP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_COMPRESSION_DEFLATE
+- */
+-const SOAP_COMPRESSION_DEFLATE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_AUTHENTICATION_BASIC
+- */
+-const SOAP_AUTHENTICATION_BASIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_AUTHENTICATION_DIGEST
+- */
+-const SOAP_AUTHENTICATION_DIGEST = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue UNKNOWN_TYPE
+- */
+-const UNKNOWN_TYPE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue XSD_STRING
+- */
+-const XSD_STRING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_BOOLEAN
+- */
+-const XSD_BOOLEAN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_DECIMAL
+- */
+-const XSD_DECIMAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_FLOAT
+- */
+-const XSD_FLOAT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_DOUBLE
+- */
+-const XSD_DOUBLE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_DURATION
+- */
+-const XSD_DURATION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_DATETIME
+- */
+-const XSD_DATETIME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_TIME
+- */
+-const XSD_TIME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_DATE
+- */
+-const XSD_DATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_GYEARMONTH
+- */
+-const XSD_GYEARMONTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_GYEAR
+- */
+-const XSD_GYEAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_GMONTHDAY
+- */
+-const XSD_GMONTHDAY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_GDAY
+- */
+-const XSD_GDAY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_GMONTH
+- */
+-const XSD_GMONTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_HEXBINARY
+- */
+-const XSD_HEXBINARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_BASE64BINARY
+- */
+-const XSD_BASE64BINARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ANYURI
+- */
+-const XSD_ANYURI = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_QNAME
+- */
+-const XSD_QNAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NOTATION
+- */
+-const XSD_NOTATION = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue XSD_NORMALIZEDSTRING
+- */
+-const XSD_NORMALIZEDSTRING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_TOKEN
+- */
+-const XSD_TOKEN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_LANGUAGE
+- */
+-const XSD_LANGUAGE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NMTOKEN
+- */
+-const XSD_NMTOKEN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NAME
+- */
+-const XSD_NAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NCNAME
+- */
+-const XSD_NCNAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ID
+- */
+-const XSD_ID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_IDREF
+- */
+-const XSD_IDREF = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_IDREFS
+- */
+-const XSD_IDREFS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ENTITY
+- */
+-const XSD_ENTITY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ENTITIES
+- */
+-const XSD_ENTITIES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_INTEGER
+- */
+-const XSD_INTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NONPOSITIVEINTEGER
+- */
+-const XSD_NONPOSITIVEINTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NEGATIVEINTEGER
+- */
+-const XSD_NEGATIVEINTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_LONG
+- */
+-const XSD_LONG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_INT
+- */
+-const XSD_INT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_SHORT
+- */
+-const XSD_SHORT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_BYTE
+- */
+-const XSD_BYTE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NONNEGATIVEINTEGER
+- */
+-const XSD_NONNEGATIVEINTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_UNSIGNEDLONG
+- */
+-const XSD_UNSIGNEDLONG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_UNSIGNEDINT
+- */
+-const XSD_UNSIGNEDINT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_UNSIGNEDSHORT
+- */
+-const XSD_UNSIGNEDSHORT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_UNSIGNEDBYTE
+- */
+-const XSD_UNSIGNEDBYTE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_POSITIVEINTEGER
+- */
+-const XSD_POSITIVEINTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_NMTOKENS
+- */
+-const XSD_NMTOKENS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ANYTYPE
+- */
+-const XSD_ANYTYPE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XSD_ANYXML
+- */
+-const XSD_ANYXML = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue APACHE_MAP
+- */
+-const APACHE_MAP = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_ENC_OBJECT
+- */
+-const SOAP_ENC_OBJECT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_ENC_ARRAY
+- */
+-const SOAP_ENC_ARRAY = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue XSD_1999_TIMEINSTANT
+- */
+-const XSD_1999_TIMEINSTANT = UNKNOWN;
+-
+-/**
+- * @var string
+- * @cvalue XSD_NAMESPACE
+- */
+-const XSD_NAMESPACE = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue XSD_1999_NAMESPACE
+- */
+-const XSD_1999_NAMESPACE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SOAP_SINGLE_ELEMENT_ARRAYS
+- */
+-const SOAP_SINGLE_ELEMENT_ARRAYS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_WAIT_ONE_WAY_CALLS
+- */
+-const SOAP_WAIT_ONE_WAY_CALLS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_USE_XSI_ARRAY_TYPE
+- */
+-const SOAP_USE_XSI_ARRAY_TYPE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue WSDL_CACHE_NONE
+- */
+-const WSDL_CACHE_NONE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue WSDL_CACHE_DISK
+- */
+-const WSDL_CACHE_DISK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue WSDL_CACHE_MEMORY
+- */
+-const WSDL_CACHE_MEMORY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue WSDL_CACHE_BOTH
+- */
+-const WSDL_CACHE_BOTH = UNKNOWN;
+-
+-/* New SOAP SSL Method Constants */
+-
+-/**
+- * @var int
+- * @cvalue SOAP_SSL_METHOD_TLS
+- */
+-const SOAP_SSL_METHOD_TLS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_SSL_METHOD_SSLv2
+- */
+-const SOAP_SSL_METHOD_SSLv2 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_SSL_METHOD_SSLv3
+- */
+-const SOAP_SSL_METHOD_SSLv3 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SOAP_SSL_METHOD_SSLv23
+- */
+-const SOAP_SSL_METHOD_SSLv23 = UNKNOWN;
+-
+ function use_soap_error_handler(bool $enable = true): bool {}
+ 
+ function is_soap_fault(mixed $object): bool {}
+@@ -477,6 +54,9 @@ class SoapVar
+ 
+ class SoapServer
+ {
++    /** @var resource */
++    private $service;
++
+     private ?SoapFault $__soap_fault = null;
+ 
+     public function __construct(?string $wsdl, array $options = []) {}
+diff --git a/ext/soap/soap_arginfo.h b/ext/soap/soap_arginfo.h
+index 5305b6e9..b6bd7f7e 100644
+--- a/ext/soap/soap_arginfo.h
++++ b/ext/soap/soap_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 4dfc98696d4bc5e36610bdf03de906dbae049cf3 */
++ * Stub hash: ab057422ee42f574e7d00462f3bf173caf14ecc1 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_use_soap_error_handler, 0, 0, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, enable, _IS_BOOL, 0, "true")
+@@ -233,91 +233,6 @@ static const zend_function_entry class_SoapClient_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_soap_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("SOAP_1_1", SOAP_1_1, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_1_2", SOAP_1_2, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_PERSISTENCE_SESSION", SOAP_PERSISTENCE_SESSION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_PERSISTENCE_REQUEST", SOAP_PERSISTENCE_REQUEST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_FUNCTIONS_ALL", SOAP_FUNCTIONS_ALL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ENCODED", SOAP_ENCODED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_LITERAL", SOAP_LITERAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_RPC", SOAP_RPC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_DOCUMENT", SOAP_DOCUMENT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ACTOR_NEXT", SOAP_ACTOR_NEXT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ACTOR_NONE", SOAP_ACTOR_NONE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ACTOR_UNLIMATERECEIVER", SOAP_ACTOR_UNLIMATERECEIVER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_ACCEPT", SOAP_COMPRESSION_ACCEPT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_GZIP", SOAP_COMPRESSION_GZIP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_COMPRESSION_DEFLATE", SOAP_COMPRESSION_DEFLATE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_AUTHENTICATION_BASIC", SOAP_AUTHENTICATION_BASIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_AUTHENTICATION_DIGEST", SOAP_AUTHENTICATION_DIGEST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("UNKNOWN_TYPE", UNKNOWN_TYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_STRING", XSD_STRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_BOOLEAN", XSD_BOOLEAN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_DECIMAL", XSD_DECIMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_FLOAT", XSD_FLOAT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_DOUBLE", XSD_DOUBLE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_DURATION", XSD_DURATION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_DATETIME", XSD_DATETIME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_TIME", XSD_TIME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_DATE", XSD_DATE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_GYEARMONTH", XSD_GYEARMONTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_GYEAR", XSD_GYEAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_GMONTHDAY", XSD_GMONTHDAY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_GDAY", XSD_GDAY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_GMONTH", XSD_GMONTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_HEXBINARY", XSD_HEXBINARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_BASE64BINARY", XSD_BASE64BINARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ANYURI", XSD_ANYURI, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_QNAME", XSD_QNAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NOTATION", XSD_NOTATION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NORMALIZEDSTRING", XSD_NORMALIZEDSTRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_TOKEN", XSD_TOKEN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_LANGUAGE", XSD_LANGUAGE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NMTOKEN", XSD_NMTOKEN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NAME", XSD_NAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NCNAME", XSD_NCNAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ID", XSD_ID, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_IDREF", XSD_IDREF, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_IDREFS", XSD_IDREFS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ENTITY", XSD_ENTITY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ENTITIES", XSD_ENTITIES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_INTEGER", XSD_INTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NONPOSITIVEINTEGER", XSD_NONPOSITIVEINTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NEGATIVEINTEGER", XSD_NEGATIVEINTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_LONG", XSD_LONG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_INT", XSD_INT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_SHORT", XSD_SHORT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_BYTE", XSD_BYTE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NONNEGATIVEINTEGER", XSD_NONNEGATIVEINTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDLONG", XSD_UNSIGNEDLONG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDINT", XSD_UNSIGNEDINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDSHORT", XSD_UNSIGNEDSHORT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_UNSIGNEDBYTE", XSD_UNSIGNEDBYTE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_POSITIVEINTEGER", XSD_POSITIVEINTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_NMTOKENS", XSD_NMTOKENS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ANYTYPE", XSD_ANYTYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_ANYXML", XSD_ANYXML, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("APACHE_MAP", APACHE_MAP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ENC_OBJECT", SOAP_ENC_OBJECT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_ENC_ARRAY", SOAP_ENC_ARRAY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("XSD_1999_TIMEINSTANT", XSD_1999_TIMEINSTANT, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("XSD_NAMESPACE", XSD_NAMESPACE, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("XSD_1999_NAMESPACE", XSD_1999_NAMESPACE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_SINGLE_ELEMENT_ARRAYS", SOAP_SINGLE_ELEMENT_ARRAYS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_WAIT_ONE_WAY_CALLS", SOAP_WAIT_ONE_WAY_CALLS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_USE_XSI_ARRAY_TYPE", SOAP_USE_XSI_ARRAY_TYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("WSDL_CACHE_NONE", WSDL_CACHE_NONE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("WSDL_CACHE_DISK", WSDL_CACHE_DISK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("WSDL_CACHE_MEMORY", WSDL_CACHE_MEMORY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("WSDL_CACHE_BOTH", WSDL_CACHE_BOTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_TLS", SOAP_SSL_METHOD_TLS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv2", SOAP_SSL_METHOD_SSLv2, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv3", SOAP_SSL_METHOD_SSLv3, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SOAP_SSL_METHOD_SSLv23", SOAP_SSL_METHOD_SSLv23, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_SoapParam(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+@@ -485,6 +400,12 @@ static zend_class_entry *register_class_SoapServer(void)
+ 	INIT_CLASS_ENTRY(ce, "SoapServer", class_SoapServer_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+ 
++	zval property_service_default_value;
++	ZVAL_NULL(&property_service_default_value);
++	zend_string *property_service_name = zend_string_init("service", sizeof("service") - 1, 1);
++	zend_declare_property_ex(class_entry, property_service_name, &property_service_default_value, ZEND_ACC_PRIVATE, NULL);
++	zend_string_release(property_service_name);
++
+ 	zend_string *property___soap_fault_class_SoapFault = zend_string_init("SoapFault", sizeof("SoapFault")-1, 1);
+ 	zval property___soap_fault_default_value;
+ 	ZVAL_NULL(&property___soap_fault_default_value);
+@@ -527,7 +448,7 @@ static zend_class_entry *register_class_SoapClient(void)
+ 	zend_string_release(property_location_name);
+ 
+ 	zval property_trace_default_value;
+-	ZVAL_FALSE(&property_trace_default_value);
++	ZVAL_BOOL(&property_trace_default_value, 0);
+ 	zend_string *property_trace_name = zend_string_init("trace", sizeof("trace") - 1, 1);
+ 	zend_declare_typed_property(class_entry, property_trace_name, &property_trace_default_value, ZEND_ACC_PRIVATE, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+ 	zend_string_release(property_trace_name);
+@@ -575,7 +496,7 @@ static zend_class_entry *register_class_SoapClient(void)
+ 	zend_string_release(property__password_name);
+ 
+ 	zval property__use_digest_default_value;
+-	ZVAL_FALSE(&property__use_digest_default_value);
++	ZVAL_BOOL(&property__use_digest_default_value, 0);
+ 	zend_string *property__use_digest_name = zend_string_init("_use_digest", sizeof("_use_digest") - 1, 1);
+ 	zend_declare_typed_property(class_entry, property__use_digest_name, &property__use_digest_default_value, ZEND_ACC_PRIVATE, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+ 	zend_string_release(property__use_digest_name);
+@@ -611,7 +532,7 @@ static zend_class_entry *register_class_SoapClient(void)
+ 	zend_string_release(property__proxy_password_name);
+ 
+ 	zval property__exceptions_default_value;
+-	ZVAL_TRUE(&property__exceptions_default_value);
++	ZVAL_BOOL(&property__exceptions_default_value, 1);
+ 	zend_string *property__exceptions_name = zend_string_init("_exceptions", sizeof("_exceptions") - 1, 1);
+ 	zend_declare_typed_property(class_entry, property__exceptions_name, &property__exceptions_default_value, ZEND_ACC_PRIVATE, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+ 	zend_string_release(property__exceptions_name);
+@@ -653,7 +574,7 @@ static zend_class_entry *register_class_SoapClient(void)
+ 	zend_string_release(property__user_agent_name);
+ 
+ 	zval property__keep_alive_default_value;
+-	ZVAL_TRUE(&property__keep_alive_default_value);
++	ZVAL_BOOL(&property__keep_alive_default_value, 1);
+ 	zend_string *property__keep_alive_name = zend_string_init("_keep_alive", sizeof("_keep_alive") - 1, 1);
+ 	zend_declare_typed_property(class_entry, property__keep_alive_name, &property__keep_alive_default_value, ZEND_ACC_PRIVATE, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+ 	zend_string_release(property__keep_alive_name);
+diff --git a/ext/soap/tests/any.phpt b/ext/soap/tests/any.phpt
+index eeb18310..859cf3bd 100644
+--- a/ext/soap/tests/any.phpt
++++ b/ext/soap/tests/any.phpt
+@@ -8,7 +8,11 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ class SOAPComplexType {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ $struct = new SOAPComplexType('arg',34,325.325);
+ 
+@@ -25,8 +29,6 @@ function echoAnyElement($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+@@ -61,10 +63,10 @@ object(stdClass)#5 (1) {
+     array(1) {
+       ["SOAPComplexType"]=>
+       object(SOAPComplexType)#7 (3) {
+-        ["varString"]=>
+-        string(3) "arg"
+         ["varInt"]=>
+         int(34)
++        ["varString"]=>
++        string(3) "arg"
+         ["varFloat"]=>
+         float(325.325)
+       }
+@@ -78,10 +80,10 @@ object(stdClass)#8 (1) {
+     array(1) {
+       ["SOAPComplexType"]=>
+       object(SOAPComplexType)#10 (3) {
+-        ["varString"]=>
+-        string(3) "arg"
+         ["varInt"]=>
+         int(34)
++        ["varString"]=>
++        string(3) "arg"
+         ["varFloat"]=>
+         float(325.325)
+       }
+diff --git a/ext/soap/tests/bug70388.phpt b/ext/soap/tests/bug70388.phpt
+index 8f3e8be7..87259bf4 100644
+--- a/ext/soap/tests/bug70388.phpt
++++ b/ext/soap/tests/bug70388.phpt
+@@ -4,8 +4,6 @@ Bug #70388 (SOAP serialize_function_call() type confusion / RCE)
+ soap
+ --FILE--
+ <?php
+-
+-#[AllowDynamicProperties]
+ class MySoapClient extends SoapClient {
+     public function __doRequest($request, $location, $action, $version, $one_way = 0): string {
+         echo $request, "\n";
+diff --git a/ext/soap/tests/bug73037.phpt b/ext/soap/tests/bug73037.phpt
+index 001940a4..25fde2cb 100644
+--- a/ext/soap/tests/bug73037.phpt
++++ b/ext/soap/tests/bug73037.phpt
+@@ -92,7 +92,7 @@ Content-Type: application/soap+xml; charset=UTF-8
+ Accept: application/soap+xml, application/dime, multipart/related, text/*
+ SOAPAction: "urn:adressen#adressen#SetAda"
+ Expect: 100-continue
+-Content-Length: {$len}
++Content-Length: ${len}
+ HDRS;
+         if ($b) {
+             $hdrs .="\nContent-Encoding: gzip";
+@@ -131,6 +131,10 @@ cleanup:
+         }
+ }
+ 
++?>
++--CLEAN--
++<?php
++unlink(__DIR__ . DIRECTORY_SEPARATOR . "bug73037_server.php");
+ ?>
+ --EXPECT--
+ Iteration 0
+diff --git a/ext/soap/tests/bugs/bug28969.phpt b/ext/soap/tests/bugs/bug28969.phpt
+index 89477cc0..dff89501 100644
+--- a/ext/soap/tests/bugs/bug28969.phpt
++++ b/ext/soap/tests/bugs/bug28969.phpt
+@@ -10,7 +10,6 @@ function test() {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug29839.phpt b/ext/soap/tests/bugs/bug29839.phpt
+index 468d05f4..b5aa0e88 100644
+--- a/ext/soap/tests/bugs/bug29839.phpt
++++ b/ext/soap/tests/bugs/bug29839.phpt
+@@ -12,7 +12,6 @@ function EchoString($s) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug29844.phpt b/ext/soap/tests/bugs/bug29844.phpt
+index 93b2bb12..7b403374 100644
+--- a/ext/soap/tests/bugs/bug29844.phpt
++++ b/ext/soap/tests/bugs/bug29844.phpt
+@@ -14,7 +14,6 @@ class hello_world {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug30045.phpt b/ext/soap/tests/bugs/bug30045.phpt
+index 0c593f95..debb613f 100644
+--- a/ext/soap/tests/bugs/bug30045.phpt
++++ b/ext/soap/tests/bugs/bug30045.phpt
+@@ -13,7 +13,6 @@ function foo($type, $num) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug30106.phpt b/ext/soap/tests/bugs/bug30106.phpt
+index 5a5d9889..023bd442 100644
+--- a/ext/soap/tests/bugs/bug30106.phpt
++++ b/ext/soap/tests/bugs/bug30106.phpt
+@@ -13,8 +13,6 @@ function getContinentList() {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options=array()) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug30928.phpt b/ext/soap/tests/bugs/bug30928.phpt
+index b15997c0..4abb9519 100644
+--- a/ext/soap/tests/bugs/bug30928.phpt
++++ b/ext/soap/tests/bugs/bug30928.phpt
+@@ -17,7 +17,6 @@ function test($x) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug31695.phpt b/ext/soap/tests/bugs/bug31695.phpt
+index 635dc9a6..3ea02641 100644
+--- a/ext/soap/tests/bugs/bug31695.phpt
++++ b/ext/soap/tests/bugs/bug31695.phpt
+@@ -11,12 +11,10 @@ function Test($x) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options=array()) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+-    $this->server->addFunction("Test");
++        $this->server->addFunction("Test");
+   }
+ 
+   function __doRequest($request, $location, $action, $version, $one_way = 0): ?string {
+diff --git a/ext/soap/tests/bugs/bug32776.phpt b/ext/soap/tests/bugs/bug32776.phpt
+index 242bf6fc..245ea224 100644
+--- a/ext/soap/tests/bugs/bug32776.phpt
++++ b/ext/soap/tests/bugs/bug32776.phpt
+@@ -15,7 +15,6 @@ function test($x) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug34453.phpt b/ext/soap/tests/bugs/bug34453.phpt
+index b3dbb672..e6966478 100644
+--- a/ext/soap/tests/bugs/bug34453.phpt
++++ b/ext/soap/tests/bugs/bug34453.phpt
+@@ -12,7 +12,6 @@ function EchoString($s) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug34643.phpt b/ext/soap/tests/bugs/bug34643.phpt
+index f0795e18..c33b1336 100644
+--- a/ext/soap/tests/bugs/bug34643.phpt
++++ b/ext/soap/tests/bugs/bug34643.phpt
+@@ -15,7 +15,6 @@ class fp {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug35142.phpt b/ext/soap/tests/bugs/bug35142.phpt
+index d02ebf82..fea08d33 100644
+--- a/ext/soap/tests/bugs/bug35142.phpt
++++ b/ext/soap/tests/bugs/bug35142.phpt
+@@ -17,7 +17,6 @@ function PostEvents($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug36226-2.phpt b/ext/soap/tests/bugs/bug36226-2.phpt
+index 6776b1a7..67bec3d3 100644
+--- a/ext/soap/tests/bugs/bug36226-2.phpt
++++ b/ext/soap/tests/bugs/bug36226-2.phpt
+@@ -16,8 +16,6 @@ function PostEvents($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug36226.phpt b/ext/soap/tests/bugs/bug36226.phpt
+index 73ce6ea8..a0eac843 100644
+--- a/ext/soap/tests/bugs/bug36226.phpt
++++ b/ext/soap/tests/bugs/bug36226.phpt
+@@ -17,7 +17,6 @@ function PostEvents($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug36999.phpt b/ext/soap/tests/bugs/bug36999.phpt
+index 6800e5aa..3bb5561f 100644
+--- a/ext/soap/tests/bugs/bug36999.phpt
++++ b/ext/soap/tests/bugs/bug36999.phpt
+@@ -12,7 +12,6 @@ function echoLong($num) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl) {
+     parent::__construct($wsdl);
+diff --git a/ext/soap/tests/bugs/bug38004.phpt b/ext/soap/tests/bugs/bug38004.phpt
+index 0526390b..9459faa6 100644
+--- a/ext/soap/tests/bugs/bug38004.phpt
++++ b/ext/soap/tests/bugs/bug38004.phpt
+@@ -13,8 +13,6 @@ function Test($param) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl) {
+     parent::__construct($wsdl);
+     $this->server = new SoapServer($wsdl);
+diff --git a/ext/soap/tests/bugs/bug38005.phpt b/ext/soap/tests/bugs/bug38005.phpt
+index db4d7653..c025c14c 100644
+--- a/ext/soap/tests/bugs/bug38005.phpt
++++ b/ext/soap/tests/bugs/bug38005.phpt
+@@ -11,8 +11,6 @@ function Test($param=NULL) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $opt) {
+     parent::__construct($wsdl, $opt);
+     $this->server = new SoapServer($wsdl, $opt);
+diff --git a/ext/soap/tests/bugs/bug38055.phpt b/ext/soap/tests/bugs/bug38055.phpt
+index 33596c24..6c8744cc 100644
+--- a/ext/soap/tests/bugs/bug38055.phpt
++++ b/ext/soap/tests/bugs/bug38055.phpt
+@@ -14,8 +14,6 @@ function Test($param) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl) {
+     parent::__construct($wsdl);
+     $this->server = new SoapServer($wsdl);
+diff --git a/ext/soap/tests/bugs/bug38067.phpt b/ext/soap/tests/bugs/bug38067.phpt
+index 75a5cece..778d4293 100644
+--- a/ext/soap/tests/bugs/bug38067.phpt
++++ b/ext/soap/tests/bugs/bug38067.phpt
+@@ -13,8 +13,6 @@ function Test($param) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $opt) {
+     parent::__construct($wsdl, $opt);
+     $this->server = new SoapServer($wsdl, $opt);
+diff --git a/ext/soap/tests/bugs/bug39815.phpt b/ext/soap/tests/bugs/bug39815.phpt
+index 7ad18d35..688c9958 100644
+--- a/ext/soap/tests/bugs/bug39815.phpt
++++ b/ext/soap/tests/bugs/bug39815.phpt
+@@ -4,7 +4,8 @@ Bug #39815 (to_zval_double() in ext/soap/php_encoding.c is not locale-independen
+ soap
+ --SKIPIF--
+ <?php
+-if (!@setlocale(LC_ALL, 'de_DE', 'de_DE.ISO8859-1')) die('skip de_DE locale not available');
++if (!@setlocale(LC_ALL, 'sv_SE', 'sv_SE.ISO8859-1')) die('skip sv_SE locale not available');
++if (!@setlocale(LC_ALL, 'en_US', 'en_US.ISO8859-1')) die('skip en_US locale not available');
+ ?>
+ --INI--
+ precision=14
+@@ -15,7 +16,6 @@ function test(){
+   return 123.456;
+ }
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+@@ -35,10 +35,10 @@ class LocalSoapClient extends SoapClient {
+ $x = new LocalSoapClient(NULL,array('location'=>'test://',
+                                    'uri'=>'http://testuri.org',
+                                    "trace"=>1));
+-setlocale(LC_ALL,"de_DE","de_DE.ISO8859-1");
++setlocale(LC_ALL,"sv_SE","sv_SE.ISO8859-1");
+ var_dump($x->test());
+ echo $x->__getLastResponse();
+-setlocale(LC_ALL, "C");
++setlocale(LC_ALL,"en_US","en_US.ISO8859-1");
+ var_dump($x->test());
+ echo $x->__getLastResponse();
+ ?>
+diff --git a/ext/soap/tests/bugs/bug42692.phpt b/ext/soap/tests/bugs/bug42692.phpt
+index e0f421e6..e1326723 100644
+--- a/ext/soap/tests/bugs/bug42692.phpt
++++ b/ext/soap/tests/bugs/bug42692.phpt
+@@ -11,7 +11,6 @@ function checkAuth($peid,$auth) {
+ }
+ 
+ class TestSoap extends SoapClient {
+-    private $server;
+ 
+     function __construct($wsdl, $options) {
+         parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug43045.phpt b/ext/soap/tests/bugs/bug43045.phpt
+index 34d60df0..633b22ef 100644
+--- a/ext/soap/tests/bugs/bug43045.phpt
++++ b/ext/soap/tests/bugs/bug43045.phpt
+@@ -9,8 +9,6 @@ function test($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug46419.phpt b/ext/soap/tests/bugs/bug46419.phpt
+index 159ae237..092cbaa7 100644
+--- a/ext/soap/tests/bugs/bug46419.phpt
++++ b/ext/soap/tests/bugs/bug46419.phpt
+@@ -9,7 +9,6 @@ function bar() {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug50762.phpt b/ext/soap/tests/bugs/bug50762.phpt
+index e73f48a7..79af58b6 100644
+--- a/ext/soap/tests/bugs/bug50762.phpt
++++ b/ext/soap/tests/bugs/bug50762.phpt
+@@ -15,7 +15,6 @@ class testSoap {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+@@ -35,8 +34,10 @@ class LocalSoapClient extends SoapClient {
+ 
+ $cl = new LocalSoapClient(__DIR__.'/bug50762.wsdl', array('cache_wsdl'=>WSDL_CACHE_NONE, 'trace'=>true));
+ 
+-class authToken {
+-    public function __construct(public $authToken) {}
++class authToken{
++    public function __construct($token){
++        $this->authToken=$token;
++    }
+ }
+ 
+ $cl->__setSoapHeaders(array(new SoapHeader('http://sova.pronto.ru/', 'authToken', new authToken('tokendata'))));
+diff --git a/ext/soap/tests/bugs/bug69085.phpt b/ext/soap/tests/bugs/bug69085.phpt
+index 3572efa5..1e603996 100644
+--- a/ext/soap/tests/bugs/bug69085.phpt
++++ b/ext/soap/tests/bugs/bug69085.phpt
+@@ -7,7 +7,6 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class MySoapClient extends SoapClient {
+     public function __doRequest($request, $location, $action, $version, $one_way = 0): string {
+         echo $request, "\n";
+diff --git a/ext/soap/tests/classmap003.phpt b/ext/soap/tests/classmap003.phpt
+index 98570cfd..c3181bb9 100644
+--- a/ext/soap/tests/classmap003.phpt
++++ b/ext/soap/tests/classmap003.phpt
+@@ -26,7 +26,6 @@ function f(){
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/classmap004.phpt b/ext/soap/tests/classmap004.phpt
+index b183be4b..541a3364 100644
+--- a/ext/soap/tests/classmap004.phpt
++++ b/ext/soap/tests/classmap004.phpt
+@@ -34,7 +34,6 @@ function f(){
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/gh12392.phpt b/ext/soap/tests/gh12392.phpt
+new file mode 100644
+index 00000000..8a234ba0
+--- /dev/null
++++ b/ext/soap/tests/gh12392.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++GH-12392 (Segmentation fault on SoapClient::__getTypes)
++--EXTENSIONS--
++soap
++--FILE--
++<?php
++
++$client = new SoapClient(__DIR__ . "/gh12392.wsdl", ['cache_wsdl' => WSDL_CACHE_NONE]);
++echo 'Client created!' . "\n";
++
++$types = $client->__getTypes();
++echo 'Got types!' . "\n";
++
++var_dump($types);
++
++?>
++--EXPECT--
++Client created!
++Got types!
++array(1) {
++  [0]=>
++  string(62) "struct dummy {
++ string foo;
++ string a;
++ string b;
++ string c;
++}"
++}
+diff --git a/ext/soap/tests/gh12392.wsdl b/ext/soap/tests/gh12392.wsdl
+new file mode 100644
+index 00000000..5e9a7ea0
+--- /dev/null
++++ b/ext/soap/tests/gh12392.wsdl
+@@ -0,0 +1,61 @@
++<?xml version='1.0' encoding='UTF-8'?>
++<wsdl:definitions
++  xmlns:xs="http://www.w3.org/2001/XMLSchema"
++  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
++  xmlns="http://schemas.xmlsoap.org/wsdl/"
++  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
++  targetNamespace="http://xoev.de/schemata/xzufi/2_2_0">
++  <wsdl:types>
++    <xs:schema xmlns:ns="http://php.net" targetNamespace="http://php.net">
++      <xs:attributeGroup name="c">
++        <xs:attribute name="c" type="string" />
++      </xs:attributeGroup>
++
++      <xs:attributeGroup name="b">
++        <xs:attribute name="b" type="string" />
++      </xs:attributeGroup>
++
++      <xs:attributeGroup name="a">
++        <xs:attribute name="a" type="string" />
++        <xs:attributeGroup ref="ns:b" />
++      </xs:attributeGroup>
++
++      <xs:complexType name="dummy">
++        <xs:sequence>
++          <xs:element name="foo" type="string" />
++        </xs:sequence>
++        <xs:attributeGroup ref="ns:a" />
++        <xs:attributeGroup ref="ns:c" />
++      </xs:complexType>
++    </xs:schema>
++  </wsdl:types>
++
++  <!-- Below is a shortened copy of the test.wsdl, doesn't matter, only the types matter -->
++
++  <message name="AddRequest">
++    <part name="x" type="xs:double" />
++  </message>
++
++  <portType name="TestServicePortType">
++    <operation name="Add">
++      <input message="tns:AddRequest" />
++    </operation>
++  </portType>
++
++  <binding name="TestServiceBinding" type="tns:TestServicePortType">
++    <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http" />
++    <operation name="Add">
++      <soap:operation soapAction="Add" style="rpc" />
++      <input>
++        <soap:body use="encoded" encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" />
++      </input>
++    </operation>
++  </binding>
++
++  <service name="TestService">
++    <port name="TestServicePort" binding="tns:TestServiceBinding">
++      <soap:address location="http://linuxsrv.home/~dmitry/soap/soap_server.php" />
++    </port>
++  </service>
++
++</wsdl:definitions>
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_005p.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_005p.phpt
+index ebed16ce..f61bc239 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_005p.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_005p.phpt
+@@ -5,7 +5,7 @@ soap
+ --FILE--
+ <?php
+ $client = new SoapClient(NULL,array("location"=>"test://","uri"=>"http://soapinterop.org/","trace"=>1,"exceptions"=>0));
+-$client->__soapCall("echoString", array('ỗÈéóÒ₧⅜ỗỸ'), array("soapaction"=>"http://soapinterop.org/","uri"=>"http://soapinterop.org/"));
++$client->__soapCall("echoString", array(utf8_encode('ỗÈéóÒ₧⅜ỗỸ')), array("soapaction"=>"http://soapinterop.org/","uri"=>"http://soapinterop.org/"));
+ echo $client->__getlastrequest();
+ $HTTP_RAW_POST_DATA = $client->__getlastrequest();
+ include("round2_base.inc");
+@@ -13,7 +13,7 @@ echo "ok\n";
+ ?>
+ --EXPECT--
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><param0 xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</param0></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><param0 xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</param0></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ ok
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_005s.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_005s.phpt
+index 6c76c2d5..9dbfbb8b 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_005s.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_005s.phpt
+@@ -5,7 +5,7 @@ soap
+ --FILE--
+ <?php
+ $client = new SoapClient(NULL,array("location"=>"test://","uri"=>"http://soapinterop.org/","trace"=>1,"exceptions"=>0));
+-$client->__soapCall("echoString", array(new SoapParam(new SoapVar('ỗÈéóÒ₧⅜ỗỸ',XSD_STRING),"inputString")), array("soapaction"=>"http://soapinterop.org/","uri"=>"http://soapinterop.org/"));
++$client->__soapCall("echoString", array(new SoapParam(new SoapVar(utf8_encode('ỗÈéóÒ₧⅜ỗỸ'),XSD_STRING),"inputString")), array("soapaction"=>"http://soapinterop.org/","uri"=>"http://soapinterop.org/"));
+ echo $client->__getlastrequest();
+ $HTTP_RAW_POST_DATA = $client->__getlastrequest();
+ include("round2_base.inc");
+@@ -13,7 +13,7 @@ echo "ok\n";
+ ?>
+ --EXPECT--
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><inputString xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</inputString></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><inputString xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</inputString></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ ok
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_005w.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_005w.phpt
+index 6c2da485..0252ebcf 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_005w.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_005w.phpt
+@@ -7,7 +7,7 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ $client = new SoapClient(__DIR__."/round2_base.wsdl",array("trace"=>1,"exceptions"=>0));
+-$client->echoString('ỗÈéóÒ₧⅜ỗỸ');
++$client->echoString(utf8_encode('ỗÈéóÒ₧⅜ỗỸ'));
+ echo $client->__getlastrequest();
+ $HTTP_RAW_POST_DATA = $client->__getlastrequest();
+ include("round2_base.inc");
+@@ -15,7 +15,7 @@ echo "ok\n";
+ ?>
+ --EXPECT--
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><inputString xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</inputString></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoString><inputString xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</inputString></ns1:echoString></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ <?xml version="1.0" encoding="UTF-8"?>
+-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">ỗÈéóÒ₧⅜ỗỸ</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
++<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://soapinterop.org/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><SOAP-ENV:Body><ns1:echoStringResponse><outputString xsi:type="xsd:string">á»ÃÃ©Ã³Ãâ§âá»á»¸</outputString></ns1:echoStringResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
+ ok
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_014p.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_014p.phpt
+index 06e0e55d..23f44ac6 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_014p.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_014p.phpt
+@@ -7,7 +7,11 @@ precision=14
+ --FILE--
+ <?php
+ class SOAPStruct {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ 
+ $client = new SoapClient(NULL,array("location"=>"test://","uri"=>"http://soapinterop.org/","trace"=>1,"exceptions"=>0));
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_014w.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_014w.phpt
+index 5314c46c..e48e1515 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_014w.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_014w.phpt
+@@ -8,7 +8,11 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ class SOAPStruct {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ 
+ $client = new SoapClient(__DIR__."/round2_base.wsdl",array("trace"=>1,"exceptions"=>0));
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_015p.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_015p.phpt
+index 78ddfe83..e206f3f0 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_015p.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_015p.phpt
+@@ -7,7 +7,11 @@ precision=14
+ --FILE--
+ <?php
+ class SOAPStruct {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ 
+ $struct1 = new SOAPStruct('arg',34,325.325);
+diff --git a/ext/soap/tests/interop/Round2/Base/r2_base_015w.phpt b/ext/soap/tests/interop/Round2/Base/r2_base_015w.phpt
+index 2481f818..4ee706ff 100644
+--- a/ext/soap/tests/interop/Round2/Base/r2_base_015w.phpt
++++ b/ext/soap/tests/interop/Round2/Base/r2_base_015w.phpt
+@@ -8,7 +8,11 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ class SOAPStruct {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ 
+ $struct1 = new SOAPStruct('arg',34,325.325);
+
+-- 
+2.43.0

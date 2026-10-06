@@ -1,0 +1,60 @@
+From f22f67ca Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0032] Fix memory leak when parsing invalid pattern matching (part 19/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -9136,23 +9516,39 @@ dedent_string(struct parser_params *p, VALUE string, int width)
+             break;
+         }
+     }
++
++    return i;
++}
++
++#ifndef RIPPER
++static int
++dedent_string(struct parser_params *p, rb_parser_string_t *string, int width)
++{
++    char *str;
++    long len;
++    int i;
++
++    len = PARSER_STRING_LEN(string);
++    str = PARSER_STRING_PTR(string);
++
++    i = dedent_string_column(str, len, width);
+     if (!i) return 0;
+-    rb_str_modify(string);
+-    str = RSTRING_PTR(string);
+-    if (RSTRING_LEN(string) != len)
+-        rb_fatal("literal string changed: %+"PRIsVALUE, string);
++
++    rb_parser_str_modify(string);
++    str = PARSER_STRING_PTR(string);
++    if (PARSER_STRING_LEN(string) != len)
++        rb_fatal("literal string changed: %s", PARSER_STRING_PTR(string));
+     MEMMOVE(str, str + i, char, len - i);
+-    rb_str_set_len(string, len - i);
++    rb_parser_str_set_len(p, string, len - i);
+     return i;
+ }
+ 
+-#ifndef RIPPER
+ static NODE *
+ heredoc_dedent(struct parser_params *p, NODE *root)
+ {
+     NODE *node, *str_node, *prev_node;
+     int indent = p->heredoc_indent;
+-    VALUE prev_lit = 0;
++    rb_parser_string_t *prev_lit = 0;
+ 
+     if (indent <= 0) return root;
+     p->heredoc_indent = 0;
+
+-- 
+2.43.0

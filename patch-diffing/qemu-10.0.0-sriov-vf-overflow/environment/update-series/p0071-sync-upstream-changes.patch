@@ -1,0 +1,419 @@
+From 405b4ff9 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0071] sync upstream changes
+
+---
+diff --git a/tests/qapi-schema/doc-good.json b/tests/qapi-schema/doc-good.json
+index de38a386e8..f64bf38d85 100644
+--- a/tests/qapi-schema/doc-good.json
++++ b/tests/qapi-schema/doc-good.json
+@@ -55,6 +55,8 @@
+ # - {braces}
+ ##
+ 
++# Not a doc comment
++
+ ##
+ # @Enum:
+ #
+@@ -155,7 +157,7 @@
+ # @cmd-feat1: a feature
+ # @cmd-feat2: another feature
+ #
+-# Note: @arg3 is undocumented
++# .. note:: @arg3 is undocumented
+ #
+ # Returns: @Object
+ #
+@@ -163,22 +165,30 @@
+ #
+ # TODO: frobnicate
+ #
+-# Notes:
++# .. admonition:: Notes
+ #
+ #  - Lorem ipsum dolor sit amet
+ #  - Ut enim ad minim veniam
+ #
+ #  Duis aute irure dolor
+ #
+-# Example:
++# .. qmp-example::
++#    :title: Ideal fast-food burger situation
+ #
+-#  -> in
+-#  <- out
++#    -> "in"
++#    <- "out"
+ #
+-# Examples:
++# Examples::
++#
++#  - Not a QMP code block
++#  - Merely a preformatted code block literal
++#  It isn't even an rST list.
+ #  - *verbatim*
+ #  - {braces}
+ #
++# Note::
++#     Ceci n'est pas une note
++#
+ # Since: 2.10
+ ##
+ { 'command': 'cmd',
+@@ -194,11 +204,11 @@
+ # @cmd-feat1: a feature
+ # @cmd-feat2: another feature
+ #
+-# Example:
++# .. qmp-example::
+ #
+-#  -> in
++#    -> "this example"
+ #
+-#  <- out
++#    <- "has no title"
+ ##
+ { 'command': 'cmd-boxed', 'boxed': true,
+   'data': 'Object',
+diff --git a/tests/qapi-schema/doc-good.out b/tests/qapi-schema/doc-good.out
+index 716a9a4102..6d24f1127b 100644
+--- a/tests/qapi-schema/doc-good.out
++++ b/tests/qapi-schema/doc-good.out
+@@ -117,8 +117,8 @@ doc symbol=Base
+     body=
+ 
+     arg=base1
+-description starts on a new line,
+-minimally indented
++ description starts on a new line,
++ minimally indented
+ doc symbol=Variant1
+     body=
+ A paragraph
+@@ -145,8 +145,8 @@ doc symbol=Alternate
+ 
+     arg=i
+ description starts on the same line
+-remainder indented the same
+-@b is undocumented
++    remainder indented the same
++    @b is undocumented
+     arg=b
+ 
+     feature=alt-feat
+@@ -158,36 +158,49 @@ doc symbol=cmd
+     body=
+ 
+     arg=arg1
+-description starts on a new line,
+-indented
++    description starts on a new line,
++    indented
+     arg=arg2
+ description starts on the same line
+-remainder indented differently
++    remainder indented differently
+     arg=arg3
+ 
+     feature=cmd-feat1
+ a feature
+     feature=cmd-feat2
+ another feature
+-    section=Note
+-@arg3 is undocumented
++    section=None
++.. note:: @arg3 is undocumented
+     section=Returns
+ @Object
+     section=Errors
+ some
+     section=TODO
+ frobnicate
+-    section=Notes
+-- Lorem ipsum dolor sit amet
+-- Ut enim ad minim veniam
++    section=None
++.. admonition:: Notes
+ 
+-Duis aute irure dolor
+-    section=Example
+--> in
+-<- out
+-    section=Examples
+-- *verbatim*
+-- {braces}
++ - Lorem ipsum dolor sit amet
++ - Ut enim ad minim veniam
++
++ Duis aute irure dolor
++
++.. qmp-example::
++   :title: Ideal fast-food burger situation
++
++   -> "in"
++   <- "out"
++
++Examples::
++
++ - Not a QMP code block
++ - Merely a preformatted code block literal
++ It isn't even an rST list.
++ - *verbatim*
++ - {braces}
++
++Note::
++    Ceci n'est pas une note
+     section=Since
+ 2.10
+ doc symbol=cmd-boxed
+@@ -197,10 +210,12 @@ If you're bored enough to read this, go see a video of boxed cats
+ a feature
+     feature=cmd-feat2
+ another feature
+-    section=Example
+--> in
++    section=None
++.. qmp-example::
+ 
+-<- out
++   -> "this example"
++
++   <- "has no title"
+ doc symbol=EVT_BOXED
+     body=
+ 
+diff --git a/tests/qapi-schema/doc-good.txt b/tests/qapi-schema/doc-good.txt
+index 847db70412..cb37db606a 100644
+--- a/tests/qapi-schema/doc-good.txt
++++ b/tests/qapi-schema/doc-good.txt
+@@ -193,11 +193,9 @@ Features
+ "cmd-feat2"
+    another feature
+ 
++Note:
+ 
+-Note
+-~~~~
+-
+-"arg3" is undocumented
++  "arg3" is undocumented
+ 
+ 
+ Returns
+@@ -211,9 +209,7 @@ Errors
+ 
+ some
+ 
+-
+-Notes
+-~~~~~
++Notes:
+ 
+ * Lorem ipsum dolor sit amet
+ 
+@@ -221,20 +217,22 @@ Notes
+ 
+ Duis aute irure dolor
+ 
++Example: Ideal fast-food burger situation:
+ 
+-Example
+-~~~~~~~
+-
+-   -> in
+-   <- out
+-
++   -> "in"
++   <- "out"
+ 
+-Examples
+-~~~~~~~~
++Examples:
+ 
++   - Not a QMP code block
++   - Merely a preformatted code block literal
++   It isn't even an rST list.
+    - *verbatim*
+    - {braces}
+ 
++Note::
++   Ceci n'est pas une note
++
+ 
+ Since
+ ~~~~~
+@@ -262,13 +260,11 @@ Features
+ "cmd-feat2"
+    another feature
+ 
++Example::
+ 
+-Example
+-~~~~~~~
+-
+-   -> in
++   -> "this example"
+ 
+-   <- out
++   <- "has no title"
+ 
+ 
+ "EVT_BOXED" (Event)
+diff --git a/tests/qapi-schema/doc-interleaved-section.json b/tests/qapi-schema/doc-interleaved-section.json
+index adb29e98da..eec01ed565 100644
+--- a/tests/qapi-schema/doc-interleaved-section.json
++++ b/tests/qapi-schema/doc-interleaved-section.json
+@@ -10,7 +10,7 @@
+ #
+ #           bao
+ #
+-# Note: a section.
++# TODO: a section.
+ #
+ # @foobar: catch this
+ #
+diff --git a/tests/qemu-iotests/061 b/tests/qemu-iotests/061
+index 53c7d428e3..b71ac097d1 100755
+--- a/tests/qemu-iotests/061
++++ b/tests/qemu-iotests/061
+@@ -326,12 +326,14 @@ $QEMU_IMG amend -o "data_file=foo" "$TEST_IMG"
+ echo
+ _make_test_img -o "compat=1.1,data_file=$TEST_IMG.data" 64M
+ $QEMU_IMG amend -o "data_file=foo" "$TEST_IMG"
+-_img_info --format-specific
++$QEMU_IO -c "read 0 4k" "$TEST_IMG" 2>&1 | _filter_testdir | _filter_imgfmt
++$QEMU_IO -c "open -o data-file.filename=$TEST_IMG.data,file.filename=$TEST_IMG" -c "read 0 4k" | _filter_qemu_io
+ TEST_IMG="data-file.filename=$TEST_IMG.data,file.filename=$TEST_IMG" _img_info --format-specific --image-opts
+ 
+ echo
+ $QEMU_IMG amend -o "data_file=" --image-opts "data-file.filename=$TEST_IMG.data,file.filename=$TEST_IMG"
+-_img_info --format-specific
++$QEMU_IO -c "read 0 4k" "$TEST_IMG" 2>&1 | _filter_testdir | _filter_imgfmt
++$QEMU_IO -c "open -o data-file.filename=$TEST_IMG.data,file.filename=$TEST_IMG" -c "read 0 4k" | _filter_qemu_io
+ TEST_IMG="data-file.filename=$TEST_IMG.data,file.filename=$TEST_IMG" _img_info --format-specific --image-opts
+ 
+ echo
+diff --git a/tests/qemu-iotests/061.out b/tests/qemu-iotests/061.out
+index 139fc68177..24c33add7c 100644
+--- a/tests/qemu-iotests/061.out
++++ b/tests/qemu-iotests/061.out
+@@ -545,7 +545,9 @@ Formatting 'TEST_DIR/t.IMGFMT', fmt=IMGFMT size=67108864
+ qemu-img: data-file can only be set for images that use an external data file
+ 
+ Formatting 'TEST_DIR/t.IMGFMT', fmt=IMGFMT size=67108864 data_file=TEST_DIR/t.IMGFMT.data
+-qemu-img: Could not open 'TEST_DIR/t.IMGFMT': Could not open 'foo': No such file or directory
++qemu-io: can't open device TEST_DIR/t.IMGFMT: Could not open 'foo': No such file or directory
++read 4096/4096 bytes at offset 0
++4 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+ image: TEST_DIR/t.IMGFMT
+ file format: IMGFMT
+ virtual size: 64 MiB (67108864 bytes)
+@@ -560,7 +562,9 @@ Format specific information:
+     corrupt: false
+     extended l2: false
+ 
+-qemu-img: Could not open 'TEST_DIR/t.IMGFMT': 'data-file' is required for this image
++qemu-io: can't open device TEST_DIR/t.IMGFMT: 'data-file' is required for this image
++read 4096/4096 bytes at offset 0
++4 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+ image: TEST_DIR/t.IMGFMT
+ file format: IMGFMT
+ virtual size: 64 MiB (67108864 bytes)
+diff --git a/tests/qemu-iotests/244 b/tests/qemu-iotests/244
+index 3e61fa25bb..bb9cc6512f 100755
+--- a/tests/qemu-iotests/244
++++ b/tests/qemu-iotests/244
+@@ -215,9 +215,22 @@ $QEMU_IMG convert -f $IMGFMT -O $IMGFMT -n -C "$TEST_IMG.src" "$TEST_IMG"
+ $QEMU_IMG compare -f $IMGFMT -F $IMGFMT "$TEST_IMG.src" "$TEST_IMG"
+ 
+ # blkdebug doesn't support copy offloading, so this tests the error path
+-$QEMU_IMG amend -f $IMGFMT -o "data_file=blkdebug::$TEST_IMG.data" "$TEST_IMG"
+-$QEMU_IMG convert -f $IMGFMT -O $IMGFMT -n -C "$TEST_IMG.src" "$TEST_IMG"
+-$QEMU_IMG compare -f $IMGFMT -F $IMGFMT "$TEST_IMG.src" "$TEST_IMG"
++test_img_with_blkdebug="json:{
++    'driver': 'qcow2',
++    'file': {
++        'driver': 'file',
++        'filename': '$TEST_IMG'
++    },
++    'data-file': {
++        'driver': 'blkdebug',
++        'image': {
++            'driver': 'file',
++            'filename': '$TEST_IMG.data'
++        }
++    }
++}"
++$QEMU_IMG convert -f $IMGFMT -O $IMGFMT -n -C "$TEST_IMG.src" "$test_img_with_blkdebug"
++$QEMU_IMG compare -f $IMGFMT -F $IMGFMT "$TEST_IMG.src" "$test_img_with_blkdebug"
+ 
+ echo
+ echo "=== Flushing should flush the data file ==="
+diff --git a/tests/qemu-iotests/245 b/tests/qemu-iotests/245
+index a934c9d1e6..f96610f510 100755
+--- a/tests/qemu-iotests/245
++++ b/tests/qemu-iotests/245
+@@ -592,7 +592,7 @@ class TestBlockdevReopen(iotests.QMPTestCase):
+     @iotests.skip_if_unsupported(['compress'])
+     def test_insert_compress_filter(self):
+         # Add an image to the VM: hd (raw) -> hd0 (qcow2) -> hd0-file (file)
+-        opts = {'driver': 'raw', 'node-name': 'hd', 'file': hd_opts(0)}
++        opts = {'driver': 'raw', 'node-name': 'hd', 'file': hd_opts(0), 'discard': 'unmap'}
+         self.vm.cmd('blockdev-add', conv_keys = False, **opts)
+ 
+         # Add a 'compress' filter
+diff --git a/tests/qemu-iotests/270 b/tests/qemu-iotests/270
+index 74352342db..c37b674aa2 100755
+--- a/tests/qemu-iotests/270
++++ b/tests/qemu-iotests/270
+@@ -60,8 +60,16 @@ _make_test_img -o cluster_size=2M,data_file="$TEST_IMG.orig" \
+ # "write" 2G of data without using any space.
+ # (qemu-img create does not like it, though, because null-co does not
+ # support image creation.)
+-$QEMU_IMG amend -o data_file="json:{'driver':'null-co',,'size':'4294967296'}" \
+-    "$TEST_IMG"
++test_img_with_null_data="json:{
++    'driver': '$IMGFMT',
++    'file': {
++        'filename': '$TEST_IMG'
++    },
++    'data-file': {
++        'driver': 'null-co',
++        'size':'4294967296'
++    }
++}"
+ 
+ # This gives us a range of:
+ #   2^31 - 512 + 768 - 1 = 2^31 + 255 > 2^31
+@@ -74,7 +82,7 @@ $QEMU_IMG amend -o data_file="json:{'driver':'null-co',,'size':'4294967296'}" \
+ # on L2 boundaries, we need large L2 tables; hence the cluster size of
+ # 2 MB.  (Anything from 256 kB should work, though, because then one L2
+ # table covers 8 GB.)
+-$QEMU_IO -c "write 768 $((2 ** 31 - 512))" "$TEST_IMG" | _filter_qemu_io
++$QEMU_IO -c "write 768 $((2 ** 31 - 512))" "$test_img_with_null_data" | _filter_qemu_io
+ 
+ _check_test_img
+ 
+diff --git a/tests/qemu-iotests/testenv.py b/tests/qemu-iotests/testenv.py
+index 588f30a4f1..96d69e5696 100644
+--- a/tests/qemu-iotests/testenv.py
++++ b/tests/qemu-iotests/testenv.py
+@@ -25,7 +25,12 @@ import collections
+ import random
+ import subprocess
+ import glob
+-from typing import List, Dict, Any, Optional, ContextManager
++from typing import List, Dict, Any, Optional
++
++if sys.version_info >= (3, 9):
++    from contextlib import AbstractContextManager as ContextManager
++else:
++    from typing import ContextManager
+ 
+ DEF_GDB_OPTIONS = 'localhost:12345'
+ 
+
+-- 
+2.43.0

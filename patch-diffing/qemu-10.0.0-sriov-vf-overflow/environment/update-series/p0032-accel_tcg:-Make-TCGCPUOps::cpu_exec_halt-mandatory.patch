@@ -1,0 +1,216 @@
+From 3cebd056 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0032] accel/tcg: Make TCGCPUOps::cpu_exec_halt mandatory
+
+---
+diff --git a/include/hw/core/tcg-cpu-ops.h b/include/hw/core/tcg-cpu-ops.h
+index 099de3375e..34318cf0e6 100644
+--- a/include/hw/core/tcg-cpu-ops.h
++++ b/include/hw/core/tcg-cpu-ops.h
+@@ -122,10 +122,13 @@ struct TCGCPUOps {
+      * to do when the CPU is in the halted state.
+      *
+      * Return true to indicate that the CPU should now leave halt, false
+-     * if it should remain in the halted state.
++     * if it should remain in the halted state. (This should generally
++     * be the same value that cpu_has_work() would return.)
+      *
+-     * If this method is not provided, the default is to do nothing, and
+-     * to leave halt if cpu_has_work() returns true.
++     * This method must be provided. If the target does not need to
++     * do anything special for halt, the same function used for its
++     * CPUClass::has_work method can be used here, as they have the
++     * same function signature.
+      */
+     bool (*cpu_exec_halt)(CPUState *cpu);
+     /**
+diff --git a/include/hw/gpio/aspeed_gpio.h b/include/hw/gpio/aspeed_gpio.h
+index 904eecf62c..90a12ae318 100644
+--- a/include/hw/gpio/aspeed_gpio.h
++++ b/include/hw/gpio/aspeed_gpio.h
+@@ -75,6 +75,7 @@ struct AspeedGPIOClass {
+     uint32_t nr_gpio_pins;
+     uint32_t nr_gpio_sets;
+     const AspeedGPIOReg *reg_table;
++    unsigned reg_table_count;
+ };
+ 
+ struct AspeedGPIOState {
+diff --git a/include/hw/i2c/aspeed_i2c.h b/include/hw/i2c/aspeed_i2c.h
+index a064479e59..fad5e9259a 100644
+--- a/include/hw/i2c/aspeed_i2c.h
++++ b/include/hw/i2c/aspeed_i2c.h
+@@ -34,7 +34,7 @@
+ OBJECT_DECLARE_TYPE(AspeedI2CState, AspeedI2CClass, ASPEED_I2C)
+ 
+ #define ASPEED_I2C_NR_BUSSES 16
+-#define ASPEED_I2C_MAX_POOL_SIZE 0x800
++#define ASPEED_I2C_SHARE_POOL_SIZE 0x800
+ #define ASPEED_I2C_OLD_NUM_REG 11
+ #define ASPEED_I2C_NEW_NUM_REG 22
+ 
+@@ -257,7 +257,7 @@ struct AspeedI2CState {
+     uint32_t ctrl_global;
+     uint32_t new_clk_divider;
+     MemoryRegion pool_iomem;
+-    uint8_t pool[ASPEED_I2C_MAX_POOL_SIZE];
++    uint8_t share_pool[ASPEED_I2C_SHARE_POOL_SIZE];
+ 
+     AspeedI2CBus busses[ASPEED_I2C_NR_BUSSES];
+     MemoryRegion *dram_mr;
+@@ -283,7 +283,7 @@ struct AspeedI2CClass {
+     uint8_t *(*bus_pool_base)(AspeedI2CBus *);
+     bool check_sram;
+     bool has_dma;
+-
++    uint64_t mem_size;
+ };
+ 
+ static inline bool aspeed_i2c_is_new_mode(AspeedI2CState *s)
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 46bc411063..4e55d7ef6e 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -317,4 +317,32 @@ extern const size_t pc_compat_2_3_len;
+     } \
+     type_init(pc_machine_init_##suffix)
+ 
++#define DEFINE_PC_VER_MACHINE(namesym, namestr, initfn, ...) \
++    static void MACHINE_VER_SYM(init, namesym, __VA_ARGS__)( \
++        MachineState *machine) \
++    { \
++        initfn(machine); \
++    } \
++    static void MACHINE_VER_SYM(class_init, namesym, __VA_ARGS__)( \
++        ObjectClass *oc, \
++        void *data) \
++    { \
++        MachineClass *mc = MACHINE_CLASS(oc); \
++        MACHINE_VER_SYM(options, namesym, __VA_ARGS__)(mc); \
++        mc->init = MACHINE_VER_SYM(init, namesym, __VA_ARGS__); \
++        MACHINE_VER_DEPRECATION(__VA_ARGS__); \
++    } \
++    static const TypeInfo MACHINE_VER_SYM(info, namesym, __VA_ARGS__) = \
++    { \
++        .name       = MACHINE_VER_TYPE_NAME(namestr, __VA_ARGS__), \
++        .parent     = TYPE_PC_MACHINE, \
++        .class_init = MACHINE_VER_SYM(class_init, namesym, __VA_ARGS__), \
++    }; \
++    static void MACHINE_VER_SYM(register, namesym, __VA_ARGS__)(void) \
++    { \
++        MACHINE_VER_DELETION(__VA_ARGS__); \
++        type_register(&MACHINE_VER_SYM(info, namesym, __VA_ARGS__)); \
++    } \
++    type_init(MACHINE_VER_SYM(register, namesym, __VA_ARGS__));
++
+ #endif
+diff --git a/include/hw/intc/loongarch_extioi.h b/include/hw/intc/loongarch_extioi.h
+index eccc2e0d18..626a37dfa1 100644
+--- a/include/hw/intc/loongarch_extioi.h
++++ b/include/hw/intc/loongarch_extioi.h
+@@ -50,7 +50,6 @@
+ #define  EXTIOI_HAS_CPU_ENCODE       (3)
+ #define  EXTIOI_VIRT_HAS_FEATURES    (BIT(EXTIOI_HAS_VIRT_EXTENSION)  \
+                                       | BIT(EXTIOI_HAS_ENABLE_OPTION) \
+-                                      | BIT(EXTIOI_HAS_INT_ENCODE)    \
+                                       | BIT(EXTIOI_HAS_CPU_ENCODE))
+ #define EXTIOI_VIRT_CONFIG           (0x4)
+ #define  EXTIOI_ENABLE               (1)
+diff --git a/include/hw/loader.h b/include/hw/loader.h
+index 9844c5e3cf..7f6d06b956 100644
+--- a/include/hw/loader.h
++++ b/include/hw/loader.h
+@@ -77,15 +77,13 @@ ssize_t load_image_targphys(const char *filename, hwaddr,
+ ssize_t load_image_mr(const char *filename, MemoryRegion *mr);
+ 
+ /* This is the limit on the maximum uncompressed image size that
+- * load_image_gzipped_buffer() and load_image_gzipped() will read. It prevents
++ * load_image_gzipped_buffer() will read. It prevents
+  * g_malloc() in those functions from allocating a huge amount of memory.
+  */
+ #define LOAD_IMAGE_MAX_GUNZIP_BYTES (256 << 20)
+ 
+ ssize_t load_image_gzipped_buffer(const char *filename, uint64_t max_sz,
+                                   uint8_t **buffer);
+-ssize_t load_image_gzipped(const char *filename, hwaddr addr, uint64_t max_sz);
+-
+ /**
+  * unpack_efi_zboot_image:
+  * @buffer: pointer to a variable holding the address of a buffer containing the
+diff --git a/include/hw/loongarch/virt.h b/include/hw/loongarch/virt.h
+index 8fdfacf268..603c1cebdb 100644
+--- a/include/hw/loongarch/virt.h
++++ b/include/hw/loongarch/virt.h
+@@ -20,7 +20,7 @@
+ #define VIRT_FWCFG_BASE         0x1e020000UL
+ #define VIRT_BIOS_BASE          0x1c000000UL
+ #define VIRT_BIOS_SIZE          (16 * MiB)
+-#define VIRT_FLASH_SECTOR_SIZE  (128 * KiB)
++#define VIRT_FLASH_SECTOR_SIZE  (256 * KiB)
+ #define VIRT_FLASH0_BASE        VIRT_BIOS_BASE
+ #define VIRT_FLASH0_SIZE        VIRT_BIOS_SIZE
+ #define VIRT_FLASH1_BASE        0x1d000000UL
+diff --git a/include/hw/misc/aspeed_scu.h b/include/hw/misc/aspeed_scu.h
+index 58db28db45..356be95e45 100644
+--- a/include/hw/misc/aspeed_scu.h
++++ b/include/hw/misc/aspeed_scu.h
+@@ -349,6 +349,10 @@ uint32_t aspeed_scu_get_apb_freq(AspeedSCUState *s);
+ #define SCU_AST2600_H_PLL_BYPASS_EN                        (0x1 << 24)
+ #define SCU_AST2600_H_PLL_OFF                              (0x1 << 23)
+ 
++/* STRAP1 SCU500 */
++#define SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC            (0x1 << 2)
++#define SCU_AST2600_HW_STRAP_BOOT_SRC_SPI             (0x0 << 2)
++
+ /*
+  * SCU310   Clock Selection Register Set 4 (for Aspeed AST1030 SOC)
+  *
+diff --git a/include/hw/misc/bcm2835_property.h b/include/hw/misc/bcm2835_property.h
+index ba8896610c..2f93fd0c75 100644
+--- a/include/hw/misc/bcm2835_property.h
++++ b/include/hw/misc/bcm2835_property.h
+@@ -11,6 +11,7 @@
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+ #include "hw/display/bcm2835_fb.h"
++#include "hw/nvram/bcm2835_otp.h"
+ #include "qom/object.h"
+ 
+ #define TYPE_BCM2835_PROPERTY "bcm2835-property"
+@@ -26,6 +27,7 @@ struct BCM2835PropertyState {
+     MemoryRegion iomem;
+     qemu_irq mbox_irq;
+     BCM2835FBState *fbdev;
++    BCM2835OTPState *otp;
+ 
+     MACAddr macaddr;
+     uint32_t board_rev;
+diff --git a/include/hw/misc/macio/macio.h b/include/hw/misc/macio/macio.h
+index 2b54da6b31..16aa95b876 100644
+--- a/include/hw/misc/macio/macio.h
++++ b/include/hw/misc/macio/macio.h
+@@ -80,8 +80,6 @@ struct MACIOIDEState {
+     uint32_t channel;
+     qemu_irq real_ide_irq;
+     qemu_irq real_dma_irq;
+-    qemu_irq ide_irq;
+-    qemu_irq dma_irq;
+ 
+     MemoryRegion mem;
+     IDEBus bus;
+@@ -92,6 +90,11 @@ struct MACIOIDEState {
+     uint32_t irq_reg;
+ };
+ 
++#define MACIO_IDE_PMAC_NIRQS 2
++
++#define MACIO_IDE_PMAC_DMA_IRQ 0
++#define MACIO_IDE_PMAC_IDE_IRQ 1
++
+ void macio_ide_init_drives(MACIOIDEState *ide, DriveInfo **hd_table);
+ void macio_ide_register_dma(MACIOIDEState *ide);
+ 
+
+-- 
+2.43.0

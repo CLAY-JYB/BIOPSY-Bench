@@ -1,0 +1,27 @@
+From 212e215d Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0066] Fix memory leak when parsing invalid pattern matching (part 34/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -15078,11 +15467,11 @@ dsym_node(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+         nd_set_loc(node, loc);
+         break;
+       case NODE_STR:
+-        lit = RNODE_STR(node)->nd_lit;
++        lit = rb_node_str_string_val(node);
+         node = NEW_SYM(lit, loc);
+         break;
+       default:
+-        node = NEW_DSYM(Qnil, 1, NEW_LIST(node, loc), loc);
++        node = NEW_DSYM(0, 1, NEW_LIST(node, loc), loc);
+         break;
+     }
+     return node;
+
+-- 
+2.43.0

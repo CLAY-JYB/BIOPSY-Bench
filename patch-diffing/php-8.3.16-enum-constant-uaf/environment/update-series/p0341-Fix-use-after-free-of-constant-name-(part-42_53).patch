@@ -1,0 +1,24 @@
+From 386e3b62 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0341] Fix use-after-free of constant name (part 42/53)
+
+---
+diff --git a/Zend/zend_fibers.c b/Zend/zend_fibers.c
+index 6a22d5c4..c80d6586 100644
+--- a/Zend/zend_fibers.c
++++ b/Zend/zend_fibers.c
+@@ -572,6 +554,10 @@ static zend_always_inline zend_fiber_transfer zend_fiber_resume(zend_fiber *fibe
+ {
+ 	zend_fiber *previous = EG(active_fiber);
+ 
++	if (previous) {
++		previous->execute_data = EG(current_execute_data);
++	}
++
+ 	fiber->caller = EG(current_fiber_context);
+ 	EG(active_fiber) = fiber;
+ 
+
+-- 
+2.43.0

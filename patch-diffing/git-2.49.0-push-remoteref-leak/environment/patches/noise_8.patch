@@ -1,0 +1,178 @@
+diff --git a/commit.c b/commit.c
+index 24ab5c1b..3238772f 100644
+--- a/commit.c
++++ b/commit.c
+@@ -84,13 +84,19 @@ struct commit *lookup_commit(struct repository *r, const struct object_id *oid)
+ }
+ 
+ struct commit *lookup_commit_reference_by_name(const char *name)
++{
++	return lookup_commit_reference_by_name_gently(name, 0);
++}
++
++struct commit *lookup_commit_reference_by_name_gently(const char *name,
++						      int quiet)
+ {
+ 	struct object_id oid;
+ 	struct commit *commit;
+ 
+ 	if (repo_get_oid_committish(the_repository, name, &oid))
+ 		return NULL;
+-	commit = lookup_commit_reference(the_repository, &oid);
++	commit = lookup_commit_reference_gently(the_repository, &oid, quiet);
+ 	if (repo_parse_commit(the_repository, commit))
+ 		return NULL;
+ 	return commit;
+diff --git a/commit.h b/commit.h
+index d62b1d93..0e5fce54 100644
+--- a/commit.h
++++ b/commit.h
+@@ -81,6 +81,8 @@ struct commit *lookup_commit_reference_gently(struct repository *r,
+ 					      const struct object_id *oid,
+ 					      int quiet);
+ struct commit *lookup_commit_reference_by_name(const char *name);
++struct commit *lookup_commit_reference_by_name_gently(const char *name,
++						      int quiet);
+ 
+ /*
+  * Look up object named by "oid", dereference tag as necessary,
+diff --git a/compat/mingw.c b/compat/mingw.c
+index 29d3f097..eb13c02a 100644
+--- a/compat/mingw.c
++++ b/compat/mingw.c
+@@ -243,7 +243,8 @@ static enum hide_dotfiles_type hide_dotfiles = HIDE_DOTFILES_DOTGITONLY;
+ static char *unset_environment_variables;
+ 
+ int mingw_core_config(const char *var, const char *value,
+-		      const struct config_context *ctx, void *cb)
++		      const struct config_context *ctx UNUSED,
++		      void *cb UNUSED)
+ {
+ 	if (!strcmp(var, "core.hidedotfiles")) {
+ 		if (value && !strcasecmp(value, "dotgitonly"))
+@@ -453,7 +454,7 @@ static int set_hidden_flag(const wchar_t *path, int set)
+ 	return -1;
+ }
+ 
+-int mingw_mkdir(const char *path, int mode)
++int mingw_mkdir(const char *path, int mode UNUSED)
+ {
+ 	int ret;
+ 	wchar_t wpath[MAX_PATH];
+@@ -597,7 +598,7 @@ int mingw_open (const char *filename, int oflags, ...)
+ 	return fd;
+ }
+ 
+-static BOOL WINAPI ctrl_ignore(DWORD type)
++static BOOL WINAPI ctrl_ignore(DWORD type UNUSED)
+ {
+ 	return TRUE;
+ }
+@@ -1085,7 +1086,7 @@ int mkstemp(char *template)
+ 	return git_mkstemp_mode(template, 0600);
+ }
+ 
+-int gettimeofday(struct timeval *tv, void *tz)
++int gettimeofday(struct timeval *tv, void *tz UNUSED)
+ {
+ 	FILETIME ft;
+ 	long long hnsec;
+@@ -2252,7 +2253,7 @@ char *mingw_query_user_email(void)
+ 	return get_extended_user_info(NameUserPrincipal);
+ }
+ 
+-struct passwd *getpwuid(int uid)
++struct passwd *getpwuid(int uid UNUSED)
+ {
+ 	static unsigned initialized;
+ 	static char user_name[100];
+@@ -2304,7 +2305,7 @@ static sig_handler_t timer_fn = SIG_DFL, sigint_fn = SIG_DFL;
+  * length to call the signal handler.
+  */
+ 
+-static unsigned __stdcall ticktack(void *dummy)
++static unsigned __stdcall ticktack(void *dummy UNUSED)
+ {
+ 	while (WaitForSingleObject(timer_event, timer_interval) == WAIT_TIMEOUT) {
+ 		mingw_raise(SIGALRM);
+@@ -2352,7 +2353,7 @@ static inline int is_timeval_eq(const struct timeval *i1, const struct timeval *
+ 	return i1->tv_sec == i2->tv_sec && i1->tv_usec == i2->tv_usec;
+ }
+ 
+-int setitimer(int type, struct itimerval *in, struct itimerval *out)
++int setitimer(int type UNUSED, struct itimerval *in, struct itimerval *out)
+ {
+ 	static const struct timeval zero;
+ 	static int atexit_done;
+diff --git a/compat/mingw.h b/compat/mingw.h
+index 27b61284..ebfb8ba4 100644
+--- a/compat/mingw.h
++++ b/compat/mingw.h
+@@ -122,17 +122,17 @@ struct utsname {
+  * trivial stubs
+  */
+ 
+-static inline int readlink(const char *path, char *buf, size_t bufsiz)
++static inline int readlink(const char *path UNUSED, char *buf UNUSED, size_t bufsiz UNUSED)
+ { errno = ENOSYS; return -1; }
+-static inline int symlink(const char *oldpath, const char *newpath)
++static inline int symlink(const char *oldpath UNUSED, const char *newpath UNUSED)
+ { errno = ENOSYS; return -1; }
+-static inline int fchmod(int fildes, mode_t mode)
++static inline int fchmod(int fildes UNUSED, mode_t mode UNUSED)
+ { errno = ENOSYS; return -1; }
+ #ifndef __MINGW64_VERSION_MAJOR
+ static inline pid_t fork(void)
+ { errno = ENOSYS; return -1; }
+ #endif
+-static inline unsigned int alarm(unsigned int seconds)
++static inline unsigned int alarm(unsigned int seconds UNUSED)
+ { return 0; }
+ static inline int fsync(int fd)
+ { return _commit(fd); }
+@@ -140,9 +140,9 @@ static inline void sync(void)
+ {}
+ static inline uid_t getuid(void)
+ { return 1; }
+-static inline struct passwd *getpwnam(const char *name)
++static inline struct passwd *getpwnam(const char *name UNUSED)
+ { return NULL; }
+-static inline int fcntl(int fd, int cmd, ...)
++static inline int fcntl(int fd UNUSED, int cmd, ...)
+ {
+ 	if (cmd == F_GETFD || cmd == F_SETFD)
+ 		return 0;
+@@ -151,17 +151,17 @@ static inline int fcntl(int fd, int cmd, ...)
+ }
+ 
+ #define sigemptyset(x) (void)0
+-static inline int sigaddset(sigset_t *set, int signum)
++static inline int sigaddset(sigset_t *set UNUSED, int signum UNUSED)
+ { return 0; }
+ #define SIG_BLOCK 0
+ #define SIG_UNBLOCK 0
+-static inline int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
++static inline int sigprocmask(int how UNUSED, const sigset_t *set UNUSED, sigset_t *oldset UNUSED)
+ { return 0; }
+ static inline pid_t getppid(void)
+ { return 1; }
+ static inline pid_t getpgid(pid_t pid)
+ { return pid == 0 ? getpid() : pid; }
+-static inline pid_t tcgetpgrp(int fd)
++static inline pid_t tcgetpgrp(int fd UNUSED)
+ { return getpid(); }
+ 
+ /*
+diff --git a/compat/nedmalloc/nedmalloc.c b/compat/nedmalloc/nedmalloc.c
+index 2c0ace70..145255da 100644
+--- a/compat/nedmalloc/nedmalloc.c
++++ b/compat/nedmalloc/nedmalloc.c
+@@ -31,6 +31,8 @@ DEALINGS IN THE SOFTWARE.
+ /*#pragma optimize("a", on)*/
+ #endif
+ 
++#pragma GCC diagnostic ignored "-Wunused-parameter"
++
+ /*#define FULLSANITYCHECKS*/
+ 
+ #include "nedmalloc.h"

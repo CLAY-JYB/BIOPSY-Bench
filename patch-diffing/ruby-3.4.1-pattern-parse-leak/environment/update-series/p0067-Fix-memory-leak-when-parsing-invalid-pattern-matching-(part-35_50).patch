@@ -1,0 +1,59 @@
+From 6de61c3a Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0067] Fix memory leak when parsing invalid pattern matching (part 35/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -15101,20 +15490,43 @@ nd_type_st_key_enable_p(NODE *node)
+       case NODE_SYM:
+       case NODE_LINE:
+       case NODE_FILE:
++      case NODE_ENCODING:
+         return true;
+       default:
+         return false;
+     }
+ }
+ 
+-static VALUE
++static NODE *
+ nd_st_key(struct parser_params *p, NODE *node)
++{
++    switch (nd_type(node)) {
++      case NODE_LIT:
++        return (NODE *)RNODE_LIT(node)->nd_lit;
++      case NODE_STR:
++      case NODE_INTEGER:
++      case NODE_FLOAT:
++      case NODE_RATIONAL:
++      case NODE_IMAGINARY:
++      case NODE_SYM:
++      case NODE_LINE:
++      case NODE_ENCODING:
++      case NODE_FILE:
++        return node;
++      default:
++        rb_bug("unexpected node: %s", ruby_node_name(nd_type(node)));
++        UNREACHABLE_RETURN(0);
++    }
++}
++
++static VALUE
++nd_value(struct parser_params *p, NODE *node)
+ {
+     switch (nd_type(node)) {
+       case NODE_LIT:
+         return RNODE_LIT(node)->nd_lit;
+       case NODE_STR:
+-        return RNODE_STR(node)->nd_lit;
++        return rb_node_str_string_val(node);
+       case NODE_INTEGER:
+         return rb_node_integer_literal_val(node);
+       case NODE_FLOAT:
+
+-- 
+2.43.0

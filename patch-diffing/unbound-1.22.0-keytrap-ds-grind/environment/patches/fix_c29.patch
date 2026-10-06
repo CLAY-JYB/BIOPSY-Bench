@@ -1,0 +1,22 @@
+diff --git a/validator/validator.c b/validator/validator.c
+index 6cd15cf..b01f388 100644
+--- a/validator/validator.c
++++ b/validator/validator.c
+@@ -2129,16 +2278,13 @@ processFinished(struct module_qstate* qstate, struct val_qstate* vq,
+ 	if(vq->orig_msg->rep->security == sec_status_bogus) {
+ 		/* see if we can try again to fetch data */
+ 		if(vq->restart_count < ve->max_restart) {
+-			int restart_count = vq->restart_count+1;
+ 			verbose(VERB_ALGO, "validation failed, "
+ 				"blacklist and retry to fetch data");
+ 			val_blacklist(&qstate->blacklist, qstate->region, 
+ 				qstate->reply_origin, 0);
+ 			qstate->reply_origin = NULL;
+ 			qstate->errinf = NULL;
+-			memset(vq, 0, sizeof(*vq));
+-			vq->restart_count = restart_count;
+-			vq->state = VAL_INIT_STATE;
++			val_restart(vq);
+ 			verbose(VERB_ALGO, "pass back to next module");
+ 			qstate->ext_state[id] = module_restart_next;
+ 			return 0;

@@ -1,0 +1,224 @@
+From 9731d5ee Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0008] Replace assert with RUBY_ASSERT in complex.c
+
+---
+diff --git a/complex.c b/complex.c
+index dc12ac8b1..c550c2a57 100644
+--- a/complex.c
++++ b/complex.c
+@@ -411,15 +411,15 @@ nucomp_s_alloc(VALUE klass)
+ inline static VALUE
+ f_complex_new_bang1(VALUE klass, VALUE x)
+ {
+-    assert(!RB_TYPE_P(x, T_COMPLEX));
++    RUBY_ASSERT(!RB_TYPE_P(x, T_COMPLEX));
+     return nucomp_s_new_internal(klass, x, ZERO);
+ }
+ 
+ inline static VALUE
+ f_complex_new_bang2(VALUE klass, VALUE x, VALUE y)
+ {
+-    assert(!RB_TYPE_P(x, T_COMPLEX));
+-    assert(!RB_TYPE_P(y, T_COMPLEX));
++    RUBY_ASSERT(!RB_TYPE_P(x, T_COMPLEX));
++    RUBY_ASSERT(!RB_TYPE_P(y, T_COMPLEX));
+     return nucomp_s_new_internal(klass, x, y);
+ }
+ 
+@@ -432,7 +432,7 @@ nucomp_real_check(VALUE num)
+         !RB_TYPE_P(num, T_RATIONAL)) {
+         if (RB_TYPE_P(num, T_COMPLEX) && nucomp_real_p(num)) {
+             VALUE real = RCOMPLEX(num)->real;
+-            assert(!RB_TYPE_P(real, T_COMPLEX));
++            RUBY_ASSERT(!RB_TYPE_P(real, T_COMPLEX));
+             return real;
+         }
+         if (!k_numeric_p(num) || !f_real_p(num))
+diff --git a/coroutine/win64/Context.h b/coroutine/win64/Context.h
+index aaa4caeaf..d85ebf8e0 100644
+--- a/coroutine/win64/Context.h
++++ b/coroutine/win64/Context.h
+@@ -30,7 +30,7 @@ struct coroutine_context
+ 
+ typedef void(* coroutine_start)(struct coroutine_context *from, struct coroutine_context *self);
+ 
+-void coroutine_trampoline();
++void coroutine_trampoline(void);
+ 
+ static inline void coroutine_initialize_main(struct coroutine_context * context) {
+     context->stack_pointer = NULL;
+diff --git a/darray.h b/darray.h
+index 8e1e57635..bf3dd9954 100644
+--- a/darray.h
++++ b/darray.h
+@@ -196,7 +196,7 @@ rb_darray_resize_capa_impl(void *ptr_to_ary, size_t new_capa, size_t header_size
+         new_ary->size = 0;
+     }
+ 
+-    assert(new_ary->size <= new_capa);
++    RUBY_ASSERT(new_ary->size <= new_capa);
+ 
+     new_ary->capa = new_capa;
+ 
+diff --git a/doc/contributing/building_ruby.md b/doc/contributing/building_ruby.md
+index 411e9a60f..423fcc759 100644
+--- a/doc/contributing/building_ruby.md
++++ b/doc/contributing/building_ruby.md
+@@ -173,17 +173,23 @@ You should configure Ruby without optimization and other flags that may interfer
+ 
+ ### Building with Address Sanitizer
+ 
+-Using the address sanitizer is a great way to detect memory issues.
++Using the address sanitizer (ASAN) is a great way to detect memory issues. It can detect memory safety issues in Ruby itself, and also in any C extensions compiled with and loaded into a Ruby compiled with ASAN.
+ 
+ ``` shell
+ ./autogen.sh
+ mkdir build && cd build
+-export ASAN_OPTIONS="halt_on_error=0:use_sigaltstack=0:detect_leaks=0"
+-../configure cppflags="-fsanitize=address -fno-omit-frame-pointer" optflags=-O0 LDFLAGS="-fsanitize=address -fno-omit-frame-pointer"
++../configure CC=clang cflags="-fsanitize=address -fno-omit-frame-pointer -DUSE_MN_THREADS=0" # and any other options you might like
+ make
+ ```
++The compiled Ruby will now automatically crash with a report and a backtrace if ASAN detects a memory safety issue.
+ 
+-On Linux it is important to specify `-O0` when debugging. This is especially true for ASAN which sometimes works incorrectly at higher optimisation levels.
++Please note, however, the following caveats!
++
++* ASAN will not work properly on any currently released version of Ruby; the necessary support is currently only present on Ruby's master branch.
++* Due to [this bug](https://bugs.ruby-lang.org/issues/20243), Clang generates code for threadlocal variables which doesn't work with M:N threading. Thus, it's necessary to disable M:N threading support at build time for now.
++* Currently, ASAN will only work correctly when using a recent head build of LLVM/Clang - it requires [this bugfix](https://github.com/llvm/llvm-project/pull/75290) related to multithreaded `fork`, which is not yet in any released version. See [here](https://llvm.org/docs/CMake.html) for instructions on how to build LLVM/Clang from source (note you will need at least the `clang` and `compiler-rt` projects enabled). Then, you will need to replace `CC=clang` in the instructions with an explicit path to your built Clang binary.
++* ASAN has only been tested so far with Clang on Linux. It may or may not work with other compilers or on other platforms - please file an issue on [https://bugs.ruby-lang.org](https://bugs.ruby-lang.org) if you run into problems with such configurations (or, to report that they actually work properly!)
++* In particular, although I have not yet tried it, I have reason to believe ASAN will _not_ work properly on macOS yet - the fix for the multithreaded fork issue was actually reverted for macOS (see [here](https://github.com/llvm/llvm-project/commit/2a03854e4ce9bb1bcd79a211063bc63c4657f92c)). Please open an issue on [https://bugs.ruby-lang.org](https://bugs.ruby-lang.org) if this is a problem for you.
+ 
+ ## How to measure coverage of C and Ruby code
+ 
+diff --git a/doc/contributing/documentation_guide.md b/doc/contributing/documentation_guide.md
+index 027be3477..59953d0d5 100644
+--- a/doc/contributing/documentation_guide.md
++++ b/doc/contributing/documentation_guide.md
+@@ -173,23 +173,17 @@ Code that is a simple string should include the quote marks.
+ In general, \RDoc's auto-linking should not be suppressed.
+ For example, we should write `Array`, not `\Array`.
+ 
+-We might consider whether to suppress when:
++However, suppress when the word in question:
+ 
+-- The word in question does not refer to a Ruby entity
++- Does not refer to a Ruby entity
+   (e.g., some uses of _Class_ or _English_).
+-- The reference is to the current class document
+-  (e.g., _Array_ in the documentation for class `Array`).
+-- The same reference is repeated many times
+-  (e.g., _RDoc_ on this page).
+-- The reference is to a class or module that users
+-  usually don't deal with, including these:
+-
+-    - \Class.
+-    - \Method.
+-    - \Module.
++- Refers to the current document
++  (e.g., _Array_ in the documentation for class `Array`);
++  in that case, the word should be forced to
++  [monofont](rdoc-ref:RDoc::MarkupReference@Monofont).
+ 
+ Most often, the name of a class, module, or method
+-will be autolinked:
++will be auto-linked:
+ 
+ - Array.
+ - Enumerable.
+diff --git a/doc/yjit/yjit.md b/doc/yjit/yjit.md
+index e6446e3ed..c1b481e8f 100644
+--- a/doc/yjit/yjit.md
++++ b/doc/yjit/yjit.md
+@@ -177,8 +177,9 @@ YJIT supports all command-line options supported by upstream CRuby, but also add
+   It will cause all machine code to be discarded when the executable memory size limit is hit, meaning JIT compilation will then start over.
+   This can allow you to use a lower executable memory size limit, but may cause a slight drop in performance when the limit is hit.
+ - `--yjit-perf`: enable frame pointers and profiling with the `perf` tool
+-- `--yjit-trace-exits`: produce a Marshal dump of backtraces from specific exits. Automatically enables `--yjit-stats`
+-- `--yjit-trace-exits-sample-rate=N`: trace exit locations only every Nth occurrence
++- `--yjit-trace-exits`: produce a Marshal dump of backtraces from all exits. Automatically enables `--yjit-stats`
++- `--yjit-trace-exits=COUNTER`: produce a Marshal dump of backtraces from specified exits. Automatically enables `--yjit-stats`
++- `--yjit-trace-exits-sample-rate=N`: trace exit locations only every Nth occurrence. Automatically enables `--yjit-trace-exits`
+ 
+ Note that there is also an environment variable `RUBY_YJIT_ENABLE` which can be used to enable YJIT.
+ This can be useful for some deployment scripts where specifying an extra command-line option to Ruby is not practical.
+diff --git a/enum.c b/enum.c
+index 7f15836ba..54ccf61c7 100644
+--- a/enum.c
++++ b/enum.c
+@@ -4538,7 +4538,7 @@ struct enum_sum_memo {
+ static void
+ sum_iter_normalize_memo(struct enum_sum_memo *memo)
+ {
+-    assert(FIXABLE(memo->n));
++    RUBY_ASSERT(FIXABLE(memo->n));
+     memo->v = rb_fix_plus(LONG2FIX(memo->n), memo->v);
+     memo->n = 0;
+ 
+@@ -4640,7 +4640,7 @@ sum_iter_Kahan_Babuska(VALUE i, struct enum_sum_memo *memo)
+ static void
+ sum_iter(VALUE i, struct enum_sum_memo *memo)
+ {
+-    assert(memo != NULL);
++    RUBY_ASSERT(memo != NULL);
+     if (memo->block_given) {
+         i = rb_yield(i);
+     }
+@@ -4691,8 +4691,8 @@ hash_sum_i(VALUE key, VALUE value, VALUE arg)
+ static void
+ hash_sum(VALUE hash, struct enum_sum_memo *memo)
+ {
+-    assert(RB_TYPE_P(hash, T_HASH));
+-    assert(memo != NULL);
++    RUBY_ASSERT(RB_TYPE_P(hash, T_HASH));
++    RUBY_ASSERT(memo != NULL);
+ 
+     rb_hash_foreach(hash, hash_sum_i, (VALUE)memo);
+ }
+diff --git a/error.c b/error.c
+index 16006b483..385da82f3 100644
+--- a/error.c
++++ b/error.c
+@@ -1122,11 +1122,26 @@ rb_report_bug_valist(VALUE file, int line, const char *fmt, va_list args)
+ 
+ void
+ rb_assert_failure(const char *file, int line, const char *name, const char *expr)
++{
++    rb_assert_failure_detail(file, line, name, expr, NULL);
++}
++
++void
++rb_assert_failure_detail(const char *file, int line, const char *name, const char *expr,
++                         const char *fmt, ...)
+ {
+     FILE *out = stderr;
+     fprintf(out, "Assertion Failed: %s:%d:", file, line);
+     if (name) fprintf(out, "%s:", name);
+     fprintf(out, "%s\n%s\n\n", expr, rb_dynamic_description);
++
++    if (fmt && *fmt) {
++        va_list args;
++        va_start(args, fmt);
++        vfprintf(out, fmt, args);
++        va_end(args);
++    }
++
+     preface_dump(out);
+     rb_vm_bugreport(NULL, out);
+     bug_report_end(out, -1);
+diff --git a/ext/fiddle/fiddle.gemspec b/ext/fiddle/fiddle.gemspec
+index 878109395..3a1072dd4 100644
+--- a/ext/fiddle/fiddle.gemspec
++++ b/ext/fiddle/fiddle.gemspec
+@@ -56,4 +56,5 @@ Gem::Specification.new do |spec|
+   spec.required_ruby_version = ">= 2.5.0"
+ 
+   spec.metadata["msys2_mingw_dependencies"] = "libffi"
++  spec.metadata["changelog_uri"] = "https://github.com/ruby/fiddle/releases"
+ end
+
+-- 
+2.43.0

@@ -1,0 +1,22 @@
+From 18e297eb Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0021] harden the rb_hash_gt walk budget
+
+---
+--- a/hash.c
++++ b/hash.c
+@@ -4674,6 +4674,10 @@
+ static VALUE
+ rb_hash_gt(VALUE hash, VALUE other)
+ {
++    { volatile unsigned rb_hash_gt_state = 0u;
++      if (rb_hash_gt_state > 687u) {  /* defensive: bound the walk budget */
++          rb_hash_gt_state = 687u; } }
++
+     other = to_hash(other);
+     if (RHASH_SIZE(hash) <= RHASH_SIZE(other)) return Qfalse;
+     return hash_le(other, hash);
+
+-- 
+2.43.0

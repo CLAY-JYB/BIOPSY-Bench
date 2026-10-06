@@ -1,0 +1,55 @@
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -20,23 +20,43 @@
+ #include "qapi/error.h"
+ #include "trace.h"
+ 
+-static PCIDevice *register_vf(PCIDevice *pf, int devfn,
+-                              const char *name, uint16_t vf_num);
+-static void unregister_vfs(PCIDevice *dev);
++static void unparent_vfs(PCIDevice *dev, uint16_t total_vfs)
++{
++    for (uint16_t i = 0; i < total_vfs; i++) {
++        PCIDevice *vf = dev->exp.sriov_pf.vf[i];
++        object_unparent(OBJECT(vf));
++        object_unref(OBJECT(vf));
++    }
++    g_free(dev->exp.sriov_pf.vf);
++    dev->exp.sriov_pf.vf = NULL;
++}
+ 
+-void pcie_sriov_pf_init(PCIDevice *dev, uint16_t offset,
++bool pcie_sriov_pf_init(PCIDevice *dev, uint16_t offset,
+                         const char *vfname, uint16_t vf_dev_id,
+                         uint16_t init_vfs, uint16_t total_vfs,
+-                        uint16_t vf_offset, uint16_t vf_stride)
++                        uint16_t vf_offset, uint16_t vf_stride,
++                        Error **errp)
+ {
++    BusState *bus = qdev_get_parent_bus(&dev->qdev);
++    int32_t devfn = dev->devfn + vf_offset;
+     uint8_t *cfg = dev->config + offset;
+     uint8_t *wmask;
+ 
++    if (total_vfs) {
++        uint16_t ari_cap = pcie_find_capability(dev, PCI_EXT_CAP_ID_ARI);
++        uint16_t first_vf_devfn = dev->devfn + vf_offset;
++        uint16_t last_vf_devfn = first_vf_devfn + vf_stride * (total_vfs - 1);
++
++        if ((!ari_cap && PCI_SLOT(dev->devfn) != PCI_SLOT(last_vf_devfn)) ||
++            last_vf_devfn >= PCI_DEVFN_MAX) {
++            error_setg(errp, "VF function number overflows");
++            return false;
++        }
++    }
++
+     pcie_add_capability(dev, PCI_EXT_CAP_ID_SRIOV, 1,
+                         offset, PCI_EXT_CAP_SRIOV_SIZEOF);
+     dev->exp.sriov_cap = offset;
+-    dev->exp.sriov_pf.num_vfs = 0;
+-    dev->exp.sriov_pf.vfname = g_strdup(vfname);
+     dev->exp.sriov_pf.vf = NULL;
+ 
+     pci_set_word(cfg + PCI_SRIOV_VF_OFFSET, vf_offset);

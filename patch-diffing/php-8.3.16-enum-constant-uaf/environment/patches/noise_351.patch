@@ -1,0 +1,84 @@
+diff --git a/ext/tokenizer/tokenizer_data_gen.php b/ext/tokenizer/tokenizer_data_gen.php
+old mode 100755
+new mode 100644
+index 1d83cb55..b9659e9f
+--- a/ext/tokenizer/tokenizer_data_gen.php
++++ b/ext/tokenizer/tokenizer_data_gen.php
+@@ -1,9 +1,8 @@
+-#!/usr/bin/env php
+ <?php
+ 
+-$infile = __DIR__ . '/../../Zend/zend_language_parser.y';
+-$outfile_stub = __DIR__ . '/tokenizer_data.stub.php';
+-$outfile_c = __DIR__ . '/tokenizer_data.c';
++$rootDir = __DIR__ . '/../..';
++$infile = $rootDir . '/Zend/zend_language_parser.y';
++$outfile = $rootDir . '/ext/tokenizer/tokenizer_data.c';
+ 
+ if (!file_exists($infile)) {
+     fwrite(STDERR, <<<ERROR
+@@ -16,27 +15,9 @@ ERROR
+     exit(1);
+ }
+ 
+-$result = "<?php\n\n/** @generate-class-entries */\n\n";
++$result = '';
+ 
+-$incontent = file_get_contents($infile);
+-preg_match_all('(^%token.*\b(?<token_name>T_.*?)\b)m', $incontent, $matches);
+-
+-foreach ($matches['token_name'] as $tokenName) {
+-    if ($tokenName === 'T_NOELSE' || $tokenName === 'T_ERROR') {
+-        continue;
+-    }
+-    $result .= "/**\n * @var int\n * @cvalue $tokenName\n */\n";
+-    $result .= "const $tokenName = UNKNOWN;\n";
+-}
+-
+-$result .= "/**\n * @var int\n * @cvalue T_PAAMAYIM_NEKUDOTAYIM\n */\n";
+-$result .= "const T_DOUBLE_COLON = UNKNOWN;\n";
+-
+-file_put_contents($outfile_stub, $result);
+-
+-echo "Wrote $outfile_stub\n";
+-
+-$result = <<<CODE
++$result .= <<<CODE
+ /*
+    +----------------------------------------------------------------------+
+    | Copyright (c) The PHP Group                                          |
+@@ -62,6 +43,25 @@ $result = <<<CODE
+ #include "zend.h"
+ #include <zend_language_parser.h>
+ 
++
++void tokenizer_register_constants(INIT_FUNC_ARGS) {
++
++CODE;
++
++$incontent = file_get_contents($infile);
++preg_match_all('(^%token.*\b(?<token_name>T_.*?)\b)m', $incontent, $matches);
++
++foreach ($matches['token_name'] as $tokenName) {
++    if ($tokenName === 'T_NOELSE' || $tokenName === 'T_ERROR') {
++        continue;
++    }
++    $result .= "\tREGISTER_LONG_CONSTANT(\"$tokenName\", $tokenName, CONST_CS | CONST_PERSISTENT);\n";
++}
++$result .= "\tREGISTER_LONG_CONSTANT(\"T_DOUBLE_COLON\", T_PAAMAYIM_NEKUDOTAYIM, CONST_CS | CONST_PERSISTENT);\n";
++
++$result .= <<<CODE
++}
++
+ char *get_token_type_name(int token_type)
+ {
+ \tswitch (token_type) {
+@@ -89,6 +89,6 @@ $result .= <<<CODE
+ 
+ CODE;
+ 
+-file_put_contents($outfile_c, $result);
++file_put_contents($outfile, $result);
+ 
+-echo "Wrote $outfile_c\n";
++echo "Wrote $outfile\n";

@@ -1,0 +1,447 @@
+diff --git a/target/sh4/cpu.c b/target/sh4/cpu.c
+index 618aa7154e..8f07261dcf 100644
+--- a/target/sh4/cpu.c
++++ b/target/sh4/cpu.c
+@@ -254,6 +254,7 @@ static const TCGCPUOps superh_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = superh_cpu_tlb_fill,
+     .cpu_exec_interrupt = superh_cpu_exec_interrupt,
++    .cpu_exec_halt = superh_cpu_has_work,
+     .do_interrupt = superh_cpu_do_interrupt,
+     .do_unaligned_access = superh_cpu_do_unaligned_access,
+     .io_recompile_replay_branch = superh_io_recompile_replay_branch,
+diff --git a/target/sparc/cpu.c b/target/sparc/cpu.c
+index 9bacfb68cb..54cb269e0a 100644
+--- a/target/sparc/cpu.c
++++ b/target/sparc/cpu.c
+@@ -926,6 +926,7 @@ static const TCGCPUOps sparc_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = sparc_cpu_tlb_fill,
+     .cpu_exec_interrupt = sparc_cpu_exec_interrupt,
++    .cpu_exec_halt = sparc_cpu_has_work,
+     .do_interrupt = sparc_cpu_do_interrupt,
+     .do_transaction_failed = sparc_cpu_do_transaction_failed,
+     .do_unaligned_access = sparc_cpu_do_unaligned_access,
+diff --git a/target/tricore/cpu.c b/target/tricore/cpu.c
+index bdefb84511..1a26171590 100644
+--- a/target/tricore/cpu.c
++++ b/target/tricore/cpu.c
+@@ -155,6 +155,11 @@ static void tc37x_initfn(Object *obj)
+     set_feature(&cpu->env, TRICORE_FEATURE_162);
+ }
+ 
++static bool tricore_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
++{
++    /* Interrupts are not implemented */
++    return false;
++}
+ 
+ #include "hw/core/sysemu-cpu-ops.h"
+ 
+@@ -169,6 +174,8 @@ static const TCGCPUOps tricore_tcg_ops = {
+     .synchronize_from_tb = tricore_cpu_synchronize_from_tb,
+     .restore_state_to_opc = tricore_restore_state_to_opc,
+     .tlb_fill = tricore_cpu_tlb_fill,
++    .cpu_exec_interrupt = tricore_cpu_exec_interrupt,
++    .cpu_exec_halt = tricore_cpu_has_work,
+ };
+ 
+ static void tricore_cpu_class_init(ObjectClass *c, void *data)
+diff --git a/target/xtensa/cpu.c b/target/xtensa/cpu.c
+index de907cfeb1..a08c7a0b1f 100644
+--- a/target/xtensa/cpu.c
++++ b/target/xtensa/cpu.c
+@@ -234,6 +234,7 @@ static const TCGCPUOps xtensa_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = xtensa_cpu_tlb_fill,
+     .cpu_exec_interrupt = xtensa_cpu_exec_interrupt,
++    .cpu_exec_halt = xtensa_cpu_has_work,
+     .do_interrupt = xtensa_cpu_do_interrupt,
+     .do_transaction_failed = xtensa_cpu_do_transaction_failed,
+     .do_unaligned_access = xtensa_cpu_do_unaligned_access,
+diff --git a/tcg/meson.build b/tcg/meson.build
+index ffbe754d8b..69ebb4908a 100644
+--- a/tcg/meson.build
++++ b/tcg/meson.build
+@@ -31,20 +31,20 @@ tcg_ss = tcg_ss.apply({})
+ 
+ libtcg_user = static_library('tcg_user',
+                              tcg_ss.sources() + genh,
+-                             name_suffix: 'fa',
+                              dependencies: tcg_ss.dependencies(),
+                              c_args: '-DCONFIG_USER_ONLY',
+                              build_by_default: false)
+ 
+-tcg_user = declare_dependency(link_with: libtcg_user)
++tcg_user = declare_dependency(objects: libtcg_user.extract_all_objects(recursive: false),
++                              dependencies: tcg_ss.dependencies())
+ user_ss.add(tcg_user)
+ 
+ libtcg_system = static_library('tcg_system',
+                                 tcg_ss.sources() + genh,
+-                                name_suffix: 'fa',
+                                 dependencies: tcg_ss.dependencies(),
+                                 c_args: '-DCONFIG_SOFTMMU',
+                                 build_by_default: false)
+ 
+-tcg_system = declare_dependency(link_with: libtcg_system)
++tcg_system = declare_dependency(objects: libtcg_system.extract_all_objects(recursive: false),
++                                dependencies: tcg_ss.dependencies())
+ system_ss.add(tcg_system)
+diff --git a/tcg/optimize.c b/tcg/optimize.c
+index 8886f7037a..ba16ec27e2 100644
+--- a/tcg/optimize.c
++++ b/tcg/optimize.c
+@@ -2384,7 +2384,7 @@ static bool fold_setcond2(OptContext *ctx, TCGOp *op)
+ 
+     case TCG_COND_TSTEQ:
+     case TCG_COND_TSTNE:
+-        if (arg_is_const_val(op->args[2], 0)) {
++        if (arg_is_const_val(op->args[3], 0)) {
+             goto do_setcond_high;
+         }
+         if (arg_is_const_val(op->args[4], 0)) {
+diff --git a/tcg/riscv/tcg-target.c.inc b/tcg/riscv/tcg-target.c.inc
+index 639363039b..d334857226 100644
+--- a/tcg/riscv/tcg-target.c.inc
++++ b/tcg/riscv/tcg-target.c.inc
+@@ -113,20 +113,6 @@ static const int tcg_target_call_iarg_regs[] = {
+     TCG_REG_A7,
+ };
+ 
+-#ifndef have_zbb
+-bool have_zbb;
+-#endif
+-#if defined(__riscv_arch_test) && defined(__riscv_zba)
+-# define have_zba true
+-#else
+-static bool have_zba;
+-#endif
+-#if defined(__riscv_arch_test) && defined(__riscv_zicond)
+-# define have_zicond true
+-#else
+-static bool have_zicond;
+-#endif
+-
+ static TCGReg tcg_target_call_oarg_reg(TCGCallReturnKind kind, int slot)
+ {
+     tcg_debug_assert(kind == TCG_CALL_RET_NORMAL);
+@@ -594,7 +580,7 @@ static void tcg_out_ext8u(TCGContext *s, TCGReg ret, TCGReg arg)
+ 
+ static void tcg_out_ext16u(TCGContext *s, TCGReg ret, TCGReg arg)
+ {
+-    if (have_zbb) {
++    if (cpuinfo & CPUINFO_ZBB) {
+         tcg_out_opc_reg(s, OPC_ZEXT_H, ret, arg, TCG_REG_ZERO);
+     } else {
+         tcg_out_opc_imm(s, OPC_SLLIW, ret, arg, 16);
+@@ -604,7 +590,7 @@ static void tcg_out_ext16u(TCGContext *s, TCGReg ret, TCGReg arg)
+ 
+ static void tcg_out_ext32u(TCGContext *s, TCGReg ret, TCGReg arg)
+ {
+-    if (have_zba) {
++    if (cpuinfo & CPUINFO_ZBA) {
+         tcg_out_opc_reg(s, OPC_ADD_UW, ret, arg, TCG_REG_ZERO);
+     } else {
+         tcg_out_opc_imm(s, OPC_SLLI, ret, arg, 32);
+@@ -614,7 +600,7 @@ static void tcg_out_ext32u(TCGContext *s, TCGReg ret, TCGReg arg)
+ 
+ static void tcg_out_ext8s(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg)
+ {
+-    if (have_zbb) {
++    if (cpuinfo & CPUINFO_ZBB) {
+         tcg_out_opc_imm(s, OPC_SEXT_B, ret, arg, 0);
+     } else {
+         tcg_out_opc_imm(s, OPC_SLLIW, ret, arg, 24);
+@@ -624,7 +610,7 @@ static void tcg_out_ext8s(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg)
+ 
+ static void tcg_out_ext16s(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg)
+ {
+-    if (have_zbb) {
++    if (cpuinfo & CPUINFO_ZBB) {
+         tcg_out_opc_imm(s, OPC_SEXT_H, ret, arg, 0);
+     } else {
+         tcg_out_opc_imm(s, OPC_SLLIW, ret, arg, 16);
+@@ -1080,7 +1066,7 @@ static void tcg_out_movcond(TCGContext *s, TCGCond cond, TCGReg ret,
+     int tmpflags;
+     TCGReg t;
+ 
+-    if (!have_zicond && (!c_cmp2 || cmp2 == 0)) {
++    if (!(cpuinfo & CPUINFO_ZICOND) && (!c_cmp2 || cmp2 == 0)) {
+         tcg_out_movcond_br2(s, cond, ret, cmp1, cmp2,
+                             val1, c_val1, val2, c_val2);
+         return;
+@@ -1089,7 +1075,7 @@ static void tcg_out_movcond(TCGContext *s, TCGCond cond, TCGReg ret,
+     tmpflags = tcg_out_setcond_int(s, cond, TCG_REG_TMP0, cmp1, cmp2, c_cmp2);
+     t = tmpflags & ~SETCOND_FLAGS;
+ 
+-    if (have_zicond) {
++    if (cpuinfo & CPUINFO_ZICOND) {
+         if (tmpflags & SETCOND_INV) {
+             tcg_out_movcond_zicond(s, ret, t, val2, c_val2, val1, c_val1);
+         } else {
+@@ -1304,7 +1290,7 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, TCGReg *pbase,
+         /* TLB Hit - translate address using addend.  */
+         if (addr_type != TCG_TYPE_I32) {
+             tcg_out_opc_reg(s, OPC_ADD, TCG_REG_TMP0, addr_reg, TCG_REG_TMP2);
+-        } else if (have_zba) {
++        } else if (cpuinfo & CPUINFO_ZBA) {
+             tcg_out_opc_reg(s, OPC_ADD_UW, TCG_REG_TMP0,
+                             addr_reg, TCG_REG_TMP2);
+         } else {
+@@ -1335,7 +1321,7 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, TCGReg *pbase,
+             if (addr_type != TCG_TYPE_I32) {
+                 tcg_out_opc_reg(s, OPC_ADD, base, addr_reg,
+                                 TCG_GUEST_BASE_REG);
+-            } else if (have_zba) {
++            } else if (cpuinfo & CPUINFO_ZBA) {
+                 tcg_out_opc_reg(s, OPC_ADD_UW, base, addr_reg,
+                                 TCG_GUEST_BASE_REG);
+             } else {
+@@ -2110,62 +2096,8 @@ static void tcg_out_tb_start(TCGContext *s)
+     /* nothing to do */
+ }
+ 
+-static volatile sig_atomic_t got_sigill;
+-
+-static void sigill_handler(int signo, siginfo_t *si, void *data)
+-{
+-    /* Skip the faulty instruction */
+-    ucontext_t *uc = (ucontext_t *)data;
+-    uc->uc_mcontext.__gregs[REG_PC] += 4;
+-
+-    got_sigill = 1;
+-}
+-
+-static void tcg_target_detect_isa(void)
+-{
+-#if !defined(have_zba) || !defined(have_zbb) || !defined(have_zicond)
+-    /*
+-     * TODO: It is expected that this will be determinable via
+-     * linux riscv_hwprobe syscall, not yet merged.
+-     * In the meantime, test via sigill.
+-     */
+-
+-    struct sigaction sa_old, sa_new;
+-
+-    memset(&sa_new, 0, sizeof(sa_new));
+-    sa_new.sa_flags = SA_SIGINFO;
+-    sa_new.sa_sigaction = sigill_handler;
+-    sigaction(SIGILL, &sa_new, &sa_old);
+-
+-#ifndef have_zba
+-    /* Probe for Zba: add.uw zero,zero,zero. */
+-    got_sigill = 0;
+-    asm volatile(".insn r 0x3b, 0, 0x04, zero, zero, zero" : : : "memory");
+-    have_zba = !got_sigill;
+-#endif
+-
+-#ifndef have_zbb
+-    /* Probe for Zba: andn zero,zero,zero. */
+-    got_sigill = 0;
+-    asm volatile(".insn r 0x33, 7, 0x20, zero, zero, zero" : : : "memory");
+-    have_zbb = !got_sigill;
+-#endif
+-
+-#ifndef have_zicond
+-    /* Probe for Zicond: czero.eqz zero,zero,zero. */
+-    got_sigill = 0;
+-    asm volatile(".insn r 0x33, 5, 0x07, zero, zero, zero" : : : "memory");
+-    have_zicond = !got_sigill;
+-#endif
+-
+-    sigaction(SIGILL, &sa_old, NULL);
+-#endif
+-}
+-
+ static void tcg_target_init(TCGContext *s)
+ {
+-    tcg_target_detect_isa();
+-
+     tcg_target_available_regs[TCG_TYPE_I32] = 0xffffffff;
+     tcg_target_available_regs[TCG_TYPE_I64] = 0xffffffff;
+ 
+diff --git a/tcg/riscv/tcg-target.h b/tcg/riscv/tcg-target.h
+index 2c1b680b93..1a347eaf6e 100644
+--- a/tcg/riscv/tcg-target.h
++++ b/tcg/riscv/tcg-target.h
+@@ -25,6 +25,8 @@
+ #ifndef RISCV_TCG_TARGET_H
+ #define RISCV_TCG_TARGET_H
+ 
++#include "host/cpuinfo.h"
++
+ #define TCG_TARGET_INSN_UNIT_SIZE 4
+ #define TCG_TARGET_NB_REGS 32
+ #define MAX_CODE_GEN_BUFFER_SIZE  ((size_t)-1)
+@@ -80,18 +82,12 @@ typedef enum {
+ #define TCG_TARGET_CALL_ARG_I128        TCG_CALL_ARG_NORMAL
+ #define TCG_TARGET_CALL_RET_I128        TCG_CALL_RET_NORMAL
+ 
+-#if defined(__riscv_arch_test) && defined(__riscv_zbb)
+-# define have_zbb true
+-#else
+-extern bool have_zbb;
+-#endif
+-
+ /* optional instructions */
+ #define TCG_TARGET_HAS_negsetcond_i32   1
+ #define TCG_TARGET_HAS_div_i32          1
+ #define TCG_TARGET_HAS_rem_i32          1
+ #define TCG_TARGET_HAS_div2_i32         0
+-#define TCG_TARGET_HAS_rot_i32          have_zbb
++#define TCG_TARGET_HAS_rot_i32          (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_deposit_i32      0
+ #define TCG_TARGET_HAS_extract_i32      0
+ #define TCG_TARGET_HAS_sextract_i32     0
+@@ -106,17 +102,17 @@ extern bool have_zbb;
+ #define TCG_TARGET_HAS_ext16s_i32       1
+ #define TCG_TARGET_HAS_ext8u_i32        1
+ #define TCG_TARGET_HAS_ext16u_i32       1
+-#define TCG_TARGET_HAS_bswap16_i32      have_zbb
+-#define TCG_TARGET_HAS_bswap32_i32      have_zbb
++#define TCG_TARGET_HAS_bswap16_i32      (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_bswap32_i32      (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_not_i32          1
+-#define TCG_TARGET_HAS_andc_i32         have_zbb
+-#define TCG_TARGET_HAS_orc_i32          have_zbb
+-#define TCG_TARGET_HAS_eqv_i32          have_zbb
++#define TCG_TARGET_HAS_andc_i32         (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_orc_i32          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_eqv_i32          (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_nand_i32         0
+ #define TCG_TARGET_HAS_nor_i32          0
+-#define TCG_TARGET_HAS_clz_i32          have_zbb
+-#define TCG_TARGET_HAS_ctz_i32          have_zbb
+-#define TCG_TARGET_HAS_ctpop_i32        have_zbb
++#define TCG_TARGET_HAS_clz_i32          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_ctz_i32          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_ctpop_i32        (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_brcond2          1
+ #define TCG_TARGET_HAS_setcond2         1
+ #define TCG_TARGET_HAS_qemu_st8_i32     0
+@@ -125,7 +121,7 @@ extern bool have_zbb;
+ #define TCG_TARGET_HAS_div_i64          1
+ #define TCG_TARGET_HAS_rem_i64          1
+ #define TCG_TARGET_HAS_div2_i64         0
+-#define TCG_TARGET_HAS_rot_i64          have_zbb
++#define TCG_TARGET_HAS_rot_i64          (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_deposit_i64      0
+ #define TCG_TARGET_HAS_extract_i64      0
+ #define TCG_TARGET_HAS_sextract_i64     0
+@@ -137,18 +133,18 @@ extern bool have_zbb;
+ #define TCG_TARGET_HAS_ext8u_i64        1
+ #define TCG_TARGET_HAS_ext16u_i64       1
+ #define TCG_TARGET_HAS_ext32u_i64       1
+-#define TCG_TARGET_HAS_bswap16_i64      have_zbb
+-#define TCG_TARGET_HAS_bswap32_i64      have_zbb
+-#define TCG_TARGET_HAS_bswap64_i64      have_zbb
++#define TCG_TARGET_HAS_bswap16_i64      (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_bswap32_i64      (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_bswap64_i64      (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_not_i64          1
+-#define TCG_TARGET_HAS_andc_i64         have_zbb
+-#define TCG_TARGET_HAS_orc_i64          have_zbb
+-#define TCG_TARGET_HAS_eqv_i64          have_zbb
++#define TCG_TARGET_HAS_andc_i64         (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_orc_i64          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_eqv_i64          (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_nand_i64         0
+ #define TCG_TARGET_HAS_nor_i64          0
+-#define TCG_TARGET_HAS_clz_i64          have_zbb
+-#define TCG_TARGET_HAS_ctz_i64          have_zbb
+-#define TCG_TARGET_HAS_ctpop_i64        have_zbb
++#define TCG_TARGET_HAS_clz_i64          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_ctz_i64          (cpuinfo & CPUINFO_ZBB)
++#define TCG_TARGET_HAS_ctpop_i64        (cpuinfo & CPUINFO_ZBB)
+ #define TCG_TARGET_HAS_add2_i64         1
+ #define TCG_TARGET_HAS_sub2_i64         1
+ #define TCG_TARGET_HAS_mulu2_i64        0
+diff --git a/tests/Makefile.include b/tests/Makefile.include
+index c9d1674bd0..d39d5dd6a4 100644
+--- a/tests/Makefile.include
++++ b/tests/Makefile.include
+@@ -87,7 +87,7 @@ distclean-tcg: $(DISTCLEAN_TCG_TARGET_RULES)
+ .PHONY: check-venv check-avocado check-acceptance check-acceptance-deprecated-warning
+ 
+ # Build up our target list from the filtered list of ninja targets
+-TARGETS=$(patsubst libqemu-%.fa, %, $(filter libqemu-%.fa, $(ninja-targets)))
++TARGETS=$(patsubst libqemu-%.a, %, $(filter libqemu-%.a, $(ninja-targets)))
+ 
+ TESTS_VENV_TOKEN=$(BUILD_DIR)/pyvenv/tests.group
+ TESTS_RESULTS_DIR=$(BUILD_DIR)/tests/results
+diff --git a/tests/avocado/hotplug_blk.py b/tests/avocado/hotplug_blk.py
+new file mode 100644
+index 0000000000..5dc30f6616
+--- /dev/null
++++ b/tests/avocado/hotplug_blk.py
+@@ -0,0 +1,69 @@
++# Functional test that hotplugs a virtio blk disk and checks it on a Linux
++# guest
++#
++# Copyright (c) 2021 Red Hat, Inc.
++# Copyright (c) Yandex
++#
++# This work is licensed under the terms of the GNU GPL, version 2 or
++# later.  See the COPYING file in the top-level directory.
++
++import time
++
++from avocado_qemu import LinuxTest
++
++
++class HotPlug(LinuxTest):
++    def blockdev_add(self) -> None:
++        self.vm.cmd('blockdev-add', **{
++            'driver': 'null-co',
++            'size': 1073741824,
++            'node-name': 'disk'
++        })
++
++    def assert_vda(self) -> None:
++        self.ssh_command('test -e /sys/block/vda')
++
++    def assert_no_vda(self) -> None:
++        with self.assertRaises(AssertionError):
++            self.assert_vda()
++
++    def plug(self) -> None:
++        args = {
++            'driver': 'virtio-blk-pci',
++            'drive': 'disk',
++            'id': 'virtio-disk0',
++            'bus': 'pci.1',
++            'addr': 1
++        }
++
++        self.assert_no_vda()
++        self.vm.cmd('device_add', args)
++        try:
++            self.assert_vda()
++        except AssertionError:
++            time.sleep(1)
++            self.assert_vda()
++
++    def unplug(self) -> None:
++        self.vm.cmd('device_del', id='virtio-disk0')
++
++        self.vm.event_wait('DEVICE_DELETED', 1.0,
++                           match={'data': {'device': 'virtio-disk0'}})
++
++        self.assert_no_vda()
++
++    def test(self) -> None:
++        """
++        :avocado: tags=arch:x86_64
++        :avocado: tags=machine:q35
++        :avocado: tags=accel:kvm
++        """
++        self.require_accelerator('kvm')
++        self.vm.add_args('-accel', 'kvm')
++        self.vm.add_args('-device', 'pcie-pci-bridge,id=pci.1,bus=pcie.0')
++
++        self.launch_and_wait()
++        self.blockdev_add()
++
++        self.plug()
++        self.unplug()

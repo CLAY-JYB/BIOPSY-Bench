@@ -1,0 +1,415 @@
+diff --git a/spec/ruby/library/observer/fixtures/classes.rb b/spec/ruby/library/observer/fixtures/classes.rb
+index d1f907996..70cd1b1be 100644
+--- a/spec/ruby/library/observer/fixtures/classes.rb
++++ b/spec/ruby/library/observer/fixtures/classes.rb
+@@ -1,19 +1,17 @@
+-ruby_version_is ""..."3.4" do
+-  require 'observer'
++require 'observer'
+ 
+-  class ObserverCallbackSpecs
+-    attr_reader :value
++class ObserverCallbackSpecs
++  attr_reader :value
+ 
+-    def initialize
+-      @value = nil
+-    end
+-
+-    def update(value)
+-      @value = value
+-    end
++  def initialize
++    @value = nil
+   end
+ 
+-  class ObservableSpecs
+-    include Observable
++  def update(value)
++    @value = value
+   end
+ end
++
++class ObservableSpecs
++  include Observable
++end
+diff --git a/spec/ruby/library/observer/notify_observers_spec.rb b/spec/ruby/library/observer/notify_observers_spec.rb
+index 1030ae701..31f82e926 100644
+--- a/spec/ruby/library/observer/notify_observers_spec.rb
++++ b/spec/ruby/library/observer/notify_observers_spec.rb
+@@ -1,34 +1,31 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
++describe "Observer#notify_observers" do
+ 
+-  describe "Observer#notify_observers" do
+-
+-    before :each do
+-      @observable = ObservableSpecs.new
+-      @observer = ObserverCallbackSpecs.new
+-      @observable.add_observer(@observer)
+-    end
+-
+-    it "must call changed before notifying observers" do
+-      @observer.value.should == nil
+-      @observable.notify_observers("test")
+-      @observer.value.should == nil
+-    end
++  before :each do
++    @observable = ObservableSpecs.new
++    @observer = ObserverCallbackSpecs.new
++    @observable.add_observer(@observer)
++  end
+ 
+-    it "verifies observer responds to update" do
+-      -> {
+-        @observable.add_observer(@observable)
+-      }.should raise_error(NoMethodError)
+-    end
++  it "must call changed before notifying observers" do
++    @observer.value.should == nil
++    @observable.notify_observers("test")
++    @observer.value.should == nil
++  end
+ 
+-    it "receives the callback" do
+-      @observer.value.should == nil
+-      @observable.changed
+-      @observable.notify_observers("test")
+-      @observer.value.should == "test"
+-    end
++  it "verifies observer responds to update" do
++    -> {
++      @observable.add_observer(@observable)
++    }.should raise_error(NoMethodError)
++  end
+ 
++  it "receives the callback" do
++    @observer.value.should == nil
++    @observable.changed
++    @observable.notify_observers("test")
++    @observer.value.should == "test"
+   end
++
+ end
+diff --git a/spec/ruby/library/syslog/alert_spec.rb b/spec/ruby/library/syslog/alert_spec.rb
+index a3a616bd6..edff789dc 100644
+--- a/spec/ruby/library/syslog/alert_spec.rb
++++ b/spec/ruby/library/syslog/alert_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.alert" do
+-      it_behaves_like :syslog_log, :alert
+-    end
++  describe "Syslog.alert" do
++    it_behaves_like :syslog_log, :alert
+   end
+ end
+diff --git a/spec/ruby/library/syslog/close_spec.rb b/spec/ruby/library/syslog/close_spec.rb
+index 60866de97..8c3b67c05 100644
+--- a/spec/ruby/library/syslog/close_spec.rb
++++ b/spec/ruby/library/syslog/close_spec.rb
+@@ -1,60 +1,57 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
+-
+-  platform_is_not :windows do
+-    require 'syslog'
+-
+-    describe "Syslog.close" do
+-      platform_is_not :windows do
+-
+-        before :each do
+-          Syslog.opened?.should be_false
+-        end
+-
+-        after :each do
+-          Syslog.opened?.should be_false
+-        end
+-
+-        it "closes the log" do
+-          Syslog.opened?.should be_false
+-          Syslog.open
+-          Syslog.opened?.should be_true
+-          Syslog.close
+-          Syslog.opened?.should be_false
+-        end
+-
+-        it "raises a RuntimeError if the log's already closed" do
+-          -> { Syslog.close }.should raise_error(RuntimeError)
+-        end
+-
+-        it "it does not work inside blocks" do
+-          -> {
+-            Syslog.open { |s| s.close }
+-          }.should raise_error(RuntimeError)
+-          Syslog.should_not.opened?
+-        end
+-
+-        it "sets the identity to nil" do
+-          Syslog.open("rubyspec")
+-          Syslog.ident.should == "rubyspec"
+-          Syslog.close
+-          Syslog.ident.should be_nil
+-        end
+-
+-        it "sets the options to nil" do
+-          Syslog.open("rubyspec", Syslog::LOG_PID)
+-          Syslog.options.should == Syslog::LOG_PID
+-          Syslog.close
+-          Syslog.options.should == nil
+-        end
+-
+-        it "sets the facility to nil" do
+-          Syslog.open
+-          Syslog.facility.should == 8
+-          Syslog.close
+-          Syslog.facility.should == nil
+-        end
++platform_is_not :windows do
++  require 'syslog'
++
++  describe "Syslog.close" do
++    platform_is_not :windows do
++
++      before :each do
++        Syslog.opened?.should be_false
++      end
++
++      after :each do
++        Syslog.opened?.should be_false
++      end
++
++      it "closes the log" do
++        Syslog.opened?.should be_false
++        Syslog.open
++        Syslog.opened?.should be_true
++        Syslog.close
++        Syslog.opened?.should be_false
++      end
++
++      it "raises a RuntimeError if the log's already closed" do
++        -> { Syslog.close }.should raise_error(RuntimeError)
++      end
++
++      it "it does not work inside blocks" do
++        -> {
++          Syslog.open { |s| s.close }
++        }.should raise_error(RuntimeError)
++        Syslog.should_not.opened?
++      end
++
++      it "sets the identity to nil" do
++        Syslog.open("rubyspec")
++        Syslog.ident.should == "rubyspec"
++        Syslog.close
++        Syslog.ident.should be_nil
++      end
++
++      it "sets the options to nil" do
++        Syslog.open("rubyspec", Syslog::LOG_PID)
++        Syslog.options.should == Syslog::LOG_PID
++        Syslog.close
++        Syslog.options.should == nil
++      end
++
++      it "sets the facility to nil" do
++        Syslog.open
++        Syslog.facility.should == 8
++        Syslog.close
++        Syslog.facility.should == nil
+       end
+     end
+   end
+diff --git a/spec/ruby/library/syslog/constants_spec.rb b/spec/ruby/library/syslog/constants_spec.rb
+index d44d67e2d..2b9524c53 100644
+--- a/spec/ruby/library/syslog/constants_spec.rb
++++ b/spec/ruby/library/syslog/constants_spec.rb
+@@ -1,43 +1,40 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require 'syslog'
+-
+-    describe "Syslog::Constants" do
+-      platform_is_not :windows, :solaris, :aix do
+-        before :all do
+-          @constants = %w(LOG_AUTHPRIV LOG_USER LOG_LOCAL2 LOG_NOTICE LOG_NDELAY
+-                        LOG_SYSLOG LOG_ALERT LOG_FTP LOG_LOCAL5 LOG_ERR LOG_AUTH
+-                        LOG_LOCAL1 LOG_ODELAY LOG_NEWS LOG_DAEMON LOG_LOCAL4
+-                        LOG_CRIT LOG_INFO LOG_PERROR LOG_LOCAL0 LOG_CONS LOG_LPR
+-                        LOG_LOCAL7 LOG_WARNING LOG_CRON LOG_LOCAL3 LOG_EMERG
+-                        LOG_NOWAIT LOG_UUCP LOG_PID LOG_KERN LOG_MAIL LOG_LOCAL6
+-                        LOG_DEBUG)
+-        end
++  describe "Syslog::Constants" do
++    platform_is_not :windows, :solaris, :aix do
++      before :all do
++        @constants = %w(LOG_AUTHPRIV LOG_USER LOG_LOCAL2 LOG_NOTICE LOG_NDELAY
++                      LOG_SYSLOG LOG_ALERT LOG_FTP LOG_LOCAL5 LOG_ERR LOG_AUTH
++                      LOG_LOCAL1 LOG_ODELAY LOG_NEWS LOG_DAEMON LOG_LOCAL4
++                      LOG_CRIT LOG_INFO LOG_PERROR LOG_LOCAL0 LOG_CONS LOG_LPR
++                      LOG_LOCAL7 LOG_WARNING LOG_CRON LOG_LOCAL3 LOG_EMERG
++                      LOG_NOWAIT LOG_UUCP LOG_PID LOG_KERN LOG_MAIL LOG_LOCAL6
++                      LOG_DEBUG)
++      end
+ 
+-        it "includes the Syslog constants" do
+-          @constants.each do |c|
+-            Syslog::Constants.should have_constant(c)
+-          end
++      it "includes the Syslog constants" do
++        @constants.each do |c|
++          Syslog::Constants.should have_constant(c)
+         end
+       end
++    end
+ 
+-      # The masks are defined in <syslog.h>
++    # The masks are defined in <syslog.h>
+ 
+-      describe "Syslog::Constants.LOG_MASK" do
+-        it "returns the mask value for a priority" do
+-          Syslog::Constants.LOG_MASK(Syslog::LOG_DEBUG).should == 128
+-          Syslog::Constants.LOG_MASK(Syslog::LOG_WARNING).should == 16
+-        end
++    describe "Syslog::Constants.LOG_MASK" do
++      it "returns the mask value for a priority" do
++        Syslog::Constants.LOG_MASK(Syslog::LOG_DEBUG).should == 128
++        Syslog::Constants.LOG_MASK(Syslog::LOG_WARNING).should == 16
+       end
++    end
+ 
+-      describe "Syslog::Constants.LOG_UPTO" do
+-        it "returns a mask for the priorities up to a given argument" do
+-          Syslog::Constants.LOG_UPTO(Syslog::LOG_ALERT).should == 3
+-          Syslog::Constants.LOG_UPTO(Syslog::LOG_DEBUG).should == 255
+-        end
++    describe "Syslog::Constants.LOG_UPTO" do
++      it "returns a mask for the priorities up to a given argument" do
++        Syslog::Constants.LOG_UPTO(Syslog::LOG_ALERT).should == 3
++        Syslog::Constants.LOG_UPTO(Syslog::LOG_DEBUG).should == 255
+       end
+     end
+   end
+diff --git a/spec/ruby/library/syslog/crit_spec.rb b/spec/ruby/library/syslog/crit_spec.rb
+index d7841ac01..5d3904f71 100644
+--- a/spec/ruby/library/syslog/crit_spec.rb
++++ b/spec/ruby/library/syslog/crit_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.crit" do
+-      it_behaves_like :syslog_log, :crit
+-    end
++  describe "Syslog.crit" do
++    it_behaves_like :syslog_log, :crit
+   end
+ end
+diff --git a/spec/ruby/library/syslog/debug_spec.rb b/spec/ruby/library/syslog/debug_spec.rb
+index 94e640c74..d03e8a88c 100644
+--- a/spec/ruby/library/syslog/debug_spec.rb
++++ b/spec/ruby/library/syslog/debug_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.debug" do
+-      it_behaves_like :syslog_log, :debug
+-    end
++  describe "Syslog.debug" do
++    it_behaves_like :syslog_log, :debug
+   end
+ end
+diff --git a/spec/ruby/library/syslog/emerg_spec.rb b/spec/ruby/library/syslog/emerg_spec.rb
+index 86938ce88..2ab4d6029 100644
+--- a/spec/ruby/library/syslog/emerg_spec.rb
++++ b/spec/ruby/library/syslog/emerg_spec.rb
+@@ -1,19 +1,16 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.emerg" do
+-      # Some way needs do be found to prevent this spec
+-      # from causing output on all open terminals. If this
+-      # is not possible, this spec may need a special guard
+-      # that only runs when requested.
+-      quarantine! do
+-        it_behaves_like :syslog_log, :emerg
+-      end
++  describe "Syslog.emerg" do
++    # Some way needs do be found to prevent this spec
++    # from causing output on all open terminals. If this
++    # is not possible, this spec may need a special guard
++    # that only runs when requested.
++    quarantine! do
++      it_behaves_like :syslog_log, :emerg
+     end
+   end
+ end
+diff --git a/spec/ruby/library/syslog/err_spec.rb b/spec/ruby/library/syslog/err_spec.rb
+index a7b39ea5c..43e876ed3 100644
+--- a/spec/ruby/library/syslog/err_spec.rb
++++ b/spec/ruby/library/syslog/err_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
+ 
+-ruby_version_is ""..."3.4" do
++platform_is_not :windows do
++  require_relative 'shared/log'
++  require 'syslog'
+ 
+-  platform_is_not :windows do
+-    require_relative 'shared/log'
+-    require 'syslog'
+-
+-    describe "Syslog.err" do
+-      it_behaves_like :syslog_log, :err
+-    end
++  describe "Syslog.err" do
++    it_behaves_like :syslog_log, :err
+   end
+ end

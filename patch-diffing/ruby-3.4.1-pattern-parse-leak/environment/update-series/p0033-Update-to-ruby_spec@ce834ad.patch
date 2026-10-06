@@ -1,0 +1,250 @@
+From ad5c6c72 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0033] Update to ruby/spec@ce834ad
+
+---
+diff --git a/spec/ruby/core/integer/coerce_spec.rb b/spec/ruby/core/integer/coerce_spec.rb
+index 13fe7b332..f1f325603 100644
+--- a/spec/ruby/core/integer/coerce_spec.rb
++++ b/spec/ruby/core/integer/coerce_spec.rb
+@@ -1,5 +1,7 @@
+ require_relative '../../spec_helper'
+ 
++require 'bigdecimal'
++
+ describe "Integer#coerce" do
+   context "fixnum" do
+     describe "when given a Fixnum" do
+@@ -89,16 +91,13 @@ describe "Integer#coerce" do
+     end
+   end
+ 
+-  ruby_version_is ""..."3.4" do
+-    require 'bigdecimal'
+-    context "bigdecimal" do
+-      it "produces Floats" do
+-        x, y = 3.coerce(BigDecimal("3.4"))
+-        x.class.should == Float
+-        x.should == 3.4
+-        y.class.should == Float
+-        y.should == 3.0
+-      end
++  context "bigdecimal" do
++    it "produces Floats" do
++      x, y = 3.coerce(BigDecimal("3.4"))
++      x.class.should == Float
++      x.should == 3.4
++      y.class.should == Float
++      y.should == 3.0
+     end
+   end
+ 
+diff --git a/spec/ruby/core/method/clone_spec.rb b/spec/ruby/core/method/clone_spec.rb
+index 3fe4000fb..b0eb5751a 100644
+--- a/spec/ruby/core/method/clone_spec.rb
++++ b/spec/ruby/core/method/clone_spec.rb
+@@ -1,14 +1,13 @@
+ require_relative '../../spec_helper'
+-require_relative 'fixtures/classes'
++require_relative 'shared/dup'
+ 
+ describe "Method#clone" do
+-  it "returns a copy of the method" do
+-    m1 = MethodSpecs::Methods.new.method(:foo)
+-    m2 = m1.clone
++  it_behaves_like :method_dup, :clone
+ 
+-    m1.should == m2
+-    m1.should_not equal(m2)
+-
+-    m1.call.should == m2.call
++  it "preserves frozen status" do
++    method = Object.new.method(:method)
++    method.freeze
++    method.frozen?.should == true
++    method.clone.frozen?.should == true
+   end
+ end
+diff --git a/spec/ruby/core/method/dup_spec.rb b/spec/ruby/core/method/dup_spec.rb
+new file mode 100644
+index 000000000..e3e29d8a6
+--- /dev/null
++++ b/spec/ruby/core/method/dup_spec.rb
+@@ -0,0 +1,15 @@
++require_relative '../../spec_helper'
++require_relative 'shared/dup'
++
++describe "Method#dup" do
++  ruby_version_is "3.4" do
++    it_behaves_like :method_dup, :dup
++
++    it "resets frozen status" do
++      method = Object.new.method(:method)
++      method.freeze
++      method.frozen?.should == true
++      method.dup.frozen?.should == false
++    end
++  end
++end
+diff --git a/spec/ruby/core/method/shared/dup.rb b/spec/ruby/core/method/shared/dup.rb
+new file mode 100644
+index 000000000..1a10b9068
+--- /dev/null
++++ b/spec/ruby/core/method/shared/dup.rb
+@@ -0,0 +1,32 @@
++describe :method_dup, shared: true do
++  it "returns a copy of self" do
++    a = Object.new.method(:method)
++    b = a.send(@method)
++
++    a.should == b
++    a.should_not equal(b)
++  end
++
++  ruby_version_is "3.4" do
++    it "copies instance variables" do
++      method = Object.new.method(:method)
++      method.instance_variable_set(:@ivar, 1)
++      cl = method.send(@method)
++      cl.instance_variables.should == [:@ivar]
++    end
++
++    it "copies the finalizer" do
++      code = <<-RUBY
++        obj = Object.new.method(:method)
++
++        ObjectSpace.define_finalizer(obj, Proc.new { STDOUT.write "finalized\n" })
++
++        obj.clone
++
++        exit 0
++      RUBY
++
++      ruby_exe(code).lines.sort.should == ["finalized\n", "finalized\n"]
++    end
++  end
++end
+diff --git a/spec/ruby/core/module/prepend_spec.rb b/spec/ruby/core/module/prepend_spec.rb
+index f80cfbcca..c90fa9700 100644
+--- a/spec/ruby/core/module/prepend_spec.rb
++++ b/spec/ruby/core/module/prepend_spec.rb
+@@ -737,6 +737,39 @@ describe "Module#prepend" do
+     klass.ancestors.take(4).should == [klass, submod, mod, Object]
+   end
+ 
++  # https://bugs.ruby-lang.org/issues/17423
++  describe "when module already exists in ancestor chain" do
++    ruby_version_is ""..."3.1" do
++      it "does not modify the ancestor chain" do
++        m = Module.new do; end
++        a = Module.new do; end
++        b = Class.new do; end
++
++        b.include(a)
++        a.prepend(m)
++        b.ancestors.take(4).should == [b, m, a, Object]
++
++        b.prepend(m)
++        b.ancestors.take(4).should == [b, m, a, Object]
++      end
++    end
++
++    ruby_version_is "3.1" do
++      it "modifies the ancestor chain" do
++        m = Module.new do; end
++        a = Module.new do; end
++        b = Class.new do; end
++
++        b.include(a)
++        a.prepend(m)
++        b.ancestors.take(4).should == [b, m, a, Object]
++
++        b.prepend(m)
++        b.ancestors.take(5).should == [m, b, m, a, Object]
++      end
++    end
++  end
++
+   describe "called on a module" do
+     describe "included into a class"
+     it "does not obscure the module's methods from reflective access" do
+diff --git a/spec/ruby/core/proc/clone_spec.rb b/spec/ruby/core/proc/clone_spec.rb
+index a1a129265..7eca9c561 100644
+--- a/spec/ruby/core/proc/clone_spec.rb
++++ b/spec/ruby/core/proc/clone_spec.rb
+@@ -3,4 +3,13 @@ require_relative 'shared/dup'
+ 
+ describe "Proc#clone" do
+   it_behaves_like :proc_dup, :clone
++
++  ruby_bug "cloning a frozen proc is broken on Ruby 3.3", "3.3"..."3.4" do
++    it "preserves frozen status" do
++      proc = Proc.new { }
++      proc.freeze
++      proc.frozen?.should == true
++      proc.clone.frozen?.should == true
++    end
++  end
+ end
+diff --git a/spec/ruby/core/proc/dup_spec.rb b/spec/ruby/core/proc/dup_spec.rb
+index 6da2f3080..dd19b3c1e 100644
+--- a/spec/ruby/core/proc/dup_spec.rb
++++ b/spec/ruby/core/proc/dup_spec.rb
+@@ -3,4 +3,11 @@ require_relative 'shared/dup'
+ 
+ describe "Proc#dup" do
+   it_behaves_like :proc_dup, :dup
++
++  it "resets frozen status" do
++    proc = Proc.new { }
++    proc.freeze
++    proc.frozen?.should == true
++    proc.dup.frozen?.should == false
++  end
+ end
+diff --git a/spec/ruby/core/proc/shared/dup.rb b/spec/ruby/core/proc/shared/dup.rb
+index 4480f3d0c..c419a4078 100644
+--- a/spec/ruby/core/proc/shared/dup.rb
++++ b/spec/ruby/core/proc/shared/dup.rb
+@@ -15,4 +15,27 @@ describe :proc_dup, shared: true do
+       cl.new{}.send(@method).class.should == cl
+     end
+   end
++
++  ruby_version_is "3.4" do
++    it "copies instance variables" do
++      proc = -> { "hello" }
++      proc.instance_variable_set(:@ivar, 1)
++      cl = proc.send(@method)
++      cl.instance_variables.should == [:@ivar]
++    end
++
++    it "copies the finalizer" do
++      code = <<-RUBY
++        obj = Proc.new { }
++
++        ObjectSpace.define_finalizer(obj, Proc.new { STDOUT.write "finalized\n" })
++
++        obj.clone
++
++        exit 0
++      RUBY
++
++      ruby_exe(code).lines.sort.should == ["finalized\n", "finalized\n"]
++    end
++  end
+ end
+diff --git a/spec/ruby/core/rational/coerce_spec.rb b/spec/ruby/core/rational/coerce_spec.rb
+index 7aea31aea..9c0f05829 100644
+--- a/spec/ruby/core/rational/coerce_spec.rb
++++ b/spec/ruby/core/rational/coerce_spec.rb
+@@ -1,5 +1,4 @@
+ require_relative "../../spec_helper"
+-
+ require_relative '../../shared/rational/coerce'
+ 
+ describe "Rational#coerce" do
+
+-- 
+2.43.0

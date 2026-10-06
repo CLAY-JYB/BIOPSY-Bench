@@ -1,0 +1,25 @@
+From e7385045 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0073] remote: fix leak in reachability check of a remote-track (part 27/29)
+
+---
+diff --git a/remote.c b/remote.c
+index 8d666c16..539e5cea 100644
+--- a/remote.c
++++ b/remote.c
+@@ -2578,10 +2620,8 @@ static int remote_tracking(struct remote *remote, const char *refname,
+ 	dst = apply_refspecs(&remote->fetch, refname);
+ 	if (!dst)
+ 		return -1; /* no tracking ref for refname at remote */
+-	if (refs_read_ref(get_main_ref_store(the_repository), dst, oid)) {
+-		free(dst);
++	if (refs_read_ref(get_main_ref_store(the_repository), dst, oid))
+ 		return -1; /* we know what the tracking ref is but we cannot read it */
+-	}
+ 
+ 	*dst_refname = dst;
+ 	return 0;
+
+-- 
+2.43.0

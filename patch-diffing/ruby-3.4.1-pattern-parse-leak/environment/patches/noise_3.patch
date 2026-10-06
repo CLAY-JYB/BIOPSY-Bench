@@ -1,0 +1,2315 @@
+diff --git a/addr2line.c b/addr2line.c
+index 2a69dd096..02a3e617a 100644
+--- a/addr2line.c
++++ b/addr2line.c
+@@ -2384,13 +2384,14 @@ fill_lines(int num_traces, void **traces, int check_debuglink,
+         goto fail;
+     }
+     else {
+-        kprintf("'%s' is not a "
+ # ifdef __LP64__
+-                "64"
++#   define bitsize "64"
+ # else
+-                "32"
++#   define bitsize "32"
+ # endif
++        kprintf("'%s' is not a " bitsize
+                 "-bit Mach-O file!\n",binary_filename);
++# undef bitsize
+         close(fd);
+         goto fail;
+     }
+diff --git a/array.c b/array.c
+index 951de5297..fe6180b8b 100644
+--- a/array.c
++++ b/array.c
+@@ -77,47 +77,47 @@ should_be_T_ARRAY(VALUE ary)
+     return RB_TYPE_P(ary, T_ARRAY);
+ }
+ 
+-#define ARY_HEAP_PTR(a) (assert(!ARY_EMBED_P(a)), RARRAY(a)->as.heap.ptr)
+-#define ARY_HEAP_LEN(a) (assert(!ARY_EMBED_P(a)), RARRAY(a)->as.heap.len)
+-#define ARY_HEAP_CAPA(a) (assert(!ARY_EMBED_P(a)), assert(!ARY_SHARED_ROOT_P(a)), \
++#define ARY_HEAP_PTR(a) (RUBY_ASSERT(!ARY_EMBED_P(a)), RARRAY(a)->as.heap.ptr)
++#define ARY_HEAP_LEN(a) (RUBY_ASSERT(!ARY_EMBED_P(a)), RARRAY(a)->as.heap.len)
++#define ARY_HEAP_CAPA(a) (RUBY_ASSERT(!ARY_EMBED_P(a)), RUBY_ASSERT(!ARY_SHARED_ROOT_P(a)), \
+                           RARRAY(a)->as.heap.aux.capa)
+ 
+-#define ARY_EMBED_PTR(a) (assert(ARY_EMBED_P(a)), RARRAY(a)->as.ary)
++#define ARY_EMBED_PTR(a) (RUBY_ASSERT(ARY_EMBED_P(a)), RARRAY(a)->as.ary)
+ #define ARY_EMBED_LEN(a) \
+-    (assert(ARY_EMBED_P(a)), \
++    (RUBY_ASSERT(ARY_EMBED_P(a)), \
+      (long)((RBASIC(a)->flags >> RARRAY_EMBED_LEN_SHIFT) & \
+          (RARRAY_EMBED_LEN_MASK >> RARRAY_EMBED_LEN_SHIFT)))
+-#define ARY_HEAP_SIZE(a) (assert(!ARY_EMBED_P(a)), assert(ARY_OWNS_HEAP_P(a)), ARY_CAPA(a) * sizeof(VALUE))
++#define ARY_HEAP_SIZE(a) (RUBY_ASSERT(!ARY_EMBED_P(a)), RUBY_ASSERT(ARY_OWNS_HEAP_P(a)), ARY_CAPA(a) * sizeof(VALUE))
+ 
+-#define ARY_OWNS_HEAP_P(a) (assert(should_be_T_ARRAY((VALUE)(a))), \
++#define ARY_OWNS_HEAP_P(a) (RUBY_ASSERT(should_be_T_ARRAY((VALUE)(a))), \
+                             !FL_TEST_RAW((a), RARRAY_SHARED_FLAG|RARRAY_EMBED_FLAG))
+ 
+ #define FL_SET_EMBED(a) do { \
+-    assert(!ARY_SHARED_P(a)); \
++    RUBY_ASSERT(!ARY_SHARED_P(a)); \
+     FL_SET((a), RARRAY_EMBED_FLAG); \
+     ary_verify(a); \
+ } while (0)
+ 
+ #define FL_UNSET_EMBED(ary) FL_UNSET((ary), RARRAY_EMBED_FLAG|RARRAY_EMBED_LEN_MASK)
+ #define FL_SET_SHARED(ary) do { \
+-    assert(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
+     FL_SET((ary), RARRAY_SHARED_FLAG); \
+ } while (0)
+ #define FL_UNSET_SHARED(ary) FL_UNSET((ary), RARRAY_SHARED_FLAG)
+ 
+ #define ARY_SET_PTR(ary, p) do { \
+-    assert(!ARY_EMBED_P(ary)); \
+-    assert(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
+     RARRAY(ary)->as.heap.ptr = (p); \
+ } while (0)
+ #define ARY_SET_EMBED_LEN(ary, n) do { \
+     long tmp_n = (n); \
+-    assert(ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(ARY_EMBED_P(ary)); \
+     RBASIC(ary)->flags &= ~RARRAY_EMBED_LEN_MASK; \
+     RBASIC(ary)->flags |= (tmp_n) << RARRAY_EMBED_LEN_SHIFT; \
+ } while (0)
+ #define ARY_SET_HEAP_LEN(ary, n) do { \
+-    assert(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
+     RARRAY(ary)->as.heap.len = (n); \
+ } while (0)
+ #define ARY_SET_LEN(ary, n) do { \
+@@ -127,15 +127,15 @@ should_be_T_ARRAY(VALUE ary)
+     else { \
+         ARY_SET_HEAP_LEN((ary), (n)); \
+     } \
+-    assert(RARRAY_LEN(ary) == (n)); \
++    RUBY_ASSERT(RARRAY_LEN(ary) == (n)); \
+ } while (0)
+ #define ARY_INCREASE_PTR(ary, n) do  { \
+-    assert(!ARY_EMBED_P(ary)); \
+-    assert(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
+     RARRAY(ary)->as.heap.ptr += (n); \
+ } while (0)
+ #define ARY_INCREASE_LEN(ary, n) do  { \
+-    assert(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
+     if (ARY_EMBED_P(ary)) { \
+         ARY_SET_EMBED_LEN((ary), RARRAY_LEN(ary)+(n)); \
+     } \
+@@ -147,30 +147,30 @@ should_be_T_ARRAY(VALUE ary)
+ #define ARY_CAPA(ary) (ARY_EMBED_P(ary) ? ary_embed_capa(ary) : \
+                        ARY_SHARED_ROOT_P(ary) ? RARRAY_LEN(ary) : ARY_HEAP_CAPA(ary))
+ #define ARY_SET_CAPA(ary, n) do { \
+-    assert(!ARY_EMBED_P(ary)); \
+-    assert(!ARY_SHARED_P(ary)); \
+-    assert(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!ARY_SHARED_P(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
+     RARRAY(ary)->as.heap.aux.capa = (n); \
+ } while (0)
+ 
+ #define ARY_SHARED_ROOT_OCCUPIED(ary) (!OBJ_FROZEN(ary) && ARY_SHARED_ROOT_REFCNT(ary) == 1)
+ #define ARY_SET_SHARED_ROOT_REFCNT(ary, value) do { \
+-    assert(ARY_SHARED_ROOT_P(ary)); \
+-    assert(!OBJ_FROZEN(ary)); \
+-    assert((value) >= 0); \
++    RUBY_ASSERT(ARY_SHARED_ROOT_P(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT((value) >= 0); \
+     RARRAY(ary)->as.heap.aux.capa = (value); \
+ } while (0)
+ #define FL_SET_SHARED_ROOT(ary) do { \
+-    assert(!OBJ_FROZEN(ary)); \
+-    assert(!ARY_EMBED_P(ary)); \
++    RUBY_ASSERT(!OBJ_FROZEN(ary)); \
++    RUBY_ASSERT(!ARY_EMBED_P(ary)); \
+     FL_SET((ary), RARRAY_SHARED_ROOT_FLAG); \
+ } while (0)
+ 
+ static inline void
+ ARY_SET(VALUE a, long i, VALUE v)
+ {
+-    assert(!ARY_SHARED_P(a));
+-    assert(!OBJ_FROZEN(a));
++    RUBY_ASSERT(!ARY_SHARED_P(a));
++    RUBY_ASSERT(!OBJ_FROZEN(a));
+ 
+     RARRAY_ASET(a, i, v);
+ }
+@@ -180,7 +180,7 @@ static long
+ ary_embed_capa(VALUE ary)
+ {
+     size_t size = rb_gc_obj_slot_size(ary) - offsetof(struct RArray, as.ary);
+-    assert(size % sizeof(VALUE) == 0);
++    RUBY_ASSERT(size % sizeof(VALUE) == 0);
+     return size / sizeof(VALUE);
+ }
+ 
+@@ -234,20 +234,20 @@ rb_ary_size_as_embedded(VALUE ary)
+ static VALUE
+ ary_verify_(VALUE ary, const char *file, int line)
+ {
+-    assert(RB_TYPE_P(ary, T_ARRAY));
++    RUBY_ASSERT(RB_TYPE_P(ary, T_ARRAY));
+ 
+     if (ARY_SHARED_P(ary)) {
+         VALUE root = ARY_SHARED_ROOT(ary);
+         const VALUE *ptr = ARY_HEAP_PTR(ary);
+         const VALUE *root_ptr = RARRAY_CONST_PTR(root);
+         long len = ARY_HEAP_LEN(ary), root_len = RARRAY_LEN(root);
+-        assert(ARY_SHARED_ROOT_P(root) || OBJ_FROZEN(root));
+-        assert(root_ptr <= ptr && ptr + len <= root_ptr + root_len);
++        RUBY_ASSERT(ARY_SHARED_ROOT_P(root) || OBJ_FROZEN(root));
++        RUBY_ASSERT(root_ptr <= ptr && ptr + len <= root_ptr + root_len);
+         ary_verify(root);
+     }
+     else if (ARY_EMBED_P(ary)) {
+-        assert(!ARY_SHARED_P(ary));
+-        assert(RARRAY_LEN(ary) <= ary_embed_capa(ary));
++        RUBY_ASSERT(!ARY_SHARED_P(ary));
++        RUBY_ASSERT(RARRAY_LEN(ary) <= ary_embed_capa(ary));
+     }
+     else {
+         const VALUE *ptr = RARRAY_CONST_PTR(ary);
+@@ -325,7 +325,7 @@ ary_memfill(VALUE ary, long beg, long size, VALUE val)
+ static void
+ ary_memcpy0(VALUE ary, long beg, long argc, const VALUE *argv, VALUE buff_owner_ary)
+ {
+-    assert(!ARY_SHARED_P(buff_owner_ary));
++    RUBY_ASSERT(!ARY_SHARED_P(buff_owner_ary));
+ 
+     if (argc > (int)(128/sizeof(VALUE)) /* is magic number (cache line size) */) {
+         rb_gc_writebarrier_remember(buff_owner_ary);
+@@ -379,7 +379,7 @@ ary_heap_realloc(VALUE ary, size_t new_capa)
+ void
+ rb_ary_make_embedded(VALUE ary)
+ {
+-    assert(rb_ary_embeddable_p(ary));
++    RUBY_ASSERT(rb_ary_embeddable_p(ary));
+     if (!ARY_EMBED_P(ary)) {
+         const VALUE *buf = ARY_HEAP_PTR(ary);
+         long len = ARY_HEAP_LEN(ary);
+@@ -396,9 +396,9 @@ rb_ary_make_embedded(VALUE ary)
+ static void
+ ary_resize_capa(VALUE ary, long capacity)
+ {
+-    assert(RARRAY_LEN(ary) <= capacity);
+-    assert(!OBJ_FROZEN(ary));
+-    assert(!ARY_SHARED_P(ary));
++    RUBY_ASSERT(RARRAY_LEN(ary) <= capacity);
++    RUBY_ASSERT(!OBJ_FROZEN(ary));
++    RUBY_ASSERT(!ARY_SHARED_P(ary));
+ 
+     if (capacity > ary_embed_capa(ary)) {
+         size_t new_capa = capacity;
+@@ -439,8 +439,8 @@ ary_shrink_capa(VALUE ary)
+ {
+     long capacity = ARY_HEAP_LEN(ary);
+     long old_capa = ARY_HEAP_CAPA(ary);
+-    assert(!ARY_SHARED_P(ary));
+-    assert(old_capa >= capacity);
++    RUBY_ASSERT(!ARY_SHARED_P(ary));
++    RUBY_ASSERT(old_capa >= capacity);
+     if (old_capa > capacity) ary_heap_realloc(ary, capacity);
+ 
+     ary_verify(ary);
+@@ -499,7 +499,7 @@ rb_ary_increment_share(VALUE shared_root)
+ {
+     if (!OBJ_FROZEN(shared_root)) {
+         long num = ARY_SHARED_ROOT_REFCNT(shared_root);
+-        assert(num >= 0);
++        RUBY_ASSERT(num >= 0);
+         ARY_SET_SHARED_ROOT_REFCNT(shared_root, num + 1);
+     }
+     return shared_root;
+@@ -508,9 +508,9 @@ rb_ary_increment_share(VALUE shared_root)
+ static void
+ rb_ary_set_shared(VALUE ary, VALUE shared_root)
+ {
+-    assert(!ARY_EMBED_P(ary));
+-    assert(!OBJ_FROZEN(ary));
+-    assert(ARY_SHARED_ROOT_P(shared_root) || OBJ_FROZEN(shared_root));
++    RUBY_ASSERT(!ARY_EMBED_P(ary));
++    RUBY_ASSERT(!OBJ_FROZEN(ary));
++    RUBY_ASSERT(ARY_SHARED_ROOT_P(shared_root) || OBJ_FROZEN(shared_root));
+ 
+     rb_ary_increment_share(shared_root);
+     FL_SET_SHARED(ary);
+@@ -633,7 +633,7 @@ ary_ensure_room_for_push(VALUE ary, long add_len)
+  *    a.freeze
+  *    a.frozen? # => true
+  *
+- *  An attempt to modify a frozen \Array raises FrozenError.
++ *  An attempt to modify a frozen +Array+ raises FrozenError.
+  */
+ 
+ VALUE
+@@ -665,7 +665,7 @@ static VALUE
+ ary_alloc_embed(VALUE klass, long capa)
+ {
+     size_t size = ary_embed_size(capa);
+-    assert(rb_gc_size_allocatable_p(size));
++    RUBY_ASSERT(rb_gc_size_allocatable_p(size));
+     NEWOBJ_OF(ary, struct RArray, klass,
+                      T_ARRAY | RARRAY_EMBED_FLAG | (RGENGC_WB_PROTECTED_ARRAY ? FL_WB_PROTECTED : 0),
+                      size, 0);
+@@ -712,7 +712,7 @@ ary_new(VALUE klass, long capa)
+     else {
+         ary = ary_alloc_heap(klass);
+         ARY_SET_CAPA(ary, capa);
+-        assert(!ARY_EMBED_P(ary));
++        RUBY_ASSERT(!ARY_EMBED_P(ary));
+ 
+         ARY_SET_PTR(ary, ary_heap_alloc(capa));
+         ARY_SET_HEAP_LEN(ary, 0);
+@@ -776,7 +776,7 @@ static VALUE
+ ec_ary_alloc_embed(rb_execution_context_t *ec, VALUE klass, long capa)
+ {
+     size_t size = ary_embed_size(capa);
+-    assert(rb_gc_size_allocatable_p(size));
++    RUBY_ASSERT(rb_gc_size_allocatable_p(size));
+     NEWOBJ_OF(ary, struct RArray, klass,
+             T_ARRAY | RARRAY_EMBED_FLAG | (RGENGC_WB_PROTECTED_ARRAY ? FL_WB_PROTECTED : 0),
+             size, ec);
+@@ -816,7 +816,7 @@ ec_ary_new(rb_execution_context_t *ec, VALUE klass, long capa)
+     else {
+         ary = ec_ary_alloc_heap(ec, klass);
+         ARY_SET_CAPA(ary, capa);
+-        assert(!ARY_EMBED_P(ary));
++        RUBY_ASSERT(!ARY_EMBED_P(ary));
+ 
+         ARY_SET_PTR(ary, ary_heap_alloc(capa));
+         ARY_SET_HEAP_LEN(ary, 0);
+@@ -948,7 +948,7 @@ ary_make_substitution(VALUE ary)
+ 
+     if (ary_embeddable_p(len)) {
+         VALUE subst = rb_ary_new_capa(len);
+-        assert(ARY_EMBED_P(subst));
++        RUBY_ASSERT(ARY_EMBED_P(subst));
+ 
+         ary_memcpy(subst, 0, len, RARRAY_CONST_PTR(ary));
+         ARY_SET_EMBED_LEN(subst, len);
+@@ -994,14 +994,14 @@ rb_to_array(VALUE ary)
+  *  call-seq:
+  *    Array.try_convert(object) -> object, new_array, or nil
+  *
+- *  If +object+ is an \Array object, returns +object+.
++ *  If +object+ is an +Array+ object, returns +object+.
+  *
+  *  Otherwise if +object+ responds to <tt>:to_ary</tt>,
+  *  calls <tt>object.to_ary</tt> and returns the result.
+  *
+  *  Returns +nil+ if +object+ does not respond to <tt>:to_ary</tt>
+  *
+- *  Raises an exception unless <tt>object.to_ary</tt> returns an \Array object.
++ *  Raises an exception unless <tt>object.to_ary</tt> returns an +Array+ object.
+  */
+ 
+ static VALUE
+@@ -1042,33 +1042,33 @@ rb_ary_s_new(int argc, VALUE *argv, VALUE klass)
+  *    Array.new(size, default_value) -> new_array
+  *    Array.new(size) {|index| ... } -> new_array
+  *
+- *  Returns a new \Array.
++ *  Returns a new +Array+.
+  *
+- *  With no block and no arguments, returns a new empty \Array object.
++ *  With no block and no arguments, returns a new empty +Array+ object.
+  *
+- *  With no block and a single \Array argument +array+,
+- *  returns a new \Array formed from +array+:
++ *  With no block and a single +Array+ argument +array+,
++ *  returns a new +Array+ formed from +array+:
+  *
+  *    a = Array.new([:foo, 'bar', 2])
+  *    a.class # => Array
+  *    a # => [:foo, "bar", 2]
+  *
+  *  With no block and a single Integer argument +size+,
+- *  returns a new \Array of the given size
++ *  returns a new +Array+ of the given size
+  *  whose elements are all +nil+:
+  *
+  *    a = Array.new(3)
+  *    a # => [nil, nil, nil]
+  *
+  *  With no block and arguments +size+ and +default_value+,
+- *  returns an \Array of the given size;
++ *  returns an +Array+ of the given size;
+  *  each element is that same +default_value+:
+  *
+  *    a = Array.new(3, 'x')
+  *    a # => ['x', 'x', 'x']
+  *
+  *  With a block and argument +size+,
+- *  returns an \Array of the given size;
++ *  returns an +Array+ of the given size;
+  *  the block is called with each successive integer +index+;
+  *  the element for that +index+ is the return value from the block:
+  *
+@@ -1079,7 +1079,7 @@ rb_ary_s_new(int argc, VALUE *argv, VALUE klass)
+  *
+  *  With a block and no argument,
+  *  or a single argument +0+,
+- *  ignores the block and returns a new empty \Array.
++ *  ignores the block and returns a new empty +Array+.
+  */
+ 
+ static VALUE
+@@ -1091,8 +1091,8 @@ rb_ary_initialize(int argc, VALUE *argv, VALUE ary)
+     rb_ary_modify(ary);
+     if (argc == 0) {
+         rb_ary_reset(ary);
+-        assert(ARY_EMBED_P(ary));
+-        assert(ARY_EMBED_LEN(ary) == 0);
++        RUBY_ASSERT(ARY_EMBED_P(ary));
++        RUBY_ASSERT(ARY_EMBED_LEN(ary) == 0);
+         if (rb_block_given_p()) {
+             rb_warning("given block not used");
+         }
+@@ -1189,9 +1189,9 @@ rb_ary_store(VALUE ary, long idx, VALUE val)
+ static VALUE
+ ary_make_partial(VALUE ary, VALUE klass, long offset, long len)
+ {
+-    assert(offset >= 0);
+-    assert(len >= 0);
+-    assert(offset+len <= RARRAY_LEN(ary));
++    RUBY_ASSERT(offset >= 0);
++    RUBY_ASSERT(len >= 0);
++    RUBY_ASSERT(offset+len <= RARRAY_LEN(ary));
+ 
+     VALUE result = ary_alloc_heap(klass);
+     size_t embed_capa = ary_embed_capa(result);
+@@ -1225,10 +1225,10 @@ ary_make_partial(VALUE ary, VALUE klass, long offset, long len)
+ static VALUE
+ ary_make_partial_step(VALUE ary, VALUE klass, long offset, long len, long step)
+ {
+-    assert(offset >= 0);
+-    assert(len >= 0);
+-    assert(offset+len <= RARRAY_LEN(ary));
+-    assert(step != 0);
++    RUBY_ASSERT(offset >= 0);
++    RUBY_ASSERT(len >= 0);
++    RUBY_ASSERT(offset+len <= RARRAY_LEN(ary));
++    RUBY_ASSERT(step != 0);
+ 
+     const long orig_len = len;
+ 
+@@ -1327,7 +1327,7 @@ ary_take_first_or_last(int argc, const VALUE *argv, VALUE ary, enum ary_take_pos
+  *    a = [:foo, 'bar', 2]
+  *    a << :baz # => [:foo, "bar", 2, :baz]
+  *
+- *  Appends +object+ as one element, even if it is another \Array:
++ *  Appends +object+ as one element, even if it is another +Array+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a1 = a << [3, 4]
+@@ -1369,7 +1369,7 @@ rb_ary_cat(VALUE ary, const VALUE *argv, long len)
+  *    a = [:foo, 'bar', 2]
+  *    a.push(:baz, :bat) # => [:foo, "bar", 2, :baz, :bat]
+  *
+- *  Appends each argument as one element, even if it is another \Array:
++ *  Appends each argument as one element, even if it is another +Array+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a1 = a.push([:baz, :bat], [:bam, :bad])
+@@ -1421,7 +1421,7 @@ rb_ary_pop(VALUE ary)
+  *
+  *  When a non-negative Integer argument +n+ is given and is in range,
+  *
+- *  removes and returns the last +n+ elements in a new \Array:
++ *  removes and returns the last +n+ elements in a new +Array+:
+  *    a = [:foo, 'bar', 2]
+  *    a.pop(2) # => ["bar", 2]
+  *
+@@ -1484,19 +1484,19 @@ rb_ary_shift(VALUE ary)
+  *  Returns +nil+ if +self+ is empty.
+  *
+  *  When positive Integer argument +n+ is given, removes the first +n+ elements;
+- *  returns those elements in a new \Array:
++ *  returns those elements in a new +Array+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a.shift(2) # => [:foo, 'bar']
+  *    a # => [2]
+  *
+  *  If +n+ is as large as or larger than <tt>self.length</tt>,
+- *  removes all elements; returns those elements in a new \Array:
++ *  removes all elements; returns those elements in a new +Array+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a.shift(3) # => [:foo, 'bar', 2]
+  *
+- *  If +n+ is zero, returns a new empty \Array; +self+ is unmodified.
++ *  If +n+ is zero, returns a new empty +Array+; +self+ is unmodified.
+  *
+  *  Related: #push, #pop, #unshift.
+  */
+@@ -1563,7 +1563,7 @@ make_room_for_unshift(VALUE ary, const VALUE *head, VALUE *sharedp, int argc, lo
+         head = sharedp + argc + room;
+     }
+     ARY_SET_PTR(ary, head - argc);
+-    assert(ARY_SHARED_ROOT_OCCUPIED(ARY_SHARED_ROOT(ary)));
++    RUBY_ASSERT(ARY_SHARED_ROOT_OCCUPIED(ARY_SHARED_ROOT(ary)));
+ 
+     ary_verify(ary);
+     return ARY_SHARED_ROOT(ary);
+@@ -1749,7 +1749,7 @@ static VALUE rb_ary_aref2(VALUE ary, VALUE b, VALUE e);
+  *  If +index+ is out of range, returns +nil+.
+  *
+  *  When two Integer arguments +start+ and +length+ are given,
+- *  returns a new \Array of size +length+ containing successive elements beginning at offset +start+:
++ *  returns a new +Array+ of size +length+ containing successive elements beginning at offset +start+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a[0, 2] # => [:foo, "bar"]
+@@ -1764,7 +1764,7 @@ static VALUE rb_ary_aref2(VALUE ary, VALUE b, VALUE e);
+  *    a[2, 2] # => [2]
+  *
+  *  If <tt>start == self.size</tt> and <tt>length >= 0</tt>,
+- *  returns a new empty \Array.
++ *  returns a new empty +Array+.
+  *
+  *  If +length+ is negative, returns +nil+.
+  *
+@@ -1776,7 +1776,7 @@ static VALUE rb_ary_aref2(VALUE ary, VALUE b, VALUE e);
+  *    a[0..1] # => [:foo, "bar"]
+  *    a[1..2] # => ["bar", 2]
+  *
+- *  Special case: If <tt>range.start == a.size</tt>, returns a new empty \Array.
++ *  Special case: If <tt>range.start == a.size</tt>, returns a new empty +Array+.
+  *
+  *  If <tt>range.end</tt> is negative, calculates the end index from the end:
+  *
+@@ -1800,7 +1800,7 @@ static VALUE rb_ary_aref2(VALUE ary, VALUE b, VALUE e);
+  *    a[4..-1] # => nil
+  *
+  *  When a single Enumerator::ArithmeticSequence argument +aseq+ is given,
+- *  returns an \Array of elements corresponding to the indexes produced by
++ *  returns an +Array+ of elements corresponding to the indexes produced by
+  *  the sequence.
+  *
+  *    a = ['--', 'data1', '--', 'data2', '--', 'data3']
+@@ -2304,7 +2304,7 @@ ary_aset_by_rb_ary_splice(VALUE ary, long beg, long len, VALUE val)
+  *    a[-1] = 'two' # => "two"
+  *    a # => [:foo, "bar", "two"]
+  *
+- *  When Integer arguments +start+ and +length+ are given and +object+ is not an \Array,
++ *  When Integer arguments +start+ and +length+ are given and +object+ is not an +Array+,
+  *  removes <tt>length - 1</tt> elements beginning at offset +start+,
+  *  and assigns +object+ at offset +start+:
+  *
+@@ -2339,7 +2339,7 @@ ary_aset_by_rb_ary_splice(VALUE ary, long beg, long len, VALUE val)
+  *    a[1, 5] = 'foo' # => "foo"
+  *    a # => [:foo, "foo"]
+  *
+- *  When Range argument +range+ is given and +object+ is not an \Array,
++ *  When Range argument +range+ is given and +object+ is not an +Array+,
+  *  removes <tt>length - 1</tt> elements beginning at offset +start+,
+  *  and assigns +object+ at offset +start+:
+  *
+@@ -2902,12 +2902,12 @@ rb_ary_to_s(VALUE ary)
+  *  call-seq:
+  *    to_a -> self or new_array
+  *
+- *  When +self+ is an instance of \Array, returns +self+:
++ *  When +self+ is an instance of +Array+, returns +self+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a.to_a # => [:foo, "bar", 2]
+  *
+- *  Otherwise, returns a new \Array containing the elements of +self+:
++ *  Otherwise, returns a new +Array+ containing the elements of +self+:
+  *
+  *    class MyArray < Array; end
+  *    a = MyArray.new(['foo', 'bar', 'two'])
+@@ -2938,14 +2938,14 @@ rb_ary_to_a(VALUE ary)
+  *  Returns a new Hash formed from +self+.
+  *
+  *  When a block is given, calls the block with each array element;
+- *  the block must return a 2-element \Array whose two elements
++ *  the block must return a 2-element +Array+ whose two elements
+  *  form a key-value pair in the returned Hash:
+  *
+  *    a = ['foo', :bar, 1, [2, 3], {baz: 4}]
+  *    h = a.to_h {|item| [item, item] }
+  *    h # => {"foo"=>"foo", :bar=>:bar, 1=>1, [2, 3]=>[2, 3], {:baz=>4}=>{:baz=>4}}
+  *
+- *  When no block is given, +self+ must be an \Array of 2-element sub-arrays,
++ *  When no block is given, +self+ must be an +Array+ of 2-element sub-arrays,
+  *  each sub-array is formed into a key-value pair in the new Hash:
+  *
+  *    [].to_h # => {}
+@@ -3039,7 +3039,7 @@ rb_ary_reverse_bang(VALUE ary)
+  *  call-seq:
+  *    array.reverse -> new_array
+  *
+- *  Returns a new \Array with the elements of +self+ in reverse order:
++ *  Returns a new +Array+ with the elements of +self+ in reverse order:
+  *
+  *    a = ['foo', 'bar', 'two']
+  *    a1 = a.reverse
+@@ -3163,10 +3163,10 @@ rb_ary_rotate_bang(int argc, VALUE *argv, VALUE ary)
+  *    array.rotate -> new_array
+  *    array.rotate(count) -> new_array
+  *
+- *  Returns a new \Array formed from +self+ with elements
++ *  Returns a new +Array+ formed from +self+ with elements
+  *  rotated from one end to the other.
+  *
+- *  When no argument given, returns a new \Array that is like +self+,
++ *  When no argument given, returns a new +Array+ that is like +self+,
+  *  except that the first element has been rotated to the last position:
+  *
+  *    a = [:foo, 'bar', 2, 'bar']
+@@ -3174,7 +3174,7 @@ rb_ary_rotate_bang(int argc, VALUE *argv, VALUE ary)
+  *    a1 # => ["bar", 2, "bar", :foo]
+  *
+  *  When given a non-negative Integer +count+,
+- *  returns a new \Array with +count+ elements rotated from the beginning to the end:
++ *  returns a new +Array+ with +count+ elements rotated from the beginning to the end:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a1 = a.rotate(2)
+@@ -3340,7 +3340,7 @@ VALUE
+ rb_ary_sort_bang(VALUE ary)
+ {
+     rb_ary_modify(ary);
+-    assert(!ARY_SHARED_P(ary));
++    RUBY_ASSERT(!ARY_SHARED_P(ary));
+     if (RARRAY_LEN(ary) > 1) {
+         VALUE tmp = ary_make_substitution(ary); /* only ary refers tmp */
+         struct ary_sort_data data;
+@@ -3367,7 +3367,7 @@ rb_ary_sort_bang(VALUE ary)
+                 ARY_SET_CAPA(ary, RARRAY_LEN(tmp));
+             }
+             else {
+-                assert(!ARY_SHARED_P(tmp));
++                RUBY_ASSERT(!ARY_SHARED_P(tmp));
+                 if (ARY_EMBED_P(ary)) {
+                     FL_UNSET_EMBED(ary);
+                 }
+@@ -3400,7 +3400,7 @@ rb_ary_sort_bang(VALUE ary)
+  *    array.sort -> new_array
+  *    array.sort {|a, b| ... } -> new_array
+  *
+- *  Returns a new \Array whose elements are those from +self+, sorted.
++ *  Returns a new +Array+ whose elements are those from +self+, sorted.
+  *
+  *  With no block, compares elements using operator <tt><=></tt>
+  *  (see Comparable):
+@@ -3576,7 +3576,7 @@ rb_ary_sort_by_bang(VALUE ary)
+  *    array.map -> new_enumerator
+  *
+  *  Calls the block, if given, with each element of +self+;
+- *  returns a new \Array whose elements are the return values from the block:
++ *  returns a new +Array+ whose elements are the return values from the block:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a1 = a.map {|element| element.class }
+@@ -3694,7 +3694,7 @@ append_values_at_single(VALUE result, VALUE ary, long olen, VALUE idx)
+  *  call-seq:
+  *    array.values_at(*indexes) -> new_array
+  *
+- *  Returns a new \Array whose elements are the elements
++ *  Returns a new +Array+ whose elements are the elements
+  *  of +self+ at the given Integer or Range +indexes+.
+  *
+  *  For each positive +index+, returns the element at offset +index+:
+@@ -3714,7 +3714,7 @@ append_values_at_single(VALUE result, VALUE ary, long olen, VALUE idx)
+  *    a = [:foo, 'bar', 2]
+  *    a.values_at(0, 3, 1, 3) # => [:foo, nil, "bar", nil]
+  *
+- *  Returns a new empty \Array if no arguments given.
++ *  Returns a new empty +Array+ if no arguments given.
+  *
+  *  For each negative +index+, counts backward from the end of the array:
+  *
+@@ -3752,7 +3752,7 @@ rb_ary_values_at(int argc, VALUE *argv, VALUE ary)
+  *    array.select -> new_enumerator
+  *
+  *  Calls the block, if given, with each element of +self+;
+- *  returns a new \Array containing those elements of +self+
++ *  returns a new +Array+ containing those elements of +self+
+  *  for which the block returns a truthy value:
+  *
+  *    a = [:foo, 'bar', 2, :bam]
+@@ -4097,7 +4097,7 @@ ary_slice_bang_by_rb_ary_splice(VALUE ary, long pos, long len)
+  *
+  *  When the only arguments are Integers +start+ and +length+,
+  *  removes +length+ elements from +self+ beginning at offset  +start+;
+- *  returns the deleted objects in a new \Array:
++ *  returns the deleted objects in a new +Array+:
+  *
+  *    a = [:foo, 'bar', 2]
+  *    a.slice!(0, 2) # => [:foo, "bar"]
+@@ -4111,7 +4111,7 @@ ary_slice_bang_by_rb_ary_splice(VALUE ary, long pos, long len)
+  *    a # => [:foo]
+  *
+  *  If <tt>start == a.size</tt> and +length+ is non-negative,
+- *  returns a new empty \Array.
++ *  returns a new empty +Array+.
+  *
+  *  If +length+ is negative, returns +nil+.
+  *
+@@ -4122,7 +4122,7 @@ ary_slice_bang_by_rb_ary_splice(VALUE ary, long pos, long len)
+  *    a.slice!(1..2) # => ["bar", 2]
+  *    a # => [:foo]
+  *
+- *  If <tt>range.start == a.size</tt>, returns a new empty \Array.
++ *  If <tt>range.start == a.size</tt>, returns a new empty +Array+.
+  *
+  *  If <tt>range.start</tt> is larger than the array size, returns +nil+.
+  *
+@@ -4251,7 +4251,7 @@ rb_ary_reject_bang(VALUE ary)
+  *    array.reject {|element| ... } -> new_array
+  *    array.reject -> new_enumerator
+  *
+- *  Returns a new \Array whose elements are all those from +self+
++ *  Returns a new +Array+ whose elements are all those from +self+
+  *  for which the block returns +false+ or +nil+:
+  *
+  *    a = [:foo, 'bar', 2, 'bat']
+@@ -4335,7 +4335,7 @@ take_items(VALUE obj, long n)
+  *    array.zip(*other_arrays) -> new_array
+  *    array.zip(*other_arrays) {|other_array| ... } -> nil
+  *
+- *  When no block given, returns a new \Array +new_array+ of size <tt>self.size</tt>
++ *  When no block given, returns a new +Array+ +new_array+ of size <tt>self.size</tt>
+  *  whose elements are Arrays.
+  *
+  *  Each nested array <tt>new_array[n]</tt> is of size <tt>other_arrays.size+1</tt>,
+@@ -4455,7 +4455,7 @@ rb_ary_zip(int argc, VALUE *argv, VALUE ary)
+  *  call-seq:
+  *    array.transpose -> new_array
+  *
+- *  Transposes the rows and columns in an \Array of Arrays;
++ *  Transposes the rows and columns in an +Array+ of Arrays;
+  *  the nested Arrays must all be the same size:
+  *
+  *    a = [[:a0, :a1], [:b0, :b1], [:c0, :c1]]
+@@ -4513,7 +4513,7 @@ rb_ary_replace(VALUE copy, VALUE orig)
+ 
+     /* orig has enough space to embed the contents of orig. */
+     if (RARRAY_LEN(orig) <= ary_embed_capa(copy)) {
+-        assert(ARY_EMBED_P(copy));
++        RUBY_ASSERT(ARY_EMBED_P(copy));
+         ary_memcpy(copy, 0, RARRAY_LEN(orig), RARRAY_CONST_PTR(orig));
+         ARY_SET_EMBED_LEN(copy, RARRAY_LEN(orig));
+     }
+@@ -4841,7 +4841,7 @@ rb_ary_fill(int argc, VALUE *argv, VALUE ary)
+  *  call-seq:
+  *    array + other_array -> new_array
+  *
+- *  Returns a new \Array containing all elements of +array+
++ *  Returns a new +Array+ containing all elements of +array+
+  *  followed by all elements of +other_array+:
+  *
+  *    a = [0, 1] + [2, 3]
+@@ -4883,7 +4883,7 @@ ary_append(VALUE x, VALUE y)
+  *  call-seq:
+  *    array.concat(*other_arrays) -> self
+  *
+- *  Adds to +array+ all elements from each \Array in +other_arrays+; returns +self+:
++ *  Adds to +array+ all elements from each +Array+ in +other_arrays+; returns +self+:
+  *
+  *    a = [0, 1]
+  *    a.concat([2, 3], [4, 5]) # => [0, 1, 2, 3, 4, 5]
+@@ -4922,7 +4922,7 @@ rb_ary_concat(VALUE x, VALUE y)
+  *    array * string_separator -> new_string
+  *
+  *  When non-negative argument Integer +n+ is given,
+- *  returns a new \Array built by concatenating the +n+ copies of +self+:
++ *  returns a new +Array+ built by concatenating the +n+ copies of +self+:
+  *
+  *    a = ['x', 'y']
+  *    a * 3 # => ["x", "y", "x", "y", "x", "y"]
+@@ -4982,7 +4982,7 @@ rb_ary_times(VALUE ary, VALUE times)
+  *  call-seq:
+  *    array.assoc(obj) -> found_array or nil
+  *
+- *  Returns the first element in +self+ that is an \Array
++ *  Returns the first element in +self+ that is an +Array+
+  *  whose first element <tt>==</tt> +obj+:
+  *
+  *    a = [{foo: 0}, [2, 4], [4, 5, 6], [4, 5]]
+@@ -5012,7 +5012,7 @@ rb_ary_assoc(VALUE ary, VALUE key)
+  *  call-seq:
+  *    array.rassoc(obj) -> found_array or nil
+  *
+- *  Returns the first element in +self+ that is an \Array
++ *  Returns the first element in +self+ that is an +Array+
+  *  whose second element <tt>==</tt> +obj+:
+  *
+  *    a = [{foo: 0}, [2, 4], [4, 5, 6], [4, 5]]
+@@ -5343,8 +5343,8 @@ ary_make_hash_by(VALUE ary)
+  *  call-seq:
+  *    array - other_array -> new_array
+  *
+- *  Returns a new \Array containing only those elements from +array+
+- *  that are not found in \Array +other_array+;
++ *  Returns a new +Array+ containing only those elements from +array+
++ *  that are not found in +Array+ +other_array+;
+  *  items are compared using <tt>eql?</tt>;
+  *  the order from +array+ is preserved:
+  *
+@@ -5388,7 +5388,7 @@ rb_ary_diff(VALUE ary1, VALUE ary2)
+  *  call-seq:
+  *    array.difference(*other_arrays) -> new_array
+  *
+- *  Returns a new \Array containing only those elements from +self+
++ *  Returns a new +Array+ containing only those elements from +self+
+  *  that are not found in any of the Arrays +other_arrays+;
+  *  items are compared using <tt>eql?</tt>;  order from +self+ is preserved:
+  *
+@@ -5442,7 +5442,7 @@ rb_ary_difference_multi(int argc, VALUE *argv, VALUE ary)
+  *  call-seq:
+  *    array & other_array -> new_array
+  *
+- *  Returns a new \Array containing each element found in both +array+ and \Array +other_array+;
++ *  Returns a new +Array+ containing each element found in both +array+ and +Array+ +other_array+;
+  *  duplicates are omitted; items are compared using <tt>eql?</tt>
+  *  (items must also implement +hash+ correctly):
+  *
+@@ -5495,7 +5495,7 @@ rb_ary_and(VALUE ary1, VALUE ary2)
+  *  call-seq:
+  *    array.intersection(*other_arrays) -> new_array
+  *
+- *  Returns a new \Array containing each element found both in +self+
++ *  Returns a new +Array+ containing each element found both in +self+
+  *  and in all of the given Arrays +other_arrays+;
+  *  duplicates are omitted; items are compared using <tt>eql?</tt>
+  *  (items must also implement +hash+ correctly):
+@@ -5560,7 +5560,7 @@ rb_ary_union_hash(VALUE hash, VALUE ary2)
+  *  call-seq:
+  *    array | other_array -> new_array
+  *
+- *  Returns the union of +array+ and \Array +other_array+;
++ *  Returns the union of +array+ and +Array+ +other_array+;
+  *  duplicates are removed; order is preserved;
+  *  items are compared using <tt>eql?</tt>:
+  *
+@@ -5594,7 +5594,7 @@ rb_ary_or(VALUE ary1, VALUE ary2)
+  *  call-seq:
+  *    array.union(*other_arrays) -> new_array
+  *
+- *  Returns a new \Array that is the union of +self+ and all given Arrays +other_arrays+;
++ *  Returns a new +Array+ that is the union of +self+ and all given Arrays +other_arrays+;
+  *  duplicates are removed;  order is preserved;  items are compared using <tt>eql?</tt>:
+  *
+  *    [0, 1, 2, 3].union([4, 5], [6, 7]) # => [0, 1, 2, 3, 4, 5, 6, 7]
+@@ -5790,7 +5790,7 @@ ary_max_opt_string(VALUE ary, long i, VALUE vmax)
+  *  Returns one of the following:
+  *
+  *  - The maximum-valued element from +self+.
+- *  - A new \Array of maximum-valued elements selected from +self+.
++ *  - A new +Array+ of maximum-valued elements selected from +self+.
+  *
+  *  When no block is given, each element in +self+ must respond to method <tt><=></tt>
+  *  with an Integer.
+@@ -5800,7 +5800,7 @@ ary_max_opt_string(VALUE ary, long i, VALUE vmax)
+  *
+  *    [0, 1, 2].max # => 2
+  *
+- *  With an argument Integer +n+ and no block, returns a new \Array with at most +n+ elements,
++ *  With an argument Integer +n+ and no block, returns a new +Array+ with at most +n+ elements,
+  *  in descending order per method <tt><=></tt>:
+  *
+  *    [0, 1, 2, 3].max(3) # => [3, 2, 1]
+@@ -5813,7 +5813,7 @@ ary_max_opt_string(VALUE ary, long i, VALUE vmax)
+  *
+  *    ['0', '00', '000'].max {|a, b| a.size <=> b.size } # => "000"
+  *
+- *  With an argument +n+ and a block, returns a new \Array with at most +n+ elements,
++ *  With an argument +n+ and a block, returns a new +Array+ with at most +n+ elements,
+  *  in descending order per the block:
+  *
+  *    ['0', '00', '000'].max(2) {|a, b| a.size <=> b.size } # => ["000", "00"]
+@@ -5958,7 +5958,7 @@ ary_min_opt_string(VALUE ary, long i, VALUE vmin)
+  *  Returns one of the following:
+  *
+  *  - The minimum-valued element from +self+.
+- *  - A new \Array of minimum-valued elements selected from +self+.
++ *  - A new +Array+ of minimum-valued elements selected from +self+.
+  *
+  *  When no block is given, each element in +self+ must respond to method <tt><=></tt>
+  *  with an Integer.
+@@ -5968,7 +5968,7 @@ ary_min_opt_string(VALUE ary, long i, VALUE vmin)
+  *
+  *    [0, 1, 2].min # => 0
+  *
+- *  With Integer argument +n+ and no block, returns a new \Array with at most +n+ elements,
++ *  With Integer argument +n+ and no block, returns a new +Array+ with at most +n+ elements,
+  *  in ascending order per method <tt><=></tt>:
+  *
+  *    [0, 1, 2, 3].min(3) # => [0, 1, 2]
+@@ -5981,7 +5981,7 @@ ary_min_opt_string(VALUE ary, long i, VALUE vmin)
+  *
+  *    ['0', '00', '000'].min { |a, b| a.size <=> b.size } # => "0"
+  *
+- *  With an argument +n+ and a block, returns a new \Array with at most +n+ elements,
++ *  With an argument +n+ and a block, returns a new +Array+ with at most +n+ elements,
+  *  in ascending order per the block:
+  *
+  *    ['0', '00', '000'].min(2) {|a, b| a.size <=> b.size } # => ["0", "00"]
+@@ -6032,19 +6032,19 @@ rb_ary_min(int argc, VALUE *argv, VALUE ary)
+  *    array.minmax -> [min_val, max_val]
+  *    array.minmax {|a, b| ... } -> [min_val, max_val]
+  *
+- *  Returns a new 2-element \Array containing the minimum and maximum values
++ *  Returns a new 2-element +Array+ containing the minimum and maximum values
+  *  from +self+, either per method <tt><=></tt> or per a given block:.
+  *
+  *  When no block is given, each element in +self+ must respond to method <tt><=></tt>
+  *  with an Integer;
+- *  returns a new 2-element \Array containing the minimum and maximum values
++ *  returns a new 2-element +Array+ containing the minimum and maximum values
+  *  from +self+, per method <tt><=></tt>:
+  *
+  *    [0, 1, 2].minmax # => [0, 2]
+  *
+  *  When a block is given, the block must return an Integer;
+  *  the block is called <tt>self.size-1</tt> times to compare elements;
+- *  returns a new 2-element \Array containing the minimum and maximum values
++ *  returns a new 2-element +Array+ containing the minimum and maximum values
+  *  from +self+, per the block:
+  *
+  *    ['0', '00', '000'].minmax {|a, b| a.size <=> b.size } # => ["0", "000"]
+@@ -6130,7 +6130,7 @@ rb_ary_uniq_bang(VALUE ary)
+  *    array.uniq -> new_array
+  *    array.uniq {|element| ... } -> new_array
+  *
+- *  Returns a new \Array containing those elements from +self+ that are not duplicates,
++ *  Returns a new +Array+ containing those elements from +self+ that are not duplicates,
+  *  the first occurrence always being retained.
+  *
+  *  With no block given, identifies and omits duplicates using method <tt>eql?</tt>
+@@ -6205,7 +6205,7 @@ rb_ary_compact_bang(VALUE ary)
+  *  call-seq:
+  *    array.compact -> new_array
+  *
+- *  Returns a new \Array containing all non-+nil+ elements from +self+:
++ *  Returns a new +Array+ containing all non-+nil+ elements from +self+:
+  *
+  *    a = [nil, 0, nil, 1, nil, 2, nil]
+  *    a.compact # => [0, 1, 2]
+@@ -6366,7 +6366,7 @@ flatten(VALUE ary, int level)
+  *    array.flatten! -> self or nil
+  *    array.flatten!(level) -> self or nil
+  *
+- *  Replaces each nested \Array in +self+ with the elements from that \Array;
++ *  Replaces each nested +Array+ in +self+ with the elements from that +Array+;
+  *  returns +self+ if any changes, +nil+ otherwise.
+  *
+  *  With non-negative Integer argument +level+, flattens recursively through +level+ levels:
+@@ -6419,9 +6419,9 @@ rb_ary_flatten_bang(int argc, VALUE *argv, VALUE ary)
+  *    array.flatten -> new_array
+  *    array.flatten(level) -> new_array
+  *
+- *  Returns a new \Array that is a recursive flattening of +self+:
++ *  Returns a new +Array+ that is a recursive flattening of +self+:
+  *  - Each non-Array element is unchanged.
+- *  - Each \Array is replaced by its individual elements.
++ *  - Each +Array+ is replaced by its individual elements.
+  *
+  *  With non-negative Integer argument +level+, flattens recursively through +level+ levels:
+  *
+@@ -6864,7 +6864,7 @@ rb_ary_permutation_size(VALUE ary, VALUE args, VALUE eobj)
+  *    [2, 0, 1]
+  *    [2, 1, 0]
+  *
+- *  When +n+ is zero, calls the block once with a new empty \Array:
++ *  When +n+ is zero, calls the block once with a new empty +Array+:
+  *
+  *    a = [0, 1, 2]
+  *    a.permutation(0) {|permutation| p permutation }
+@@ -7002,7 +7002,7 @@ rb_ary_combination_size(VALUE ary, VALUE args, VALUE eobj)
+  *
+  *    [0, 1, 2]
+  *
+- *  When +n+ is zero, calls the block once with a new empty \Array:
++ *  When +n+ is zero, calls the block once with a new empty +Array+:
+  *
+  *    a = [0, 1, 2]
+  *    a1 = a.combination(0) {|combination| p combination }
+@@ -7113,7 +7113,7 @@ rb_ary_repeated_permutation_size(VALUE ary, VALUE args, VALUE eobj)
+  *    array.repeated_permutation(n) -> new_enumerator
+  *
+  *  Calls the block with each repeated permutation of length +n+ of the elements of +self+;
+- *  each permutation is an \Array;
++ *  each permutation is an +Array+;
+  *  returns +self+. The order of the permutations is indeterminate.
+  *
+  *  When a block and a positive Integer argument +n+ are given, calls the block with each
+@@ -7147,7 +7147,7 @@ rb_ary_repeated_permutation_size(VALUE ary, VALUE args, VALUE eobj)
+  *    [2, 1]
+  *    [2, 2]
+  *
+- *  If +n+ is zero, calls the block once with an empty \Array.
++ *  If +n+ is zero, calls the block once with an empty +Array+.
+  *
+  *  If +n+ is negative, does not call the block:
+  *
+@@ -7245,7 +7245,7 @@ rb_ary_repeated_combination_size(VALUE ary, VALUE args, VALUE eobj)
+  *    array.repeated_combination(n) -> new_enumerator
+  *
+  *  Calls the block with each repeated combination of length +n+ of the elements of +self+;
+- *  each combination is an \Array;
++ *  each combination is an +Array+;
+  *  returns +self+. The order of the combinations is indeterminate.
+  *
+  *  When a block and a positive Integer argument +n+ are given, calls the block with each
+@@ -7276,7 +7276,7 @@ rb_ary_repeated_combination_size(VALUE ary, VALUE args, VALUE eobj)
+  *    [1, 2]
+  *    [2, 2]
+  *
+- *  If +n+ is zero, calls the block once with an empty \Array.
++ *  If +n+ is zero, calls the block once with an empty +Array+.
+  *
+  *  If +n+ is negative, does not call the block:
+  *
+@@ -7349,7 +7349,7 @@ rb_ary_repeated_combination(VALUE ary, VALUE num)
+  *    including both +self+ and +other_arrays+.
+  *  - The order of the returned combinations is indeterminate.
+  *
+- *  When no block is given, returns the combinations as an \Array of Arrays:
++ *  When no block is given, returns the combinations as an +Array+ of Arrays:
+  *
+  *    a = [0, 1, 2]
+  *    a1 = [3, 4]
+@@ -7361,14 +7361,14 @@ rb_ary_repeated_combination(VALUE ary, VALUE num)
+  *    p.size # => 12 # a.size * a1.size * a2.size
+  *    p # => [[0, 3, 5], [0, 3, 6], [0, 4, 5], [0, 4, 6], [1, 3, 5], [1, 3, 6], [1, 4, 5], [1, 4, 6], [2, 3, 5], [2, 3, 6], [2, 4, 5], [2, 4, 6]]
+  *
+- *  If any argument is an empty \Array, returns an empty \Array.
++ *  If any argument is an empty +Array+, returns an empty +Array+.
+  *
+- *  If no argument is given, returns an \Array of 1-element Arrays,
++ *  If no argument is given, returns an +Array+ of 1-element Arrays,
+  *  each containing an element of +self+:
+  *
+  *    a.product # => [[0], [1], [2]]
+  *
+- *  When a block is given, yields each combination as an \Array; returns +self+:
++ *  When a block is given, yields each combination as an +Array+; returns +self+:
+  *
+  *    a.product(a1) {|combination| p combination }
+  *
+@@ -7381,11 +7381,11 @@ rb_ary_repeated_combination(VALUE ary, VALUE num)
+  *    [2, 3]
+  *    [2, 4]
+  *
+- *  If any argument is an empty \Array, does not call the block:
++ *  If any argument is an empty +Array+, does not call the block:
+  *
+  *    a.product(a1, a2, []) {|combination| fail 'Cannot happen' }
+  *
+- *  If no argument is given, yields each element of +self+ as a 1-element \Array:
++ *  If no argument is given, yields each element of +self+ as a 1-element +Array+:
+  *
+  *    a.product {|combination| p combination }
+  *
+@@ -7489,7 +7489,7 @@ done:
+  *  call-seq:
+  *    array.take(n) -> new_array
+  *
+- *  Returns a new \Array containing the first +n+ element of +self+,
++ *  Returns a new +Array+ containing the first +n+ element of +self+,
+  *  where +n+ is a non-negative Integer;
+  *  does not modify +self+.
+  *
+@@ -7518,12 +7518,12 @@ rb_ary_take(VALUE obj, VALUE n)
+  *    array.take_while {|element| ... } -> new_array
+  *    array.take_while -> new_enumerator
+  *
+- *  Returns a new \Array containing zero or more leading elements of +self+;
++ *  Returns a new +Array+ containing zero or more leading elements of +self+;
+  *  does not modify +self+.
+  *
+  *  With a block given, calls the block with each successive element of +self+;
+  *  stops if the block returns +false+ or +nil+;
+- *  returns a new \Array containing those elements for which the block returned a truthy value:
++ *  returns a new +Array+ containing those elements for which the block returned a truthy value:
+  *
+  *    a = [0, 1, 2, 3, 4, 5]
+  *    a.take_while {|element| element < 3 } # => [0, 1, 2]
+@@ -7552,7 +7552,7 @@ rb_ary_take_while(VALUE ary)
+  *  call-seq:
+  *    array.drop(n) -> new_array
+  *
+- *  Returns a new \Array containing all but the first +n+ element of +self+,
++ *  Returns a new +Array+ containing all but the first +n+ element of +self+,
+  *  where +n+ is a non-negative Integer;
+  *  does not modify +self+.
+  *
+@@ -7584,12 +7584,12 @@ rb_ary_drop(VALUE ary, VALUE n)
+  *    array.drop_while {|element| ... } -> new_array
+  *    array.drop_while -> new_enumerator
+ 
+- *  Returns a new \Array containing zero or more trailing elements of +self+;
++ *  Returns a new +Array+ containing zero or more trailing elements of +self+;
+  *  does not modify +self+.
+  *
+  *  With a block given, calls the block with each successive element of +self+;
+  *  stops if the block returns +false+ or +nil+;
+- *  returns a new \Array _omitting_ those elements for which the block returned a truthy value:
++ *  returns a new +Array+ _omitting_ those elements for which the block returned a truthy value:
+  *
+  *    a = [0, 1, 2, 3, 4, 5]
+  *    a.drop_while {|element| element < 3 } # => [3, 4, 5]
+@@ -7951,7 +7951,7 @@ finish_exact_sum(long n, VALUE r, VALUE v, int z)
+  *  Notes:
+  *
+  *  - Array#join and Array#flatten may be faster than Array#sum
+- *    for an \Array of Strings or an \Array of Arrays.
++ *    for an +Array+ of Strings or an +Array+ of Arrays.
+  *  - Array#sum method may not respect method redefinition of "+" methods such as Integer#+.
+  *
+  */
+@@ -8081,13 +8081,13 @@ rb_ary_deconstruct(VALUE ary)
+ }
+ 
+ /*
+- *  An \Array is an ordered, integer-indexed collection of objects, called _elements_.
++ *  An +Array+ is an ordered, integer-indexed collection of objects, called _elements_.
+  *  Any object (even another array) may be an array element,
+  *  and an array can contain objects of different types.
+  *
+- *  == \Array Indexes
++ *  == +Array+ Indexes
+  *
+- *  \Array indexing starts at 0, as in C or Java.
++ *  +Array+ indexing starts at 0, as in C or Java.
+  *
+  *  A positive index is an offset from the first element:
+  *
+@@ -8114,14 +8114,14 @@ rb_ary_deconstruct(VALUE ary)
+  *  - Index -4 is out of range.
+  *
+  *  Although the effective index into an array is always an integer,
+- *  some methods (both within and outside of class \Array)
++ *  some methods (both within and outside of class +Array+)
+  *  accept one or more non-integer arguments that are
+  *  {integer-convertible objects}[rdoc-ref:implicit_conversion.rdoc@Integer-Convertible+Objects].
+  *
+  *
+  *  == Creating Arrays
+  *
+- *  You can create an \Array object explicitly with:
++ *  You can create an +Array+ object explicitly with:
+  *
+  *  - An {array literal}[rdoc-ref:literals.rdoc@Array+Literals]:
+  *
+@@ -8202,7 +8202,7 @@ rb_ary_deconstruct(VALUE ary)
+  *  == Example Usage
+  *
+  *  In addition to the methods it mixes in through the Enumerable module, the
+- *  \Array class has proprietary methods for accessing, searching and otherwise
++ *  +Array+ class has proprietary methods for accessing, searching and otherwise
+  *  manipulating arrays.
+  *
+  *  Some of the more common ones are illustrated below.
+@@ -8250,7 +8250,7 @@ rb_ary_deconstruct(VALUE ary)
+  *
+  *     arr.drop(3) #=> [4, 5, 6]
+  *
+- *  == Obtaining Information about an \Array
++ *  == Obtaining Information about an +Array+
+  *
+  *  Arrays keep track of their own length at all times.  To query an array
+  *  about the number of elements it contains, use #length, #count or #size.
+@@ -8288,7 +8288,7 @@ rb_ary_deconstruct(VALUE ary)
+  *     arr.insert(3, 'orange', 'pear', 'grapefruit')
+  *     #=> [0, 1, 2, "orange", "pear", "grapefruit", "apple", 3, 4, 5, 6]
+  *
+- *  == Removing Items from an \Array
++ *  == Removing Items from an +Array+
+  *
+  *  The method #pop removes the last element in an array and returns it:
+  *
+@@ -8330,9 +8330,9 @@ rb_ary_deconstruct(VALUE ary)
+  *
+  *  == Iterating over Arrays
+  *
+- *  Like all classes that include the Enumerable module, \Array has an each
++ *  Like all classes that include the Enumerable module, +Array+ has an each
+  *  method, which defines what elements should be iterated over and how.  In
+- *  case of Array's #each, all elements in the \Array instance are yielded to
++ *  case of Array's #each, all elements in the +Array+ instance are yielded to
+  *  the supplied block in sequence.
+  *
+  *  Note that this operation leaves the array unchanged.
+@@ -8359,7 +8359,7 @@ rb_ary_deconstruct(VALUE ary)
+  *     arr                   #=> [1, 4, 9, 16, 25]
+  *
+  *
+- *  == Selecting Items from an \Array
++ *  == Selecting Items from an +Array+
+  *
+  *  Elements can be selected from an array according to criteria defined in a
+  *  block.  The selection can happen in a destructive or a non-destructive
+@@ -8392,13 +8392,13 @@ rb_ary_deconstruct(VALUE ary)
+  *
+  *  == What's Here
+  *
+- *  First, what's elsewhere. \Class \Array:
++ *  First, what's elsewhere. \Class +Array+:
+  *
+  *  - Inherits from {class Object}[rdoc-ref:Object@What-27s+Here].
+  *  - Includes {module Enumerable}[rdoc-ref:Enumerable@What-27s+Here],
+  *    which provides dozens of additional methods.
+  *
+- *  Here, class \Array provides methods that are useful for:
++ *  Here, class +Array+ provides methods that are useful for:
+  *
+  *  - {Creating an Array}[rdoc-ref:Array@Methods+for+Creating+an+Array]
+  *  - {Querying}[rdoc-ref:Array@Methods+for+Querying]
+@@ -8411,7 +8411,7 @@ rb_ary_deconstruct(VALUE ary)
+  *  - {Converting}[rdoc-ref:Array@Methods+for+Converting]
+  *  - {And more....}[rdoc-ref:Array@Other+Methods]
+  *
+- *  === Methods for Creating an \Array
++ *  === Methods for Creating an +Array+
+  *
+  *  - ::[]: Returns a new array populated with given objects.
+  *  - ::new: Returns a new array.
+diff --git a/ast.c b/ast.c
+index c938e3e20..710b2136a 100644
+--- a/ast.c
++++ b/ast.c
+@@ -555,9 +555,10 @@ node_children(rb_ast_t *ast, const NODE *node)
+         return rb_ary_new_from_node_args(ast, 2, RNODE_MATCH3(node)->nd_recv, RNODE_MATCH3(node)->nd_value);
+       case NODE_MATCH:
+       case NODE_LIT:
++        return rb_ary_new_from_args(1, RNODE_LIT(node)->nd_lit);
+       case NODE_STR:
+       case NODE_XSTR:
+-        return rb_ary_new_from_args(1, RNODE_LIT(node)->nd_lit);
++        return rb_ary_new_from_args(1, rb_node_str_string_val(node));
+       case NODE_INTEGER:
+         return rb_ary_new_from_args(1, rb_node_integer_literal_val(node));
+       case NODE_FLOAT:
+@@ -579,7 +580,7 @@ node_children(rb_ast_t *ast, const NODE *node)
+                 head = NEW_CHILD(ast, n->nd_head);
+                 next = NEW_CHILD(ast, n->nd_next);
+             }
+-            return rb_ary_new_from_args(3, RNODE_DSTR(node)->nd_lit, head, next);
++            return rb_ary_new_from_args(3, rb_node_dstr_string_val(node), head, next);
+         }
+       case NODE_SYM:
+         return rb_ary_new_from_args(1, rb_node_sym_string_val(node));
+diff --git a/benchmark/realpath.yml b/benchmark/realpath.yml
+index 90a029d5b..6b6a4836b 100644
+--- a/benchmark/realpath.yml
++++ b/benchmark/realpath.yml
+@@ -12,6 +12,9 @@ prelude: |
+   relative_dir = 'b/c'
+   absolute_dir = File.join(pwd, relative_dir)
+   file_dir = 'c'
++teardown: |
++  require 'fileutils'
++  FileUtils.rm_rf('b')
+ benchmark:
+   relative_nil: "f.realpath(relative, nil)"
+   absolute_nil: "f.realpath(absolute, nil)"
+diff --git a/benchmark/vm_call_kw_and_kw_splat.yml b/benchmark/vm_call_kw_and_kw_splat.yml
+new file mode 100644
+index 000000000..aa6e549e0
+--- /dev/null
++++ b/benchmark/vm_call_kw_and_kw_splat.yml
+@@ -0,0 +1,25 @@
++prelude: |
++  h1, h10, h100, h1000 = [1, 10, 100, 1000].map do |n|
++    h = {kw: 1}
++    n.times{|i| h[i.to_s.to_sym] = i}
++    h
++  end
++  eh = {}
++  def kw(kw: nil, **kws) end
++benchmark:
++  1: |
++    kw(**h1)
++  1_mutable: |
++    kw(**eh, **h1)
++  10: |
++    kw(**h10)
++  10_mutable: |
++    kw(**eh, **h10)
++  100: |
++    kw(**h100)
++  100_mutable: |
++    kw(**eh, **h100)
++  1000: |
++    kw(**h1000)
++  1000_mutable: |
++    kw(**eh, **h1000)
+diff --git a/benchmark/vm_method_splat_calls2.yml b/benchmark/vm_method_splat_calls2.yml
+index 0b09fce88..d33dcd7e8 100644
+--- a/benchmark/vm_method_splat_calls2.yml
++++ b/benchmark/vm_method_splat_calls2.yml
+@@ -7,6 +7,7 @@ prelude: |
+   def anon_fw_to_named(*, **) named_arg_kw_splat(*, **) end
+   def fw_to_named(...) named_arg_kw_splat(...) end
+   def fw_to_anon_to_named(...) anon_fw_to_named(...) end
++  def fw_no_kw(...) named_arg_splat(...) end
+   a = [1]
+   kw = {y: 1}
+ benchmark:
+@@ -23,3 +24,4 @@ benchmark:
+   fw_to_named_no_splat: "fw_to_named(1, y: 1)"
+   fw_to_anon_to_named_splat: "fw_to_anon_to_named(*a, **kw)"
+   fw_to_anon_to_named_no_splat: "fw_to_anon_to_named(1, y: 1)"
++  fw_no_kw: "fw_no_kw(1, 2)"
+diff --git a/bignum.c b/bignum.c
+index fed86b3a8..0e7833497 100644
+--- a/bignum.c
++++ b/bignum.c
+@@ -349,7 +349,7 @@ maxpow_in_bdigit_dbl(int base, int *exp_ret)
+     BDIGIT_DBL maxpow;
+     int exponent;
+ 
+-    assert(2 <= base && base <= 36);
++    RUBY_ASSERT(2 <= base && base <= 36);
+ 
+     {
+ #if SIZEOF_BDIGIT_DBL == 2
+@@ -381,7 +381,7 @@ maxpow_in_bdigit_dbl(int base, int *exp_ret)
+ static inline BDIGIT_DBL
+ bary2bdigitdbl(const BDIGIT *ds, size_t n)
+ {
+-    assert(n <= 2);
++    RUBY_ASSERT(n <= 2);
+ 
+     if (n == 2)
+         return ds[0] | BIGUP(ds[1]);
+@@ -393,7 +393,7 @@ bary2bdigitdbl(const BDIGIT *ds, size_t n)
+ static inline void
+ bdigitdbl2bary(BDIGIT *ds, size_t n, BDIGIT_DBL num)
+ {
+-    assert(n == 2);
++    RUBY_ASSERT(n == 2);
+ 
+     ds[0] = BIGLO(num);
+     ds[1] = (BDIGIT)BIGDN(num);
+@@ -424,7 +424,7 @@ bary_small_lshift(BDIGIT *zds, const BDIGIT *xds, size_t n, int shift)
+ {
+     size_t i;
+     BDIGIT_DBL num = 0;
+-    assert(0 <= shift && shift < BITSPERDIG);
++    RUBY_ASSERT(0 <= shift && shift < BITSPERDIG);
+ 
+     for (i=0; i<n; i++) {
+         num = num | (BDIGIT_DBL)*xds++ << shift;
+@@ -440,7 +440,7 @@ bary_small_rshift(BDIGIT *zds, const BDIGIT *xds, size_t n, int shift, BDIGIT hi
+     size_t i;
+     BDIGIT_DBL num = 0;
+ 
+-    assert(0 <= shift && shift < BITSPERDIG);
++    RUBY_ASSERT(0 <= shift && shift < BITSPERDIG);
+ 
+     num = BIGUP(higher_bdigit);
+     for (i = 0; i < n; i++) {
+@@ -1060,8 +1060,8 @@ integer_unpack_num_bdigits(size_t numwords, size_t wordsize, size_t nails, int *
+         if (debug_integer_pack) {
+             int nlp_bits1;
+             size_t num_bdigits1 = integer_unpack_num_bdigits_generic(numwords, wordsize, nails, &nlp_bits1);
+-            assert(num_bdigits == num_bdigits1);
+-            assert(*nlp_bits_ret == nlp_bits1);
++            RUBY_ASSERT(num_bdigits == num_bdigits1);
++            RUBY_ASSERT(*nlp_bits_ret == nlp_bits1);
+             (void)num_bdigits1;
+         }
+     }
+@@ -1271,7 +1271,7 @@ bary_unpack_internal(BDIGIT *bdigits, size_t num_bdigits, const void *words, siz
+         }
+         if (dd)
+             *dp++ = (BDIGIT)dd;
+-        assert(dp <= de);
++        RUBY_ASSERT(dp <= de);
+         while (dp < de)
+             *dp++ = 0;
+ #undef PUSH_BITS
+@@ -1330,7 +1330,7 @@ bary_unpack(BDIGIT *bdigits, size_t num_bdigits, const void *words, size_t numwo
+ 
+     num_bdigits0 = integer_unpack_num_bdigits(numwords, wordsize, nails, &nlp_bits);
+ 
+-    assert(num_bdigits0 <= num_bdigits);
++    RUBY_ASSERT(num_bdigits0 <= num_bdigits);
+ 
+     sign = bary_unpack_internal(bdigits, num_bdigits0, words, numwords, wordsize, nails, flags, nlp_bits);
+ 
+@@ -1349,8 +1349,8 @@ bary_subb(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGIT *yd
+     size_t i;
+     size_t sn;
+ 
+-    assert(xn <= zn);
+-    assert(yn <= zn);
++    RUBY_ASSERT(xn <= zn);
++    RUBY_ASSERT(yn <= zn);
+ 
+     sn = xn < yn ? xn : yn;
+ 
+@@ -1411,8 +1411,8 @@ bary_addc(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGIT *yd
+     BDIGIT_DBL num;
+     size_t i;
+ 
+-    assert(xn <= zn);
+-    assert(yn <= zn);
++    RUBY_ASSERT(xn <= zn);
++    RUBY_ASSERT(yn <= zn);
+ 
+     if (xn > yn) {
+         const BDIGIT *tds;
+@@ -1476,7 +1476,7 @@ bary_mul_single(BDIGIT *zds, size_t zn, BDIGIT x, BDIGIT y)
+ {
+     BDIGIT_DBL n;
+ 
+-    assert(2 <= zn);
++    RUBY_ASSERT(2 <= zn);
+ 
+     n = (BDIGIT_DBL)x * y;
+     bdigitdbl2bary(zds, 2, n);
+@@ -1490,7 +1490,7 @@ bary_muladd_1xN(BDIGIT *zds, size_t zn, BDIGIT x, const BDIGIT *yds, size_t yn)
+     BDIGIT_DBL dd;
+     size_t j;
+ 
+-    assert(zn > yn);
++    RUBY_ASSERT(zn > yn);
+ 
+     if (x == 0)
+         return 0;
+@@ -1525,7 +1525,7 @@ bigdivrem_mulsub(BDIGIT *zds, size_t zn, BDIGIT x, const BDIGIT *yds, size_t yn)
+     BDIGIT_DBL t2;
+     BDIGIT_DBL_SIGNED num;
+ 
+-    assert(zn == yn + 1);
++    RUBY_ASSERT(zn == yn + 1);
+ 
+     num = 0;
+     t2 = 0;
+@@ -1550,7 +1550,7 @@ bary_mulsub_1xN(BDIGIT *zds, size_t zn, BDIGIT x, const BDIGIT *yds, size_t yn)
+ {
+     BDIGIT_DBL_SIGNED num;
+ 
+-    assert(zn == yn + 1);
++    RUBY_ASSERT(zn == yn + 1);
+ 
+     num = bigdivrem_mulsub(zds, zn, x, yds, yn);
+     zds[yn] = BIGLO(num);
+@@ -1564,7 +1564,7 @@ bary_mul_normal(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIG
+ {
+     size_t i;
+ 
+-    assert(xn + yn <= zn);
++    RUBY_ASSERT(xn + yn <= zn);
+ 
+     BDIGITS_ZERO(zds, zn);
+     for (i = 0; i < xn; i++) {
+@@ -1595,7 +1595,7 @@ bary_sq_fast(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn)
+     BDIGIT vl;
+     int vh;
+ 
+-    assert(xn * 2 <= zn);
++    RUBY_ASSERT(xn * 2 <= zn);
+ 
+     BDIGITS_ZERO(zds, zn);
+ 
+@@ -1667,9 +1667,9 @@ bary_mul_balance_with_mulfunc(BDIGIT *const zds, const size_t zn,
+     VALUE work = 0;
+     size_t n;
+ 
+-    assert(xn + yn <= zn);
+-    assert(xn <= yn);
+-    assert(!KARATSUBA_BALANCED(xn, yn) || !TOOM3_BALANCED(xn, yn));
++    RUBY_ASSERT(xn + yn <= zn);
++    RUBY_ASSERT(xn <= yn);
++    RUBY_ASSERT(!KARATSUBA_BALANCED(xn, yn) || !TOOM3_BALANCED(xn, yn));
+ 
+     BDIGITS_ZERO(zds, xn);
+ 
+@@ -1751,9 +1751,9 @@ bary_mul_karatsuba(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const B
+     const BDIGIT *xds0, *xds1, *yds0, *yds1;
+     BDIGIT *zds0, *zds1, *zds2, *zds3;
+ 
+-    assert(xn + yn <= zn);
+-    assert(xn <= yn);
+-    assert(yn < 2 * xn);
++    RUBY_ASSERT(xn + yn <= zn);
++    RUBY_ASSERT(xn <= yn);
++    RUBY_ASSERT(yn < 2 * xn);
+ 
+     sq = xds == yds && xn == yn;
+ 
+@@ -1768,7 +1768,7 @@ bary_mul_karatsuba(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const B
+ 
+     n = yn / 2;
+ 
+-    assert(n < xn);
++    RUBY_ASSERT(n < xn);
+ 
+     if (wn < n) {
+         /* This function itself needs only n BDIGITs for work area.
+@@ -1889,7 +1889,7 @@ bary_mul_karatsuba(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const B
+         for (x = 0, i = xn-1; 0 <= i; i--) { x <<= SIZEOF_BDIGIT*CHAR_BIT; x |= xds[i]; }
+         for (y = 0, i = yn-1; 0 <= i; i--) { y <<= SIZEOF_BDIGIT*CHAR_BIT; y |= yds[i]; }
+         for (z = 0, i = zn-1; 0 <= i; i--) { z <<= SIZEOF_BDIGIT*CHAR_BIT; z |= zds[i]; }
+-        assert(z == x * y);
++        RUBY_ASSERT(z == x * y);
+     }
+     */
+ 
+@@ -1957,11 +1957,11 @@ bary_mul_toom3(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGI
+ 
+     int sq = xds == yds && xn == yn;
+ 
+-    assert(xn <= yn);  /* assume y >= x */
+-    assert(xn + yn <= zn);
++    RUBY_ASSERT(xn <= yn);  /* assume y >= x */
++    RUBY_ASSERT(xn + yn <= zn);
+ 
+     n = (yn + 2) / 3;
+-    assert(2*n < xn);
++    RUBY_ASSERT(2*n < xn);
+ 
+     wnc = 0;
+ 
+@@ -2148,19 +2148,19 @@ bary_mul_toom3(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGI
+     /* z(1) : t1 <- u1 * v1 */
+     bary_mul_toom3_start(t1ds, t1n, u1ds, u1n, v1ds, v1n, wds, wn);
+     t1p = u1p == v1p;
+-    assert(t1ds[t1n-1] == 0);
++    RUBY_ASSERT(t1ds[t1n-1] == 0);
+     t1n--;
+ 
+     /* z(-1) : t2 <- u2 * v2 */
+     bary_mul_toom3_start(t2ds, t2n, u2ds, u2n, v2ds, v2n, wds, wn);
+     t2p = u2p == v2p;
+-    assert(t2ds[t2n-1] == 0);
++    RUBY_ASSERT(t2ds[t2n-1] == 0);
+     t2n--;
+ 
+     /* z(-2) : t3 <- u3 * v3 */
+     bary_mul_toom3_start(t3ds, t3n, u3ds, u3n, v3ds, v3n, wds, wn);
+     t3p = u3p == v3p;
+-    assert(t3ds[t3n-1] == 0);
++    RUBY_ASSERT(t3ds[t3n-1] == 0);
+     t3n--;
+ 
+     /* z(inf) : t4 <- x2 * y2 */
+@@ -2336,7 +2336,7 @@ bary_mul_gmp(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGIT
+     mpz_t x, y, z;
+     size_t count;
+ 
+-    assert(xn + yn <= zn);
++    RUBY_ASSERT(xn + yn <= zn);
+ 
+     mpz_init(x);
+     mpz_init(y);
+@@ -2371,7 +2371,7 @@ rb_big_mul_gmp(VALUE x, VALUE y)
+ static void
+ bary_short_mul(BDIGIT *zds, size_t zn, const BDIGIT *xds, size_t xn, const BDIGIT *yds, size_t yn)
+ {
+-    assert(xn + yn <= zn);
++    RUBY_ASSERT(xn + yn <= zn);
+ 
+     if (xn == 1 && yn == 1) {
+         bary_mul_single(zds, zn, xds[0], yds[0]);
+@@ -2407,7 +2407,7 @@ bary_mul_precheck(BDIGIT **zdsp, size_t *znp, const BDIGIT **xdsp, size_t *xnp,
+     const BDIGIT *yds = *ydsp;
+     size_t yn = *ynp;
+ 
+-    assert(xn + yn <= zn);
++    RUBY_ASSERT(xn + yn <= zn);
+ 
+     nlsz = 0;
+ 
+@@ -2456,7 +2456,7 @@ bary_mul_precheck(BDIGIT **zdsp, size_t *znp, const BDIGIT **xdsp, size_t *xnp,
+         tds = xds; xds = yds; yds = tds;
+         tn = xn; xn = yn; yn = tn;
+     }
+-    assert(xn <= yn);
++    RUBY_ASSERT(xn <= yn);
+ 
+     if (xn <= 1) {
+         if (xn == 0) {
+@@ -2639,8 +2639,8 @@ rb_big_stop(void *ptr)
+ static BDIGIT
+ bigdivrem_single1(BDIGIT *qds, const BDIGIT *xds, size_t xn, BDIGIT x_higher_bdigit, BDIGIT y)
+ {
+-    assert(0 < xn);
+-    assert(x_higher_bdigit < y);
++    RUBY_ASSERT(0 < xn);
++    RUBY_ASSERT(x_higher_bdigit < y);
+     if (POW2_P(y)) {
+         BDIGIT r;
+         r = xds[0] & (y-1);
+@@ -2672,9 +2672,9 @@ bigdivrem_restoring(BDIGIT *zds, size_t zn, BDIGIT *yds, size_t yn)
+     struct big_div_struct bds;
+     size_t ynzero;
+ 
+-    assert(yn < zn);
+-    assert(BDIGIT_MSB(yds[yn-1]));
+-    assert(zds[zn-1] < yds[yn-1]);
++    RUBY_ASSERT(yn < zn);
++    RUBY_ASSERT(BDIGIT_MSB(yds[yn-1]));
++    RUBY_ASSERT(zds[zn-1] < yds[yn-1]);
+ 
+     for (ynzero = 0; !yds[ynzero]; ynzero++);
+ 
+@@ -2713,9 +2713,9 @@ bary_divmod_normal(BDIGIT *qds, size_t qn, BDIGIT *rds, size_t rn, const BDIGIT
+     size_t zn;
+     VALUE tmpyz = 0;
+ 
+-    assert(yn < xn || (xn == yn && yds[yn - 1] <= xds[xn - 1]));
+-    assert(qds ? (xn - yn + 1) <= qn : 1);
+-    assert(rds ? yn <= rn : 1);
++    RUBY_ASSERT(yn < xn || (xn == yn && yds[yn - 1] <= xds[xn - 1]));
++    RUBY_ASSERT(qds ? (xn - yn + 1) <= qn : 1);
++    RUBY_ASSERT(rds ? yn <= rn : 1);
+ 
+     zn = xn + BIGDIVREM_EXTRA_WORDS;
+ 
+@@ -2807,10 +2807,10 @@ bary_divmod_gmp(BDIGIT *qds, size_t qn, BDIGIT *rds, size_t rn, const BDIGIT *xd
+     mpz_t x, y, q, r;
+     size_t count;
+ 
+-    assert(yn < xn || (xn == yn && yds[yn - 1] <= xds[xn - 1]));
+-    assert(qds ? (xn - yn + 1) <= qn : 1);
+-    assert(rds ? yn <= rn : 1);
+-    assert(qds || rds);
++    RUBY_ASSERT(yn < xn || (xn == yn && yds[yn - 1] <= xds[xn - 1]));
++    RUBY_ASSERT(qds ? (xn - yn + 1) <= qn : 1);
++    RUBY_ASSERT(rds ? yn <= rn : 1);
++    RUBY_ASSERT(qds || rds);
+ 
+     mpz_init(x);
+     mpz_init(y);
+@@ -2896,8 +2896,8 @@ bary_divmod_branch(BDIGIT *qds, size_t qn, BDIGIT *rds, size_t rn, const BDIGIT
+ static void
+ bary_divmod(BDIGIT *qds, size_t qn, BDIGIT *rds, size_t rn, const BDIGIT *xds, size_t xn, const BDIGIT *yds, size_t yn)
+ {
+-    assert(xn <= qn);
+-    assert(yn <= rn);
++    RUBY_ASSERT(xn <= qn);
++    RUBY_ASSERT(yn <= rn);
+ 
+     BARY_TRUNC(yds, yn);
+     if (yn == 0)
+@@ -3432,8 +3432,8 @@ rb_absint_numwords(VALUE val, size_t word_numbits, size_t *nlz_bits_ret)
+         if (debug_integer_pack) {
+             size_t numwords0, nlz_bits0;
+             numwords0 = absint_numwords_generic(numbytes, nlz_bits_in_msbyte, word_numbits, &nlz_bits0);
+-            assert(numwords0 == numwords);
+-            assert(nlz_bits0 == nlz_bits);
++            RUBY_ASSERT(numwords0 == numwords);
++            RUBY_ASSERT(nlz_bits0 == nlz_bits);
+             (void)numwords0;
+         }
+     }
+@@ -3848,7 +3848,7 @@ str2big_poweroftwo(
+     if (numbits) {
+         *dp++ = BIGLO(dd);
+     }
+-    assert((size_t)(dp - BDIGITS(z)) == num_bdigits);
++    RUBY_ASSERT((size_t)(dp - BDIGITS(z)) == num_bdigits);
+ 
+     return z;
+ }
+@@ -3891,7 +3891,7 @@ str2big_normal(
+             }
+             break;
+         }
+-        assert(blen <= num_bdigits);
++        RUBY_ASSERT(blen <= num_bdigits);
+     }
+ 
+     return z;
+@@ -3949,7 +3949,7 @@ str2big_karatsuba(
+             current_base = 1;
+         }
+     }
+-    assert(i == num_bdigits);
++    RUBY_ASSERT(i == num_bdigits);
+     for (unit = 2; unit < num_bdigits; unit *= 2) {
+         for (i = 0; i < num_bdigits; i += unit*2) {
+             if (2*unit <= num_bdigits - i) {
+@@ -4094,8 +4094,8 @@ rb_int_parse_cstr(const char *str, ssize_t len, char **endp, size_t *ndigits,
+         len -= (n); \
+     } while (0)
+ #define ASSERT_LEN() do {\
+-        assert(len != 0); \
+-        if (len0 >= 0) assert(s + len0 == str + len); \
++        RUBY_ASSERT(len != 0); \
++        if (len0 >= 0) RUBY_ASSERT(s + len0 == str + len); \
+     } while (0)
+ 
+     if (!str) {
+@@ -4640,8 +4640,8 @@ big_shift2(VALUE x, int lshift_p, VALUE y)
+     size_t shift_numdigits;
+     int shift_numbits;
+ 
+-    assert(POW2_P(CHAR_BIT));
+-    assert(POW2_P(BITSPERDIG));
++    RUBY_ASSERT(POW2_P(CHAR_BIT));
++    RUBY_ASSERT(POW2_P(BITSPERDIG));
+ 
+     if (BIGZEROP(x))
+         return INT2FIX(0);
+@@ -4764,7 +4764,7 @@ big2str_2bdigits(struct big2str_struct *b2s, BDIGIT *xds, size_t xn, size_t tail
+     int beginning = !b2s->ptr;
+     size_t len = 0;
+ 
+-    assert(xn <= 2);
++    RUBY_ASSERT(xn <= 2);
+     num = bary2bdigitdbl(xds, xn);
+ 
+     if (beginning) {
+@@ -4892,7 +4892,7 @@ big2str_karatsuba(struct big2str_struct *b2s, BDIGIT *xds, size_t xn, size_t wn,
+             /* bigdivrem_restoring will modify y.
+              * So use temporary buffer.  */
+             tds = xds + qn;
+-            assert(qn + bn <= xn + wn);
++            RUBY_ASSERT(qn + bn <= xn + wn);
+             bary_small_lshift(tds, bds, bn, shift);
+             xds[xn] = bary_small_lshift(xds, xds, xn, shift);
+         }
+@@ -4910,7 +4910,7 @@ big2str_karatsuba(struct big2str_struct *b2s, BDIGIT *xds, size_t xn, size_t wn,
+         }
+ 
+         BARY_TRUNC(qds, qn);
+-        assert(qn <= bn);
++        RUBY_ASSERT(qn <= bn);
+         big2str_karatsuba(b2s, qds, qn, xn+wn - (rn+qn), lower_power_level, lower_numdigits+taillen);
+         BARY_TRUNC(rds, rn);
+         big2str_karatsuba(b2s, rds, rn, xn+wn - rn, lower_power_level, taillen);
+@@ -4985,7 +4985,7 @@ big2str_generic(VALUE x, int base)
+         power_level++;
+         power = power_cache_get_power(base, power_level, NULL);
+     }
+-    assert(power_level != MAX_BASE36_POWER_TABLE_ENTRIES);
++    RUBY_ASSERT(power_level != MAX_BASE36_POWER_TABLE_ENTRIES);
+ 
+     if ((size_t)BIGNUM_LEN(power) <= xn) {
+         /*
+@@ -5660,7 +5660,7 @@ bigsub_int(VALUE x, long y0)
+     zds = BDIGITS(z);
+ 
+ #if SIZEOF_BDIGIT >= SIZEOF_LONG
+-    assert(xn == zn);
++    RUBY_ASSERT(xn == zn);
+     num = (BDIGIT_DBL_SIGNED)xds[0] - y;
+     if (xn == 1 && num < 0) {
+         BIGNUM_NEGATE(z);
+@@ -5723,7 +5723,7 @@ bigsub_int(VALUE x, long y0)
+     goto finish;
+ 
+   finish:
+-    assert(num == 0 || num == -1);
++    RUBY_ASSERT(num == 0 || num == -1);
+     if (num < 0) {
+         get2comp(z);
+         BIGNUM_NEGATE(z);
+@@ -7001,7 +7001,7 @@ int_pow_tmp3(VALUE x, VALUE y, VALUE m, int nega_flg)
+     if (FIXNUM_P(y)) {
+        y = rb_int2big(FIX2LONG(y));
+     }
+-    assert(RB_BIGNUM_TYPE_P(m));
++    RUBY_ASSERT(RB_BIGNUM_TYPE_P(m));
+     xn = BIGNUM_LEN(x);
+     yn = BIGNUM_LEN(y);
+     mn = BIGNUM_LEN(m);
+diff --git a/common.mk b/common.mk
+index 53bd710a4..4ad47ca86 100644
+--- a/common.mk
++++ b/common.mk
+@@ -983,7 +983,7 @@ $(RBCONFIG): $(tooldir)/mkconfig.rb config.status $(srcdir)/version.h $(srcdir)/
+ test-rubyspec: test-spec
+ yes-test-rubyspec: yes-test-spec
+ 
+-yes-test-spec-precheck: yes-test-all-precheck yes-fake
++yes-test-spec-precheck: yes-test-all-precheck yes-fake prepare-gems
+ 
+ test-spec: $(TEST_RUNNABLE)-test-spec
+ yes-test-spec: yes-test-spec-precheck
+@@ -9325,11 +9325,15 @@ localeinit.$(OBJEXT): {$(VPATH)}st.h
+ localeinit.$(OBJEXT): {$(VPATH)}subst.h
+ main.$(OBJEXT): $(hdrdir)/ruby.h
+ main.$(OBJEXT): $(hdrdir)/ruby/ruby.h
++main.$(OBJEXT): $(top_srcdir)/internal/compilers.h
++main.$(OBJEXT): $(top_srcdir)/internal/sanitizers.h
++main.$(OBJEXT): $(top_srcdir)/internal/warnings.h
+ main.$(OBJEXT): {$(VPATH)}assert.h
+ main.$(OBJEXT): {$(VPATH)}backward.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/assume.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/attributes.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/bool.h
++main.$(OBJEXT): {$(VPATH)}backward/2/gcc_version_since.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/inttypes.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/limits.h
+ main.$(OBJEXT): {$(VPATH)}backward/2/long_long.h
+diff --git a/compile.c b/compile.c
+index 6f012b59d..8b20aa2b8 100644
+--- a/compile.c
++++ b/compile.c
+@@ -222,30 +222,34 @@ const ID rb_iseq_shared_exc_local_tbl[] = {idERROR_INFO};
+ 
+ /* add an instruction */
+ #define ADD_INSN(seq, line_node, insn) \
+-  ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_body(iseq, (line_node), BIN(insn), 0))
++  ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_body(iseq, nd_line(line_node), nd_node_id(line_node), BIN(insn), 0))
++
++/* add an instruction with the given line number and node id */
++#define ADD_SYNTHETIC_INSN(seq, line_no, node_id, insn) \
++  ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_body(iseq, (line_no), (node_id), BIN(insn), 0))
+ 
+ /* insert an instruction before next */
+-#define INSERT_BEFORE_INSN(next, line_node, insn) \
+-  ELEM_INSERT_PREV(&(next)->link, (LINK_ELEMENT *) new_insn_body(iseq, (line_node), BIN(insn), 0))
++#define INSERT_BEFORE_INSN(next, line_no, node_id, insn) \
++  ELEM_INSERT_PREV(&(next)->link, (LINK_ELEMENT *) new_insn_body(iseq, line_no, node_id, BIN(insn), 0))
+ 
+ /* insert an instruction after prev */
+-#define INSERT_AFTER_INSN(prev, line_node, insn) \
+-  ELEM_INSERT_NEXT(&(prev)->link, (LINK_ELEMENT *) new_insn_body(iseq, (line_node), BIN(insn), 0))
++#define INSERT_AFTER_INSN(prev, line_no, node_id, insn) \
++  ELEM_INSERT_NEXT(&(prev)->link, (LINK_ELEMENT *) new_insn_body(iseq, line_no, node_id, BIN(insn), 0))
+ 
+ /* add an instruction with some operands (1, 2, 3, 5) */
+ #define ADD_INSN1(seq, line_node, insn, op1) \
+   ADD_ELEM((seq), (LINK_ELEMENT *) \
+-           new_insn_body(iseq, (line_node), BIN(insn), 1, (VALUE)(op1)))
++           new_insn_body(iseq, nd_line(line_node), nd_node_id(line_node), BIN(insn), 1, (VALUE)(op1)))
+ 
+ /* insert an instruction with some operands (1, 2, 3, 5) before next */
+-#define INSERT_BEFORE_INSN1(next, line_node, insn, op1) \
++#define INSERT_BEFORE_INSN1(next, line_no, node_id, insn, op1) \
+   ELEM_INSERT_PREV(&(next)->link, (LINK_ELEMENT *) \
+-           new_insn_body(iseq, (line_node), BIN(insn), 1, (VALUE)(op1)))
++           new_insn_body(iseq, line_no, node_id, BIN(insn), 1, (VALUE)(op1)))
+ 
+ /* insert an instruction with some operands (1, 2, 3, 5) after prev */
+-#define INSERT_AFTER_INSN1(prev, line_node, insn, op1) \
++#define INSERT_AFTER_INSN1(prev, line_no, node_id, insn, op1) \
+   ELEM_INSERT_NEXT(&(prev)->link, (LINK_ELEMENT *) \
+-           new_insn_body(iseq, (line_node), BIN(insn), 1, (VALUE)(op1)))
++           new_insn_body(iseq, line_no, node_id, BIN(insn), 1, (VALUE)(op1)))
+ 
+ #define LABEL_REF(label) ((label)->refcnt++)
+ 
+@@ -254,11 +258,11 @@ const ID rb_iseq_shared_exc_local_tbl[] = {idERROR_INFO};
+ 
+ #define ADD_INSN2(seq, line_node, insn, op1, op2) \
+   ADD_ELEM((seq), (LINK_ELEMENT *) \
+-           new_insn_body(iseq, (line_node), BIN(insn), 2, (VALUE)(op1), (VALUE)(op2)))
++           new_insn_body(iseq, nd_line(line_node), nd_node_id(line_node), BIN(insn), 2, (VALUE)(op1), (VALUE)(op2)))
+ 
+ #define ADD_INSN3(seq, line_node, insn, op1, op2, op3) \
+   ADD_ELEM((seq), (LINK_ELEMENT *) \
+-           new_insn_body(iseq, (line_node), BIN(insn), 3, (VALUE)(op1), (VALUE)(op2), (VALUE)(op3)))
++           new_insn_body(iseq, nd_line(line_node), nd_node_id(line_node), BIN(insn), 3, (VALUE)(op1), (VALUE)(op2), (VALUE)(op3)))
+ 
+ /* Specific Insn factory */
+ #define ADD_SEND(seq, line_node, id, argc) \
+@@ -280,7 +284,7 @@ const ID rb_iseq_shared_exc_local_tbl[] = {idERROR_INFO};
+   ADD_SEND_R((seq), (line_node), (id), (argc), (block), (VALUE)INT2FIX(VM_CALL_FCALL), NULL)
+ 
+ #define ADD_SEND_R(seq, line_node, id, argc, block, flag, keywords) \
+-  ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_send(iseq, (line_node), (id), (VALUE)(argc), (block), (VALUE)(flag), (keywords)))
++  ADD_ELEM((seq), (LINK_ELEMENT *) new_insn_send(iseq, nd_line(line_node), nd_node_id(line_node), (id), (VALUE)(argc), (block), (VALUE)(flag), (keywords)))
+ 
+ #define ADD_TRACE(seq, event) \
+   ADD_ELEM((seq), (LINK_ELEMENT *)new_trace_body(iseq, (event), 0))
+@@ -473,7 +477,7 @@ static void dump_disasm_list(const LINK_ELEMENT *elem);
+ static int insn_data_length(INSN *iobj);
+ static int calc_sp_depth(int depth, INSN *iobj);
+ 
+-static INSN *new_insn_body(rb_iseq_t *iseq, const NODE *const line_node, enum ruby_vminsn_type insn_id, int argc, ...);
++static INSN *new_insn_body(rb_iseq_t *iseq, int line_no, int node_id, enum ruby_vminsn_type insn_id, int argc, ...);
+ static LABEL *new_label_body(rb_iseq_t *iseq, long line);
+ static ADJUST *new_adjust_body(rb_iseq_t *iseq, LABEL *label, int line);
+ static TRACE *new_trace_body(rb_iseq_t *iseq, rb_event_flag_t event, long data);
+@@ -694,9 +698,7 @@ add_trace_branch_coverage(rb_iseq_t *iseq, LINK_ANCHOR *const seq, const NODE *n
+     }
+ 
+     ADD_TRACE_WITH_DATA(seq, RUBY_EVENT_COVERAGE_BRANCH, counter_idx);
+-
+-    NODE dummy_line_node = generate_dummy_line_node(last_lineno, nd_node_id(node));
+-    ADD_INSN(seq, &dummy_line_node, nop);
++    ADD_SYNTHETIC_INSN(seq, last_lineno, nd_node_id(node), nop);
+ }
+ 
+ #define ISEQ_LAST_LINE(iseq) (ISEQ_COMPILE_DATA(iseq)->last_line)
+@@ -838,7 +840,7 @@ get_string_value(const NODE *node)
+ {
+     switch (nd_type(node)) {
+       case NODE_STR:
+-        return RNODE_STR(node)->nd_lit;
++        return rb_node_str_string_val(node);
+       case NODE_FILE:
+         return rb_node_file_path_val(node);
+       default:
+@@ -854,8 +856,7 @@ rb_iseq_compile_callback(rb_iseq_t *iseq, const struct rb_iseq_new_with_callback
+ 
+     (*ifunc->func)(iseq, ret, ifunc->data);
+ 
+-    NODE dummy_line_node = generate_dummy_line_node(ISEQ_COMPILE_DATA(iseq)->last_line, -1);
+-    ADD_INSN(ret, &dummy_line_node, leave);
++    ADD_SYNTHETIC_INSN(ret, ISEQ_COMPILE_DATA(iseq)->last_line, -1, leave);
+ 
+     CHECK(iseq_setup_insn(iseq, ret));
+     return iseq_setup(iseq, ret);
+@@ -891,8 +892,7 @@ rb_iseq_compile_node(rb_iseq_t *iseq, const NODE *node)
+                 end->rescued = LABEL_RESCUE_END;
+ 
+                 ADD_TRACE(ret, RUBY_EVENT_B_CALL);
+-                NODE dummy_line_node = generate_dummy_line_node(ISEQ_BODY(iseq)->location.first_lineno, -1);
+-                ADD_INSN (ret, &dummy_line_node, nop);
++                ADD_SYNTHETIC_INSN(ret, ISEQ_BODY(iseq)->location.first_lineno, -1, nop);
+                 ADD_LABEL(ret, start);
+                 CHECK(COMPILE(ret, "block body", RNODE_SCOPE(node)->nd_body));
+                 ADD_LABEL(ret, end);
+@@ -966,8 +966,7 @@ rb_iseq_compile_node(rb_iseq_t *iseq, const NODE *node)
+         ADD_INSN1(ret, &dummy_line_node, throw, INT2FIX(0) /* continue throw */ );
+     }
+     else {
+-        NODE dummy_line_node = generate_dummy_line_node(ISEQ_COMPILE_DATA(iseq)->last_line, -1);
+-        ADD_INSN(ret, &dummy_line_node, leave);
++        ADD_SYNTHETIC_INSN(ret, ISEQ_COMPILE_DATA(iseq)->last_line, -1, leave);
+     }
+ 
+ #if OPT_SUPPORT_JOKE
+@@ -1400,8 +1399,7 @@ iseq_insn_each_object_write_barrier(VALUE obj, VALUE iseq)
+ }
+ 
+ static INSN *
+-new_insn_core(rb_iseq_t *iseq, const NODE *line_node,
+-              int insn_id, int argc, VALUE *argv)
++new_insn_core(rb_iseq_t *iseq, int line_no, int node_id, int insn_id, int argc, VALUE *argv)
+ {
+     INSN *iobj = compile_data_alloc_insn(iseq);
+ 
+@@ -1410,8 +1408,8 @@ new_insn_core(rb_iseq_t *iseq, const NODE *line_node,
+     iobj->link.type = ISEQ_ELEMENT_INSN;
+     iobj->link.next = 0;
+     iobj->insn_id = insn_id;
+-    iobj->insn_info.line_no = nd_line(line_node);
+-    iobj->insn_info.node_id = nd_node_id(line_node);
++    iobj->insn_info.line_no = line_no;
++    iobj->insn_info.node_id = node_id;
+     iobj->insn_info.events = 0;
+     iobj->operands = argv;
+     iobj->operand_size = argc;
+@@ -1423,7 +1421,7 @@ new_insn_core(rb_iseq_t *iseq, const NODE *line_node,
+ }
+ 
+ static INSN *
+-new_insn_body(rb_iseq_t *iseq, const NODE *const line_node, enum ruby_vminsn_type insn_id, int argc, ...)
++new_insn_body(rb_iseq_t *iseq, int line_no, int node_id, enum ruby_vminsn_type insn_id, int argc, ...)
+ {
+     VALUE *operands = 0;
+     va_list argv;
+@@ -1437,7 +1435,7 @@ new_insn_body(rb_iseq_t *iseq, const NODE *const line_node, enum ruby_vminsn_typ
+         }
+         va_end(argv);
+     }
+-    return new_insn_core(iseq, line_node, insn_id, argc, operands);
++    return new_insn_core(iseq, line_no, node_id, insn_id, argc, operands);
+ }
+ 
+ static const struct rb_callinfo *
+@@ -1462,7 +1460,7 @@ new_callinfo(rb_iseq_t *iseq, ID mid, int argc, unsigned int flag, struct rb_cal
+ }
+ 
+ static INSN *
+-new_insn_send(rb_iseq_t *iseq, const NODE *const line_node, ID id, VALUE argc, const rb_iseq_t *blockiseq, VALUE flag, struct rb_callinfo_kwarg *keywords)
++new_insn_send(rb_iseq_t *iseq, int line_no, int node_id, ID id, VALUE argc, const rb_iseq_t *blockiseq, VALUE flag, struct rb_callinfo_kwarg *keywords)
+ {
+     VALUE *operands = compile_data_calloc2(iseq, sizeof(VALUE), 2);
+     VALUE ci = (VALUE)new_callinfo(iseq, id, FIX2INT(argc), FIX2INT(flag), keywords, blockiseq != NULL);
+@@ -1471,7 +1469,7 @@ new_insn_send(rb_iseq_t *iseq, const NODE *const line_node, ID id, VALUE argc, c
+     if (blockiseq) {
+         RB_OBJ_WRITTEN(iseq, Qundef, blockiseq);
+     }
+-    INSN *insn = new_insn_core(iseq, line_node, BIN(send), 2, operands);
++    INSN *insn = new_insn_core(iseq, line_no, node_id, BIN(send), 2, operands);
+     RB_OBJ_WRITTEN(iseq, Qundef, ci);
+     RB_GC_GUARD(ci);
+     return insn;
+@@ -1590,8 +1588,7 @@ iseq_insert_nop_between_end_and_cont(rb_iseq_t *iseq)
+ 
+             for (e = end; e && (IS_LABEL(e) || IS_TRACE(e)); e = e->next) {
+                 if (e == cont) {
+-                    NODE dummy_line_node = generate_dummy_line_node(0, -1);
+-                    INSN *nop = new_insn_core(iseq, &dummy_line_node, BIN(nop), 0, 0);
++                    INSN *nop = new_insn_core(iseq, 0, -1, BIN(nop), 0, 0);
+                     ELEM_INSERT_NEXT(end, &nop->link);
+                     break;
+                 }
+@@ -2063,7 +2060,7 @@ iseq_set_arguments(rb_iseq_t *iseq, LINK_ANCHOR *const optargs, const NODE *cons
+             body->param.rest_start = arg_size++;
+             body->param.flags.has_rest = TRUE;
+             if (rest_id == '*') body->param.flags.anon_rest = TRUE;
+-            assert(body->param.rest_start != -1);
++            RUBY_ASSERT(body->param.rest_start != -1);
+         }
+ 
+         if (args->first_post_arg) {
+@@ -2683,7 +2680,7 @@ iseq_set_sequence(rb_iseq_t *iseq, LINK_ANCHOR *const anchor)
+                       case TS_CALLDATA:
+                         {
+                             const struct rb_callinfo *source_ci = (const struct rb_callinfo *)operands[j];
+-                            assert(ISEQ_COMPILE_DATA(iseq)->ci_index <= body->ci_size);
++                            RUBY_ASSERT(ISEQ_COMPILE_DATA(iseq)->ci_index <= body->ci_size);
+                             struct rb_call_data *cd = &body->call_data[ISEQ_COMPILE_DATA(iseq)->ci_index++];
+                             cd->ci = source_ci;
+                             cd->cc = vm_cc_empty();
+@@ -3148,7 +3145,6 @@ optimize_checktype(rb_iseq_t *iseq, INSN *iobj)
+     }
+     line = ciobj->insn_info.line_no;
+     node_id = ciobj->insn_info.node_id;
+-    NODE dummy_line_node = generate_dummy_line_node(line, node_id);
+     if (!dest) {
+         if (niobj->link.next && IS_LABEL(niobj->link.next)) {
+             dest = (LABEL *)niobj->link.next; /* reuse label */
+@@ -3158,9 +3154,9 @@ optimize_checktype(rb_iseq_t *iseq, INSN *iobj)
+             ELEM_INSERT_NEXT(&niobj->link, &dest->link);
+         }
+     }
+-    INSERT_AFTER_INSN1(iobj, &dummy_line_node, jump, dest);
++    INSERT_AFTER_INSN1(iobj, line, node_id, jump, dest);
+     LABEL_REF(dest);
+-    if (!dup) INSERT_AFTER_INSN(iobj, &dummy_line_node, pop);
++    if (!dup) INSERT_AFTER_INSN(iobj, line, node_id, pop);
+     return TRUE;
+ }
+ 
+@@ -3318,8 +3314,7 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+                  *   pop
+                  *   jump L1
+                  */
+-                NODE dummy_line_node = generate_dummy_line_node(iobj->insn_info.line_no, iobj->insn_info.node_id);
+-                INSN *popiobj = new_insn_core(iseq, &dummy_line_node, BIN(pop), 0, 0);
++                INSN *popiobj = new_insn_core(iseq, iobj->insn_info.line_no, iobj->insn_info.node_id, BIN(pop), 0, 0);
+                 ELEM_REPLACE(&piobj->link, &popiobj->link);
+             }
+         }
+@@ -3498,14 +3493,12 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+                         ELEM_REMOVE(iobj->link.prev);
+                     }
+                     else if (!iseq_pop_newarray(iseq, pobj)) {
+-                        NODE dummy_line_node = generate_dummy_line_node(pobj->insn_info.line_no, pobj->insn_info.node_id);
+-                        pobj = new_insn_core(iseq, &dummy_line_node, BIN(pop), 0, NULL);
++                        pobj = new_insn_core(iseq, pobj->insn_info.line_no, pobj->insn_info.node_id, BIN(pop), 0, NULL);
+                         ELEM_INSERT_PREV(&iobj->link, &pobj->link);
+                     }
+                     if (cond) {
+                         if (prev_dup) {
+-                            NODE dummy_line_node = generate_dummy_line_node(pobj->insn_info.line_no, pobj->insn_info.node_id);
+-                            pobj = new_insn_core(iseq, &dummy_line_node, BIN(putnil), 0, NULL);
++                            pobj = new_insn_core(iseq, pobj->insn_info.line_no, pobj->insn_info.node_id, BIN(putnil), 0, NULL);
+                             ELEM_INSERT_NEXT(&iobj->link, &pobj->link);
+                         }
+                         iobj->insn_id = BIN(jump);
+@@ -3551,8 +3544,7 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+             }
+             else if (previ == BIN(concatarray)) {
+                 INSN *piobj = (INSN *)prev;
+-                NODE dummy_line_node = generate_dummy_line_node(piobj->insn_info.line_no, piobj->insn_info.node_id);
+-                INSERT_BEFORE_INSN1(piobj, &dummy_line_node, splatarray, Qfalse);
++                INSERT_BEFORE_INSN1(piobj, piobj->insn_info.line_no, piobj->insn_info.node_id, splatarray, Qfalse);
+                 INSN_OF(piobj) = BIN(pop);
+             }
+             else if (previ == BIN(concatstrings)) {
+@@ -3617,7 +3609,6 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+                 }
+             }
+             else {
+-                NODE dummy_line_node = generate_dummy_line_node(iobj->insn_info.line_no, iobj->insn_info.node_id);
+                 long diff = FIX2LONG(op1) - FIX2LONG(op2);
+                 INSN_OF(iobj) = BIN(opt_reverse);
+                 OPERAND_AT(iobj, 0) = OPERAND_AT(next, 0);
+@@ -3631,7 +3622,7 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+                      *  opt_reverse Y
+                      */
+                     for (; diff > 0; diff--) {
+-                        INSERT_BEFORE_INSN(iobj, &dummy_line_node, pop);
++                        INSERT_BEFORE_INSN(iobj, iobj->insn_info.line_no, iobj->insn_info.node_id, pop);
+                     }
+                 }
+                 else { /* (op1 < op2) */
+@@ -3643,7 +3634,7 @@ iseq_peephole_optimize(rb_iseq_t *iseq, LINK_ELEMENT *list, const int do_tailcal
+                      *  opt_reverse Y
+                      */
+                     for (; diff < 0; diff++) {
+-                        INSERT_BEFORE_INSN(iobj, &dummy_line_node, putnil);
++                        INSERT_BEFORE_INSN(iobj, iobj->insn_info.line_no, iobj->insn_info.node_id, putnil);
+                     }
+                 }
+             }
+@@ -4222,8 +4213,7 @@ new_unified_insn(rb_iseq_t *iseq,
+         list = list->next;
+     }
+ 
+-    NODE dummy_line_node = generate_dummy_line_node(iobj->insn_info.line_no, iobj->insn_info.node_id);
+-    return new_insn_core(iseq, &dummy_line_node, insn_id, argc, operands);
++    return new_insn_core(iseq, iobj->insn_info.line_no, iobj->insn_info.node_id, insn_id, argc, operands);
+ }
+ #endif
+ 
+@@ -4310,7 +4300,7 @@ static int
+ compile_dstr_fragments(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node, int *cntp)
+ {
+     const struct RNode_LIST *list = RNODE_DSTR(node)->nd_next;
+-    VALUE lit = RNODE_DSTR(node)->nd_lit;
++    VALUE lit = rb_node_dstr_string_val(node);
+     LINK_ELEMENT *first_lit = 0;
+     int cnt = 0;
+ 
+@@ -4331,7 +4321,7 @@ compile_dstr_fragments(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *cons
+     while (list) {
+         const NODE *const head = list->nd_head;
+         if (nd_type_p(head, NODE_STR)) {
+-            lit = rb_fstring(RNODE_STR(head)->nd_lit);
++            lit = rb_fstring(rb_node_str_string_val(head));
+             ADD_INSN1(ret, head, putobject, lit);
+             RB_OBJ_WRITTEN(iseq, Qundef, lit);
+             lit = Qnil;
+@@ -4370,7 +4360,7 @@ compile_dstr(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node)
+ {
+     int cnt;
+     if (!RNODE_DSTR(node)->nd_next) {
+-        VALUE lit = rb_fstring(RNODE_DSTR(node)->nd_lit);
++        VALUE lit = rb_fstring(rb_node_dstr_string_val(node));
+         ADD_INSN1(ret, node, putstring, lit);
+         RB_OBJ_WRITTEN(iseq, Qundef, lit);
+     }
+@@ -4387,14 +4377,13 @@ compile_dregx(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node, i
+     int cnt;
+ 
+     if (!RNODE_DREGX(node)->nd_next) {
+-        VALUE match = RNODE_DREGX(node)->nd_lit;
+-        if (RB_TYPE_P(match, T_REGEXP)) {
+-            if (!popped) {
+-                ADD_INSN1(ret, node, putobject, match);
+-                RB_OBJ_WRITTEN(iseq, Qundef, match);
+-            }
+-            return COMPILE_OK;
++        if (!popped) {
++            VALUE src = rb_node_dregx_string_val(node);
++            VALUE match = rb_reg_compile(src, (int)RNODE_DREGX(node)->nd_cflag, NULL, 0);
++            ADD_INSN1(ret, node, putobject, match);
++            RB_OBJ_WRITTEN(iseq, Qundef, match);
+         }
++        return COMPILE_OK;
+     }
+ 
+     CHECK(compile_dstr_fragments(iseq, ret, node, &cnt));
+@@ -4626,7 +4615,7 @@ compile_keyword_arg(rb_iseq_t *iseq, LINK_ANCHOR *const ret,
+             const NODE *key_node = RNODE_LIST(node)->nd_head;
+             seen_nodes++;
+ 
+-            assert(nd_type_p(node, NODE_LIST));
++            RUBY_ASSERT(nd_type_p(node, NODE_LIST));
+             if (key_node && nd_type_p(key_node, NODE_LIT) && SYMBOL_P(RNODE_LIT(key_node)->nd_lit)) {
+                 /* can be keywords */
+             }
+@@ -4676,7 +4665,7 @@ compile_keyword_arg(rb_iseq_t *iseq, LINK_ANCHOR *const ret,
+                 }
+                 NO_CHECK(COMPILE_(ret, "keyword values", val_node, popped));
+             }
+-            assert(j == len);
++            RUBY_ASSERT(j == len);
+             return TRUE;
+         }
+     }
+@@ -5135,7 +5124,7 @@ rb_node_case_when_optimizable_literal(const NODE *const node)
+       case NODE_LINE:
+         return rb_node_line_lineno_val(node);
+       case NODE_STR:
+-        return rb_fstring(RNODE_STR(node)->nd_lit);
++        return rb_fstring(rb_node_str_string_val(node));
+       case NODE_FILE:
+         return rb_fstring(rb_node_file_path_val(node));
+     }
+@@ -5400,18 +5389,22 @@ compile_massign_lhs(rb_iseq_t *iseq, LINK_ANCHOR *const pre, LINK_ANCHOR *const
+             }
+             OPERAND_AT(iobj, 0) = (VALUE)ci;
+             RB_OBJ_WRITTEN(iseq, Qundef, iobj);
++
+             /* Given: h[*a], h[*b, 1] = ary
+              *  h[*a] uses splatarray false and does not set VM_CALL_ARGS_SPLAT_MUT,
+              *    so this uses splatarray true on a to dup it before using pushtoarray
+              *  h[*b, 1] uses splatarray true and sets VM_CALL_ARGS_SPLAT_MUT,
+              *    so you can use pushtoarray directly
+              */
++            int line_no = nd_line(line_node);
++            int node_id = nd_node_id(line_node);
++
+             if (dupsplat) {
+-                INSERT_BEFORE_INSN(iobj, line_node, swap);
+-                INSERT_BEFORE_INSN1(iobj, line_node, splatarray, Qtrue);
+-                INSERT_BEFORE_INSN(iobj, line_node, swap);
++                INSERT_BEFORE_INSN(iobj, line_no, node_id, swap);
++                INSERT_BEFORE_INSN1(iobj, line_no, node_id, splatarray, Qtrue);
++                INSERT_BEFORE_INSN(iobj, line_no, node_id, swap);
+             }
+-            INSERT_BEFORE_INSN1(iobj, line_node, pushtoarray, INT2FIX(1));
++            INSERT_BEFORE_INSN1(iobj, line_no, node_id, pushtoarray, INT2FIX(1));
+         }
+         ADD_INSN(lhs, line_node, pop);
+         if (argc != 1) {
+@@ -5630,7 +5623,7 @@ compile_massign(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node,
+         while (memo) {
+             VALUE topn_arg = INT2FIX((state.num_args - memo->argn) + memo->lhs_pos);
+             for (int i = 0; i < memo->num_args; i++) {
+-                INSERT_BEFORE_INSN1(memo->before_insn, memo->line_node, topn, topn_arg);
++                INSERT_BEFORE_INSN1(memo->before_insn, nd_line(memo->line_node), nd_node_id(memo->line_node), topn, topn_arg);
+             }
+             tmp_memo = memo->next;
+             free(memo);
+@@ -5942,7 +5935,7 @@ defined_expr0(rb_iseq_t *iseq, LINK_ANCHOR *const ret,
+         break;
+     }
+ 
+-    assert(expr_type != DEFINED_NOT_DEFINED);
++    RUBY_ASSERT(expr_type != DEFINED_NOT_DEFINED);
+ 
+     if (needstr != Qfalse) {
+         VALUE str = rb_iseq_defined_string(expr_type);
+@@ -5956,8 +5949,7 @@ defined_expr0(rb_iseq_t *iseq, LINK_ANCHOR *const ret,
+ static void
+ build_defined_rescue_iseq(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const void *unused)
+ {
+-    NODE dummy_line_node = generate_dummy_line_node(0, -1);
+-    ADD_INSN(ret, &dummy_line_node, putnil);
++    ADD_SYNTHETIC_INSN(ret, 0, -1, putnil);
+     iseq_set_exception_local_table(iseq);
+ }
+ 
+@@ -6003,7 +5995,7 @@ compile_defined_expr(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const
+         lfinish[2] = 0;
+         defined_expr(iseq, ret, RNODE_DEFINED(node)->nd_head, lfinish, needstr);
+         if (lfinish[1]) {
+-            ELEM_INSERT_NEXT(last, &new_insn_body(iseq, line_node, BIN(putnil), 0)->link);
++            ELEM_INSERT_NEXT(last, &new_insn_body(iseq, nd_line(line_node), nd_node_id(line_node), BIN(putnil), 0)->link);
+             ADD_INSN(ret, line_node, swap);
+             if (lfinish[2]) {
+                 ADD_LABEL(ret, lfinish[2]);
+@@ -6084,7 +6076,7 @@ can_add_ensure_iseq(const rb_iseq_t *iseq)
+ static void
+ add_ensure_iseq(LINK_ANCHOR *const ret, rb_iseq_t *iseq, int is_return)
+ {
+-    assert(can_add_ensure_iseq(iseq));
++    RUBY_ASSERT(can_add_ensure_iseq(iseq));
+ 
+     struct iseq_compile_data_ensure_node_stack *enlp =
+         ISEQ_COMPILE_DATA(iseq)->ensure_node_stack;
+@@ -6325,7 +6317,7 @@ compile_named_capture_assign(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE
+         last = ret->last;
+         NO_CHECK(COMPILE_POPPED(ret, "capture", RNODE_BLOCK(vars)->nd_head));
+         last = last->next; /* putobject :var */
+-        cap = new_insn_send(iseq, line_node, idAREF, INT2FIX(1),
++        cap = new_insn_send(iseq, nd_line(line_node), nd_node_id(line_node), idAREF, INT2FIX(1),
+                             NULL, INT2FIX(0), NULL);
+         ELEM_INSERT_PREV(last->next, (LINK_ELEMENT *)cap);
+ #if !defined(NAMED_CAPTURE_SINGLE_OPT) || NAMED_CAPTURE_SINGLE_OPT-0
+@@ -8249,9 +8241,7 @@ compile_resbody(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node,
+ 
+         if (nd_type(RNODE_RESBODY(resq)->nd_body) == NODE_BEGIN && RNODE_BEGIN(RNODE_RESBODY(resq)->nd_body)->nd_body == NULL) {
+             // empty body
+-            int lineno = nd_line(RNODE_RESBODY(resq)->nd_body);
+-            NODE dummy_line_node = generate_dummy_line_node(lineno, -1);
+-            ADD_INSN(ret, &dummy_line_node, putnil);
++            ADD_SYNTHETIC_INSN(ret, nd_line(RNODE_RESBODY(resq)->nd_body), -1, putnil);
+         }
+         else {
+             CHECK(COMPILE(ret, "resbody body", RNODE_RESBODY(resq)->nd_body));
+@@ -9547,7 +9537,7 @@ compile_super(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const node, i
+             if (local_body->param.flags.has_kwrest) {
+                 int idx = local_body->local_table_size - local_kwd->rest_start;
+                 ADD_GETLOCAL(args, node, idx, lvar_level);
+-                assert(local_kwd->num > 0);
++                RUBY_ASSERT(local_kwd->num > 0);
+                 ADD_SEND (args, node, rb_intern("dup"), INT2FIX(0));
+             }
+             else {
+@@ -9930,8 +9920,7 @@ iseq_compile_each(rb_iseq_t *iseq, LINK_ANCHOR *ret, const NODE *node, int poppe
+             int lineno = ISEQ_COMPILE_DATA(iseq)->last_line;
+             if (lineno == 0) lineno = FIX2INT(rb_iseq_first_lineno(iseq));
+             debugs("node: NODE_NIL(implicit)\n");
+-            NODE dummy_line_node = generate_dummy_line_node(lineno, -1);
+-            ADD_INSN(ret, &dummy_line_node, putnil);
++            ADD_SYNTHETIC_INSN(ret, lineno, -1, putnil);
+         }
+         return COMPILE_OK;
+     }
+@@ -10364,7 +10353,7 @@ iseq_compile_each0(rb_iseq_t *iseq, LINK_ANCHOR *const ret, const NODE *const no
+       }
+       case NODE_XSTR:{
+         ADD_CALL_RECEIVER(ret, node);
+-        VALUE str = rb_fstring(RNODE_XSTR(node)->nd_lit);
++        VALUE str = rb_fstring(rb_node_str_string_val(node));
+         ADD_INSN1(ret, node, putobject, str);
+         RB_OBJ_WRITTEN(iseq, Qundef, str);
+         ADD_CALL(ret, node, idBackquote, INT2FIX(1));
+@@ -11144,9 +11133,8 @@ iseq_build_from_ary_body(rb_iseq_t *iseq, LINK_ANCHOR *const anchor,
+                 argv = compile_data_calloc2(iseq, sizeof(VALUE), argc);
+ 
+                 // add element before operand setup to make GC root
+-                NODE dummy_line_node = generate_dummy_line_node(line_no, node_id);
+                 ADD_ELEM(anchor,
+-                         (LINK_ELEMENT*)new_insn_core(iseq, &dummy_line_node,
++                         (LINK_ELEMENT*)new_insn_core(iseq, line_no, node_id,
+                                                       (enum ruby_vminsn_type)insn_id, argc, argv));
+ 
+                 for (j=0; j<argc; j++) {
+@@ -11254,9 +11242,8 @@ iseq_build_from_ary_body(rb_iseq_t *iseq, LINK_ANCHOR *const anchor,
+                 }
+             }
+             else {
+-                NODE dummy_line_node = generate_dummy_line_node(line_no, node_id);
+                 ADD_ELEM(anchor,
+-                         (LINK_ELEMENT*)new_insn_core(iseq, &dummy_line_node,
++                         (LINK_ELEMENT*)new_insn_core(iseq, line_no, node_id,
+                                                       (enum ruby_vminsn_type)insn_id, argc, NULL));
+             }
+         }
+@@ -12035,7 +12022,7 @@ ibf_dump_code(struct ibf_dump *dump, const rb_iseq_t *iseq)
+             ibf_dump_write_small_value(dump, wv);
+           skip_wv:;
+         }
+-        assert(insn_len(insn) == op_index+1);
++        RUBY_ASSERT(insn_len(insn) == op_index+1);
+     }
+ 
+     return offset;
+@@ -12200,8 +12187,8 @@ ibf_load_code(const struct ibf_load *load, rb_iseq_t *iseq, ibf_offset_t bytecod
+         }
+     }
+ 
+-    assert(code_index == iseq_size);
+-    assert(reading_pos == bytecode_offset + bytecode_size);
++    RUBY_ASSERT(code_index == iseq_size);
++    RUBY_ASSERT(reading_pos == bytecode_offset + bytecode_size);
+     return code;
+ }
+ 
+@@ -12611,7 +12598,7 @@ ibf_load_outer_variables(const struct ibf_load * load, ibf_offset_t outer_variab
+ static ibf_offset_t
+ ibf_dump_iseq_each(struct ibf_dump *dump, const rb_iseq_t *iseq)
+ {
+-    assert(dump->current_buffer == &dump->global_buffer);
++    RUBY_ASSERT(dump->current_buffer == &dump->global_buffer);
+ 
+     unsigned int *positions;
+ 

@@ -1,0 +1,523 @@
+diff --git a/chardev/char-stdio.c b/chardev/char-stdio.c
+index 3c648678ab..b960ddd4e4 100644
+--- a/chardev/char-stdio.c
++++ b/chardev/char-stdio.c
+@@ -41,6 +41,7 @@
+ /* init terminal so that we can grab keys */
+ static struct termios oldtty;
+ static int old_fd0_flags;
++static int old_fd1_flags;
+ static bool stdio_in_use;
+ static bool stdio_allow_signal;
+ static bool stdio_echo_state;
+@@ -50,6 +51,8 @@ static void term_exit(void)
+     if (stdio_in_use) {
+         tcsetattr(0, TCSANOW, &oldtty);
+         fcntl(0, F_SETFL, old_fd0_flags);
++        fcntl(1, F_SETFL, old_fd1_flags);
++        stdio_in_use = false;
+     }
+ }
+ 
+@@ -102,6 +105,7 @@ static void qemu_chr_open_stdio(Chardev *chr,
+ 
+     stdio_in_use = true;
+     old_fd0_flags = fcntl(0, F_GETFL);
++    old_fd1_flags = fcntl(1, F_GETFL);
+     tcgetattr(0, &oldtty);
+     if (!g_unix_set_fd_nonblocking(0, true, NULL)) {
+         error_setg_errno(errp, errno, "Failed to set FD nonblocking");
+diff --git a/configs/targets/aarch64-linux-user.mak b/configs/targets/aarch64-linux-user.mak
+index ba8bc5fe3f..8f0ed21d76 100644
+--- a/configs/targets/aarch64-linux-user.mak
++++ b/configs/targets/aarch64-linux-user.mak
+@@ -1,6 +1,6 @@
+ TARGET_ARCH=aarch64
+ TARGET_BASE_ARCH=arm
+-TARGET_XML_FILES= gdb-xml/aarch64-core.xml gdb-xml/aarch64-fpu.xml gdb-xml/aarch64-pauth.xml
++TARGET_XML_FILES= gdb-xml/aarch64-core.xml gdb-xml/aarch64-fpu.xml gdb-xml/aarch64-pauth.xml gdb-xml/aarch64-mte.xml
+ TARGET_HAS_BFLT=y
+ CONFIG_SEMIHOSTING=y
+ CONFIG_ARM_COMPATIBLE_SEMIHOSTING=y
+diff --git a/configs/targets/loongarch64-linux-user.mak b/configs/targets/loongarch64-linux-user.mak
+index d878e5a113..ea9b7e839a 100644
+--- a/configs/targets/loongarch64-linux-user.mak
++++ b/configs/targets/loongarch64-linux-user.mak
+@@ -1,4 +1,4 @@
+ # Default configuration for loongarch64-linux-user
+ TARGET_ARCH=loongarch64
+ TARGET_BASE_ARCH=loongarch
+-TARGET_XML_FILES=gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml
++TARGET_XML_FILES=gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml gdb-xml/loongarch-lsx.xml gdb-xml/loongarch-lasx.xml
+diff --git a/configs/targets/loongarch64-softmmu.mak b/configs/targets/loongarch64-softmmu.mak
+index 84beb19b90..ce19ab6a16 100644
+--- a/configs/targets/loongarch64-softmmu.mak
++++ b/configs/targets/loongarch64-softmmu.mak
+@@ -1,6 +1,7 @@
+ TARGET_ARCH=loongarch64
+ TARGET_BASE_ARCH=loongarch
++TARGET_KVM_HAVE_GUEST_DEBUG=y
+ TARGET_SUPPORTS_MTTCG=y
+-TARGET_XML_FILES= gdb-xml/loongarch-base32.xml gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml
++TARGET_XML_FILES= gdb-xml/loongarch-base32.xml gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml gdb-xml/loongarch-lsx.xml gdb-xml/loongarch-lasx.xml
+ # all boards require libfdt
+ TARGET_NEED_FDT=y
+diff --git a/configure b/configure
+index 8b6a2f16ce..019fcbd0ef 100755
+--- a/configure
++++ b/configure
+@@ -1673,6 +1673,10 @@ for target in $target_list; do
+           echo "GDB=$gdb_bin" >> $config_target_mak
+       fi
+ 
++      if test "${arch}" = "aarch64" && version_ge ${gdb_version##* } 15.0; then
++          echo "GDB_HAS_MTE=y" >> $config_target_mak
++      fi
++
+       echo "run-tcg-tests-$target: $qemu\$(EXESUF)" >> Makefile.prereqs
+       tcg_tests_targets="$tcg_tests_targets $target"
+   fi
+diff --git a/contrib/plugins/lockstep.c b/contrib/plugins/lockstep.c
+index 237543b43a..6a7e9bbb39 100644
+--- a/contrib/plugins/lockstep.c
++++ b/contrib/plugins/lockstep.c
+@@ -14,7 +14,8 @@
+  * particular run may execute the exact same sequence of blocks. An
+  * asynchronous event (for example X11 graphics update) may cause a
+  * block to end early and a new partial block to start. This means
+- * serial only test cases are a better bet. -d nochain may also help.
++ * serial only test cases are a better bet. -d nochain may also help
++ * as well as -accel tcg,one-insn-per-tb=on
+  *
+  * This code is not thread safe!
+  *
+@@ -57,7 +58,7 @@ typedef struct {
+ /* The execution state we compare */
+ typedef struct {
+     uint64_t pc;
+-    unsigned long insn_count;
++    uint64_t insn_count;
+ } ExecState;
+ 
+ typedef struct {
+@@ -134,10 +135,13 @@ static void report_divergance(ExecState *us, ExecState *them)
+ 
+     /* Output short log entry of going out of sync... */
+     if (verbose || divrec.distance == 1 || diverged) {
+-        g_string_printf(out,
+-                        "@ 0x%016" PRIx64 " vs 0x%016" PRIx64
++        g_string_printf(out, "@ "
++                        "0x%016" PRIx64 " (%" PRId64 ") vs "
++                        "0x%016" PRIx64 " (%" PRId64 ")"
+                         " (%d/%d since last)\n",
+-                        us->pc, them->pc, g_slist_length(divergence_log),
++                        us->pc, us->insn_count,
++                        them->pc, them->insn_count,
++                        g_slist_length(divergence_log),
+                         divrec.distance);
+         qemu_plugin_outs(out->str);
+     }
+@@ -146,10 +150,7 @@ static void report_divergance(ExecState *us, ExecState *them)
+         int i;
+         GSList *entry;
+ 
+-        g_string_printf(out,
+-                        "Δ insn_count @ 0x%016" PRIx64
+-                        " (%ld) vs 0x%016" PRIx64 " (%ld)\n",
+-                        us->pc, us->insn_count, them->pc, them->insn_count);
++        g_string_printf(out, "Δ too high, we have diverged, previous insns\n");
+ 
+         for (entry = log, i = 0;
+              g_slist_next(entry) && i < 5;
+@@ -162,7 +163,7 @@ static void report_divergance(ExecState *us, ExecState *them)
+                                    prev->insn_count);
+         }
+         qemu_plugin_outs(out->str);
+-        qemu_plugin_outs("too much divergence... giving up.");
++        qemu_plugin_outs("giving up\n");
+         qemu_plugin_uninstall(our_id, plugin_cleanup);
+     }
+ }
+@@ -347,7 +348,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
+                 return -1;
+             }
+         } else if (g_strcmp0(tokens[0], "sockpath") == 0) {
+-            sock_path = tokens[1];
++            sock_path = g_strdup(tokens[1]);
+         } else {
+             fprintf(stderr, "option parsing failed: %s\n", p);
+             return -1;
+diff --git a/cpu-common.c b/cpu-common.c
+index ce78273af5..7ae136f98c 100644
+--- a/cpu-common.c
++++ b/cpu-common.c
+@@ -331,6 +331,17 @@ void async_safe_run_on_cpu(CPUState *cpu, run_on_cpu_func func,
+     queue_work_on_cpu(cpu, wi);
+ }
+ 
++void free_queued_cpu_work(CPUState *cpu)
++{
++    while (!QSIMPLEQ_EMPTY(&cpu->work_list)) {
++        struct qemu_work_item *wi = QSIMPLEQ_FIRST(&cpu->work_list);
++        QSIMPLEQ_REMOVE_HEAD(&cpu->work_list, node);
++        if (wi->free) {
++            g_free(wi);
++        }
++    }
++}
++
+ void process_queued_cpu_work(CPUState *cpu)
+ {
+     struct qemu_work_item *wi;
+diff --git a/disas/riscv.c b/disas/riscv.c
+index 90d6b26de9..5965574d87 100644
+--- a/disas/riscv.c
++++ b/disas/riscv.c
+@@ -906,6 +906,76 @@ typedef enum {
+     rv_op_amocas_w = 875,
+     rv_op_amocas_d = 876,
+     rv_op_amocas_q = 877,
++    rv_mop_r_0     = 878,
++    rv_mop_r_1     = 879,
++    rv_mop_r_2     = 880,
++    rv_mop_r_3     = 881,
++    rv_mop_r_4     = 882,
++    rv_mop_r_5     = 883,
++    rv_mop_r_6     = 884,
++    rv_mop_r_7     = 885,
++    rv_mop_r_8     = 886,
++    rv_mop_r_9     = 887,
++    rv_mop_r_10    = 888,
++    rv_mop_r_11    = 889,
++    rv_mop_r_12    = 890,
++    rv_mop_r_13    = 891,
++    rv_mop_r_14    = 892,
++    rv_mop_r_15    = 893,
++    rv_mop_r_16    = 894,
++    rv_mop_r_17    = 895,
++    rv_mop_r_18    = 896,
++    rv_mop_r_19    = 897,
++    rv_mop_r_20    = 898,
++    rv_mop_r_21    = 899,
++    rv_mop_r_22    = 900,
++    rv_mop_r_23    = 901,
++    rv_mop_r_24    = 902,
++    rv_mop_r_25    = 903,
++    rv_mop_r_26    = 904,
++    rv_mop_r_27    = 905,
++    rv_mop_r_28    = 906,
++    rv_mop_r_29    = 907,
++    rv_mop_r_30    = 908,
++    rv_mop_r_31    = 909,
++    rv_mop_rr_0    = 910,
++    rv_mop_rr_1    = 911,
++    rv_mop_rr_2    = 912,
++    rv_mop_rr_3    = 913,
++    rv_mop_rr_4    = 914,
++    rv_mop_rr_5    = 915,
++    rv_mop_rr_6    = 916,
++    rv_mop_rr_7    = 917,
++    rv_c_mop_1     = 918,
++    rv_c_mop_3     = 919,
++    rv_c_mop_5     = 920,
++    rv_c_mop_7     = 921,
++    rv_c_mop_9     = 922,
++    rv_c_mop_11    = 923,
++    rv_c_mop_13    = 924,
++    rv_c_mop_15    = 925,
++    rv_op_amoswap_b = 926,
++    rv_op_amoadd_b  = 927,
++    rv_op_amoxor_b  = 928,
++    rv_op_amoor_b   = 929,
++    rv_op_amoand_b  = 930,
++    rv_op_amomin_b  = 931,
++    rv_op_amomax_b  = 932,
++    rv_op_amominu_b = 933,
++    rv_op_amomaxu_b = 934,
++    rv_op_amoswap_h = 935,
++    rv_op_amoadd_h  = 936,
++    rv_op_amoxor_h  = 937,
++    rv_op_amoor_h   = 938,
++    rv_op_amoand_h  = 939,
++    rv_op_amomin_h  = 940,
++    rv_op_amomax_h  = 941,
++    rv_op_amominu_h = 942,
++    rv_op_amomaxu_h = 943,
++    rv_op_amocas_b  = 944,
++    rv_op_amocas_h  = 945,
++    rv_op_wrs_sto = 946,
++    rv_op_wrs_nto = 947,
+ } rv_op;
+ 
+ /* register names */
+@@ -2096,6 +2166,76 @@ const rv_opcode_data rvi_opcode_data[] = {
+     { "amocas.w", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
+     { "amocas.d", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
+     { "amocas.q", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "mop.r.0", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.1", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.2", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.3", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.4", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.5", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.6", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.7", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.8", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.9", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.10", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.11", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.12", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.13", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.14", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.15", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.16", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.17", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.18", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.19", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.20", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.21", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.22", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.23", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.24", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.25", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.26", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.27", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.28", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.29", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.30", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.r.31", rv_codec_r, rv_fmt_rd_rs1, NULL, 0, 0 },
++    { "mop.rr.0", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.1", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.2", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.3", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.4", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.5", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.6", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "mop.rr.7", rv_codec_r, rv_fmt_rd_rs1_rs2, NULL, 0, 0, 0 },
++    { "c.mop.1",  rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.3",  rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.5",  rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.7",  rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.9",  rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.11", rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.13", rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "c.mop.15", rv_codec_ci_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "amoswap.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoadd.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoxor.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoor.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoand.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomin.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomax.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amominu.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomaxu.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoswap.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoadd.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoxor.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoor.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amoand.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomin.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomax.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amominu.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amomaxu.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amocas.b", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "amocas.h", rv_codec_r_a, rv_fmt_aqrl_rd_rs2_rs1, NULL, 0, 0, 0 },
++    { "wrs.sto", rv_codec_none, rv_fmt_none, NULL, 0, 0, 0 },
++    { "wrs.nto", rv_codec_none, rv_fmt_none, NULL, 0, 0, 0 },
+ };
+ 
+ /* CSR names */
+@@ -2452,6 +2592,13 @@ static void decode_inst_opcode(rv_decode *dec, rv_isa isa)
+             break;
+         case 2: op = rv_op_c_li; break;
+         case 3:
++            if (dec->cfg->ext_zcmop) {
++                if ((((inst >> 2) & 0b111111) == 0b100000) &&
++                    (((inst >> 11) & 0b11) == 0b0)) {
++                    op = rv_c_mop_1 + ((inst >> 8) & 0b111);
++                    break;
++                }
++            }
+             switch ((inst >> 7) & 0b11111) {
+             case 2: op = rv_op_c_addi16sp; break;
+             default: op = rv_op_c_lui; break;
+@@ -2883,9 +3030,13 @@ static void decode_inst_opcode(rv_decode *dec, rv_isa isa)
+         case 11:
+             switch (((inst >> 24) & 0b11111000) |
+                     ((inst >> 12) & 0b00000111)) {
++            case 0: op = rv_op_amoadd_b; break;
++            case 1: op = rv_op_amoadd_h; break;
+             case 2: op = rv_op_amoadd_w; break;
+             case 3: op = rv_op_amoadd_d; break;
+             case 4: op = rv_op_amoadd_q; break;
++            case 8: op = rv_op_amoswap_b; break;
++            case 9: op = rv_op_amoswap_h; break;
+             case 10: op = rv_op_amoswap_w; break;
+             case 11: op = rv_op_amoswap_d; break;
+             case 12: op = rv_op_amoswap_q; break;
+@@ -2907,27 +3058,43 @@ static void decode_inst_opcode(rv_decode *dec, rv_isa isa)
+             case 26: op = rv_op_sc_w; break;
+             case 27: op = rv_op_sc_d; break;
+             case 28: op = rv_op_sc_q; break;
++            case 32: op = rv_op_amoxor_b; break;
++            case 33: op = rv_op_amoxor_h; break;
+             case 34: op = rv_op_amoxor_w; break;
+             case 35: op = rv_op_amoxor_d; break;
+             case 36: op = rv_op_amoxor_q; break;
++            case 40: op = rv_op_amocas_b; break;
++            case 41: op = rv_op_amocas_h; break;
+             case 42: op = rv_op_amocas_w; break;
+             case 43: op = rv_op_amocas_d; break;
+             case 44: op = rv_op_amocas_q; break;
++            case 64: op = rv_op_amoor_b; break;
++            case 65: op = rv_op_amoor_h; break;
+             case 66: op = rv_op_amoor_w; break;
+             case 67: op = rv_op_amoor_d; break;
+             case 68: op = rv_op_amoor_q; break;
++            case 96: op = rv_op_amoand_b; break;
++            case 97: op = rv_op_amoand_h; break;
+             case 98: op = rv_op_amoand_w; break;
+             case 99: op = rv_op_amoand_d; break;
+             case 100: op = rv_op_amoand_q; break;
++            case 128: op = rv_op_amomin_b; break;
++            case 129: op = rv_op_amomin_h; break;
+             case 130: op = rv_op_amomin_w; break;
+             case 131: op = rv_op_amomin_d; break;
+             case 132: op = rv_op_amomin_q; break;
++            case 160: op = rv_op_amomax_b; break;
++            case 161: op = rv_op_amomax_h; break;
+             case 162: op = rv_op_amomax_w; break;
+             case 163: op = rv_op_amomax_d; break;
+             case 164: op = rv_op_amomax_q; break;
++            case 192: op = rv_op_amominu_b; break;
++            case 193: op = rv_op_amominu_h; break;
+             case 194: op = rv_op_amominu_w; break;
+             case 195: op = rv_op_amominu_d; break;
+             case 196: op = rv_op_amominu_q; break;
++            case 224: op = rv_op_amomaxu_b; break;
++            case 225: op = rv_op_amomaxu_h; break;
+             case 226: op = rv_op_amomaxu_w; break;
+             case 227: op = rv_op_amomaxu_d; break;
+             case 228: op = rv_op_amomaxu_q; break;
+@@ -3817,6 +3984,8 @@ static void decode_inst_opcode(rv_decode *dec, rv_isa isa)
+                     case 0: op = rv_op_ecall; break;
+                     case 32: op = rv_op_ebreak; break;
+                     case 64: op = rv_op_uret; break;
++                    case 416: op = rv_op_wrs_nto; break;
++                    case 928: op = rv_op_wrs_sto; break;
+                     }
+                     break;
+                 case 256:
+@@ -3855,6 +4024,24 @@ static void decode_inst_opcode(rv_decode *dec, rv_isa isa)
+             case 1: op = rv_op_csrrw; break;
+             case 2: op = rv_op_csrrs; break;
+             case 3: op = rv_op_csrrc; break;
++            case 4:
++                if (dec->cfg->ext_zimop) {
++                    int imm_mop5, imm_mop3;
++                    if ((extract32(inst, 22, 10) & 0b1011001111)
++                        == 0b1000000111) {
++                        imm_mop5 = deposit32(deposit32(extract32(inst, 20, 2),
++                                                       2, 2,
++                                                       extract32(inst, 26, 2)),
++                                             4, 1, extract32(inst, 30, 1));
++                        op = rv_mop_r_0 + imm_mop5;
++                    } else if ((extract32(inst, 25, 7) & 0b1011001)
++                               == 0b1000001) {
++                        imm_mop3 = deposit32(extract32(inst, 26, 2),
++                                             2, 1, extract32(inst, 30, 1));
++                        op = rv_mop_rr_0 + imm_mop3;
++                    }
++                }
++                break;
+             case 5: op = rv_op_csrrwi; break;
+             case 6: op = rv_op_csrrsi; break;
+             case 7: op = rv_op_csrrci; break;
+diff --git a/docs/about/deprecated.rst b/docs/about/deprecated.rst
+index ff3da68208..88f0f03786 100644
+--- a/docs/about/deprecated.rst
++++ b/docs/about/deprecated.rst
+@@ -11,6 +11,19 @@ releases, the feature is liable to be removed. Deprecated features may also
+ generate warnings on the console when QEMU starts up, or if activated via a
+ monitor command, however, this is not a mandatory requirement.
+ 
++As a special exception to this general timeframe, rather than have an
++indefinite lifetime, versioned machine types are only intended to be
++supported for a period of 6 years, equivalent to 18 QEMU releases. All
++versioned machine types will be automatically marked deprecated after an
++initial 3 years (9 QEMU releases) has passed, and will then be deleted after
++a further 3 year period has passed. It is recommended that a deprecated
++machine type is only used for incoming migrations and restore of saved state,
++for pre-existing VM deployments. They should be scheduled for updating to a
++newer machine type during an appropriate service window. Newly deployed VMs
++should exclusively use a non-deprecated machine type, with use of the most
++recent version highly recommended. Non-versioned machine types follow the
++general feature deprecation policy.
++
+ Prior to the 2.10.0 release there was no official policy on how
+ long features would be deprecated prior to their removal, nor
+ any documented list of which features were deprecated. Thus
+@@ -256,6 +269,14 @@ images are not available, OpenWRT dropped support in 2019, U-Boot in
+ 2017, Linux also is dropping support in 2024. It is time to let go of
+ this ancient hardware and focus on newer CPUs and platforms.
+ 
++Arm ``tacoma-bmc`` machine (since 9.1)
++''''''''''''''''''''''''''''''''''''''''
++
++The ``tacoma-bmc`` machine was a board including an AST2600 SoC based
++BMC and a witherspoon like OpenPOWER system. It was used for bring up
++of the AST2600 SoC in labs.  It can be easily replaced by the
++``rainier-bmc`` machine which is a real product.
++
+ Backend options
+ ---------------
+ 
+@@ -362,6 +383,12 @@ recommending to switch to their stable counterparts:
+ - "Zve64f" should be replaced with "zve64f"
+ - "Zve64d" should be replaced with "zve64d"
+ 
++``-device sd-card,spec_version=1`` (since 9.1)
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++
++SD physical layer specification v2.00 supersedes the v1.10 one.
++v2.00 is the default since QEMU 3.0.0.
++
+ Block device options
+ ''''''''''''''''''''
+ 
+@@ -452,6 +479,17 @@ versions, aliases will point to newer CPU model versions
+ depending on the machine type, so management software must
+ resolve CPU model aliases before starting a virtual machine.
+ 
++RISC-V "virt" board "riscv,delegate" DT property (since 9.1)
++''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
++
++The "riscv,delegate" DT property was added in QEMU 7.0 as part of
++the AIA APLIC support.  The property changed name during the review
++process in Linux and the correct name ended up being
++"riscv,delegation".  Changing the DT property name will break all
++available firmwares that are using the current (wrong) name.  The
++property is kept as is in 9.1, together with "riscv,delegation", to
++give more time for firmware developers to change their code.
++
+ Migration
+ ---------
+ 
+diff --git a/docs/conf.py b/docs/conf.py
+index aae0304ac6..876f676881 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -53,10 +53,9 @@ sys.path.insert(0, os.path.join(qemu_docdir, "../scripts"))
+ 
+ # If your documentation needs a minimal Sphinx version, state it here.
+ #
+-# Sphinx 1.5 and earlier can't build our docs because they are too
+-# picky about the syntax of the argument to the option:: directive
+-# (see Sphinx bugs #646, #3366).
+-needs_sphinx = '1.6'
++# 3.4.3 is the oldest version of Sphinx that ships on a platform we
++# pledge build support for.
++needs_sphinx = '3.4.3'
+ 
+ # Add any Sphinx extension module names here, as strings. They can be
+ # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom

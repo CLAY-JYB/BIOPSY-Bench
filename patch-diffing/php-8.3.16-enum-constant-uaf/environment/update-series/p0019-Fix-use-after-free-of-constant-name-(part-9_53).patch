@@ -1,0 +1,49 @@
+From de88f609 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0019] Fix use-after-free of constant name (part 9/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -2296,7 +2260,7 @@ ZEND_API void zend_collect_module_handlers(void) /* {{{ */
+ 	int class_count = 0;
+ 
+ 	/* Collect extensions with request startup/shutdown handlers */
+-	ZEND_HASH_MAP_FOREACH_PTR(&module_registry, module) {
++	ZEND_HASH_FOREACH_PTR(&module_registry, module) {
+ 		if (module->request_startup_func) {
+ 			startup_count++;
+ 		}
+@@ -2319,7 +2283,7 @@ ZEND_API void zend_collect_module_handlers(void) /* {{{ */
+ 	module_post_deactivate_handlers[post_deactivate_count] = NULL;
+ 	startup_count = 0;
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&module_registry, module) {
++	ZEND_HASH_FOREACH_PTR(&module_registry, module) {
+ 		if (module->request_startup_func) {
+ 			module_request_startup_handlers[startup_count++] = module;
+ 		}
+@@ -2332,7 +2296,7 @@ ZEND_API void zend_collect_module_handlers(void) /* {{{ */
+ 	} ZEND_HASH_FOREACH_END();
+ 
+ 	/* Collect internal classes with static members */
+-	ZEND_HASH_MAP_FOREACH_PTR(CG(class_table), ce) {
++	ZEND_HASH_FOREACH_PTR(CG(class_table), ce) {
+ 		if (ce->type == ZEND_INTERNAL_CLASS &&
+ 		    ce->default_static_members_count > 0) {
+ 		    class_count++;
+@@ -2345,7 +2309,7 @@ ZEND_API void zend_collect_module_handlers(void) /* {{{ */
+ 	class_cleanup_handlers[class_count] = NULL;
+ 
+ 	if (class_count) {
+-		ZEND_HASH_MAP_FOREACH_PTR(CG(class_table), ce) {
++		ZEND_HASH_FOREACH_PTR(CG(class_table), ce) {
+ 			if (ce->type == ZEND_INTERNAL_CLASS &&
+ 			    ce->default_static_members_count > 0) {
+ 			    class_cleanup_handlers[--class_count] = ce;
+
+-- 
+2.43.0

@@ -1,0 +1,231 @@
+diff --git a/builtin/upload-archive.c b/builtin/upload-archive.c
+index 1b09e5e1..313a8dfa 100644
+--- a/builtin/upload-archive.c
++++ b/builtin/upload-archive.c
+@@ -22,6 +22,7 @@ int cmd_upload_archive_writer(int argc, const char **argv, const char *prefix)
+ {
+ 	struct strvec sent_argv = STRVEC_INIT;
+ 	const char *arg_cmd = "argument ";
++	int ret;
+ 
+ 	if (argc != 2 || !strcmp(argv[1], "-h"))
+ 		usage(upload_archive_usage);
+@@ -46,8 +47,11 @@ int cmd_upload_archive_writer(int argc, const char **argv, const char *prefix)
+ 	}
+ 
+ 	/* parse all options sent by the client */
+-	return write_archive(sent_argv.nr, sent_argv.v, prefix,
+-			     the_repository, NULL, 1);
++	ret = write_archive(sent_argv.nr, sent_argv.v, prefix,
++			    the_repository, NULL, 1);
++
++	strvec_clear(&sent_argv);
++	return ret;
+ }
+ 
+ __attribute__((format (printf, 1, 2)))
+diff --git a/bundle-uri.c b/bundle-uri.c
+index 1e0ee156..dc0c9695 100644
+--- a/bundle-uri.c
++++ b/bundle-uri.c
+@@ -13,6 +13,7 @@
+ #include "config.h"
+ #include "fetch-pack.h"
+ #include "remote.h"
++#include "trace2.h"
+ 
+ static struct {
+ 	enum bundle_list_heuristic heuristic;
+@@ -799,6 +800,8 @@ int fetch_bundle_uri(struct repository *r, const char *uri,
+ 		.id = xstrdup(""),
+ 	};
+ 
++	trace2_region_enter("fetch", "fetch-bundle-uri", the_repository);
++
+ 	init_bundle_list(&list);
+ 
+ 	/*
+@@ -824,6 +827,7 @@ cleanup:
+ 	for_all_bundles_in_list(&list, unlink_bundle, NULL);
+ 	clear_bundle_list(&list);
+ 	clear_remote_bundle_info(&bundle, NULL);
++	trace2_region_leave("fetch", "fetch-bundle-uri", the_repository);
+ 	return result;
+ }
+ 
+diff --git a/bundle.c b/bundle.c
+index b0a8a925..4773b51e 100644
+--- a/bundle.c
++++ b/bundle.c
+@@ -644,10 +644,8 @@ int unbundle(struct repository *r, struct bundle_header *header,
+ 	if (flags & VERIFY_BUNDLE_FSCK)
+ 		strvec_push(&ip.args, "--fsck-objects");
+ 
+-	if (extra_index_pack_args) {
++	if (extra_index_pack_args)
+ 		strvec_pushv(&ip.args, extra_index_pack_args->v);
+-		strvec_clear(extra_index_pack_args);
+-	}
+ 
+ 	ip.in = bundle_fd;
+ 	ip.no_stdout = 1;
+diff --git a/commit-reach.c b/commit-reach.c
+index 02f8218b..c3518aa3 100644
+--- a/commit-reach.c
++++ b/commit-reach.c
+@@ -1229,3 +1229,129 @@ done:
+ 	repo_clear_commit_marks(r, SEEN);
+ 	free_commit_list(stack);
+ }
++
++/*
++ * This slab initializes integers to zero, so use "-1" for "tip is best" and
++ * "i + 1" for "bases[i] is best".
++ */
++define_commit_slab(best_branch_base, int);
++static struct best_branch_base best_branch_base;
++#define get_best(c) (*best_branch_base_at(&best_branch_base, (c)))
++#define set_best(c,v) (*best_branch_base_at(&best_branch_base, (c)) = (v))
++
++int get_branch_base_for_tip(struct repository *r,
++			    struct commit *tip,
++			    struct commit **bases,
++			    size_t bases_nr)
++{
++	int best_index = -1;
++	struct commit *branch_point = NULL;
++	struct prio_queue queue = { compare_commits_by_gen_then_commit_date };
++	int found_missing_gen = 0;
++
++	if (!bases_nr)
++		return -1;
++
++	repo_parse_commit(r, tip);
++	if (commit_graph_generation(tip) == GENERATION_NUMBER_INFINITY)
++		found_missing_gen = 1;
++
++	/* Check for missing generation numbers. */
++	for (size_t i = 0; i < bases_nr; i++) {
++		struct commit *c = bases[i];
++		repo_parse_commit(r, c);
++		if (commit_graph_generation(c) == GENERATION_NUMBER_INFINITY)
++			found_missing_gen = 1;
++	}
++
++	if (found_missing_gen) {
++		struct commit **commits;
++		size_t commits_nr = bases_nr + 1;
++
++		CALLOC_ARRAY(commits, commits_nr);
++		COPY_ARRAY(commits, bases, bases_nr);
++		commits[bases_nr] = tip;
++		ensure_generations_valid(r, commits, commits_nr);
++		free(commits);
++	}
++
++	/* Initialize queue and slab now that generations are guaranteed. */
++	init_best_branch_base(&best_branch_base);
++	set_best(tip, -1);
++	prio_queue_put(&queue, tip);
++
++	for (size_t i = 0; i < bases_nr; i++) {
++		struct commit *c = bases[i];
++		int best = get_best(c);
++
++		/* Has this already been marked as best by another commit? */
++		if (best) {
++			if (best == -1) {
++				/* We agree at this position. Stop now. */
++				best_index = i + 1;
++				goto cleanup;
++			}
++			continue;
++		}
++
++		set_best(c, i + 1);
++		prio_queue_put(&queue, c);
++	}
++
++	while (queue.nr) {
++		struct commit *c = prio_queue_get(&queue);
++		int best_for_c = get_best(c);
++		int best_for_p, positive;
++		struct commit *parent;
++
++		/* Have we reached a known branch point? It's optimal. */
++		if (c == branch_point)
++			break;
++
++		repo_parse_commit(r, c);
++		if (!c->parents)
++			continue;
++
++		parent = c->parents->item;
++		repo_parse_commit(r, parent);
++		best_for_p = get_best(parent);
++
++		if (!best_for_p) {
++			/* 'parent' is new, so pass along best_for_c. */
++			set_best(parent, best_for_c);
++			prio_queue_put(&queue, parent);
++			continue;
++		}
++
++		if (best_for_p > 0 && best_for_c > 0) {
++			/* Collision among bases. Minimize. */
++			if (best_for_c < best_for_p)
++				set_best(parent, best_for_c);
++			continue;
++		}
++
++		/*
++		 * At this point, we have reached a commit that is reachable
++		 * from the tip, either from 'c' or from an earlier commit to
++		 * have 'parent' as its first parent.
++		 *
++		 * Update 'best_index' to match the minimum of all base indices
++		 * to reach 'parent'.
++		 */
++
++		/* Exactly one is positive due to initial conditions. */
++		positive = (best_for_c < 0) ? best_for_p : best_for_c;
++
++		if (best_index < 0 || positive < best_index)
++			best_index = positive;
++
++		/* No matter what, track that the parent is reachable from tip. */
++		set_best(parent, -1);
++		branch_point = parent;
++	}
++
++cleanup:
++	clear_best_branch_base(&best_branch_base);
++	clear_prio_queue(&queue);
++	return best_index > 0 ? best_index - 1 : -1;
++}
+diff --git a/commit-reach.h b/commit-reach.h
+index bf63cc46..9a745b7e 100644
+--- a/commit-reach.h
++++ b/commit-reach.h
+@@ -139,4 +139,21 @@ void tips_reachable_from_bases(struct repository *r,
+ 			       struct commit **tips, size_t tips_nr,
+ 			       int mark);
+ 
++/*
++ * Given a 'tip' commit and a list potential 'bases', return the index 'i' that
++ * minimizes the number of commits in the first-parent history of 'tip' and not
++ * in the first-parent history of 'bases[i]'.
++ *
++ * Among a list of long-lived branches that are updated only by merges (with the
++ * first parent being the previous position of the branch), this would inform
++ * which branch was used to create the tip reference.
++ *
++ * Returns -1 if no common point is found in first-parent histories, which is
++ * rare, but possible with multiple root commits.
++ */
++int get_branch_base_for_tip(struct repository *r,
++			    struct commit *tip,
++			    struct commit **bases,
++			    size_t bases_nr);
++
+ #endif

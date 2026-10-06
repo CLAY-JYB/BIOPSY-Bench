@@ -1,0 +1,28 @@
+diff --git a/ref-filter.c b/ref-filter.c
+index 6d8b5919..0f51095b 100644
+--- a/ref-filter.c
++++ b/ref-filter.c
+@@ -2341,6 +2377,7 @@ static int populate_value(struct ref_array_item *ref, struct strbuf *err)
+ 	int i;
+ 	struct object_info empty = OBJECT_INFO_INIT;
+ 	int ahead_behind_atoms = 0;
++	int is_base_atoms = 0;
+ 
+ 	CALLOC_ARRAY(ref->value, used_atom_cnt);
+ 
+@@ -2490,6 +2527,15 @@ static int populate_value(struct ref_array_item *ref, struct strbuf *err)
+ 				v->s = xstrdup("");
+ 			}
+ 			continue;
++		} else if (atom_type == ATOM_ISBASE) {
++			if (ref->is_base && ref->is_base[is_base_atoms]) {
++				v->s = xstrfmt("(%s)", ref->is_base[is_base_atoms]);
++				free(ref->is_base[is_base_atoms]);
++			} else {
++				v->s = xstrdup("");
++			}
++			is_base_atoms++;
++			continue;
+ 		} else
+ 			continue;
+ 

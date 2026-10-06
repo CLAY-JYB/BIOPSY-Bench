@@ -1,0 +1,80 @@
+From 3c7a0d6d Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0012] Fix memory leak when parsing invalid pattern matching (part 8/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -2128,27 +2140,60 @@ get_nd_args(struct parser_params *p, NODE *node)
+         return 0;
+     }
+ }
++
++static st_index_t
++djb2(const uint8_t *str, size_t len)
++{
++    st_index_t hash = 5381;
++
++    for (size_t i = 0; i < len; i++) {
++        hash = ((hash << 5) + hash) + str[i];
++    }
++
++    return hash;
++}
++
++static st_index_t
++parser_memhash(const void *ptr, long len)
++{
++    return djb2(ptr, len);
++}
+ #endif
+ 
++#define PARSER_STRING_PTR(str) (str->ptr)
++#define PARSER_STRING_LEN(str) (str->len)
++#define STRING_SIZE(str) ((size_t)str->len + 1)
++#define STRING_TERM_LEN(str) (1)
++#define STRING_TERM_FILL(str) (str->ptr[str->len] = '\0')
++#define PARSER_STRING_RESIZE_CAPA_TERM(p,str,capacity,termlen) do {\
++    SIZED_REALLOC_N(str->ptr, char, (size_t)total + termlen, STRING_SIZE(str)); \
++    str->len = total; \
++} while (0)
++#define STRING_SET_LEN(str, n) do { \
++    (str)->len = (n); \
++} while (0)
++#define PARSER_STRING_GETMEM(str, ptrvar, lenvar) \
++    ((ptrvar) = str->ptr,                            \
++     (lenvar) = str->len)
++
+ #ifndef RIPPER
+ static rb_parser_string_t *
+ rb_parser_string_new(rb_parser_t *p, const char *ptr, long len)
+ {
+-    size_t size;
+     rb_parser_string_t *str;
+ 
+     if (len < 0) {
+         rb_bug("negative string size (or size too big): %ld", len);
+     }
+ 
+-    size = offsetof(rb_parser_string_t, ptr) + len + 1;
+-    str = xcalloc(1, size);
++    str = xcalloc(1, sizeof(rb_parser_string_t));
++    str->ptr = xcalloc(len + 1, sizeof(char));
+ 
+     if (ptr) {
+-        memcpy(str->ptr, ptr, len);
++        memcpy(PARSER_STRING_PTR(str), ptr, len);
+     }
+-    str->len = len;
+-    str->ptr[len] = '\0';
++    STRING_SET_LEN(str, len);
++    STRING_TERM_FILL(str);
+     return str;
+ }
+ 
+
+-- 
+2.43.0

@@ -1,0 +1,82 @@
+From fd7b5c24 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0017] compat: disable -Wunused-parameter in 3rd-party code
+
+---
+diff --git a/compat/regex/regcomp.c b/compat/regex/regcomp.c
+index 6c5d455e..8d93a9b9 100644
+--- a/compat/regex/regcomp.c
++++ b/compat/regex/regcomp.c
+@@ -17,6 +17,8 @@
+    License along with the GNU C Library; if not, see
+    <http://www.gnu.org/licenses/>.  */
+ 
++#pragma GCC diagnostic ignored "-Wunused-parameter"
++
+ #if defined __TANDEM
+  /* This is currently duplicated from git-compat-utils.h */
+ # ifdef NO_INTPTR_T
+diff --git a/compat/stub/procinfo.c b/compat/stub/procinfo.c
+index 12c0a23c..3168cd57 100644
+--- a/compat/stub/procinfo.c
++++ b/compat/stub/procinfo.c
+@@ -6,6 +6,6 @@
+  * Stub. See sample implementations in compat/linux/procinfo.c and
+  * compat/win32/trace2_win32_process_info.c.
+  */
+-void trace2_collect_process_info(enum trace2_process_info_reason reason)
++void trace2_collect_process_info(enum trace2_process_info_reason reason UNUSED)
+ {
+ }
+diff --git a/compat/win32/headless.c b/compat/win32/headless.c
+index 8b00dfe3..11392a0b 100644
+--- a/compat/win32/headless.c
++++ b/compat/win32/headless.c
+@@ -11,6 +11,8 @@
+ #include <stdlib.h>
+ #include <wchar.h>
+ 
++#pragma GCC diagnostic ignored "-Wunused-parameter"
++
+ /*
+  * If `dir` contains the path to a Git exec directory, extend `PATH` to
+  * include the corresponding `bin/` directory (which is where all those
+diff --git a/compat/win32/pthread.c b/compat/win32/pthread.c
+index 85f8f792..58980a52 100644
+--- a/compat/win32/pthread.c
++++ b/compat/win32/pthread.c
+@@ -21,7 +21,7 @@ static unsigned __stdcall win32_start_routine(void *arg)
+ 	return 0;
+ }
+ 
+-int pthread_create(pthread_t *thread, const void *unused,
++int pthread_create(pthread_t *thread, const void *attr UNUSED,
+ 		   void *(*start_routine)(void *), void *arg)
+ {
+ 	thread->arg = arg;
+diff --git a/compat/win32/pthread.h b/compat/win32/pthread.h
+index cc3221cb..e2b5c4f6 100644
+--- a/compat/win32/pthread.h
++++ b/compat/win32/pthread.h
+@@ -18,7 +18,7 @@
+  */
+ #define pthread_mutex_t CRITICAL_SECTION
+ 
+-static inline int return_0(int i) {
++static inline int return_0(int i UNUSED) {
+ 	return 0;
+ }
+ #define pthread_mutex_init(a,b) return_0((InitializeCriticalSection((a)), 0))
+@@ -70,7 +70,7 @@ static inline void NORETURN pthread_exit(void *ret)
+ }
+ 
+ typedef DWORD pthread_key_t;
+-static inline int pthread_key_create(pthread_key_t *keyp, void (*destructor)(void *value))
++static inline int pthread_key_create(pthread_key_t *keyp, void (*destructor)(void *value) UNUSED)
+ {
+ 	return (*keyp = TlsAlloc()) == TLS_OUT_OF_INDEXES ? EAGAIN : 0;
+ }
+
+-- 
+2.43.0

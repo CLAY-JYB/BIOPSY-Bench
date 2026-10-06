@@ -1,0 +1,36 @@
+From 45503085 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0073] Fix memory leak when parsing invalid pattern matching (part 40/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -16412,7 +16855,21 @@ rb_ruby_ripper_parse0(rb_parser_t *p)
+ int
+ rb_ruby_ripper_dedent_string(rb_parser_t *p, VALUE string, int width)
+ {
+-    return dedent_string(p, string, width);
++    char *str;
++    long len;
++    int i;
++
++    RSTRING_GETMEM(string, str, len);
++    i = dedent_string_column(str, len, width);
++    if (!i) return 0;
++
++    rb_str_modify(string);
++    str = RSTRING_PTR(string);
++    if (RSTRING_LEN(string) != len)
++        rb_fatal("literal string changed: %+"PRIsVALUE, string);
++    MEMMOVE(str, str + i, char, len - i);
++    rb_str_set_len(string, len - i);
++    return i;
+ }
+ 
+ VALUE
+
+-- 
+2.43.0

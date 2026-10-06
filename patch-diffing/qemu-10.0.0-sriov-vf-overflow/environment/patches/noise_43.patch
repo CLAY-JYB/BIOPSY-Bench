@@ -1,0 +1,1185 @@
+diff --git a/target/microblaze/cpu.c b/target/microblaze/cpu.c
+index 41ad47d04c..135947ee80 100644
+--- a/target/microblaze/cpu.c
++++ b/target/microblaze/cpu.c
+@@ -413,6 +413,7 @@ static const TCGCPUOps mb_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = mb_cpu_tlb_fill,
+     .cpu_exec_interrupt = mb_cpu_exec_interrupt,
++    .cpu_exec_halt = mb_cpu_has_work,
+     .do_interrupt = mb_cpu_do_interrupt,
+     .do_transaction_failed = mb_cpu_transaction_failed,
+     .do_unaligned_access = mb_cpu_do_unaligned_access,
+diff --git a/target/mips/cpu.c b/target/mips/cpu.c
+index bbe01d07dd..89655b1900 100644
+--- a/target/mips/cpu.c
++++ b/target/mips/cpu.c
+@@ -555,6 +555,7 @@ static const TCGCPUOps mips_tcg_ops = {
+ #if !defined(CONFIG_USER_ONLY)
+     .tlb_fill = mips_cpu_tlb_fill,
+     .cpu_exec_interrupt = mips_cpu_exec_interrupt,
++    .cpu_exec_halt = mips_cpu_has_work,
+     .do_interrupt = mips_cpu_do_interrupt,
+     .do_transaction_failed = mips_cpu_do_transaction_failed,
+     .do_unaligned_access = mips_cpu_do_unaligned_access,
+diff --git a/target/openrisc/cpu.c b/target/openrisc/cpu.c
+index fdaaa09fc8..6ec54ad7a6 100644
+--- a/target/openrisc/cpu.c
++++ b/target/openrisc/cpu.c
+@@ -233,6 +233,7 @@ static const TCGCPUOps openrisc_tcg_ops = {
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = openrisc_cpu_tlb_fill,
+     .cpu_exec_interrupt = openrisc_cpu_exec_interrupt,
++    .cpu_exec_halt = openrisc_cpu_has_work,
+     .do_interrupt = openrisc_cpu_do_interrupt,
+ #endif /* !CONFIG_USER_ONLY */
+ };
+diff --git a/target/ppc/cpu_init.c b/target/ppc/cpu_init.c
+index 01e358a4a5..cdada7987d 100644
+--- a/target/ppc/cpu_init.c
++++ b/target/ppc/cpu_init.c
+@@ -1,3 +1,4 @@
++
+ /*
+  *  PowerPC CPU initialization for qemu.
+  *
+@@ -7481,6 +7482,7 @@ static const TCGCPUOps ppc_tcg_ops = {
+ #else
+   .tlb_fill = ppc_cpu_tlb_fill,
+   .cpu_exec_interrupt = ppc_cpu_exec_interrupt,
++  .cpu_exec_halt = ppc_cpu_has_work,
+   .do_interrupt = ppc_cpu_do_interrupt,
+   .cpu_exec_enter = ppc_cpu_exec_enter,
+   .cpu_exec_exit = ppc_cpu_exec_exit,
+diff --git a/target/riscv/cpu.c b/target/riscv/cpu.c
+index a2640cf259..a90808a3ba 100644
+--- a/target/riscv/cpu.c
++++ b/target/riscv/cpu.c
+@@ -113,10 +113,13 @@ const RISCVIsaExtData isa_edata_arr[] = {
+     ISA_EXT_DATA_ENTRY(zihintntl, PRIV_VERSION_1_10_0, ext_zihintntl),
+     ISA_EXT_DATA_ENTRY(zihintpause, PRIV_VERSION_1_10_0, ext_zihintpause),
+     ISA_EXT_DATA_ENTRY(zihpm, PRIV_VERSION_1_12_0, ext_zihpm),
++    ISA_EXT_DATA_ENTRY(zimop, PRIV_VERSION_1_13_0, ext_zimop),
+     ISA_EXT_DATA_ENTRY(zmmul, PRIV_VERSION_1_12_0, ext_zmmul),
+     ISA_EXT_DATA_ENTRY(za64rs, PRIV_VERSION_1_12_0, has_priv_1_11),
+     ISA_EXT_DATA_ENTRY(zaamo, PRIV_VERSION_1_12_0, ext_zaamo),
++    ISA_EXT_DATA_ENTRY(zabha, PRIV_VERSION_1_13_0, ext_zabha),
+     ISA_EXT_DATA_ENTRY(zacas, PRIV_VERSION_1_12_0, ext_zacas),
++    ISA_EXT_DATA_ENTRY(zama16b, PRIV_VERSION_1_13_0, ext_zama16b),
+     ISA_EXT_DATA_ENTRY(zalrsc, PRIV_VERSION_1_12_0, ext_zalrsc),
+     ISA_EXT_DATA_ENTRY(zawrs, PRIV_VERSION_1_12_0, ext_zawrs),
+     ISA_EXT_DATA_ENTRY(zfa, PRIV_VERSION_1_12_0, ext_zfa),
+@@ -130,6 +133,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
+     ISA_EXT_DATA_ENTRY(zcf, PRIV_VERSION_1_12_0, ext_zcf),
+     ISA_EXT_DATA_ENTRY(zcd, PRIV_VERSION_1_12_0, ext_zcd),
+     ISA_EXT_DATA_ENTRY(zce, PRIV_VERSION_1_12_0, ext_zce),
++    ISA_EXT_DATA_ENTRY(zcmop, PRIV_VERSION_1_13_0, ext_zcmop),
+     ISA_EXT_DATA_ENTRY(zcmp, PRIV_VERSION_1_12_0, ext_zcmp),
+     ISA_EXT_DATA_ENTRY(zcmt, PRIV_VERSION_1_12_0, ext_zcmt),
+     ISA_EXT_DATA_ENTRY(zba, PRIV_VERSION_1_12_0, ext_zba),
+@@ -178,6 +182,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
+     ISA_EXT_DATA_ENTRY(zhinx, PRIV_VERSION_1_12_0, ext_zhinx),
+     ISA_EXT_DATA_ENTRY(zhinxmin, PRIV_VERSION_1_12_0, ext_zhinxmin),
+     ISA_EXT_DATA_ENTRY(smaia, PRIV_VERSION_1_12_0, ext_smaia),
++    ISA_EXT_DATA_ENTRY(smcntrpmf, PRIV_VERSION_1_12_0, ext_smcntrpmf),
+     ISA_EXT_DATA_ENTRY(smepmp, PRIV_VERSION_1_12_0, ext_smepmp),
+     ISA_EXT_DATA_ENTRY(smstateen, PRIV_VERSION_1_12_0, ext_smstateen),
+     ISA_EXT_DATA_ENTRY(ssaia, PRIV_VERSION_1_12_0, ext_ssaia),
+@@ -903,7 +908,7 @@ static vaddr riscv_cpu_get_pc(CPUState *cs)
+     return env->pc;
+ }
+ 
+-static bool riscv_cpu_has_work(CPUState *cs)
++bool riscv_cpu_has_work(CPUState *cs)
+ {
+ #ifndef CONFIG_USER_ONLY
+     RISCVCPU *cpu = RISCV_CPU(cs);
+@@ -1467,11 +1472,16 @@ const char *riscv_get_misa_ext_description(uint32_t bit)
+ const RISCVCPUMultiExtConfig riscv_cpu_extensions[] = {
+     /* Defaults for standard extensions */
+     MULTI_EXT_CFG_BOOL("sscofpmf", ext_sscofpmf, false),
++    MULTI_EXT_CFG_BOOL("smcntrpmf", ext_smcntrpmf, false),
+     MULTI_EXT_CFG_BOOL("zifencei", ext_zifencei, true),
+     MULTI_EXT_CFG_BOOL("zicsr", ext_zicsr, true),
+     MULTI_EXT_CFG_BOOL("zihintntl", ext_zihintntl, true),
+     MULTI_EXT_CFG_BOOL("zihintpause", ext_zihintpause, true),
++    MULTI_EXT_CFG_BOOL("zimop", ext_zimop, false),
++    MULTI_EXT_CFG_BOOL("zcmop", ext_zcmop, false),
+     MULTI_EXT_CFG_BOOL("zacas", ext_zacas, false),
++    MULTI_EXT_CFG_BOOL("zama16b", ext_zama16b, false),
++    MULTI_EXT_CFG_BOOL("zabha", ext_zabha, false),
+     MULTI_EXT_CFG_BOOL("zaamo", ext_zaamo, false),
+     MULTI_EXT_CFG_BOOL("zalrsc", ext_zalrsc, false),
+     MULTI_EXT_CFG_BOOL("zawrs", ext_zawrs, true),
+diff --git a/target/riscv/cpu.h b/target/riscv/cpu.h
+index 87742047ce..1619c3acb6 100644
+--- a/target/riscv/cpu.h
++++ b/target/riscv/cpu.h
+@@ -176,11 +176,19 @@ typedef struct PMUCTRState {
+     target_ulong mhpmcounter_prev;
+     /* Snapshort value of a counter in RV32 */
+     target_ulong mhpmcounterh_prev;
+-    bool started;
+     /* Value beyond UINT32_MAX/UINT64_MAX before overflow interrupt trigger */
+     target_ulong irq_overflow_left;
+ } PMUCTRState;
+ 
++typedef struct PMUFixedCtrState {
++        /* Track cycle and icount for each privilege mode */
++        uint64_t counter[4];
++        uint64_t counter_prev[4];
++        /* Track cycle and icount for each privilege mode when V = 1*/
++        uint64_t counter_virt[2];
++        uint64_t counter_virt_prev[2];
++} PMUFixedCtrState;
++
+ struct CPUArchState {
+     target_ulong gpr[32];
+     target_ulong gprh[32]; /* 64 top bits of the 128-bit registers */
+@@ -362,6 +370,12 @@ struct CPUArchState {
+ 
+     uint32_t mcountinhibit;
+ 
++    /* PMU cycle & instret privilege mode filtering */
++    target_ulong mcyclecfg;
++    target_ulong mcyclecfgh;
++    target_ulong minstretcfg;
++    target_ulong minstretcfgh;
++
+     /* PMU counter state */
+     PMUCTRState pmu_ctrs[RV_MAX_MHPMCOUNTERS];
+ 
+@@ -371,6 +385,8 @@ struct CPUArchState {
+     /* PMU event selector configured values for RV32 */
+     target_ulong mhpmeventh_val[RV_MAX_MHPMEVENTS];
+ 
++    PMUFixedCtrState pmu_fixed_ctrs[2];
++
+     target_ulong sscratch;
+     target_ulong mscratch;
+ 
+@@ -567,7 +583,7 @@ void riscv_cpu_set_aia_ireg_rmw_fn(CPURISCVState *env, uint32_t priv,
+ RISCVException smstateen_acc_ok(CPURISCVState *env, int index, uint64_t bit);
+ #endif /* !CONFIG_USER_ONLY */
+ 
+-void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv);
++void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv, bool virt_en);
+ 
+ void riscv_translate_init(void);
+ G_NORETURN void riscv_raise_exception(CPURISCVState *env,
+@@ -735,6 +751,8 @@ void cpu_get_tb_cpu_state(CPURISCVState *env, vaddr *pc,
+ void riscv_cpu_update_mask(CPURISCVState *env);
+ bool riscv_cpu_is_32bit(RISCVCPU *cpu);
+ 
++RISCVException riscv_csrr(CPURISCVState *env, int csrno,
++                          target_ulong *ret_value);
+ RISCVException riscv_csrrw(CPURISCVState *env, int csrno,
+                            target_ulong *ret_value,
+                            target_ulong new_value, target_ulong write_mask);
+@@ -767,6 +785,8 @@ typedef RISCVException (*riscv_csr_op_fn)(CPURISCVState *env, int csrno,
+                                           target_ulong new_value,
+                                           target_ulong write_mask);
+ 
++RISCVException riscv_csrr_i128(CPURISCVState *env, int csrno,
++                               Int128 *ret_value);
+ RISCVException riscv_csrrw_i128(CPURISCVState *env, int csrno,
+                                 Int128 *ret_value,
+                                 Int128 new_value, Int128 write_mask);
+diff --git a/target/riscv/cpu_bits.h b/target/riscv/cpu_bits.h
+index c257c5ed7d..32b068f18a 100644
+--- a/target/riscv/cpu_bits.h
++++ b/target/riscv/cpu_bits.h
+@@ -397,6 +397,10 @@
+ /* Machine counter-inhibit register */
+ #define CSR_MCOUNTINHIBIT   0x320
+ 
++/* Machine counter configuration registers */
++#define CSR_MCYCLECFG       0x321
++#define CSR_MINSTRETCFG     0x322
++
+ #define CSR_MHPMEVENT3      0x323
+ #define CSR_MHPMEVENT4      0x324
+ #define CSR_MHPMEVENT5      0x325
+@@ -427,6 +431,9 @@
+ #define CSR_MHPMEVENT30     0x33e
+ #define CSR_MHPMEVENT31     0x33f
+ 
++#define CSR_MCYCLECFGH      0x721
++#define CSR_MINSTRETCFGH    0x722
++
+ #define CSR_MHPMEVENT3H     0x723
+ #define CSR_MHPMEVENT4H     0x724
+ #define CSR_MHPMEVENT5H     0x725
+@@ -884,6 +891,28 @@ typedef enum RISCVException {
+ /* PMU related bits */
+ #define MIE_LCOFIE                         (1 << IRQ_PMU_OVF)
+ 
++#define MCYCLECFG_BIT_MINH                 BIT_ULL(62)
++#define MCYCLECFGH_BIT_MINH                BIT(30)
++#define MCYCLECFG_BIT_SINH                 BIT_ULL(61)
++#define MCYCLECFGH_BIT_SINH                BIT(29)
++#define MCYCLECFG_BIT_UINH                 BIT_ULL(60)
++#define MCYCLECFGH_BIT_UINH                BIT(28)
++#define MCYCLECFG_BIT_VSINH                BIT_ULL(59)
++#define MCYCLECFGH_BIT_VSINH               BIT(27)
++#define MCYCLECFG_BIT_VUINH                BIT_ULL(58)
++#define MCYCLECFGH_BIT_VUINH               BIT(26)
++
++#define MINSTRETCFG_BIT_MINH               BIT_ULL(62)
++#define MINSTRETCFGH_BIT_MINH              BIT(30)
++#define MINSTRETCFG_BIT_SINH               BIT_ULL(61)
++#define MINSTRETCFGH_BIT_SINH              BIT(29)
++#define MINSTRETCFG_BIT_UINH               BIT_ULL(60)
++#define MINSTRETCFGH_BIT_UINH              BIT(28)
++#define MINSTRETCFG_BIT_VSINH              BIT_ULL(59)
++#define MINSTRETCFGH_BIT_VSINH             BIT(27)
++#define MINSTRETCFG_BIT_VUINH              BIT_ULL(58)
++#define MINSTRETCFGH_BIT_VUINH             BIT(26)
++
+ #define MHPMEVENT_BIT_OF                   BIT_ULL(63)
+ #define MHPMEVENTH_BIT_OF                  BIT(31)
+ #define MHPMEVENT_BIT_MINH                 BIT_ULL(62)
+@@ -897,6 +926,18 @@ typedef enum RISCVException {
+ #define MHPMEVENT_BIT_VUINH                BIT_ULL(58)
+ #define MHPMEVENTH_BIT_VUINH               BIT(26)
+ 
++#define MHPMEVENT_FILTER_MASK              (MHPMEVENT_BIT_MINH  | \
++                                            MHPMEVENT_BIT_SINH  | \
++                                            MHPMEVENT_BIT_UINH  | \
++                                            MHPMEVENT_BIT_VSINH | \
++                                            MHPMEVENT_BIT_VUINH)
++
++#define MHPMEVENTH_FILTER_MASK              (MHPMEVENTH_BIT_MINH  | \
++                                            MHPMEVENTH_BIT_SINH  | \
++                                            MHPMEVENTH_BIT_UINH  | \
++                                            MHPMEVENTH_BIT_VSINH | \
++                                            MHPMEVENTH_BIT_VUINH)
++
+ #define MHPMEVENT_SSCOF_MASK               _ULL(0xFFFF000000000000)
+ #define MHPMEVENT_IDX_MASK                 0xFFFFF
+ #define MHPMEVENT_SSCOF_RESVD              16
+diff --git a/target/riscv/cpu_cfg.h b/target/riscv/cpu_cfg.h
+index fb7eebde52..8b272fb826 100644
+--- a/target/riscv/cpu_cfg.h
++++ b/target/riscv/cpu_cfg.h
+@@ -71,9 +71,12 @@ struct RISCVCPUConfig {
+     bool ext_zihintntl;
+     bool ext_zihintpause;
+     bool ext_zihpm;
++    bool ext_zimop;
++    bool ext_zcmop;
+     bool ext_ztso;
+     bool ext_smstateen;
+     bool ext_sstc;
++    bool ext_smcntrpmf;
+     bool ext_svadu;
+     bool ext_svinval;
+     bool ext_svnapot;
+@@ -81,6 +84,8 @@ struct RISCVCPUConfig {
+     bool ext_zdinx;
+     bool ext_zaamo;
+     bool ext_zacas;
++    bool ext_zama16b;
++    bool ext_zabha;
+     bool ext_zalrsc;
+     bool ext_zawrs;
+     bool ext_zfa;
+diff --git a/target/riscv/cpu_helper.c b/target/riscv/cpu_helper.c
+index 6709622dd3..395a1d9140 100644
+--- a/target/riscv/cpu_helper.c
++++ b/target/riscv/cpu_helper.c
+@@ -619,30 +619,6 @@ void riscv_cpu_set_geilen(CPURISCVState *env, target_ulong geilen)
+     env->geilen = geilen;
+ }
+ 
+-/* This function can only be called to set virt when RVH is enabled */
+-void riscv_cpu_set_virt_enabled(CPURISCVState *env, bool enable)
+-{
+-    /* Flush the TLB on all virt mode changes. */
+-    if (env->virt_enabled != enable) {
+-        tlb_flush(env_cpu(env));
+-    }
+-
+-    env->virt_enabled = enable;
+-
+-    if (enable) {
+-        /*
+-         * The guest external interrupts from an interrupt controller are
+-         * delivered only when the Guest/VM is running (i.e. V=1). This means
+-         * any guest external interrupt which is triggered while the Guest/VM
+-         * is not running (i.e. V=0) will be missed on QEMU resulting in guest
+-         * with sluggish response to serial console input and other I/O events.
+-         *
+-         * To solve this, we check and inject interrupt after setting V=1.
+-         */
+-        riscv_cpu_update_mip(env, 0, 0);
+-    }
+-}
+-
+ int riscv_cpu_claim_interrupts(RISCVCPU *cpu, uint64_t interrupts)
+ {
+     CPURISCVState *env = &cpu->env;
+@@ -715,13 +691,18 @@ void riscv_cpu_set_aia_ireg_rmw_fn(CPURISCVState *env, uint32_t priv,
+     }
+ }
+ 
+-void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv)
++void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv, bool virt_en)
+ {
+     g_assert(newpriv <= PRV_M && newpriv != PRV_RESERVED);
+ 
+-    if (icount_enabled() && newpriv != env->priv) {
+-        riscv_itrigger_update_priv(env);
++    if (newpriv != env->priv || env->virt_enabled != virt_en) {
++        if (icount_enabled()) {
++            riscv_itrigger_update_priv(env);
++        }
++
++        riscv_pmu_update_fixed_ctrs(env, newpriv, virt_en);
+     }
++
+     /* tlb_flush is unnecessary as mode is contained in mmu_idx */
+     env->priv = newpriv;
+     env->xl = cpu_recompute_xl(env);
+@@ -736,6 +717,28 @@ void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv)
+      * preemptive context switch. As a result, do both.
+      */
+     env->load_res = -1;
++
++    if (riscv_has_ext(env, RVH)) {
++        /* Flush the TLB on all virt mode changes. */
++        if (env->virt_enabled != virt_en) {
++            tlb_flush(env_cpu(env));
++        }
++
++        env->virt_enabled = virt_en;
++        if (virt_en) {
++            /*
++             * The guest external interrupts from an interrupt controller are
++             * delivered only when the Guest/VM is running (i.e. V=1). This
++             * means any guest external interrupt which is triggered while the
++             * Guest/VM is not running (i.e. V=0) will be missed on QEMU
++             * resulting in guest with sluggish response to serial console
++             * input and other I/O events.
++             *
++             * To solve this, we check and inject interrupt after setting V=1.
++             */
++            riscv_cpu_update_mip(env, 0, 0);
++        }
++    }
+ }
+ 
+ /*
+@@ -1648,6 +1651,7 @@ void riscv_cpu_do_interrupt(CPUState *cs)
+ {
+     RISCVCPU *cpu = RISCV_CPU(cs);
+     CPURISCVState *env = &cpu->env;
++    bool virt = env->virt_enabled;
+     bool write_gva = false;
+     uint64_t s;
+ 
+@@ -1778,7 +1782,7 @@ void riscv_cpu_do_interrupt(CPUState *cs)
+ 
+                 htval = env->guest_phys_fault_addr;
+ 
+-                riscv_cpu_set_virt_enabled(env, 0);
++                virt = false;
+             } else {
+                 /* Trap into HS mode */
+                 env->hstatus = set_field(env->hstatus, HSTATUS_SPV, false);
+@@ -1799,7 +1803,7 @@ void riscv_cpu_do_interrupt(CPUState *cs)
+         env->htinst = tinst;
+         env->pc = (env->stvec >> 2 << 2) +
+                   ((async && (env->stvec & 3) == 1) ? cause * 4 : 0);
+-        riscv_cpu_set_mode(env, PRV_S);
++        riscv_cpu_set_mode(env, PRV_S, virt);
+     } else {
+         /* handle the trap in M-mode */
+         if (riscv_has_ext(env, RVH)) {
+@@ -1815,7 +1819,7 @@ void riscv_cpu_do_interrupt(CPUState *cs)
+             mtval2 = env->guest_phys_fault_addr;
+ 
+             /* Trapping to M mode, virt is disabled */
+-            riscv_cpu_set_virt_enabled(env, 0);
++            virt = false;
+         }
+ 
+         s = env->mstatus;
+@@ -1830,7 +1834,7 @@ void riscv_cpu_do_interrupt(CPUState *cs)
+         env->mtinst = tinst;
+         env->pc = (env->mtvec >> 2 << 2) +
+                   ((async && (env->mtvec & 3) == 1) ? cause * 4 : 0);
+-        riscv_cpu_set_mode(env, PRV_M);
++        riscv_cpu_set_mode(env, PRV_M, virt);
+     }
+ 
+     /*
+diff --git a/target/riscv/csr.c b/target/riscv/csr.c
+index 432c59dc66..ea3560342c 100644
+--- a/target/riscv/csr.c
++++ b/target/riscv/csr.c
+@@ -30,7 +30,6 @@
+ #include "qemu/guest-random.h"
+ #include "qapi/error.h"
+ 
+-
+ /* CSR function table public API */
+ void riscv_get_csr_ops(int csrno, riscv_csr_operations *ops)
+ {
+@@ -227,6 +226,33 @@ static RISCVException sscofpmf(CPURISCVState *env, int csrno)
+     return RISCV_EXCP_NONE;
+ }
+ 
++static RISCVException sscofpmf_32(CPURISCVState *env, int csrno)
++{
++    if (riscv_cpu_mxl(env) != MXL_RV32) {
++        return RISCV_EXCP_ILLEGAL_INST;
++    }
++
++    return sscofpmf(env, csrno);
++}
++
++static RISCVException smcntrpmf(CPURISCVState *env, int csrno)
++{
++    if (!riscv_cpu_cfg(env)->ext_smcntrpmf) {
++        return RISCV_EXCP_ILLEGAL_INST;
++    }
++
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException smcntrpmf_32(CPURISCVState *env, int csrno)
++{
++    if (riscv_cpu_mxl(env) != MXL_RV32) {
++        return RISCV_EXCP_ILLEGAL_INST;
++    }
++
++    return smcntrpmf(env, csrno);
++}
++
+ static RISCVException any(CPURISCVState *env, int csrno)
+ {
+     return RISCV_EXCP_NONE;
+@@ -761,36 +787,16 @@ static RISCVException write_vcsr(CPURISCVState *env, int csrno,
+     return RISCV_EXCP_NONE;
+ }
+ 
++#if defined(CONFIG_USER_ONLY)
+ /* User Timers and Counters */
+-static target_ulong get_ticks(bool shift, bool instructions)
++static target_ulong get_ticks(bool shift)
+ {
+-    int64_t val;
+-    target_ulong result;
+-
+-#if !defined(CONFIG_USER_ONLY)
+-    if (icount_enabled()) {
+-        if (instructions) {
+-            val = icount_get_raw();
+-        } else {
+-            val = icount_get();
+-        }
+-    } else {
+-        val = cpu_get_host_ticks();
+-    }
+-#else
+-    val = cpu_get_host_ticks();
+-#endif
+-
+-    if (shift) {
+-        result = val >> 32;
+-    } else {
+-        result = val;
+-    }
++    int64_t val = cpu_get_host_ticks();
++    target_ulong result = shift ? val >> 32 : val;
+ 
+     return result;
+ }
+ 
+-#if defined(CONFIG_USER_ONLY)
+ static RISCVException read_time(CPURISCVState *env, int csrno,
+                                 target_ulong *val)
+ {
+@@ -808,19 +814,124 @@ static RISCVException read_timeh(CPURISCVState *env, int csrno,
+ static RISCVException read_hpmcounter(CPURISCVState *env, int csrno,
+                                       target_ulong *val)
+ {
+-    *val = get_ticks(false, (csrno == CSR_INSTRET));
++    *val = get_ticks(false);
+     return RISCV_EXCP_NONE;
+ }
+ 
+ static RISCVException read_hpmcounterh(CPURISCVState *env, int csrno,
+                                        target_ulong *val)
+ {
+-    *val = get_ticks(true, (csrno == CSR_INSTRETH));
++    *val = get_ticks(true);
+     return RISCV_EXCP_NONE;
+ }
+ 
+ #else /* CONFIG_USER_ONLY */
+ 
++static RISCVException read_mcyclecfg(CPURISCVState *env, int csrno,
++                                     target_ulong *val)
++{
++    *val = env->mcyclecfg;
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException write_mcyclecfg(CPURISCVState *env, int csrno,
++                                      target_ulong val)
++{
++    uint64_t inh_avail_mask;
++
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        env->mcyclecfg = val;
++    } else {
++        /* Set xINH fields if priv mode supported */
++        inh_avail_mask = ~MHPMEVENT_FILTER_MASK | MCYCLECFG_BIT_MINH;
++        inh_avail_mask |= riscv_has_ext(env, RVU) ? MCYCLECFG_BIT_UINH : 0;
++        inh_avail_mask |= riscv_has_ext(env, RVS) ? MCYCLECFG_BIT_SINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVU)) ? MCYCLECFG_BIT_VUINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVS)) ? MCYCLECFG_BIT_VSINH : 0;
++        env->mcyclecfg = val & inh_avail_mask;
++    }
++
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException read_mcyclecfgh(CPURISCVState *env, int csrno,
++                                      target_ulong *val)
++{
++    *val = env->mcyclecfgh;
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException write_mcyclecfgh(CPURISCVState *env, int csrno,
++                                       target_ulong val)
++{
++    target_ulong inh_avail_mask = (target_ulong)(~MHPMEVENTH_FILTER_MASK |
++                                                 MCYCLECFGH_BIT_MINH);
++
++    /* Set xINH fields if priv mode supported */
++    inh_avail_mask |= riscv_has_ext(env, RVU) ? MCYCLECFGH_BIT_UINH : 0;
++    inh_avail_mask |= riscv_has_ext(env, RVS) ? MCYCLECFGH_BIT_SINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVU)) ? MCYCLECFGH_BIT_VUINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVS)) ? MCYCLECFGH_BIT_VSINH : 0;
++
++    env->mcyclecfgh = val & inh_avail_mask;
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException read_minstretcfg(CPURISCVState *env, int csrno,
++                                       target_ulong *val)
++{
++    *val = env->minstretcfg;
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException write_minstretcfg(CPURISCVState *env, int csrno,
++                                        target_ulong val)
++{
++    uint64_t inh_avail_mask;
++
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        env->minstretcfg = val;
++    } else {
++        inh_avail_mask = ~MHPMEVENT_FILTER_MASK | MINSTRETCFG_BIT_MINH;
++        inh_avail_mask |= riscv_has_ext(env, RVU) ? MINSTRETCFG_BIT_UINH : 0;
++        inh_avail_mask |= riscv_has_ext(env, RVS) ? MINSTRETCFG_BIT_SINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVU)) ? MINSTRETCFG_BIT_VUINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVS)) ? MINSTRETCFG_BIT_VSINH : 0;
++        env->minstretcfg = val & inh_avail_mask;
++    }
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException read_minstretcfgh(CPURISCVState *env, int csrno,
++                                        target_ulong *val)
++{
++    *val = env->minstretcfgh;
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException write_minstretcfgh(CPURISCVState *env, int csrno,
++                                         target_ulong val)
++{
++    target_ulong inh_avail_mask = (target_ulong)(~MHPMEVENTH_FILTER_MASK |
++                                                 MINSTRETCFGH_BIT_MINH);
++
++    inh_avail_mask |= riscv_has_ext(env, RVU) ? MINSTRETCFGH_BIT_UINH : 0;
++    inh_avail_mask |= riscv_has_ext(env, RVS) ? MINSTRETCFGH_BIT_SINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVU)) ? MINSTRETCFGH_BIT_VUINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVS)) ? MINSTRETCFGH_BIT_VSINH : 0;
++
++    env->minstretcfgh = val & inh_avail_mask;
++    return RISCV_EXCP_NONE;
++}
++
+ static RISCVException read_mhpmevent(CPURISCVState *env, int csrno,
+                                      target_ulong *val)
+ {
+@@ -836,13 +947,24 @@ static RISCVException write_mhpmevent(CPURISCVState *env, int csrno,
+ {
+     int evt_index = csrno - CSR_MCOUNTINHIBIT;
+     uint64_t mhpmevt_val = val;
+-
+-    env->mhpmevent_val[evt_index] = val;
++    uint64_t inh_avail_mask;
+ 
+     if (riscv_cpu_mxl(env) == MXL_RV32) {
++        env->mhpmevent_val[evt_index] = val;
+         mhpmevt_val = mhpmevt_val |
+                       ((uint64_t)env->mhpmeventh_val[evt_index] << 32);
++    } else {
++        inh_avail_mask = ~MHPMEVENT_FILTER_MASK | MHPMEVENT_BIT_MINH;
++        inh_avail_mask |= riscv_has_ext(env, RVU) ? MHPMEVENT_BIT_UINH : 0;
++        inh_avail_mask |= riscv_has_ext(env, RVS) ? MHPMEVENT_BIT_SINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVU)) ? MHPMEVENT_BIT_VUINH : 0;
++        inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                           riscv_has_ext(env, RVS)) ? MHPMEVENT_BIT_VSINH : 0;
++        mhpmevt_val = val & inh_avail_mask;
++        env->mhpmevent_val[evt_index] = mhpmevt_val;
+     }
++
+     riscv_pmu_update_event_map(env, mhpmevt_val, evt_index);
+ 
+     return RISCV_EXCP_NONE;
+@@ -862,28 +984,107 @@ static RISCVException write_mhpmeventh(CPURISCVState *env, int csrno,
+                                        target_ulong val)
+ {
+     int evt_index = csrno - CSR_MHPMEVENT3H + 3;
+-    uint64_t mhpmevth_val = val;
++    uint64_t mhpmevth_val;
+     uint64_t mhpmevt_val = env->mhpmevent_val[evt_index];
++    target_ulong inh_avail_mask = (target_ulong)(~MHPMEVENTH_FILTER_MASK |
++                                                  MHPMEVENTH_BIT_MINH);
+ 
++    inh_avail_mask |= riscv_has_ext(env, RVU) ? MHPMEVENTH_BIT_UINH : 0;
++    inh_avail_mask |= riscv_has_ext(env, RVS) ? MHPMEVENTH_BIT_SINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVU)) ? MHPMEVENTH_BIT_VUINH : 0;
++    inh_avail_mask |= (riscv_has_ext(env, RVH) &&
++                       riscv_has_ext(env, RVS)) ? MHPMEVENTH_BIT_VSINH : 0;
++
++    mhpmevth_val = val & inh_avail_mask;
+     mhpmevt_val = mhpmevt_val | (mhpmevth_val << 32);
+-    env->mhpmeventh_val[evt_index] = val;
++    env->mhpmeventh_val[evt_index] = mhpmevth_val;
+ 
+     riscv_pmu_update_event_map(env, mhpmevt_val, evt_index);
+ 
+     return RISCV_EXCP_NONE;
+ }
+ 
++static target_ulong riscv_pmu_ctr_get_fixed_counters_val(CPURISCVState *env,
++                                                         int counter_idx,
++                                                         bool upper_half)
++{
++    int inst = riscv_pmu_ctr_monitor_instructions(env, counter_idx);
++    uint64_t *counter_arr_virt = env->pmu_fixed_ctrs[inst].counter_virt;
++    uint64_t *counter_arr = env->pmu_fixed_ctrs[inst].counter;
++    target_ulong result = 0;
++    uint64_t curr_val = 0;
++    uint64_t cfg_val = 0;
++
++    if (counter_idx == 0) {
++        cfg_val = upper_half ? ((uint64_t)env->mcyclecfgh << 32) :
++                  env->mcyclecfg;
++    } else if (counter_idx == 2) {
++        cfg_val = upper_half ? ((uint64_t)env->minstretcfgh << 32) :
++                  env->minstretcfg;
++    } else {
++        cfg_val = upper_half ?
++                  ((uint64_t)env->mhpmeventh_val[counter_idx] << 32) :
++                  env->mhpmevent_val[counter_idx];
++        cfg_val &= MHPMEVENT_FILTER_MASK;
++    }
++
++    if (!cfg_val) {
++        if (icount_enabled()) {
++                curr_val = inst ? icount_get_raw() : icount_get();
++        } else {
++            curr_val = cpu_get_host_ticks();
++        }
++
++        goto done;
++    }
++
++    /* Update counter before reading. */
++    riscv_pmu_update_fixed_ctrs(env, env->priv, env->virt_enabled);
++
++    if (!(cfg_val & MCYCLECFG_BIT_MINH)) {
++        curr_val += counter_arr[PRV_M];
++    }
++
++    if (!(cfg_val & MCYCLECFG_BIT_SINH)) {
++        curr_val += counter_arr[PRV_S];
++    }
++
++    if (!(cfg_val & MCYCLECFG_BIT_UINH)) {
++        curr_val += counter_arr[PRV_U];
++    }
++
++    if (!(cfg_val & MCYCLECFG_BIT_VSINH)) {
++        curr_val += counter_arr_virt[PRV_S];
++    }
++
++    if (!(cfg_val & MCYCLECFG_BIT_VUINH)) {
++        curr_val += counter_arr_virt[PRV_U];
++    }
++
++done:
++    if (riscv_cpu_mxl(env) == MXL_RV32) {
++        result = upper_half ? curr_val >> 32 : curr_val;
++    } else {
++        result = curr_val;
++    }
++
++    return result;
++}
++
+ static RISCVException write_mhpmcounter(CPURISCVState *env, int csrno,
+                                         target_ulong val)
+ {
+     int ctr_idx = csrno - CSR_MCYCLE;
+     PMUCTRState *counter = &env->pmu_ctrs[ctr_idx];
+     uint64_t mhpmctr_val = val;
+-    bool instr = riscv_pmu_ctr_monitor_instructions(env, ctr_idx);
+ 
+     counter->mhpmcounter_val = val;
+-    if (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) || instr) {
+-        counter->mhpmcounter_prev = get_ticks(false, instr);
++    if (!get_field(env->mcountinhibit, BIT(ctr_idx)) &&
++        (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) ||
++         riscv_pmu_ctr_monitor_instructions(env, ctr_idx))) {
++        counter->mhpmcounter_prev = riscv_pmu_ctr_get_fixed_counters_val(env,
++                                                                ctr_idx, false);
+         if (ctr_idx > 2) {
+             if (riscv_cpu_mxl(env) == MXL_RV32) {
+                 mhpmctr_val = mhpmctr_val |
+@@ -906,12 +1107,14 @@ static RISCVException write_mhpmcounterh(CPURISCVState *env, int csrno,
+     PMUCTRState *counter = &env->pmu_ctrs[ctr_idx];
+     uint64_t mhpmctr_val = counter->mhpmcounter_val;
+     uint64_t mhpmctrh_val = val;
+-    bool instr = riscv_pmu_ctr_monitor_instructions(env, ctr_idx);
+ 
+     counter->mhpmcounterh_val = val;
+     mhpmctr_val = mhpmctr_val | (mhpmctrh_val << 32);
+-    if (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) || instr) {
+-        counter->mhpmcounterh_prev = get_ticks(true, instr);
++    if (!get_field(env->mcountinhibit, BIT(ctr_idx)) &&
++        (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) ||
++         riscv_pmu_ctr_monitor_instructions(env, ctr_idx))) {
++        counter->mhpmcounterh_prev = riscv_pmu_ctr_get_fixed_counters_val(env,
++                                                                 ctr_idx, true);
+         if (ctr_idx > 2) {
+             riscv_pmu_setup_timer(env, mhpmctr_val, ctr_idx);
+         }
+@@ -922,7 +1125,7 @@ static RISCVException write_mhpmcounterh(CPURISCVState *env, int csrno,
+     return RISCV_EXCP_NONE;
+ }
+ 
+-static RISCVException riscv_pmu_read_ctr(CPURISCVState *env, target_ulong *val,
++RISCVException riscv_pmu_read_ctr(CPURISCVState *env, target_ulong *val,
+                                          bool upper_half, uint32_t ctr_idx)
+ {
+     PMUCTRState *counter = &env->pmu_ctrs[ctr_idx];
+@@ -930,29 +1133,24 @@ static RISCVException riscv_pmu_read_ctr(CPURISCVState *env, target_ulong *val,
+                                          counter->mhpmcounter_prev;
+     target_ulong ctr_val = upper_half ? counter->mhpmcounterh_val :
+                                         counter->mhpmcounter_val;
+-    bool instr = riscv_pmu_ctr_monitor_instructions(env, ctr_idx);
+ 
+     if (get_field(env->mcountinhibit, BIT(ctr_idx))) {
+         /*
+-         * Counter should not increment if inhibit bit is set. We can't really
+-         * stop the icount counting. Just return the counter value written by
+-         * the supervisor to indicate that counter was not incremented.
++         * Counter should not increment if inhibit bit is set. Just return the
++         * current counter value.
+          */
+-        if (!counter->started) {
+-            *val = ctr_val;
+-            return RISCV_EXCP_NONE;
+-        } else {
+-            /* Mark that the counter has been stopped */
+-            counter->started = false;
+-        }
++         *val = ctr_val;
++         return RISCV_EXCP_NONE;
+     }
+ 
+     /*
+      * The kernel computes the perf delta by subtracting the current value from
+      * the value it initialized previously (ctr_val).
+      */
+-    if (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) || instr) {
+-        *val = get_ticks(upper_half, instr) - ctr_prev + ctr_val;
++    if (riscv_pmu_ctr_monitor_cycles(env, ctr_idx) ||
++        riscv_pmu_ctr_monitor_instructions(env, ctr_idx)) {
++        *val = riscv_pmu_ctr_get_fixed_counters_val(env, ctr_idx, upper_half) -
++                                                    ctr_prev + ctr_val;
+     } else {
+         *val = ctr_val;
+     }
+@@ -1977,16 +2175,61 @@ static RISCVException write_mcountinhibit(CPURISCVState *env, int csrno,
+     int cidx;
+     PMUCTRState *counter;
+     RISCVCPU *cpu = env_archcpu(env);
++    uint32_t present_ctrs = cpu->pmu_avail_ctrs | COUNTEREN_CY | COUNTEREN_IR;
++    target_ulong updated_ctrs = (env->mcountinhibit ^ val) & present_ctrs;
++    uint64_t mhpmctr_val, prev_count, curr_count;
+ 
+     /* WARL register - disable unavailable counters; TM bit is always 0 */
+-    env->mcountinhibit =
+-        val & (cpu->pmu_avail_ctrs | COUNTEREN_CY | COUNTEREN_IR);
++    env->mcountinhibit = val & present_ctrs;
+ 
+     /* Check if any other counter is also monitoring cycles/instructions */
+     for (cidx = 0; cidx < RV_MAX_MHPMCOUNTERS; cidx++) {
++        if (!(updated_ctrs & BIT(cidx)) ||
++            (!riscv_pmu_ctr_monitor_cycles(env, cidx) &&
++            !riscv_pmu_ctr_monitor_instructions(env, cidx))) {
++            continue;
++        }
++
++        counter = &env->pmu_ctrs[cidx];
++
+         if (!get_field(env->mcountinhibit, BIT(cidx))) {
+-            counter = &env->pmu_ctrs[cidx];
+-            counter->started = true;
++            counter->mhpmcounter_prev =
++                riscv_pmu_ctr_get_fixed_counters_val(env, cidx, false);
++            if (riscv_cpu_mxl(env) == MXL_RV32) {
++                counter->mhpmcounterh_prev =
++                    riscv_pmu_ctr_get_fixed_counters_val(env, cidx, true);
++            }
++
++            if (cidx > 2) {
++                mhpmctr_val = counter->mhpmcounter_val;
++                if (riscv_cpu_mxl(env) == MXL_RV32) {
++                    mhpmctr_val = mhpmctr_val |
++                            ((uint64_t)counter->mhpmcounterh_val << 32);
++                }
++                riscv_pmu_setup_timer(env, mhpmctr_val, cidx);
++            }
++        } else {
++            curr_count = riscv_pmu_ctr_get_fixed_counters_val(env, cidx, false);
++
++            mhpmctr_val = counter->mhpmcounter_val;
++            prev_count = counter->mhpmcounter_prev;
++            if (riscv_cpu_mxl(env) == MXL_RV32) {
++                uint64_t tmp =
++                    riscv_pmu_ctr_get_fixed_counters_val(env, cidx, true);
++
++                curr_count = curr_count | (tmp << 32);
++                mhpmctr_val = mhpmctr_val |
++                    ((uint64_t)counter->mhpmcounterh_val << 32);
++                prev_count = prev_count |
++                    ((uint64_t)counter->mhpmcounterh_prev << 32);
++            }
++
++            /* Adjust the counter for later reads. */
++            mhpmctr_val = curr_count - prev_count + mhpmctr_val;
++            counter->mhpmcounter_val = mhpmctr_val;
++            if (riscv_cpu_mxl(env) == MXL_RV32) {
++                counter->mhpmcounterh_val = mhpmctr_val >> 32;
++            }
+         }
+     }
+ 
+@@ -2854,7 +3097,11 @@ static RISCVException read_scounteren(CPURISCVState *env, int csrno,
+ static RISCVException write_scounteren(CPURISCVState *env, int csrno,
+                                        target_ulong val)
+ {
+-    env->scounteren = val;
++    RISCVCPU *cpu = env_archcpu(env);
++
++    /* WARL register - disable unavailable counters */
++    env->scounteren = val & (cpu->pmu_avail_ctrs | COUNTEREN_CY | COUNTEREN_TM |
++                             COUNTEREN_IR);
+     return RISCV_EXCP_NONE;
+ }
+ 
+@@ -3513,7 +3760,11 @@ static RISCVException read_hcounteren(CPURISCVState *env, int csrno,
+ static RISCVException write_hcounteren(CPURISCVState *env, int csrno,
+                                        target_ulong val)
+ {
+-    env->hcounteren = val;
++    RISCVCPU *cpu = env_archcpu(env);
++
++    /* WARL register - disable unavailable counters */
++    env->hcounteren = val & (cpu->pmu_avail_ctrs | COUNTEREN_CY | COUNTEREN_TM |
++                             COUNTEREN_IR);
+     return RISCV_EXCP_NONE;
+ }
+ 
+@@ -3791,7 +4042,12 @@ static RISCVException read_vstvec(CPURISCVState *env, int csrno,
+ static RISCVException write_vstvec(CPURISCVState *env, int csrno,
+                                    target_ulong val)
+ {
+-    env->vstvec = val;
++    /* bits [1:0] encode mode; 0 = direct, 1 = vectored, 2 >= reserved */
++    if ((val & 3) < 2) {
++        env->vstvec = val;
++    } else {
++        qemu_log_mask(LOG_UNIMP, "CSR_VSTVEC: reserved mode not supported\n");
++    }
+     return RISCV_EXCP_NONE;
+ }
+ 
+@@ -4368,7 +4624,7 @@ static RISCVException rmw_seed(CPURISCVState *env, int csrno,
+ 
+ static inline RISCVException riscv_csrrw_check(CPURISCVState *env,
+                                                int csrno,
+-                                               bool write_mask)
++                                               bool write)
+ {
+     /* check privileges and return RISCV_EXCP_ILLEGAL_INST if check fails */
+     bool read_only = get_field(csrno, 0xC00) == 3;
+@@ -4390,7 +4646,7 @@ static inline RISCVException riscv_csrrw_check(CPURISCVState *env,
+     }
+ 
+     /* read / write check */
+-    if (write_mask && read_only) {
++    if (write && read_only) {
+         return RISCV_EXCP_ILLEGAL_INST;
+     }
+ 
+@@ -4477,11 +4733,22 @@ static RISCVException riscv_csrrw_do64(CPURISCVState *env, int csrno,
+     return RISCV_EXCP_NONE;
+ }
+ 
++RISCVException riscv_csrr(CPURISCVState *env, int csrno,
++                           target_ulong *ret_value)
++{
++    RISCVException ret = riscv_csrrw_check(env, csrno, false);
++    if (ret != RISCV_EXCP_NONE) {
++        return ret;
++    }
++
++    return riscv_csrrw_do64(env, csrno, ret_value, 0, 0);
++}
++
+ RISCVException riscv_csrrw(CPURISCVState *env, int csrno,
+                            target_ulong *ret_value,
+                            target_ulong new_value, target_ulong write_mask)
+ {
+-    RISCVException ret = riscv_csrrw_check(env, csrno, write_mask);
++    RISCVException ret = riscv_csrrw_check(env, csrno, true);
+     if (ret != RISCV_EXCP_NONE) {
+         return ret;
+     }
+@@ -4529,13 +4796,45 @@ static RISCVException riscv_csrrw_do128(CPURISCVState *env, int csrno,
+     return RISCV_EXCP_NONE;
+ }
+ 
++RISCVException riscv_csrr_i128(CPURISCVState *env, int csrno,
++                               Int128 *ret_value)
++{
++    RISCVException ret;
++
++    ret = riscv_csrrw_check(env, csrno, false);
++    if (ret != RISCV_EXCP_NONE) {
++        return ret;
++    }
++
++    if (csr_ops[csrno].read128) {
++        return riscv_csrrw_do128(env, csrno, ret_value,
++                                 int128_zero(), int128_zero());
++    }
++
++    /*
++     * Fall back to 64-bit version for now, if the 128-bit alternative isn't
++     * at all defined.
++     * Note, some CSRs don't need to extend to MXLEN (64 upper bits non
++     * significant), for those, this fallback is correctly handling the
++     * accesses
++     */
++    target_ulong old_value;
++    ret = riscv_csrrw_do64(env, csrno, &old_value,
++                           (target_ulong)0,
++                           (target_ulong)0);
++    if (ret == RISCV_EXCP_NONE && ret_value) {
++        *ret_value = int128_make64(old_value);
++    }
++    return ret;
++}
++
+ RISCVException riscv_csrrw_i128(CPURISCVState *env, int csrno,
+                                 Int128 *ret_value,
+                                 Int128 new_value, Int128 write_mask)
+ {
+     RISCVException ret;
+ 
+-    ret = riscv_csrrw_check(env, csrno, int128_nz(write_mask));
++    ret = riscv_csrrw_check(env, csrno, true);
+     if (ret != RISCV_EXCP_NONE) {
+         return ret;
+     }
+@@ -4574,7 +4873,11 @@ RISCVException riscv_csrrw_debug(CPURISCVState *env, int csrno,
+ #if !defined(CONFIG_USER_ONLY)
+     env->debugger = true;
+ #endif
+-    ret = riscv_csrrw(env, csrno, ret_value, new_value, write_mask);
++    if (!write_mask) {
++        ret = riscv_csrr(env, csrno, ret_value);
++    } else {
++        ret = riscv_csrrw(env, csrno, ret_value, new_value, write_mask);
++    }
+ #if !defined(CONFIG_USER_ONLY)
+     env->debugger = false;
+ #endif
+@@ -5042,6 +5345,13 @@ riscv_csr_operations csr_ops[CSR_TABLE_SIZE] = {
+                              write_mcountinhibit,
+                              .min_priv_ver = PRIV_VERSION_1_11_0       },
+ 
++    [CSR_MCYCLECFG]      = { "mcyclecfg",   smcntrpmf, read_mcyclecfg,
++                             write_mcyclecfg,
++                             .min_priv_ver = PRIV_VERSION_1_12_0       },
++    [CSR_MINSTRETCFG]    = { "minstretcfg", smcntrpmf, read_minstretcfg,
++                             write_minstretcfg,
++                             .min_priv_ver = PRIV_VERSION_1_12_0       },
++
+     [CSR_MHPMEVENT3]     = { "mhpmevent3",     any,    read_mhpmevent,
+                              write_mhpmevent                           },
+     [CSR_MHPMEVENT4]     = { "mhpmevent4",     any,    read_mhpmevent,
+@@ -5101,91 +5411,98 @@ riscv_csr_operations csr_ops[CSR_TABLE_SIZE] = {
+     [CSR_MHPMEVENT31]    = { "mhpmevent31",    any,    read_mhpmevent,
+                              write_mhpmevent                           },
+ 
+-    [CSR_MHPMEVENT3H]    = { "mhpmevent3h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MCYCLECFGH]     = { "mcyclecfgh",   smcntrpmf_32, read_mcyclecfgh,
++                             write_mcyclecfgh,
++                             .min_priv_ver = PRIV_VERSION_1_12_0        },
++    [CSR_MINSTRETCFGH]   = { "minstretcfgh", smcntrpmf_32, read_minstretcfgh,
++                             write_minstretcfgh,
++                             .min_priv_ver = PRIV_VERSION_1_12_0        },
++
++    [CSR_MHPMEVENT3H]    = { "mhpmevent3h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT4H]    = { "mhpmevent4h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT4H]    = { "mhpmevent4h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT5H]    = { "mhpmevent5h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT5H]    = { "mhpmevent5h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT6H]    = { "mhpmevent6h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT6H]    = { "mhpmevent6h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT7H]    = { "mhpmevent7h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT7H]    = { "mhpmevent7h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT8H]    = { "mhpmevent8h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT8H]    = { "mhpmevent8h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT9H]    = { "mhpmevent9h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT9H]    = { "mhpmevent9h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT10H]   = { "mhpmevent10h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT10H]   = { "mhpmevent10h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT11H]   = { "mhpmevent11h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT11H]   = { "mhpmevent11h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT12H]   = { "mhpmevent12h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT12H]   = { "mhpmevent12h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT13H]   = { "mhpmevent13h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT13H]   = { "mhpmevent13h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT14H]   = { "mhpmevent14h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT14H]   = { "mhpmevent14h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT15H]   = { "mhpmevent15h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT15H]   = { "mhpmevent15h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT16H]   = { "mhpmevent16h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT16H]   = { "mhpmevent16h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT17H]   = { "mhpmevent17h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT17H]   = { "mhpmevent17h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT18H]   = { "mhpmevent18h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT18H]   = { "mhpmevent18h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT19H]   = { "mhpmevent19h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT19H]   = { "mhpmevent19h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT20H]   = { "mhpmevent20h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT20H]   = { "mhpmevent20h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT21H]   = { "mhpmevent21h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT21H]   = { "mhpmevent21h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT22H]   = { "mhpmevent22h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT22H]   = { "mhpmevent22h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT23H]   = { "mhpmevent23h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT23H]   = { "mhpmevent23h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT24H]   = { "mhpmevent24h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT24H]   = { "mhpmevent24h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT25H]   = { "mhpmevent25h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT25H]   = { "mhpmevent25h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT26H]   = { "mhpmevent26h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT26H]   = { "mhpmevent26h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT27H]   = { "mhpmevent27h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT27H]   = { "mhpmevent27h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT28H]   = { "mhpmevent28h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT28H]   = { "mhpmevent28h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT29H]   = { "mhpmevent29h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT29H]   = { "mhpmevent29h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT30H]   = { "mhpmevent30h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT30H]   = { "mhpmevent30h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+-    [CSR_MHPMEVENT31H]   = { "mhpmevent31h",    sscofpmf,  read_mhpmeventh,
++    [CSR_MHPMEVENT31H]   = { "mhpmevent31h",    sscofpmf_32,  read_mhpmeventh,
+                              write_mhpmeventh,
+                              .min_priv_ver = PRIV_VERSION_1_12_0        },
+ 

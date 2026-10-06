@@ -1,0 +1,370 @@
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -2179,29 +2239,354 @@ rb_parser_string_set_encoding(rb_parser_string_t *str, rb_encoding *enc)
+ {
+     str->enc = enc;
+ }
++#endif
+ 
+-long
+-rb_parser_string_length(rb_parser_string_t *str)
++static rb_encoding *
++rb_parser_str_get_encoding(rb_parser_string_t *str)
+ {
+-    return str->len;
++    return str->enc;
+ }
+ 
+-char *
+-rb_parser_string_pointer(rb_parser_string_t *str)
++#ifndef RIPPER
++static int
++PARSER_ENC_CODERANGE(rb_parser_string_t *str)
+ {
+-    return str->ptr;
++    return str->coderange;
++}
++
++static void
++PARSER_ENC_CODERANGE_SET(rb_parser_string_t *str, int coderange)
++{
++    str->coderange = coderange;
++}
++
++static void
++PARSER_ENCODING_CODERANGE_SET(rb_parser_string_t *str, rb_encoding *enc, enum rb_parser_string_coderange_type cr)
++{
++    rb_parser_string_set_encoding(str, enc);
++    PARSER_ENC_CODERANGE_SET(str, cr);
++}
++
++static void
++PARSER_ENCODING_CODERANGE_CLEAR(rb_parser_string_t *str)
++{
++    str->coderange = RB_PARSER_ENC_CODERANGE_UNKNOWN;
++}
++
++static bool
++PARSER_ENC_CODERANGE_CLEAN_P(int cr)
++{
++    return cr == RB_PARSER_ENC_CODERANGE_7BIT || cr == RB_PARSER_ENC_CODERANGE_VALID;
++}
++
++static const char *
++rb_parser_search_nonascii(const char *p, const char *e)
++{
++    const char *s = p;
++
++    for (; s < e; s++) {
++        if (*s & 0x80) return s;
++    }
++
++    return NULL;
++}
++
++static int
++rb_parser_coderange_scan(struct parser_params *p, const char *ptr, long len, rb_encoding *enc)
++{
++    const char *e = ptr + len;
++
++    if (enc == rb_ascii8bit_encoding()) {
++        /* enc is ASCII-8BIT.  ASCII-8BIT string never be broken. */
++        ptr = rb_parser_search_nonascii(ptr, e);
++        return ptr ? RB_PARSER_ENC_CODERANGE_VALID : RB_PARSER_ENC_CODERANGE_7BIT;
++    }
++
++    /* parser string encoding is always asciicompat */
++    ptr = rb_parser_search_nonascii(ptr, e);
++    if (!ptr) return RB_PARSER_ENC_CODERANGE_7BIT;
++    for (;;) {
++        int ret = rb_enc_precise_mbclen(ptr, e, enc);
++        if (!MBCLEN_CHARFOUND_P(ret)) return RB_PARSER_ENC_CODERANGE_BROKEN;
++        ptr += MBCLEN_CHARFOUND_LEN(ret);
++        if (ptr == e) break;
++        ptr = rb_parser_search_nonascii(ptr, e);
++        if (!ptr) break;
++    }
++
++    return RB_PARSER_ENC_CODERANGE_VALID;
++}
++
++static int
++rb_parser_enc_coderange_scan(struct parser_params *p, rb_parser_string_t *str, rb_encoding *enc)
++{
++    return rb_parser_coderange_scan(p, PARSER_STRING_PTR(str), PARSER_STRING_LEN(str), enc);
++}
++
++static int
++rb_parser_enc_str_coderange(struct parser_params *p, rb_parser_string_t *str)
++{
++    int cr = PARSER_ENC_CODERANGE(str);
++
++    if (cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++        cr = rb_parser_enc_coderange_scan(p, str, rb_parser_str_get_encoding(str));
++        PARSER_ENC_CODERANGE_SET(str, cr);
++    }
++
++    return cr;
++}
++
++static bool
++rb_parser_is_ascii_string(struct parser_params *p, rb_parser_string_t *str)
++{
++    return rb_parser_enc_str_coderange(p, str) == RB_PARSER_ENC_CODERANGE_7BIT;
++}
++
++static int
++rb_parser_enc_str_asciionly_p(struct parser_params *p, rb_parser_string_t *str)
++{
++    rb_encoding *enc = rb_parser_str_get_encoding(str);
++
++    if (!rb_enc_asciicompat(enc))
++        return FALSE;
++    else if (rb_parser_is_ascii_string(p, str))
++        return TRUE;
++    return FALSE;
+ }
+-#endif
+ 
+ static rb_encoding *
+-rb_parser_string_encoding(rb_parser_string_t *str)
++rb_parser_enc_compatible_latter(struct parser_params *p, rb_parser_string_t *str1, rb_parser_string_t *str2, rb_encoding *enc1, rb_encoding *enc2)
+ {
+-    return str->enc;
++    int cr1, cr2;
++
++    if (PARSER_STRING_LEN(str2) == 0)
++        return enc1;
++    if (PARSER_STRING_LEN(str1) == 0)
++        return (rb_enc_asciicompat(enc1) && rb_parser_enc_str_asciionly_p(p, str2)) ? enc1 : enc2;
++    if (!rb_enc_asciicompat(enc1) || !rb_enc_asciicompat(enc2)) {
++        return 0;
++    }
++
++    cr1 = rb_parser_enc_str_coderange(p, str1);
++    cr2 = rb_parser_enc_str_coderange(p, str2);
++
++    if (cr1 != cr2) {
++        if (cr1 == RB_PARSER_ENC_CODERANGE_7BIT) return enc2;
++        if (cr2 == RB_PARSER_ENC_CODERANGE_7BIT) return enc1;
++    }
++
++    if (cr2 == RB_PARSER_ENC_CODERANGE_7BIT) {
++        return enc1;
++    }
++
++    if (cr1 == RB_PARSER_ENC_CODERANGE_7BIT) {
++        return enc2;
++    }
++
++    return 0;
++}
++
++static rb_encoding *
++rb_parser_enc_compatible(struct parser_params *p, rb_parser_string_t *str1, rb_parser_string_t *str2)
++{
++    rb_encoding *enc1 = rb_parser_str_get_encoding(str1);
++    rb_encoding *enc2 = rb_parser_str_get_encoding(str2);
++
++    if (enc1 == NULL || enc2 == NULL)
++        return 0;
++
++    if (enc1 == enc2) {
++        return enc1;
++    }
++
++    return rb_parser_enc_compatible_latter(p, str1, str2, enc1, enc2);
++}
++
++static void
++rb_parser_str_modify(rb_parser_string_t *str)
++{
++    PARSER_ENCODING_CODERANGE_CLEAR(str);
++}
++
++static void
++rb_parser_str_set_len(struct parser_params *p, rb_parser_string_t *str, long len)
++{
++    long capa;
++    const int termlen = STRING_TERM_LEN(str);
++
++    if (len > (capa = (long)(rb_parser_str_capacity(str, termlen))) || len < 0) {
++        rb_bug("probable buffer overflow: %ld for %ld", len, capa);
++    }
++
++    int cr = PARSER_ENC_CODERANGE(str);
++    if (cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++        /* Leave unknown. */
++    }
++    else if (len > PARSER_STRING_LEN(str)) {
++        PARSER_ENC_CODERANGE_SET(str, RB_PARSER_ENC_CODERANGE_UNKNOWN);
++    }
++    else if (len < PARSER_STRING_LEN(str)) {
++        if (cr != RB_PARSER_ENC_CODERANGE_7BIT) {
++            /* ASCII-only string is keeping after truncated.  Valid
++             * and broken may be invalid or valid, leave unknown. */
++            PARSER_ENC_CODERANGE_SET(str, RB_PARSER_ENC_CODERANGE_UNKNOWN);
++        }
++    }
++
++    STRING_SET_LEN(str, len);
++    STRING_TERM_FILL(str);
++}
++
++static rb_parser_string_t *
++rb_parser_str_buf_cat(struct parser_params *p, rb_parser_string_t *str, const char *ptr, long len)
++{
++    rb_parser_str_modify(str);
++    if (len == 0) return 0;
++
++    long total, olen, off = -1;
++    char *sptr;
++    const int termlen = STRING_TERM_LEN(str);
++
++    PARSER_STRING_GETMEM(str, sptr, olen);
++    if (ptr >= sptr && ptr <= sptr + olen) {
++        off = ptr - sptr;
++    }
++
++    if (olen > LONG_MAX - len) {
++        compile_error(p, "string sizes too big");
++        return 0;
++    }
++    total = olen + len;
++    PARSER_STRING_RESIZE_CAPA_TERM(p, str, total, termlen);
++    sptr = PARSER_STRING_PTR(str);
++    if (off != -1) {
++        ptr = sptr + off;
++    }
++    memcpy(sptr + olen, ptr, len);
++    STRING_SET_LEN(str, total);
++    STRING_TERM_FILL(str);
++
++    return str;
++}
++
++static rb_parser_string_t *
++rb_parser_enc_cr_str_buf_cat(struct parser_params *p, rb_parser_string_t *str, const char *ptr, long len,
++    rb_encoding *ptr_enc, int ptr_cr, int *ptr_cr_ret)
++{
++    int str_cr, res_cr;
++    rb_encoding *str_enc, *res_enc;
++
++    str_enc = rb_parser_str_get_encoding(str);
++    str_cr = PARSER_STRING_LEN(str) ? PARSER_ENC_CODERANGE(str) : RB_PARSER_ENC_CODERANGE_7BIT;
++
++    if (str_enc == ptr_enc) {
++        if (str_cr != RB_PARSER_ENC_CODERANGE_UNKNOWN && ptr_cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++            ptr_cr = rb_parser_coderange_scan(p, ptr, len, ptr_enc);
++        }
++    }
++    else {
++        /* parser string encoding is always asciicompat */
++        if (ptr_cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++            ptr_cr = rb_parser_coderange_scan(p, ptr, len, ptr_enc);
++        }
++        if (str_cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++            if (str_enc == rb_ascii8bit_encoding() || ptr_cr != RB_PARSER_ENC_CODERANGE_7BIT) {
++                str_cr = rb_parser_enc_str_coderange(p, str);
++            }
++        }
++    }
++    if (ptr_cr_ret)
++        *ptr_cr_ret = ptr_cr;
++
++    if (str_enc != ptr_enc &&
++        str_cr != RB_PARSER_ENC_CODERANGE_7BIT &&
++        ptr_cr != RB_PARSER_ENC_CODERANGE_7BIT) {
++        goto incompatible;
++    }
++
++    if (str_cr == RB_PARSER_ENC_CODERANGE_UNKNOWN) {
++        res_enc = str_enc;
++        res_cr = RB_PARSER_ENC_CODERANGE_UNKNOWN;
++    }
++    else if (str_cr == RB_PARSER_ENC_CODERANGE_7BIT) {
++        if (ptr_cr == RB_PARSER_ENC_CODERANGE_7BIT) {
++            res_enc = str_enc;
++            res_cr = RB_PARSER_ENC_CODERANGE_7BIT;
++        }
++        else {
++            res_enc = ptr_enc;
++            res_cr = ptr_cr;
++        }
++    }
++    else if (str_cr == RB_PARSER_ENC_CODERANGE_VALID) {
++        res_enc = str_enc;
++        if (PARSER_ENC_CODERANGE_CLEAN_P(ptr_cr))
++            res_cr = str_cr;
++        else
++            res_cr = ptr_cr;
++    }
++    else { /* str_cr == RB_PARSER_ENC_CODERANGE_BROKEN */
++        res_enc = str_enc;
++        res_cr = str_cr;
++        if (0 < len) res_cr = RB_PARSER_ENC_CODERANGE_UNKNOWN;
++    }
++
++    if (len < 0) {
++        compile_error(p, "negative string size (or size too big)");
++    }
++    rb_parser_str_buf_cat(p, str, ptr, len);
++    PARSER_ENCODING_CODERANGE_SET(str, res_enc, res_cr);
++    return str;
++
++  incompatible:
++    compile_error(p, "incompatible character encodings: %s and %s",
++                  rb_enc_name(str_enc), rb_enc_name(ptr_enc));
++    UNREACHABLE_RETURN(0);
++
++}
++
++static rb_parser_string_t *
++rb_parser_str_buf_append(struct parser_params *p, rb_parser_string_t *str, rb_parser_string_t *str2)
++{
++    int str2_cr = rb_parser_enc_str_coderange(p, str2);
++
++    rb_parser_enc_cr_str_buf_cat(p, str, PARSER_STRING_PTR(str2), PARSER_STRING_LEN(str2),
++        rb_parser_str_get_encoding(str2), str2_cr, &str2_cr);
++
++    PARSER_ENC_CODERANGE_SET(str2, str2_cr);
++
++    return str;
++}
++
++static rb_parser_string_t *
++rb_parser_str_resize(struct parser_params *p, rb_parser_string_t *str, long len)
++{
++    if (len < 0) {
++        rb_bug("negative string size (or size too big)");
++    }
++
++    long slen = PARSER_STRING_LEN(str);
++
++    if (slen > len && PARSER_ENC_CODERANGE(str) != RB_PARSER_ENC_CODERANGE_7BIT) {
++        PARSER_ENCODING_CODERANGE_CLEAR(str);
++    }
++
++    {
++        long capa;
++        const int termlen = STRING_TERM_LEN(str);
++
++        if ((capa = slen) < len) {
++            SIZED_REALLOC_N(str->ptr, char, (size_t)len + termlen, STRING_SIZE(str));
++        }
++        else if (len == slen) return str;
++        STRING_SET_LEN(str, len);
++        STRING_TERM_FILL(str);
++    }
++    return str;
+ }
+ 
+-#ifndef RIPPER
+ #ifndef UNIVERSAL_PARSER
+-# define PARSER_STRING_GETMEM(str, ptrvar, lenvar, encvar) \
++# define PARSER_ENC_STRING_GETMEM(str, ptrvar, lenvar, encvar) \
+     ((ptrvar) = str->ptr,                            \
+      (lenvar) = str->len,                            \
+      (encvar) = str->enc)

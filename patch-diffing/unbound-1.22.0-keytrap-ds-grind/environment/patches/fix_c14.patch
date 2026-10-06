@@ -1,0 +1,29 @@
+diff --git a/validator/val_sigcrypt.c b/validator/val_sigcrypt.c
+index 37730f1..f4b8663 100644
+--- a/validator/val_sigcrypt.c
++++ b/validator/val_sigcrypt.c
+@@ -691,6 +713,7 @@ dnskey_verify_rrset(struct module_env* env, struct val_env* ve,
+ 	int buf_canon = 0;
+ 	uint16_t tag = dnskey_calc_keytag(dnskey, dnskey_idx);
+ 	int algo = dnskey_get_algo(dnskey, dnskey_idx);
++	int numverified = 0;
+ 
+ 	num = rrset_get_sigcount(rrset);
+ 	if(num == 0) {
+@@ -714,8 +737,16 @@ dnskey_verify_rrset(struct module_env* env, struct val_env* ve,
+ 		if(sec == sec_status_secure)
+ 			return sec;
+ 		numchecked ++;
++		numverified ++;
+ 		if(sec == sec_status_indeterminate)
+ 			numindeterminate ++;
++		if(numverified > MAX_VALIDATE_RRSIGS) {
++			verbose(VERB_QUERY, "rrset failed to verify, too many RRSIG validations");
++			*reason = "too many RRSIG validations";
++			if(reason_bogus)
++				*reason_bogus = LDNS_EDE_DNSSEC_BOGUS;
++			return sec_status_bogus;
++		}
+ 	}
+ 	verbose(VERB_ALGO, "rrset failed to verify: all signatures are bogus");
+ 	if(!numchecked) {

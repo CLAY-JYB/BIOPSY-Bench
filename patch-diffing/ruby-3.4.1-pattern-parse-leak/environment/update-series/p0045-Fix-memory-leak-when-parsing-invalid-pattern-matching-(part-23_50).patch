@@ -1,0 +1,45 @@
+From 22ff80ea Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0045] Fix memory leak when parsing invalid pattern matching (part 23/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -12273,25 +12669,25 @@ rb_node_dstr_new0(struct parser_params *p, VALUE nd_lit, long nd_alen, NODE *nd_
+ }
+ 
+ static rb_node_dstr_t *
+-rb_node_dstr_new(struct parser_params *p, VALUE nd_lit, const YYLTYPE *loc)
++rb_node_dstr_new(struct parser_params *p, rb_parser_string_t *string, const YYLTYPE *loc)
+ {
+-    return rb_node_dstr_new0(p, nd_lit, 1, 0, loc);
++    return rb_node_dstr_new0(p, string, 1, 0, loc);
+ }
+ 
+ static rb_node_xstr_t *
+-rb_node_xstr_new(struct parser_params *p, VALUE nd_lit, const YYLTYPE *loc)
++rb_node_xstr_new(struct parser_params *p, rb_parser_string_t *string, const YYLTYPE *loc)
+ {
+     rb_node_xstr_t *n = NODE_NEWNODE(NODE_XSTR, rb_node_xstr_t, loc);
+-    n->nd_lit = nd_lit;
++    n->string = string;
+ 
+     return n;
+ }
+ 
+ static rb_node_dxstr_t *
+-rb_node_dxstr_new(struct parser_params *p, VALUE nd_lit, long nd_alen, NODE *nd_next, const YYLTYPE *loc)
++rb_node_dxstr_new(struct parser_params *p, rb_parser_string_t *string, long nd_alen, NODE *nd_next, const YYLTYPE *loc)
+ {
+     rb_node_dxstr_t *n = NODE_NEWNODE(NODE_DXSTR, rb_node_dxstr_t, loc);
+-    n->nd_lit = nd_lit;
++    n->string = string;
+     n->nd_alen = nd_alen;
+     n->nd_next = (rb_node_list_t *)nd_next;
+ 
+
+-- 
+2.43.0

@@ -1,0 +1,34 @@
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -141,26 +185,10 @@ void pcie_sriov_vf_register_bar(PCIDevice *dev, int region_num,
+     }
+ }
+ 
+-static PCIDevice *register_vf(PCIDevice *pf, int devfn, const char *name,
+-                              uint16_t vf_num)
++static void clear_ctrl_vfe(PCIDevice *dev)
+ {
+-    PCIDevice *dev = pci_new(devfn, name);
+-    dev->exp.sriov_vf.pf = pf;
+-    dev->exp.sriov_vf.vf_number = vf_num;
+-    PCIBus *bus = pci_get_bus(pf);
+-    Error *local_err = NULL;
+-
+-    qdev_realize(&dev->qdev, &bus->qbus, &local_err);
+-    if (local_err) {
+-        error_report_err(local_err);
+-        return NULL;
+-    }
+-
+-    /* set vid/did according to sr/iov spec - they are not used */
+-    pci_config_set_vendor_id(dev->config, 0xffff);
+-    pci_config_set_device_id(dev->config, 0xffff);
+-
+-    return dev;
++    uint8_t *ctrl = dev->config + dev->exp.sriov_cap + PCI_SRIOV_CTRL;
++    pci_set_word(ctrl, pci_get_word(ctrl) & ~PCI_SRIOV_CTRL_VFE);
+ }
+ 
+ static void register_vfs(PCIDevice *dev)

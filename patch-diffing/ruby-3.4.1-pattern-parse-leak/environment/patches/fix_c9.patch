@@ -1,0 +1,32 @@
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -2156,6 +2201,7 @@ static rb_parser_string_t *
+ rb_parser_encoding_string_new(rb_parser_t *p, const char *ptr, long len, rb_encoding *enc)
+ {
+     rb_parser_string_t *str = rb_parser_string_new(p, ptr, len);
++    str->coderange = RB_PARSER_ENC_CODERANGE_UNKNOWN;
+     str->enc = enc;
+     return str;
+ }
+@@ -12887,7 +13283,7 @@ static NODE *
+ literal_concat(struct parser_params *p, NODE *head, NODE *tail, const YYLTYPE *loc)
+ {
+     enum node_type htype;
+-    VALUE lit;
++    rb_parser_string_t *lit;
+ 
+     if (!head) return tail;
+     if (!tail) return head;
+@@ -13415,9 +13809,7 @@ static NODE *
+ new_xstring(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+ {
+     if (!node) {
+-        VALUE lit = STR_NEW0();
+-        NODE *xstr = NEW_XSTR(lit, loc);
+-        RB_OBJ_WRITTEN(p->ast, Qnil, lit);
++        NODE *xstr = NEW_XSTR(STRING_NEW0(), loc);
+         return xstr;
+     }
+     switch (nd_type(node)) {

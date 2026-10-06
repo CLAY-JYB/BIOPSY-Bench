@@ -1,0 +1,939 @@
+From e7af214c Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0042] Update to ruby/spec@ce834ad
+
+---
+diff --git a/spec/ruby/library/bigdecimal/split_spec.rb b/spec/ruby/library/bigdecimal/split_spec.rb
+index a8752e323..f9b4bab5f 100644
+--- a/spec/ruby/library/bigdecimal/split_spec.rb
++++ b/spec/ruby/library/bigdecimal/split_spec.rb
+@@ -1,89 +1,86 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#split" do
+ 
+-  describe "BigDecimal#split" do
++  before :each do
++    @arr = BigDecimal("0.314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043E1").split
++    @arr_neg = BigDecimal("-0.314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043E1").split
++    @digits = "922337203685477580810101333333333333333333333333333"
++    @arr_big = BigDecimal("00#{@digits}000").split
++    @arr_big_neg = BigDecimal("-00#{@digits}000").split
++    @huge = BigDecimal('100000000000000000000000000000000000000000001E90000000').split
+ 
+-    before :each do
+-      @arr = BigDecimal("0.314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043E1").split
+-      @arr_neg = BigDecimal("-0.314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043E1").split
+-      @digits = "922337203685477580810101333333333333333333333333333"
+-      @arr_big = BigDecimal("00#{@digits}000").split
+-      @arr_big_neg = BigDecimal("-00#{@digits}000").split
+-      @huge = BigDecimal('100000000000000000000000000000000000000000001E90000000').split
+-
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_neg = BigDecimal("-Infinity")
+-      @nan = BigDecimal("NaN")
+-      @zero = BigDecimal("0")
+-      @zero_neg = BigDecimal("-0")
+-    end
+-
+-    it "splits BigDecimal in an array with four values" do
+-      @arr.size.should == 4
+-    end
++    @infinity = BigDecimal("Infinity")
++    @infinity_neg = BigDecimal("-Infinity")
++    @nan = BigDecimal("NaN")
++    @zero = BigDecimal("0")
++    @zero_neg = BigDecimal("-0")
++  end
+ 
+-    it "first value: 1 for numbers > 0" do
+-      @arr[0].should == 1
+-      @arr_big[0].should == 1
+-      @zero.split[0].should == 1
+-      @huge[0].should == 1
+-      BigDecimal("+0").split[0].should == 1
+-      BigDecimal("1E400").split[0].should == 1
+-      @infinity.split[0].should == 1
+-    end
++  it "splits BigDecimal in an array with four values" do
++    @arr.size.should == 4
++  end
+ 
+-    it "first value: -1 for numbers < 0" do
+-      @arr_neg[0].should == -1
+-      @arr_big_neg[0].should == -1
+-      @zero_neg.split[0].should == -1
+-      BigDecimal("-1E400").split[0].should == -1
+-      @infinity_neg.split[0].should == -1
+-    end
++  it "first value: 1 for numbers > 0" do
++    @arr[0].should == 1
++    @arr_big[0].should == 1
++    @zero.split[0].should == 1
++    @huge[0].should == 1
++    BigDecimal("+0").split[0].should == 1
++    BigDecimal("1E400").split[0].should == 1
++    @infinity.split[0].should == 1
++  end
+ 
+-    it "first value: 0 if BigDecimal is NaN" do
+-      BigDecimal("NaN").split[0].should == 0
+-    end
++  it "first value: -1 for numbers < 0" do
++    @arr_neg[0].should == -1
++    @arr_big_neg[0].should == -1
++    @zero_neg.split[0].should == -1
++    BigDecimal("-1E400").split[0].should == -1
++    @infinity_neg.split[0].should == -1
++  end
+ 
+-    it "second value: a string with the significant digits" do
+-      string = "314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043"
+-      @arr[1].should == string
+-      @arr_big[1].should == @digits
+-      @arr_big_neg[1].should == @digits
+-      @huge[1].should == "100000000000000000000000000000000000000000001"
+-      @infinity.split[1].should == @infinity.to_s
+-      @nan.split[1].should == @nan.to_s
+-      @infinity_neg.split[1].should == @infinity.to_s
+-      @zero.split[1].should == "0"
+-      BigDecimal("-0").split[1].should == "0"
+-    end
++  it "first value: 0 if BigDecimal is NaN" do
++    BigDecimal("NaN").split[0].should == 0
++  end
+ 
+-    it "third value: the base (currently always ten)" do
+-     @arr[2].should == 10
+-     @arr_neg[2].should == 10
+-     @arr_big[2].should == 10
+-     @arr_big_neg[2].should == 10
+-     @huge[2].should == 10
+-     @infinity.split[2].should == 10
+-     @nan.split[2].should == 10
+-     @infinity_neg.split[2].should == 10
+-     @zero.split[2].should == 10
+-     @zero_neg.split[2].should == 10
+-    end
++  it "second value: a string with the significant digits" do
++    string = "314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593014782083152134043"
++    @arr[1].should == string
++    @arr_big[1].should == @digits
++    @arr_big_neg[1].should == @digits
++    @huge[1].should == "100000000000000000000000000000000000000000001"
++    @infinity.split[1].should == @infinity.to_s
++    @nan.split[1].should == @nan.to_s
++    @infinity_neg.split[1].should == @infinity.to_s
++    @zero.split[1].should == "0"
++    BigDecimal("-0").split[1].should == "0"
++  end
+ 
+-    it "fourth value: the exponent" do
+-      @arr[3].should == 1
+-      @arr_neg[3].should == 1
+-      @arr_big[3].should == 54
+-      @arr_big_neg[3].should == 54
+-      @huge[3].should == 90000045
+-      @infinity.split[3].should == 0
+-      @nan.split[3].should == 0
+-      @infinity_neg.split[3].should == 0
+-      @zero.split[3].should == 0
+-      @zero_neg.split[3].should == 0
+-    end
++  it "third value: the base (currently always ten)" do
++   @arr[2].should == 10
++   @arr_neg[2].should == 10
++   @arr_big[2].should == 10
++   @arr_big_neg[2].should == 10
++   @huge[2].should == 10
++   @infinity.split[2].should == 10
++   @nan.split[2].should == 10
++   @infinity_neg.split[2].should == 10
++   @zero.split[2].should == 10
++   @zero_neg.split[2].should == 10
++  end
+ 
++  it "fourth value: the exponent" do
++    @arr[3].should == 1
++    @arr_neg[3].should == 1
++    @arr_big[3].should == 54
++    @arr_big_neg[3].should == 54
++    @huge[3].should == 90000045
++    @infinity.split[3].should == 0
++    @nan.split[3].should == 0
++    @infinity_neg.split[3].should == 0
++    @zero.split[3].should == 0
++    @zero_neg.split[3].should == 0
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/sqrt_spec.rb b/spec/ruby/library/bigdecimal/sqrt_spec.rb
+index daf95dbfe..8fd1ec0f3 100644
+--- a/spec/ruby/library/bigdecimal/sqrt_spec.rb
++++ b/spec/ruby/library/bigdecimal/sqrt_spec.rb
+@@ -1,115 +1,114 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
++require 'bigdecimal'
++
++describe "BigDecimal#sqrt" do
++  before :each do
++    @one = BigDecimal("1")
++    @zero = BigDecimal("0")
++    @zero_pos = BigDecimal("+0")
++    @zero_neg = BigDecimal("-0")
++    @two = BigDecimal("2.0")
++    @three = BigDecimal("3.0")
++    @nan = BigDecimal("NaN")
++    @infinity = BigDecimal("Infinity")
++    @infinity_minus = BigDecimal("-Infinity")
++    @one_minus = BigDecimal("-1")
++    @frac_1 = BigDecimal("1E-99999")
++    @frac_2 = BigDecimal("0.9E-99999")
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#sqrt" do
+-    before :each do
+-      @one = BigDecimal("1")
+-      @zero = BigDecimal("0")
+-      @zero_pos = BigDecimal("+0")
+-      @zero_neg = BigDecimal("-0")
+-      @two = BigDecimal("2.0")
+-      @three = BigDecimal("3.0")
+-      @nan = BigDecimal("NaN")
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_minus = BigDecimal("-Infinity")
+-      @one_minus = BigDecimal("-1")
+-      @frac_1 = BigDecimal("1E-99999")
+-      @frac_2 = BigDecimal("0.9E-99999")
+-    end
+-
+-    it "returns square root of 2 with desired precision" do
+-      string = "1.41421356237309504880168872420969807856967187537694807317667973799073247846210703885038753432764157"
+-      (1..99).each { |idx|
+-        @two.sqrt(idx).should be_close(BigDecimal(string), BigDecimal("1E-#{idx-1}"))
+-      }
+-    end
++  it "returns square root of 2 with desired precision" do
++    string = "1.41421356237309504880168872420969807856967187537694807317667973799073247846210703885038753432764157"
++    (1..99).each { |idx|
++      @two.sqrt(idx).should be_close(BigDecimal(string), BigDecimal("1E-#{idx-1}"))
++    }
++  end
+ 
+-    it "returns square root of 3 with desired precision" do
+-      sqrt_3 = "1.732050807568877293527446341505872366942805253810380628055806979451933016908800037081146186757248575"
+-      (1..99).each { |idx|
+-        @three.sqrt(idx).should be_close(BigDecimal(sqrt_3), BigDecimal("1E-#{idx-1}"))
+-      }
+-    end
++  it "returns square root of 3 with desired precision" do
++    sqrt_3 = "1.732050807568877293527446341505872366942805253810380628055806979451933016908800037081146186757248575"
++    (1..99).each { |idx|
++      @three.sqrt(idx).should be_close(BigDecimal(sqrt_3), BigDecimal("1E-#{idx-1}"))
++    }
++  end
+ 
+-    it "returns square root of 121 with desired precision" do
+-      BigDecimal('121').sqrt(5).should be_close(11, 0.00001)
+-    end
++  it "returns square root of 121 with desired precision" do
++    BigDecimal('121').sqrt(5).should be_close(11, 0.00001)
++  end
+ 
++  platform_is_not wordsize: 32 do # fails on i686
+     it "returns square root of 0.9E-99999 with desired precision" do
+       @frac_2.sqrt(1).to_s.should =~ /\A0\.3E-49999\z/i
+     end
++  end
+ 
+-    it "raises ArgumentError when no argument is given" do
+-      -> {
+-        @one.sqrt
+-      }.should raise_error(ArgumentError)
+-    end
+-
+-    it "raises ArgumentError if a negative number is given" do
+-      -> {
+-        @one.sqrt(-1)
+-      }.should raise_error(ArgumentError)
+-    end
++  it "raises ArgumentError when no argument is given" do
++    -> {
++      @one.sqrt
++    }.should raise_error(ArgumentError)
++  end
+ 
+-    it "raises ArgumentError if 2 arguments are given" do
+-      -> {
+-        @one.sqrt(1, 1)
+-      }.should raise_error(ArgumentError)
+-    end
++  it "raises ArgumentError if a negative number is given" do
++    -> {
++      @one.sqrt(-1)
++    }.should raise_error(ArgumentError)
++  end
+ 
+-    it "raises TypeError if nil is given" do
+-      -> {
+-        @one.sqrt(nil)
+-      }.should raise_error(TypeError)
+-    end
++  it "raises ArgumentError if 2 arguments are given" do
++    -> {
++      @one.sqrt(1, 1)
++    }.should raise_error(ArgumentError)
++  end
+ 
+-    it "raises TypeError if a string is given" do
+-      -> {
+-        @one.sqrt("stuff")
+-      }.should raise_error(TypeError)
+-    end
++  it "raises TypeError if nil is given" do
++    -> {
++      @one.sqrt(nil)
++    }.should raise_error(TypeError)
++  end
+ 
+-    it "raises TypeError if a plain Object is given" do
+-      -> {
+-        @one.sqrt(Object.new)
+-      }.should raise_error(TypeError)
+-    end
++  it "raises TypeError if a string is given" do
++    -> {
++      @one.sqrt("stuff")
++    }.should raise_error(TypeError)
++  end
+ 
+-    it "returns 1 if precision is 0 or 1" do
+-      @one.sqrt(1).should == 1
+-      @one.sqrt(0).should == 1
+-    end
++  it "raises TypeError if a plain Object is given" do
++    -> {
++      @one.sqrt(Object.new)
++    }.should raise_error(TypeError)
++  end
+ 
+-    it "raises FloatDomainError on negative values" do
+-      -> {
+-        BigDecimal('-1').sqrt(10)
+-      }.should raise_error(FloatDomainError)
+-    end
++  it "returns 1 if precision is 0 or 1" do
++    @one.sqrt(1).should == 1
++    @one.sqrt(0).should == 1
++  end
+ 
+-    it "returns positive infinity for infinity" do
+-      @infinity.sqrt(1).should == @infinity
+-    end
++  it "raises FloatDomainError on negative values" do
++    -> {
++      BigDecimal('-1').sqrt(10)
++    }.should raise_error(FloatDomainError)
++  end
+ 
+-    it "raises FloatDomainError for negative infinity" do
+-      -> {
+-        @infinity_minus.sqrt(1)
+-      }.should raise_error(FloatDomainError)
+-    end
++  it "returns positive infinity for infinity" do
++    @infinity.sqrt(1).should == @infinity
++  end
+ 
+-    it "raises FloatDomainError for NaN" do
+-      -> {
+-        @nan.sqrt(1)
+-      }.should raise_error(FloatDomainError)
+-    end
++  it "raises FloatDomainError for negative infinity" do
++    -> {
++      @infinity_minus.sqrt(1)
++    }.should raise_error(FloatDomainError)
++  end
+ 
+-    it "returns 0 for 0, +0.0 and -0.0" do
+-      @zero.sqrt(1).should == 0
+-      @zero_pos.sqrt(1).should == 0
+-      @zero_neg.sqrt(1).should == 0
+-    end
++  it "raises FloatDomainError for NaN" do
++    -> {
++      @nan.sqrt(1)
++    }.should raise_error(FloatDomainError)
++  end
+ 
++  it "returns 0 for 0, +0.0 and -0.0" do
++    @zero.sqrt(1).should == 0
++    @zero_pos.sqrt(1).should == 0
++    @zero_neg.sqrt(1).should == 0
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/sub_spec.rb b/spec/ruby/library/bigdecimal/sub_spec.rb
+index aa4e2a866..bddfec218 100644
+--- a/spec/ruby/library/bigdecimal/sub_spec.rb
++++ b/spec/ruby/library/bigdecimal/sub_spec.rb
+@@ -1,73 +1,70 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#sub" do
+ 
+-  describe "BigDecimal#sub" do
+-
+-    before :each do
+-      @one = BigDecimal("1")
+-      @zero = BigDecimal("0")
+-      @two = BigDecimal("2")
+-      @three = BigDecimal("3")
+-      @nan = BigDecimal("NaN")
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_minus = BigDecimal("-Infinity")
+-      @one_minus = BigDecimal("-1")
+-      @frac_1 = BigDecimal("1E-99999")
+-      @frac_2 = BigDecimal("0.9E-99999")
+-      @frac_3 = BigDecimal("12345E10")
+-      @frac_4 = BigDecimal("98765E10")
+-    end
++  before :each do
++    @one = BigDecimal("1")
++    @zero = BigDecimal("0")
++    @two = BigDecimal("2")
++    @three = BigDecimal("3")
++    @nan = BigDecimal("NaN")
++    @infinity = BigDecimal("Infinity")
++    @infinity_minus = BigDecimal("-Infinity")
++    @one_minus = BigDecimal("-1")
++    @frac_1 = BigDecimal("1E-99999")
++    @frac_2 = BigDecimal("0.9E-99999")
++    @frac_3 = BigDecimal("12345E10")
++    @frac_4 = BigDecimal("98765E10")
++  end
+ 
+-    it "returns a - b with given precision" do
+-      # documentation states, that precision is optional
+-      # but implementation raises ArgumentError if not given.
++  it "returns a - b with given precision" do
++    # documentation states, that precision is optional
++    # but implementation raises ArgumentError if not given.
+ 
+-      @two.sub(@one, 1).should == @one
+-      @one.sub(@two, 1).should == @one_minus
+-      @one.sub(@one_minus, 1).should == @two
+-      @frac_2.sub(@frac_1, 1000000).should == BigDecimal("-0.1E-99999")
+-      @frac_2.sub(@frac_1, 1).should == BigDecimal("-0.1E-99999")
+-      # the above two examples puzzle me.
+-      in_arow_one = BigDecimal("1.23456789")
+-      in_arow_two = BigDecimal("1.2345678")
+-      in_arow_one.sub(in_arow_two, 10).should == BigDecimal("0.9E-7")
+-      @two.sub(@two,1).should == @zero
+-      @frac_1.sub(@frac_1, 1000000).should == @zero
+-    end
+-
+-    describe "with Object" do
+-      it "tries to coerce the other operand to self" do
+-        object = mock("Object")
+-        object.should_receive(:coerce).with(@frac_3).and_return([@frac_3, @frac_4])
+-        @frac_3.sub(object, 1).should == BigDecimal("-0.9E15")
+-      end
+-    end
++    @two.sub(@one, 1).should == @one
++    @one.sub(@two, 1).should == @one_minus
++    @one.sub(@one_minus, 1).should == @two
++    @frac_2.sub(@frac_1, 1000000).should == BigDecimal("-0.1E-99999")
++    @frac_2.sub(@frac_1, 1).should == BigDecimal("-0.1E-99999")
++    # the above two examples puzzle me.
++    in_arow_one = BigDecimal("1.23456789")
++    in_arow_two = BigDecimal("1.2345678")
++    in_arow_one.sub(in_arow_two, 10).should == BigDecimal("0.9E-7")
++    @two.sub(@two,1).should == @zero
++    @frac_1.sub(@frac_1, 1000000).should == @zero
++  end
+ 
+-    describe "with Rational" do
+-      it "produces a BigDecimal" do
+-        (@three - Rational(500, 2)).should == BigDecimal('-0.247e3')
+-      end
++  describe "with Object" do
++    it "tries to coerce the other operand to self" do
++      object = mock("Object")
++      object.should_receive(:coerce).with(@frac_3).and_return([@frac_3, @frac_4])
++      @frac_3.sub(object, 1).should == BigDecimal("-0.9E15")
+     end
++  end
+ 
+-    it "returns NaN if NaN is involved" do
+-      @one.sub(@nan, 1).should.nan?
+-      @nan.sub(@one, 1).should.nan?
++  describe "with Rational" do
++    it "produces a BigDecimal" do
++      (@three - Rational(500, 2)).should == BigDecimal('-0.247e3')
+     end
++  end
+ 
+-    it "returns NaN if both values are infinite with the same signs" do
+-      @infinity.sub(@infinity, 1).should.nan?
+-      @infinity_minus.sub(@infinity_minus, 1).should.nan?
+-    end
++  it "returns NaN if NaN is involved" do
++    @one.sub(@nan, 1).should.nan?
++    @nan.sub(@one, 1).should.nan?
++  end
+ 
+-    it "returns Infinity or -Infinity if these are involved" do
+-      @infinity.sub(@infinity_minus, 1).should == @infinity
+-      @infinity_minus.sub(@infinity, 1).should == @infinity_minus
+-      @zero.sub(@infinity, 1).should == @infinity_minus
+-      @frac_2.sub( @infinity, 1).should == @infinity_minus
+-      @two.sub(@infinity, 1).should == @infinity_minus
+-    end
++  it "returns NaN if both values are infinite with the same signs" do
++    @infinity.sub(@infinity, 1).should.nan?
++    @infinity_minus.sub(@infinity_minus, 1).should.nan?
++  end
+ 
++  it "returns Infinity or -Infinity if these are involved" do
++    @infinity.sub(@infinity_minus, 1).should == @infinity
++    @infinity_minus.sub(@infinity, 1).should == @infinity_minus
++    @zero.sub(@infinity, 1).should == @infinity_minus
++    @frac_2.sub( @infinity, 1).should == @infinity_minus
++    @two.sub(@infinity, 1).should == @infinity_minus
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_d_spec.rb b/spec/ruby/library/bigdecimal/to_d_spec.rb
+index ae2f11fe6..50aea99bf 100644
+--- a/spec/ruby/library/bigdecimal/to_d_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_d_spec.rb
+@@ -1,13 +1,10 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++require 'bigdecimal/util'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-  require 'bigdecimal/util'
+-
+-  describe "Float#to_d" do
+-    it "returns appropriate BigDecimal zero for signed zero" do
+-      -0.0.to_d.sign.should == -1
+-      0.0.to_d.sign.should == 1
+-    end
++describe "Float#to_d" do
++  it "returns appropriate BigDecimal zero for signed zero" do
++    -0.0.to_d.sign.should == -1
++    0.0.to_d.sign.should == 1
+   end
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_f_spec.rb b/spec/ruby/library/bigdecimal/to_f_spec.rb
+index c91e123db..84d4d49de 100644
+--- a/spec/ruby/library/bigdecimal/to_f_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_f_spec.rb
+@@ -1,57 +1,54 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
++
++describe "BigDecimal#to_f" do
++  before :each do
++    @one = BigDecimal("1")
++    @zero = BigDecimal("0")
++    @zero_pos = BigDecimal("+0")
++    @zero_neg = BigDecimal("-0")
++    @two = BigDecimal("2")
++    @three = BigDecimal("3")
++    @nan = BigDecimal("NaN")
++    @infinity = BigDecimal("Infinity")
++    @infinity_minus = BigDecimal("-Infinity")
++    @one_minus = BigDecimal("-1")
++    @frac_1 = BigDecimal("1E-99999")
++    @frac_2 = BigDecimal("0.9E-99999")
++    @vals = [@one, @zero, @two, @three, @frac_1, @frac_2]
++    @spec_vals = [@zero_pos, @zero_neg, @nan, @infinity, @infinity_minus]
++  end
++
++  it "returns number of type float" do
++    BigDecimal("3.14159").to_f.should be_kind_of(Float)
++    @vals.each { |val| val.to_f.should be_kind_of(Float) }
++    @spec_vals.each { |val| val.to_f.should be_kind_of(Float) }
++  end
++
++  it "rounds correctly to Float precision" do
++    bigdec = BigDecimal("3.141592653589793238462643383279502884197169399375")
++    bigdec.to_f.should be_close(3.14159265358979, TOLERANCE)
++    @one.to_f.should == 1.0
++    @two.to_f.should == 2.0
++    @three.to_f.should be_close(3.0, TOLERANCE)
++    @one_minus.to_f.should == -1.0
++
++    # regression test for [ruby-talk:338957]
++    BigDecimal("10.03").to_f.should == 10.03
++  end
++
++  it "properly handles special values" do
++    @zero.to_f.should == 0
++    @zero.to_f.to_s.should == "0.0"
++
++    @nan.to_f.should.nan?
++
++    @infinity.to_f.infinite?.should == 1
++    @infinity_minus.to_f.infinite?.should == -1
++  end
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#to_f" do
+-    before :each do
+-      @one = BigDecimal("1")
+-      @zero = BigDecimal("0")
+-      @zero_pos = BigDecimal("+0")
+-      @zero_neg = BigDecimal("-0")
+-      @two = BigDecimal("2")
+-      @three = BigDecimal("3")
+-      @nan = BigDecimal("NaN")
+-      @infinity = BigDecimal("Infinity")
+-      @infinity_minus = BigDecimal("-Infinity")
+-      @one_minus = BigDecimal("-1")
+-      @frac_1 = BigDecimal("1E-99999")
+-      @frac_2 = BigDecimal("0.9E-99999")
+-      @vals = [@one, @zero, @two, @three, @frac_1, @frac_2]
+-      @spec_vals = [@zero_pos, @zero_neg, @nan, @infinity, @infinity_minus]
+-    end
+-
+-    it "returns number of type float" do
+-      BigDecimal("3.14159").to_f.should be_kind_of(Float)
+-      @vals.each { |val| val.to_f.should be_kind_of(Float) }
+-      @spec_vals.each { |val| val.to_f.should be_kind_of(Float) }
+-    end
+-
+-    it "rounds correctly to Float precision" do
+-      bigdec = BigDecimal("3.141592653589793238462643383279502884197169399375")
+-      bigdec.to_f.should be_close(3.14159265358979, TOLERANCE)
+-      @one.to_f.should == 1.0
+-      @two.to_f.should == 2.0
+-      @three.to_f.should be_close(3.0, TOLERANCE)
+-      @one_minus.to_f.should == -1.0
+-
+-      # regression test for [ruby-talk:338957]
+-      BigDecimal("10.03").to_f.should == 10.03
+-    end
+-
+-    it "properly handles special values" do
+-      @zero.to_f.should == 0
+-      @zero.to_f.to_s.should == "0.0"
+-
+-      @nan.to_f.should.nan?
+-
+-      @infinity.to_f.infinite?.should == 1
+-      @infinity_minus.to_f.infinite?.should == -1
+-    end
+-
+-    it "remembers negative zero when converted to float" do
+-      @zero_neg.to_f.should == 0
+-      @zero_neg.to_f.to_s.should == "-0.0"
+-    end
++  it "remembers negative zero when converted to float" do
++    @zero_neg.to_f.should == 0
++    @zero_neg.to_f.to_s.should == "-0.0"
+   end
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_i_spec.rb b/spec/ruby/library/bigdecimal/to_i_spec.rb
+index 08367374e..09481fce1 100644
+--- a/spec/ruby/library/bigdecimal/to_i_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_i_spec.rb
+@@ -1,10 +1,7 @@
+ require_relative '../../spec_helper'
++require_relative 'shared/to_int'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'shared/to_int'
+-  require 'bigdecimal'
+-
+-  describe "BigDecimal#to_i" do
+-      it_behaves_like :bigdecimal_to_int, :to_i
+-  end
++describe "BigDecimal#to_i" do
++    it_behaves_like :bigdecimal_to_int, :to_i
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_int_spec.rb b/spec/ruby/library/bigdecimal/to_int_spec.rb
+index 8ded7bcaf..4df674984 100644
+--- a/spec/ruby/library/bigdecimal/to_int_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_int_spec.rb
+@@ -1,11 +1,8 @@
+ require_relative '../../spec_helper'
++require_relative 'shared/to_int'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'shared/to_int'
+-  require 'bigdecimal'
+ 
+-
+-  describe "BigDecimal#to_int" do
+-    it_behaves_like :bigdecimal_to_int, :to_int
+-  end
++describe "BigDecimal#to_int" do
++  it_behaves_like :bigdecimal_to_int, :to_int
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_r_spec.rb b/spec/ruby/library/bigdecimal/to_r_spec.rb
+index 0d787a2ef..c350beff0 100644
+--- a/spec/ruby/library/bigdecimal/to_r_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_r_spec.rb
+@@ -1,31 +1,28 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#to_r" do
+ 
+-  describe "BigDecimal#to_r" do
+-
+-    it "returns a Rational" do
+-      BigDecimal("3.14159").to_r.should be_kind_of(Rational)
+-    end
+-
+-    it "returns a Rational with bignum values" do
+-      r = BigDecimal("3.141592653589793238462643").to_r
+-      r.numerator.should eql(3141592653589793238462643)
+-      r.denominator.should eql(1000000000000000000000000)
+-    end
++  it "returns a Rational" do
++    BigDecimal("3.14159").to_r.should be_kind_of(Rational)
++  end
+ 
+-    it "returns a Rational from a BigDecimal with an exponent" do
+-      r = BigDecimal("1E2").to_r
+-      r.numerator.should eql(100)
+-      r.denominator.should eql(1)
+-    end
++  it "returns a Rational with bignum values" do
++    r = BigDecimal("3.141592653589793238462643").to_r
++    r.numerator.should eql(3141592653589793238462643)
++    r.denominator.should eql(1000000000000000000000000)
++  end
+ 
+-    it "returns a Rational from a negative BigDecimal with an exponent" do
+-      r = BigDecimal("-1E2").to_r
+-      r.numerator.should eql(-100)
+-      r.denominator.should eql(1)
+-    end
++  it "returns a Rational from a BigDecimal with an exponent" do
++    r = BigDecimal("1E2").to_r
++    r.numerator.should eql(100)
++    r.denominator.should eql(1)
++  end
+ 
++  it "returns a Rational from a negative BigDecimal with an exponent" do
++    r = BigDecimal("-1E2").to_r
++    r.numerator.should eql(-100)
++    r.denominator.should eql(1)
+   end
++
+ end
+diff --git a/spec/ruby/library/bigdecimal/to_s_spec.rb b/spec/ruby/library/bigdecimal/to_s_spec.rb
+index 02f1ce0d3..ba9f960eb 100644
+--- a/spec/ruby/library/bigdecimal/to_s_spec.rb
++++ b/spec/ruby/library/bigdecimal/to_s_spec.rb
+@@ -1,103 +1,100 @@
+ require_relative '../../spec_helper'
++require 'bigdecimal'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'bigdecimal'
++describe "BigDecimal#to_s" do
+ 
+-  describe "BigDecimal#to_s" do
+-
+-    before :each do
+-      @bigdec_str = "3.14159265358979323846264338327950288419716939937"
+-      @bigneg_str = "-3.1415926535897932384626433832795028841971693993"
+-      @bigdec = BigDecimal(@bigdec_str)
+-      @bigneg = BigDecimal(@bigneg_str)
+-      @internal = Encoding.default_internal
+-    end
++  before :each do
++    @bigdec_str = "3.14159265358979323846264338327950288419716939937"
++    @bigneg_str = "-3.1415926535897932384626433832795028841971693993"
++    @bigdec = BigDecimal(@bigdec_str)
++    @bigneg = BigDecimal(@bigneg_str)
++    @internal = Encoding.default_internal
++  end
+ 
+-    after :each do
+-      Encoding.default_internal = @internal
+-    end
++  after :each do
++    Encoding.default_internal = @internal
++  end
+ 
+-    it "return type is of class String" do
+-      @bigdec.to_s.kind_of?(String).should == true
+-      @bigneg.to_s.kind_of?(String).should == true
+-    end
++  it "return type is of class String" do
++    @bigdec.to_s.kind_of?(String).should == true
++    @bigneg.to_s.kind_of?(String).should == true
++  end
+ 
+-    it "the default format looks like 0.xxxxenn" do
+-      @bigdec.to_s.should =~ /^0\.[0-9]*e[0-9]*$/
+-    end
++  it "the default format looks like 0.xxxxenn" do
++    @bigdec.to_s.should =~ /^0\.[0-9]*e[0-9]*$/
++  end
+ 
+-    it "does not add an exponent for zero values" do
+-      BigDecimal("0").to_s.should == "0.0"
+-      BigDecimal("+0").to_s.should == "0.0"
+-      BigDecimal("-0").to_s.should == "-0.0"
+-    end
++  it "does not add an exponent for zero values" do
++    BigDecimal("0").to_s.should == "0.0"
++    BigDecimal("+0").to_s.should == "0.0"
++    BigDecimal("-0").to_s.should == "-0.0"
++  end
+ 
+-    it "takes an optional argument" do
+-      -> {@bigdec.to_s("F")}.should_not raise_error()
+-    end
++  it "takes an optional argument" do
++    -> {@bigdec.to_s("F")}.should_not raise_error()
++  end
+ 
+-    it "starts with + if + is supplied and value is positive" do
+-      @bigdec.to_s("+").should =~ /^\+.*/
+-      @bigneg.to_s("+").should_not =~ /^\+.*/
+-    end
++  it "starts with + if + is supplied and value is positive" do
++    @bigdec.to_s("+").should =~ /^\+.*/
++    @bigneg.to_s("+").should_not =~ /^\+.*/
++  end
+ 
+-    it "inserts a space every n chars to fraction part, if integer n is supplied" do
+-      re =\
+-      /\A0\.314 159 265 358 979 323 846 264 338 327 950 288 419 716 939 937E1\z/i
+-      @bigdec.to_s(3).should =~ re
+-
+-      str1 = '-123.45678 90123 45678 9'
+-      BigDecimal("-123.45678901234567890").to_s('5F').should ==  str1
+-      # trailing zeroes removed
+-      BigDecimal("1.00000000000").to_s('1F').should == "1.0"
+-      # 0 is treated as no spaces
+-      BigDecimal("1.2345").to_s('0F').should == "1.2345"
+-    end
++  it "inserts a space every n chars to fraction part, if integer n is supplied" do
++    re =\
++    /\A0\.314 159 265 358 979 323 846 264 338 327 950 288 419 716 939 937E1\z/i
++    @bigdec.to_s(3).should =~ re
++
++    str1 = '-123.45678 90123 45678 9'
++    BigDecimal("-123.45678901234567890").to_s('5F').should ==  str1
++    # trailing zeroes removed
++    BigDecimal("1.00000000000").to_s('1F').should == "1.0"
++    # 0 is treated as no spaces
++    BigDecimal("1.2345").to_s('0F').should == "1.2345"
++  end
+ 
+-    version_is BigDecimal::VERSION, "3.1.5" do #ruby_version_is '3.3' do
+-      it "inserts a space every n chars to integer part, if integer n is supplied" do
+-        BigDecimal('1000010').to_s('5F').should == "10 00010.0"
+-      end
++  version_is BigDecimal::VERSION, "3.1.5" do #ruby_version_is '3.3' do
++    it "inserts a space every n chars to integer part, if integer n is supplied" do
++      BigDecimal('1000010').to_s('5F').should == "10 00010.0"
+     end
++  end
+ 
+-    it "can return a leading space for values > 0" do
+-      @bigdec.to_s(" F").should =~ /\ .*/
+-      @bigneg.to_s(" F").should_not =~ /\ .*/
+-    end
++  it "can return a leading space for values > 0" do
++    @bigdec.to_s(" F").should =~ /\ .*/
++    @bigneg.to_s(" F").should_not =~ /\ .*/
++  end
+ 
+-    it "removes trailing spaces in floating point notation" do
+-      BigDecimal('-123.45678901234567890').to_s('F').should == "-123.4567890123456789"
+-      BigDecimal('1.2500').to_s('F').should == "1.25"
+-      BigDecimal('0000.00000').to_s('F').should == "0.0"
+-      BigDecimal('-00.000010000').to_s('F').should == "-0.00001"
+-      BigDecimal("5.00000E-2").to_s("F").should == "0.05"
++  it "removes trailing spaces in floating point notation" do
++    BigDecimal('-123.45678901234567890').to_s('F').should == "-123.4567890123456789"
++    BigDecimal('1.2500').to_s('F').should == "1.25"
++    BigDecimal('0000.00000').to_s('F').should == "0.0"
++    BigDecimal('-00.000010000').to_s('F').should == "-0.00001"
++    BigDecimal("5.00000E-2").to_s("F").should == "0.05"
+ 
+-      BigDecimal("500000").to_s("F").should == "500000.0"
+-      BigDecimal("5E2").to_s("F").should == "500.0"
+-      BigDecimal("-5E100").to_s("F").should == "-5" + "0" * 100 + ".0"
+-    end
++    BigDecimal("500000").to_s("F").should == "500000.0"
++    BigDecimal("5E2").to_s("F").should == "500.0"
++    BigDecimal("-5E100").to_s("F").should == "-5" + "0" * 100 + ".0"
++  end
+ 
+-    it "can use engineering notation" do
+-      @bigdec.to_s("E").should =~ /^0\.[0-9]*E[0-9]*$/i
+-    end
++  it "can use engineering notation" do
++    @bigdec.to_s("E").should =~ /^0\.[0-9]*E[0-9]*$/i
++  end
+ 
+-    it "can use conventional floating point notation" do
+-      %w[f F].each do |format_char|
+-        @bigdec.to_s(format_char).should == @bigdec_str
+-        @bigneg.to_s(format_char).should == @bigneg_str
+-        str2 = "+123.45678901 23456789"
+-        BigDecimal('123.45678901234567890').to_s("+8#{format_char}").should == str2
+-      end
++  it "can use conventional floating point notation" do
++    %w[f F].each do |format_char|
++      @bigdec.to_s(format_char).should == @bigdec_str
++      @bigneg.to_s(format_char).should == @bigneg_str
++      str2 = "+123.45678901 23456789"
++      BigDecimal('123.45678901234567890').to_s("+8#{format_char}").should == str2
+     end
++  end
+ 
+-    it "returns a String in US-ASCII encoding when Encoding.default_internal is nil" do
+-      Encoding.default_internal = nil
+-      BigDecimal('1.23').to_s.encoding.should equal(Encoding::US_ASCII)
+-    end
++  it "returns a String in US-ASCII encoding when Encoding.default_internal is nil" do
++    Encoding.default_internal = nil
++    BigDecimal('1.23').to_s.encoding.should equal(Encoding::US_ASCII)
++  end
+ 
+-    it "returns a String in US-ASCII encoding when Encoding.default_internal is not nil" do
+-      Encoding.default_internal = Encoding::IBM437
+-      BigDecimal('1.23').to_s.encoding.should equal(Encoding::US_ASCII)
+-    end
++  it "returns a String in US-ASCII encoding when Encoding.default_internal is not nil" do
++    Encoding.default_internal = Encoding::IBM437
++    BigDecimal('1.23').to_s.encoding.should equal(Encoding::US_ASCII)
+   end
+ end
+
+-- 
+2.43.0

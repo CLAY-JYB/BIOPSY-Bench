@@ -1,0 +1,43 @@
+From bb49ec59 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0180] Fix use-after-free of constant name (part 19/53)
+
+---
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 4f0bae3f..5e89c918 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -3448,9 +3371,6 @@ static bool zend_is_callable_check_class(zend_string *name, zend_class_entry *sc
+ 		if (!scope) {
+ 			if (error) *error = estrdup("cannot access \"self\" when no class scope is active");
+ 		} else {
+-			if (!suppress_deprecation) {
+-				zend_error(E_DEPRECATED, "Use of \"self\" in callables is deprecated");
+-			}
+ 			fcc->called_scope = zend_get_called_scope(frame);
+ 			if (!fcc->called_scope || !instanceof_function(fcc->called_scope, scope)) {
+ 				fcc->called_scope = scope;
+@@ -3467,9 +3387,6 @@ static bool zend_is_callable_check_class(zend_string *name, zend_class_entry *sc
+ 		} else if (!scope->parent) {
+ 			if (error) *error = estrdup("cannot access \"parent\" when current class scope has no parent");
+ 		} else {
+-			if (!suppress_deprecation) {
+-				zend_error(E_DEPRECATED, "Use of \"parent\" in callables is deprecated");
+-			}
+ 			fcc->called_scope = zend_get_called_scope(frame);
+ 			if (!fcc->called_scope || !instanceof_function(fcc->called_scope, scope->parent)) {
+ 				fcc->called_scope = scope->parent;
+@@ -3487,9 +3404,6 @@ static bool zend_is_callable_check_class(zend_string *name, zend_class_entry *sc
+ 		if (!called_scope) {
+ 			if (error) *error = estrdup("cannot access \"static\" when no class scope is active");
+ 		} else {
+-			if (!suppress_deprecation) {
+-				zend_error(E_DEPRECATED, "Use of \"static\" in callables is deprecated");
+-			}
+ 			fcc->called_scope = called_scope;
+ 			fcc->calling_scope = called_scope;
+ 			if (!fcc->object) {
+
+-- 
+2.43.0

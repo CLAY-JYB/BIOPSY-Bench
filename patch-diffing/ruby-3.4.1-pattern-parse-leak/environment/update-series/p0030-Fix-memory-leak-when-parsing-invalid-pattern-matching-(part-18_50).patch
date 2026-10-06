@@ -1,0 +1,39 @@
+From 2cc8d2e2 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0030] Fix memory leak when parsing invalid pattern matching (part 18/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -9104,8 +9487,8 @@ heredoc_restore(struct parser_params *p, rb_strterm_heredoc_t *here)
+     p->lex.strterm = 0;
+     line = here->lastline;
+     p->lex.lastline = line;
+-    p->lex.pbeg = rb_parser_string_pointer(line);
+-    p->lex.pend = p->lex.pbeg + rb_parser_string_length(line);
++    p->lex.pbeg = PARSER_STRING_PTR(line);
++    p->lex.pend = p->lex.pbeg + PARSER_STRING_LEN(line);
+     p->lex.pcur = p->lex.pbeg + here->offset + here->length + here->quote;
+     p->lex.ptok = p->lex.pbeg + here->offset - here->quote;
+     p->heredoc_end = p->ruby_sourceline;
+@@ -9116,13 +9499,10 @@ heredoc_restore(struct parser_params *p, rb_strterm_heredoc_t *here)
+ }
+ 
+ static int
+-dedent_string(struct parser_params *p, VALUE string, int width)
++dedent_string_column(const char *str, long len, int width)
+ {
+-    char *str;
+-    long len;
+     int i, col = 0;
+ 
+-    RSTRING_GETMEM(string, str, len);
+     for (i = 0; i < len && col < width; i++) {
+         if (str[i] == ' ') {
+             col++;
+
+-- 
+2.43.0

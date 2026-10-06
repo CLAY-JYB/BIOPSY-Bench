@@ -1,0 +1,421 @@
+From 902c83d2 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0024] hw/sd/sdhci: Log non-sequencial access as GUEST_ERROR
+
+---
+diff --git a/hw/sd/sdhci.c b/hw/sd/sdhci.c
+index 27673e1c70..d02c3e3963 100644
+--- a/hw/sd/sdhci.c
++++ b/hw/sd/sdhci.c
+@@ -983,8 +983,9 @@ static inline bool
+ sdhci_buff_access_is_sequential(SDHCIState *s, unsigned byte_num)
+ {
+     if ((s->data_count & 0x3) != byte_num) {
+-        trace_sdhci_error("Non-sequential access to Buffer Data Port register"
+-                          "is prohibited\n");
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "SDHCI: Non-sequential access to Buffer Data Port"
++                      " register is prohibited\n");
+         return false;
+     }
+     return true;
+diff --git a/hw/sd/sdmmc-internal.c b/hw/sd/sdmmc-internal.c
+deleted file mode 100644
+index c1d5508ae6..0000000000
+--- a/hw/sd/sdmmc-internal.c
++++ /dev/null
+@@ -1,72 +0,0 @@
+-/*
+- * SD/MMC cards common helpers
+- *
+- * Copyright (c) 2018  Philippe Mathieu-Daudé <f4bug@amsat.org>
+- *
+- * This work is licensed under the terms of the GNU GPL, version 2 or later.
+- * See the COPYING file in the top-level directory.
+- * SPDX-License-Identifier: GPL-2.0-or-later
+- */
+-
+-#include "qemu/osdep.h"
+-#include "sdmmc-internal.h"
+-
+-const char *sd_cmd_name(uint8_t cmd)
+-{
+-    static const char *cmd_abbrev[SDMMC_CMD_MAX] = {
+-         [0]    = "GO_IDLE_STATE",           [1]    = "SEND_OP_COND",
+-         [2]    = "ALL_SEND_CID",            [3]    = "SEND_RELATIVE_ADDR",
+-         [4]    = "SET_DSR",                 [5]    = "IO_SEND_OP_COND",
+-         [6]    = "SWITCH_FUNC",             [7]    = "SELECT/DESELECT_CARD",
+-         [8]    = "SEND_IF_COND",            [9]    = "SEND_CSD",
+-        [10]    = "SEND_CID",               [11]    = "VOLTAGE_SWITCH",
+-        [12]    = "STOP_TRANSMISSION",      [13]    = "SEND_STATUS",
+-                                            [15]    = "GO_INACTIVE_STATE",
+-        [16]    = "SET_BLOCKLEN",           [17]    = "READ_SINGLE_BLOCK",
+-        [18]    = "READ_MULTIPLE_BLOCK",    [19]    = "SEND_TUNING_BLOCK",
+-        [20]    = "SPEED_CLASS_CONTROL",    [21]    = "DPS_spec",
+-                                            [23]    = "SET_BLOCK_COUNT",
+-        [24]    = "WRITE_BLOCK",            [25]    = "WRITE_MULTIPLE_BLOCK",
+-        [26]    = "MANUF_RSVD",             [27]    = "PROGRAM_CSD",
+-        [28]    = "SET_WRITE_PROT",         [29]    = "CLR_WRITE_PROT",
+-        [30]    = "SEND_WRITE_PROT",
+-        [32]    = "ERASE_WR_BLK_START",     [33]    = "ERASE_WR_BLK_END",
+-        [34]    = "SW_FUNC_RSVD",           [35]    = "SW_FUNC_RSVD",
+-        [36]    = "SW_FUNC_RSVD",           [37]    = "SW_FUNC_RSVD",
+-        [38]    = "ERASE",
+-        [40]    = "DPS_spec",
+-        [42]    = "LOCK_UNLOCK",            [43]    = "Q_MANAGEMENT",
+-        [44]    = "Q_TASK_INFO_A",          [45]    = "Q_TASK_INFO_B",
+-        [46]    = "Q_RD_TASK",              [47]    = "Q_WR_TASK",
+-        [48]    = "READ_EXTR_SINGLE",       [49]    = "WRITE_EXTR_SINGLE",
+-        [50]    = "SW_FUNC_RSVD",
+-        [52]    = "IO_RW_DIRECT",           [53]    = "IO_RW_EXTENDED",
+-        [54]    = "SDIO_RSVD",              [55]    = "APP_CMD",
+-        [56]    = "GEN_CMD",                [57]    = "SW_FUNC_RSVD",
+-        [58]    = "READ_EXTR_MULTI",        [59]    = "WRITE_EXTR_MULTI",
+-        [60]    = "MANUF_RSVD",             [61]    = "MANUF_RSVD",
+-        [62]    = "MANUF_RSVD",             [63]    = "MANUF_RSVD",
+-    };
+-    return cmd_abbrev[cmd] ? cmd_abbrev[cmd] : "UNKNOWN_CMD";
+-}
+-
+-const char *sd_acmd_name(uint8_t cmd)
+-{
+-    static const char *acmd_abbrev[SDMMC_CMD_MAX] = {
+-         [6] = "SET_BUS_WIDTH",
+-        [13] = "SD_STATUS",
+-        [14] = "DPS_spec",                  [15] = "DPS_spec",
+-        [16] = "DPS_spec",
+-        [18] = "SECU_spec",
+-        [22] = "SEND_NUM_WR_BLOCKS",        [23] = "SET_WR_BLK_ERASE_COUNT",
+-        [41] = "SD_SEND_OP_COND",
+-        [42] = "SET_CLR_CARD_DETECT",
+-        [51] = "SEND_SCR",
+-        [52] = "SECU_spec",                 [53] = "SECU_spec",
+-        [54] = "SECU_spec",
+-        [56] = "SECU_spec",                 [57] = "SECU_spec",
+-        [58] = "SECU_spec",                 [59] = "SECU_spec",
+-    };
+-
+-    return acmd_abbrev[cmd] ? acmd_abbrev[cmd] : "UNKNOWN_ACMD";
+-}
+diff --git a/hw/sd/sdmmc-internal.h b/hw/sd/sdmmc-internal.h
+index d8bf17d204..91eb5b6b2f 100644
+--- a/hw/sd/sdmmc-internal.h
++++ b/hw/sd/sdmmc-internal.h
+@@ -11,30 +11,115 @@
+ #ifndef SDMMC_INTERNAL_H
+ #define SDMMC_INTERNAL_H
+ 
+-#define SDMMC_CMD_MAX 64
++#define TYPE_SDMMC_COMMON "sdmmc-common"
++DECLARE_OBJ_CHECKERS(SDState, SDCardClass, SDMMC_COMMON, TYPE_SDMMC_COMMON)
+ 
+-/**
+- * sd_cmd_name:
+- * @cmd: A SD "normal" command, up to SDMMC_CMD_MAX.
+- *
+- * Returns a human-readable name describing the command.
+- * The return value is always a static string which does not need
+- * to be freed after use.
++/*
++ * EXT_CSD Modes segment
+  *
+- * Returns: The command name of @cmd or "UNKNOWN_CMD".
++ * Define the configuration the Device is working in.
++ * These modes can be changed by the host by means of the SWITCH command.
+  */
+-const char *sd_cmd_name(uint8_t cmd);
+-
+-/**
+- * sd_acmd_name:
+- * @cmd: A SD "Application-Specific" command, up to SDMMC_CMD_MAX.
+- *
+- * Returns a human-readable name describing the application command.
+- * The return value is always a static string which does not need
+- * to be freed after use.
++#define EXT_CSD_CMDQ_MODE_EN            15      /* R/W */
++#define EXT_CSD_FLUSH_CACHE             32      /* W */
++#define EXT_CSD_CACHE_CTRL              33      /* R/W */
++#define EXT_CSD_POWER_OFF_NOTIFICATION  34      /* R/W */
++#define EXT_CSD_PACKED_FAILURE_INDEX    35      /* RO */
++#define EXT_CSD_PACKED_CMD_STATUS       36      /* RO */
++#define EXT_CSD_EXP_EVENTS_STATUS       54      /* RO, 2 bytes */
++#define EXT_CSD_EXP_EVENTS_CTRL         56      /* R/W, 2 bytes */
++#define EXT_CSD_CLASS_6_CTRL            59
++#define EXT_CSD_INI_TIMEOUT_EMU         60
++#define EXT_CSD_DATA_SECTOR_SIZE        61      /* R */
++#define EXT_CSD_USE_NATIVE_SECTOR       62
++#define EXT_CSD_NATIVE_SECTOR_SIZE      63
++#define EXT_CSD_VENDOR_SPECIFIC_FIELD   64      /* 64 bytes */
++#define EXT_CSD_PROGRAM_CID_CSD_DDR_SUPPORT 130
++#define EXT_CSD_PERIODIC_WAKEUP         131
++#define EXT_CSD_TCASE_SUPPORT           132
++#define EXT_CSD_SEC_BAD_BLK_MGMNT       134
++#define EXT_CSD_GP_SIZE_MULT            143     /* R/W */
++#define EXT_CSD_PARTITION_SETTING_COMPLETED 155 /* R/W */
++#define EXT_CSD_PARTITION_ATTRIBUTE     156     /* R/W */
++#define EXT_CSD_MAX_ENH_SIZE_MULT       157     /* RO, 3 bytes */
++#define EXT_CSD_PARTITION_SUPPORT       160     /* RO */
++#define EXT_CSD_HPI_MGMT                161     /* R/W */
++#define EXT_CSD_RST_N_FUNCTION          162     /* R/W */
++#define EXT_CSD_BKOPS_EN                163     /* R/W */
++#define EXT_CSD_BKOPS_START             164     /* W */
++#define EXT_CSD_SANITIZE_START          165     /* W */
++#define EXT_CSD_WR_REL_PARAM            166     /* RO */
++#define EXT_CSD_WR_REL_SET              167
++#define EXT_CSD_RPMB_MULT               168     /* RO */
++#define EXT_CSD_FW_CONFIG               169     /* R/W */
++#define EXT_CSD_USER_WP                 171
++#define EXT_CSD_BOOT_WP                 173     /* R/W */
++#define EXT_CSD_BOOT_WP_STATUS          174
++#define EXT_CSD_ERASE_GROUP_DEF         175     /* R/W */
++#define EXT_CSD_BOOT_BUS_CONDITIONS     177
++#define EXT_CSD_BOOT_CONFIG_PROT        178
++#define EXT_CSD_PART_CONFIG             179     /* R/W */
++#define EXT_CSD_ERASED_MEM_CONT         181     /* RO */
++#define EXT_CSD_BUS_WIDTH               183     /* R/W */
++#define EXT_CSD_STROBE_SUPPORT          184     /* RO */
++#define EXT_CSD_HS_TIMING               185     /* R/W */
++#define EXT_CSD_POWER_CLASS             187     /* R/W */
++#define EXT_CSD_CMD_SET_REV             189
++#define EXT_CSD_CMD_SET                 191
++/*
++ * EXT_CSD Properties segment
+  *
+- * Returns: The application command name of @cmd or "UNKNOWN_ACMD".
++ * Define the Device capabilities, cannot be modified by the host.
+  */
+-const char *sd_acmd_name(uint8_t cmd);
++#define EXT_CSD_REV                     192
++#define EXT_CSD_STRUCTURE               194
++#define EXT_CSD_CARD_TYPE               196
++#define EXT_CSD_DRIVER_STRENGTH         197
++#define EXT_CSD_OUT_OF_INTERRUPT_TIME   198
++#define EXT_CSD_PART_SWITCH_TIME        199
++#define EXT_CSD_PWR_CL_52_195           200
++#define EXT_CSD_PWR_CL_26_195           201
++#define EXT_CSD_PWR_CL_52_360           202
++#define EXT_CSD_PWR_CL_26_360           203
++#define EXT_CSD_SEC_CNT                 212     /* 4 bytes */
++#define EXT_CSD_S_A_TIMEOUT             217
++#define EXT_CSD_S_C_VCCQ                219
++#define EXT_CSD_S_C_VCC                 220
++#define EXT_CSD_REL_WR_SEC_C            222
++#define EXT_CSD_HC_WP_GRP_SIZE          221
++#define EXT_CSD_ERASE_TIMEOUT_MULT      223
++#define EXT_CSD_HC_ERASE_GRP_SIZE       224
++#define EXT_CSD_ACC_SIZE                225
++#define EXT_CSD_BOOT_MULT               226
++#define EXT_CSD_BOOT_INFO               228
++#define EXT_CSD_SEC_FEATURE_SUPPORT     231
++#define EXT_CSD_TRIM_MULT               232
++#define EXT_CSD_INI_TIMEOUT_PA          241
++#define EXT_CSD_BKOPS_STATUS            246
++#define EXT_CSD_POWER_OFF_LONG_TIME     247
++#define EXT_CSD_GENERIC_CMD6_TIME       248
++#define EXT_CSD_CACHE_SIZE              249     /* 4 bytes */
++#define EXT_CSD_EXT_SUPPORT             494
++#define EXT_CSD_LARGE_UNIT_SIZE_M1      495
++#define EXT_CSD_CONTEXT_CAPABILITIES    496
++#define EXT_CSD_TAG_RES_SIZE            497
++#define EXT_CSD_TAG_UNIT_SIZE           498
++#define EXT_CSD_DATA_TAG_SUPPORT        499
++#define EXT_CSD_MAX_PACKED_WRITES       500
++#define EXT_CSD_MAX_PACKED_READS        501
++#define EXT_CSD_BKOPS_SUPPORT           502
++#define EXT_CSD_HPI_FEATURES            503
++#define EXT_CSD_S_CMD_SET               504
++
++#define EXT_CSD_WR_REL_PARAM_EN                 (1 << 2)
++#define EXT_CSD_WR_REL_PARAM_EN_RPMB_REL_WR     (1 << 4)
++
++#define EXT_CSD_PART_CONFIG_ACC_MASK            (0x7)
++#define EXT_CSD_PART_CONFIG_ACC_DEFAULT         (0x0)
++#define EXT_CSD_PART_CONFIG_ACC_BOOT0           (0x1)
++
++#define EXT_CSD_PART_CONFIG_EN_MASK             (0x7 << 3)
++#define EXT_CSD_PART_CONFIG_EN_BOOT0            (0x1 << 3)
++#define EXT_CSD_PART_CONFIG_EN_USER             (0x7 << 3)
+ 
+ #endif
+diff --git a/hw/sd/trace-events b/hw/sd/trace-events
+index 724365efc3..43671dc791 100644
+--- a/hw/sd/trace-events
++++ b/hw/sd/trace-events
+@@ -43,6 +43,7 @@ sdcard_response(const char *rspdesc, int rsplen) "%s (sz:%d)"
+ sdcard_powerup(void) ""
+ sdcard_inquiry_cmd41(void) ""
+ sdcard_reset(void) ""
++sdcard_set_rca(uint16_t value) "new RCA: 0x%04x"
+ sdcard_set_blocklen(uint16_t length) "block len 0x%03x"
+ sdcard_set_block_count(uint32_t cnt) "block cnt 0x%"PRIx32
+ sdcard_inserted(bool readonly) "read_only: %u"
+@@ -50,11 +51,14 @@ sdcard_ejected(void) ""
+ sdcard_erase(uint32_t first, uint32_t last) "addr first 0x%" PRIx32" last 0x%" PRIx32
+ sdcard_lock(void) ""
+ sdcard_unlock(void) ""
++sdcard_req_addr(uint32_t req_arg, uint64_t addr) "req 0x%" PRIx32 " addr 0x%" PRIx64
+ sdcard_read_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
+ sdcard_write_block(uint64_t addr, uint32_t len) "addr 0x%" PRIx64 " size 0x%x"
+-sdcard_write_data(const char *proto, const char *cmd_desc, uint8_t cmd, uint8_t value) "%s %20s/ CMD%02d value 0x%02x"
+-sdcard_read_data(const char *proto, const char *cmd_desc, uint8_t cmd, uint32_t length) "%s %20s/ CMD%02d len %" PRIu32
++sdcard_write_data(const char *proto, const char *cmd_desc, uint8_t cmd, uint32_t offset, uint8_t value) "%s %20s/ CMD%02d ofs %"PRIu32" value 0x%02x"
++sdcard_read_data(const char *proto, const char *cmd_desc, uint8_t cmd, uint32_t offset, uint64_t size, uint32_t blklen) "%s %20s/ CMD%02d ofs %"PRIu32" size %"PRIu64" blklen %" PRIu32
+ sdcard_set_voltage(uint16_t millivolts) "%u mV"
++sdcard_ext_csd_update(unsigned index, uint8_t oval, uint8_t nval) "index %u: 0x%02x -> 0x%02x"
++sdcard_switch(unsigned access, unsigned index, unsigned value, unsigned set) "SWITCH acc:%u idx:%u val:%u set:%u"
+ 
+ # pxa2xx_mmci.c
+ pxa2xx_mmci_read(uint8_t size, uint32_t addr, uint32_t value) "size %d addr 0x%02x value 0x%08x"
+diff --git a/hw/ssi/aspeed_smc.c b/hw/ssi/aspeed_smc.c
+index 49205ab76d..f39fb85a35 100644
+--- a/hw/ssi/aspeed_smc.c
++++ b/hw/ssi/aspeed_smc.c
+@@ -789,8 +789,7 @@ static uint8_t aspeed_smc_hclk_divisor(uint8_t hclk_mask)
+         }
+     }
+ 
+-    aspeed_smc_error("invalid HCLK mask %x", hclk_mask);
+-    return 0;
++    g_assert_not_reached();
+ }
+ 
+ /*
+diff --git a/hw/timer/hpet.c b/hw/timer/hpet.c
+index 01efe4885d..4cb5393c0b 100644
+--- a/hw/timer/hpet.c
++++ b/hw/timer/hpet.c
+@@ -548,10 +548,16 @@ static void hpet_ram_write(void *opaque, hwaddr addr,
+                  * FIXME: Clamp period to reasonable min value?
+                  * Clamp period to reasonable max value
+                  */
+-                new_val &= (timer->config & HPET_TN_32BIT ? ~0u : ~0ull) >> 1;
++                if (timer->config & HPET_TN_32BIT) {
++                    new_val = MIN(new_val, ~0u >> 1);
++                }
+                 timer->period =
+                     (timer->period & 0xffffffff00000000ULL) | new_val;
+             }
++            /*
++             * FIXME: on a 64-bit write, HPET_TN_SETVAL should apply to the
++             * high bits part as well.
++             */
+             timer->config &= ~HPET_TN_SETVAL;
+             if (hpet_enabled(s)) {
+                 hpet_set_timer(timer);
+@@ -562,20 +568,21 @@ static void hpet_ram_write(void *opaque, hwaddr addr,
+             if (!timer_is_periodic(timer)
+                 || (timer->config & HPET_TN_SETVAL)) {
+                 timer->cmp = (timer->cmp & 0xffffffffULL) | new_val << 32;
+-            } else {
++            }
++            if (timer_is_periodic(timer)) {
+                 /*
+                  * FIXME: Clamp period to reasonable min value?
+                  * Clamp period to reasonable max value
+                  */
+-                new_val &= (timer->config & HPET_TN_32BIT ? ~0u : ~0ull) >> 1;
++                new_val = MIN(new_val, ~0u >> 1);
+                 timer->period =
+                     (timer->period & 0xffffffffULL) | new_val << 32;
+-                }
+-                timer->config &= ~HPET_TN_SETVAL;
+-                if (hpet_enabled(s)) {
+-                    hpet_set_timer(timer);
+-                }
+-                break;
++            }
++            timer->config &= ~HPET_TN_SETVAL;
++            if (hpet_enabled(s)) {
++                hpet_set_timer(timer);
++            }
++            break;
+         case HPET_TN_ROUTE:
+             timer->fsb = (timer->fsb & 0xffffffff00000000ULL) | new_val;
+             break;
+diff --git a/hw/ufs/ufs.c b/hw/ufs/ufs.c
+index 683fff5840..945a0ea127 100644
+--- a/hw/ufs/ufs.c
++++ b/hw/ufs/ufs.c
+@@ -57,14 +57,26 @@ static inline uint64_t ufs_reg_size(UfsHc *u)
+ 
+ static inline bool ufs_is_mcq_reg(UfsHc *u, uint64_t addr, unsigned size)
+ {
+-    uint64_t mcq_reg_addr = ufs_mcq_reg_addr(u, 0);
++    uint64_t mcq_reg_addr;
++
++    if (!u->params.mcq) {
++        return false;
++    }
++
++    mcq_reg_addr = ufs_mcq_reg_addr(u, 0);
+     return (addr >= mcq_reg_addr &&
+             addr + size <= mcq_reg_addr + sizeof(u->mcq_reg));
+ }
+ 
+ static inline bool ufs_is_mcq_op_reg(UfsHc *u, uint64_t addr, unsigned size)
+ {
+-    uint64_t mcq_op_reg_addr = ufs_mcq_op_reg_addr(u, 0);
++    uint64_t mcq_op_reg_addr;
++
++    if (!u->params.mcq) {
++        return false;
++    }
++
++    mcq_op_reg_addr = ufs_mcq_op_reg_addr(u, 0);
+     return (addr >= mcq_op_reg_addr &&
+             addr + size <= mcq_op_reg_addr + sizeof(u->mcq_op_reg));
+ }
+diff --git a/hw/usb/host-libusb.c b/hw/usb/host-libusb.c
+index 80122b4125..691bc881fb 100644
+--- a/hw/usb/host-libusb.c
++++ b/hw/usb/host-libusb.c
+@@ -1212,9 +1212,8 @@ static void usb_host_realize(USBDevice *udev, Error **errp)
+     if (s->hostdevice) {
+         int fd;
+         s->needs_autoscan = false;
+-        fd = qemu_open_old(s->hostdevice, O_RDWR);
++        fd = qemu_open(s->hostdevice, O_RDWR, errp);
+         if (fd < 0) {
+-            error_setg_errno(errp, errno, "failed to open %s", s->hostdevice);
+             return;
+         }
+         rc = usb_host_open(s, NULL, fd);
+diff --git a/hw/usb/u2f-passthru.c b/hw/usb/u2f-passthru.c
+index b7025d303d..c4a783d128 100644
+--- a/hw/usb/u2f-passthru.c
++++ b/hw/usb/u2f-passthru.c
+@@ -482,10 +482,8 @@ static void u2f_passthru_realize(U2FKeyState *base, Error **errp)
+         return;
+ #endif
+     } else {
+-        fd = qemu_open_old(key->hidraw, O_RDWR);
++        fd = qemu_open(key->hidraw, O_RDWR, errp);
+         if (fd < 0) {
+-            error_setg(errp, "%s: Failed to open %s", TYPE_U2F_PASSTHRU,
+-                       key->hidraw);
+             return;
+         }
+ 
+diff --git a/hw/vfio/common.c b/hw/vfio/common.c
+index 7cdb969fd3..6d15b36e0b 100644
+--- a/hw/vfio/common.c
++++ b/hw/vfio/common.c
+@@ -622,14 +622,6 @@ static void vfio_listener_region_add(MemoryListener *listener,
+                             int128_get64(llend),
+                             iommu_idx);
+ 
+-        ret = memory_region_iommu_set_page_size_mask(giommu->iommu_mr,
+-                                                     bcontainer->pgsizes,
+-                                                     &err);
+-        if (ret) {
+-            g_free(giommu);
+-            goto fail;
+-        }
+-
+         ret = memory_region_register_iommu_notifier(section->mr, &giommu->n,
+                                                     &err);
+         if (ret) {
+
+-- 
+2.43.0

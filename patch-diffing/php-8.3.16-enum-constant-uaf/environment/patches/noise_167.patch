@@ -1,0 +1,4173 @@
+diff --git a/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt b/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt
+deleted file mode 100644
+index d16168d3..00000000
+--- a/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt
++++ /dev/null
+@@ -1,60 +0,0 @@
+---TEST--
+-Random: Randomizer: shuffleBytes(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-function sort_bytes(string $bytes): string
+-{
+-    $bytes = str_split($bytes);
+-    sort($bytes);
+-    return implode('', $bytes);
+-}
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    // This test is slow, test all numbers smaller than 50 and then in steps of 677 (which is prime).
+-    for ($i = 1; $i < 5_000; $i += ($i < 50 ? 1 : 677)) {
+-        $bytes = sort_bytes(random_bytes($i));
+-
+-        $result = $randomizer->shuffleBytes($bytes);
+-
+-        $result = sort_bytes($result);
+-
+-        if ($result !== $bytes) {
+-            die("failure: not a permutation at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/readonly.phpt b/ext/random/tests/03_randomizer/readonly.phpt
+deleted file mode 100644
+index f5cf7cc0..00000000
+--- a/ext/random/tests/03_randomizer/readonly.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-Random: Randomizer: The engine property must be readonly
+---FILE--
+-<?php
+-
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-$randomizer = new Randomizer(new PcgOneseq128XslRr64(1234));
+-$referenceRandomizer = new Randomizer(new PcgOneseq128XslRr64(1234));
+-
+-try {
+-    $randomizer->engine = new Xoshiro256StarStar(1234);
+-} catch (Throwable $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-for ($i = 0; $i < 10_000; $i++) {
+-    if ($randomizer->getInt(0, $i) !== $referenceRandomizer->getInt(0, $i)) {
+-        die("failure: state differs at {$i}");
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Cannot modify readonly property Random\Randomizer::$engine
+-success
+diff --git a/ext/random/tests/03_randomizer/serialize.phpt b/ext/random/tests/03_randomizer/serialize.phpt
+deleted file mode 100644
+index b02bb93c..00000000
+--- a/ext/random/tests/03_randomizer/serialize.phpt
++++ /dev/null
+@@ -1,50 +0,0 @@
+---TEST--
+-Random: Randomizer: Serialization of the Randomizer must preserve the sequence
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(1234, MT_RAND_MT19937);
+-$engines[] = new Mt19937(1234, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64(1234);
+-$engines[] = new Xoshiro256StarStar(1234);
+-$engines[] = new TestShaEngine("1234");
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    for ($i = 0; $i < 10_000; $i++) {
+-        $randomizer->getInt(0, $i);
+-    }
+-
+-    $randomizer2 = unserialize(serialize($randomizer));
+-
+-    for ($i = 0; $i < 10_000; $i++) {
+-        if ($randomizer->getInt(0, $i) !== $randomizer2->getInt(0, $i)) {
+-            $className = $engine::class;
+-
+-            die("failure: state differs at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/serialize_disallowed.phpt b/ext/random/tests/03_randomizer/serialize_disallowed.phpt
+deleted file mode 100644
+index 06f8ea2c..00000000
+--- a/ext/random/tests/03_randomizer/serialize_disallowed.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Random: Randomizer: Serialization of the Randomizer fails if the engine is not serializable
+---FILE--
+-<?php
+-
+-use Random\Engine\Secure;
+-use Random\Randomizer;
+-
+-try {
+-    serialize(new Randomizer(new Secure()));
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-Serialization of 'Random\Engine\Secure' is not allowed
+diff --git a/ext/random/tests/engines.inc b/ext/random/tests/engines.inc
+deleted file mode 100644
+index 909f581d..00000000
+--- a/ext/random/tests/engines.inc
++++ /dev/null
+@@ -1,74 +0,0 @@
+-<?php
+-
+-namespace Random\Engine\Test;
+-
+-use Random\Engine;
+-
+-final class TestShaEngine implements Engine
+-{
+-    private string $state;
+-
+-    public function __construct(?string $state = null)
+-    {
+-        if ($state !== null) {
+-            $this->state = $state;
+-        } else {
+-            $this->state = random_bytes(20);
+-        }
+-    }
+-
+-    public function generate(): string
+-    {
+-        $this->state = sha1($this->state, true);
+-
+-        return substr($this->state, 0, 8);
+-    }
+-}
+-
+-final class TestWrapperEngine implements Engine
+-{
+-    public function __construct(private readonly Engine $engine)
+-    {
+-    }
+-
+-    public function generate(): string
+-    {
+-        return $this->engine->generate();
+-    }
+-}
+-
+-final class TestXoshiro128PlusPlusEngine implements Engine
+-{
+-    public function __construct(
+-        private int $s0,
+-        private int $s1,
+-        private int $s2,
+-        private int $s3
+-    ) {
+-    }
+-
+-    private static function rotl($x, $k)
+-    {
+-        return (($x << $k) | ($x >> (32 - $k))) & 0xFFFFFFFF;
+-    }
+-
+-    public function generate(): string
+-    {
+-        $result = (self::rotl(($this->s0 + $this->s3) & 0xFFFFFFFF, 7) + $this->s0) & 0xFFFFFFFF;
+-
+-        $t = ($this->s1 << 9)  & 0xFFFFFFFF;
+-
+-        $this->s2 ^= $this->s0;
+-        $this->s3 ^= $this->s1;
+-        $this->s1 ^= $this->s2;
+-        $this->s0 ^= $this->s3;
+-
+-        $this->s2 ^= $t;
+-
+-        $this->s3 = self::rotl($this->s3, 11);
+-
+-        return pack('V', $result);
+-    }
+-}
+-
+-?>
+diff --git a/ext/readline/php_readline.h b/ext/readline/php_readline.h
+index a9b56b61..d825e19a 100644
+--- a/ext/readline/php_readline.h
++++ b/ext/readline/php_readline.h
+@@ -17,12 +17,6 @@
+ #ifndef PHP_READLINE_H
+ #define PHP_READLINE_H
+ 
+-#if HAVE_LIBEDIT
+-#define READLINE_LIB "libedit"
+-#else
+-#define READLINE_LIB "readline"
+-#endif
+-
+ #if HAVE_LIBREADLINE || HAVE_LIBEDIT
+ 
+ extern zend_module_entry readline_module_entry;
+diff --git a/ext/readline/readline.c b/ext/readline/readline.c
+index db2776fb..544258ee 100644
+--- a/ext/readline/readline.c
++++ b/ext/readline/readline.c
+@@ -82,9 +82,6 @@ PHP_MINIT_FUNCTION(readline)
+ #if HAVE_RL_CALLBACK_READ_CHAR
+ 	ZVAL_UNDEF(&_prepped_callback);
+ #endif
+-
+-	register_readline_symbols(module_number);
+-
+ 	return PHP_MINIT(cli_readline)(INIT_FUNC_ARGS_PASSTHRU);
+ }
+ 
+diff --git a/ext/readline/readline.stub.php b/ext/readline/readline.stub.php
+index 0e0db92a..804b02fd 100644
+--- a/ext/readline/readline.stub.php
++++ b/ext/readline/readline.stub.php
+@@ -2,12 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var string
+- * @cvalue READLINE_LIB
+- */
+-const READLINE_LIB = UNKNOWN;
+-
+ function readline(?string $prompt = null): string|false {}
+ 
+ /** @param int|string|bool|null $value */
+diff --git a/ext/readline/readline_arginfo.h b/ext/readline/readline_arginfo.h
+index ca68dbf1..de539fd3 100644
+--- a/ext/readline/readline_arginfo.h
++++ b/ext/readline/readline_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 64d630be9ea75d584a4a999dd4d4c6bc769f5aca */
++ * Stub hash: 1839e2895847790ef3db4263d4940fa1bc956ff2 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_readline, 0, 0, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, prompt, IS_STRING, 1, "null")
+@@ -114,8 +114,3 @@ static const zend_function_entry ext_functions[] = {
+ #endif
+ 	ZEND_FE_END
+ };
+-
+-static void register_readline_symbols(int module_number)
+-{
+-	REGISTER_STRING_CONSTANT("READLINE_LIB", READLINE_LIB, CONST_PERSISTENT);
+-}
+diff --git a/ext/readline/readline_cli.c b/ext/readline/readline_cli.c
+index 84b261db..8bf5d23d 100644
+--- a/ext/readline/readline_cli.c
++++ b/ext/readline/readline_cli.c
+@@ -771,6 +771,12 @@ PHP_MINIT_FUNCTION(cli_readline)
+ 	ZEND_INIT_MODULE_GLOBALS(cli_readline, cli_readline_init_globals, NULL);
+ 	REGISTER_INI_ENTRIES();
+ 
++#if HAVE_LIBEDIT
++	REGISTER_STRING_CONSTANT("READLINE_LIB", "libedit", CONST_CS|CONST_PERSISTENT);
++#else
++	REGISTER_STRING_CONSTANT("READLINE_LIB", "readline", CONST_CS|CONST_PERSISTENT);
++#endif
++
+ 	GET_SHELL_CB(cb);
+ 	if (cb) {
+ 		cb->cli_shell_write = readline_shell_write;
+diff --git a/ext/reflection/php_reflection.c b/ext/reflection/php_reflection.c
+index 136d69b2..876338f4 100644
+--- a/ext/reflection/php_reflection.c
++++ b/ext/reflection/php_reflection.c
+@@ -27,7 +27,7 @@
+ #include "php_reflection.h"
+ #include "ext/standard/info.h"
+ #include "ext/standard/sha1.h"
+-#include "ext/random/php_random.h"
++#include "ext/standard/php_random.h"
+ 
+ #include "zend.h"
+ #include "zend_API.h"
+@@ -45,9 +45,6 @@
+ #include "zend_smart_str.h"
+ #include "zend_enum.h"
+ #include "zend_fibers.h"
+-
+-#define REFLECTION_ATTRIBUTE_IS_INSTANCEOF (1 << 1)
+-
+ #include "php_reflection_arginfo.h"
+ 
+ /* Key used to avoid leaking addresses in ReflectionProperty::getId() */
+@@ -118,6 +115,12 @@ PHPAPI zend_class_entry *reflection_fiber_ptr;
+ 	target = intern->ptr; \
+ } while (0)
+ 
++/* Class constants */
++#define REGISTER_REFLECTION_CLASS_CONST_LONG(class_name, const_name, value) \
++	zend_declare_class_constant_long(reflection_ ## class_name ## _ptr, const_name, sizeof(const_name)-1, (zend_long)value);
++
++#define REFLECTION_ATTRIBUTE_IS_INSTANCEOF (1 << 1)
++
+ /* {{{ Object structure */
+ 
+ /* Struct for properties */
+@@ -345,9 +348,6 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 		if (ce->ce_flags & ZEND_ACC_FINAL) {
+ 			smart_str_append_printf(str, "final ");
+ 		}
+-		if (ce->ce_flags & ZEND_ACC_READONLY_CLASS) {
+-			smart_str_append_printf(str, "readonly ");
+-		}
+ 		smart_str_append_printf(str, "class ");
+ 	}
+ 	smart_str_append_printf(str, "%s", ZSTR_VAL(ce->name));
+@@ -384,7 +384,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 		zend_string *key;
+ 		zend_class_constant *c;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), key, c) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), key, c) {
+ 			_class_const_string(str, ZSTR_VAL(key), c, ZSTR_VAL(sub_indent));
+ 			if (UNEXPECTED(EG(exception))) {
+ 				zend_string_release(sub_indent);
+@@ -400,7 +400,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 	if (count > 0) {
+ 		zend_property_info *prop;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
++		ZEND_HASH_FOREACH_PTR(&ce->properties_info, prop) {
+ 			if ((prop->flags & ZEND_ACC_PRIVATE) && prop->ce != ce) {
+ 				count_shadow_props++;
+ 			} else if (prop->flags & ZEND_ACC_STATIC) {
+@@ -414,7 +414,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 	if (count_static_props > 0) {
+ 		zend_property_info *prop;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
++		ZEND_HASH_FOREACH_PTR(&ce->properties_info, prop) {
+ 			if ((prop->flags & ZEND_ACC_STATIC) && (!(prop->flags & ZEND_ACC_PRIVATE) || prop->ce == ce)) {
+ 				_property_string(str, prop, NULL, ZSTR_VAL(sub_indent));
+ 			}
+@@ -428,7 +428,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 	if (count > 0) {
+ 		zend_function *mptr;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
++		ZEND_HASH_FOREACH_PTR(&ce->function_table, mptr) {
+ 			if ((mptr->common.fn_flags & ZEND_ACC_STATIC)
+ 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
+ 			{
+@@ -442,7 +442,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 	if (count_static_funcs > 0) {
+ 		zend_function *mptr;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
++		ZEND_HASH_FOREACH_PTR(&ce->function_table, mptr) {
+ 			if ((mptr->common.fn_flags & ZEND_ACC_STATIC)
+ 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
+ 			{
+@@ -461,7 +461,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 	if (count > 0) {
+ 		zend_property_info *prop;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
++		ZEND_HASH_FOREACH_PTR(&ce->properties_info, prop) {
+ 			if (!(prop->flags & ZEND_ACC_STATIC)
+ 			 && (!(prop->flags & ZEND_ACC_PRIVATE) || prop->ce == ce)) {
+ 				_property_string(str, prop, NULL, ZSTR_VAL(sub_indent));
+@@ -477,7 +477,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 
+ 		count = 0;
+ 		if (properties && zend_hash_num_elements(properties)) {
+-			ZEND_HASH_MAP_FOREACH_STR_KEY(properties, prop_name) {
++			ZEND_HASH_FOREACH_STR_KEY(properties, prop_name) {
+ 				if (prop_name && ZSTR_LEN(prop_name) && ZSTR_VAL(prop_name)[0]) { /* skip all private and protected properties */
+ 					if (!zend_hash_exists(&ce->properties_info, prop_name)) {
+ 						count++;
+@@ -500,7 +500,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, char
+ 		smart_str method_str = {0};
+ 
+ 		count = 0;
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
++		ZEND_HASH_FOREACH_PTR(&ce->function_table, mptr) {
+ 			if ((mptr->common.fn_flags & ZEND_ACC_STATIC) == 0
+ 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
+ 			{
+@@ -756,7 +756,7 @@ static void _function_closure_string(smart_str *str, zend_function *fptr, char*
+ 	smart_str_append_printf(str, "\n");
+ 	smart_str_append_printf(str, "%s- Bound Variables [%d] {\n", indent, zend_hash_num_elements(static_variables));
+ 	i = 0;
+-	ZEND_HASH_MAP_FOREACH_STR_KEY(static_variables, key) {
++	ZEND_HASH_FOREACH_STR_KEY(static_variables, key) {
+ 		smart_str_append_printf(str, "%s    Variable #%d [ $%s ]\n", indent, i++, ZSTR_VAL(key));
+ 	} ZEND_HASH_FOREACH_END();
+ 	smart_str_append_printf(str, "%s}\n", indent);
+@@ -1028,7 +1028,7 @@ static void _extension_string(smart_str *str, zend_module_entry *module, char *i
+ 	{
+ 		smart_str str_ini = {0};
+ 		zend_ini_entry *ini_entry;
+-		ZEND_HASH_MAP_FOREACH_PTR(EG(ini_directives), ini_entry) {
++		ZEND_HASH_FOREACH_PTR(EG(ini_directives), ini_entry) {
+ 			_extension_ini_string(ini_entry, &str_ini, indent, module->module_number);
+ 		} ZEND_HASH_FOREACH_END();
+ 		if (smart_str_get_len(&str_ini) > 0) {
+@@ -1044,7 +1044,7 @@ static void _extension_string(smart_str *str, zend_module_entry *module, char *i
+ 		zend_constant *constant;
+ 		int num_constants = 0;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), constant) {
++		ZEND_HASH_FOREACH_PTR(EG(zend_constants), constant) {
+ 			if (ZEND_CONSTANT_MODULE_NUMBER(constant) == module->module_number) {
+ 				_const_string(&str_constants, ZSTR_VAL(constant->name), &constant->value, indent);
+ 				num_constants++;
+@@ -1063,7 +1063,7 @@ static void _extension_string(smart_str *str, zend_module_entry *module, char *i
+ 		zend_function *fptr;
+ 		int first = 1;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(CG(function_table), fptr) {
++		ZEND_HASH_FOREACH_PTR(CG(function_table), fptr) {
+ 			if (fptr->common.type==ZEND_INTERNAL_FUNCTION
+ 				&& fptr->internal_function.module == module) {
+ 				if (first) {
+@@ -1085,7 +1085,7 @@ static void _extension_string(smart_str *str, zend_module_entry *module, char *i
+ 		zend_class_entry *ce;
+ 		int num_classes = 0;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
+ 			_extension_class_string(ce, key, &str_classes, ZSTR_VAL(sub_indent), module, &num_classes);
+ 		} ZEND_HASH_FOREACH_END();
+ 		if (num_classes) {
+@@ -1133,7 +1133,7 @@ static int read_attributes(zval *ret, HashTable *attributes, zend_class_entry *s
+ 		// Name based filtering using lowercased key.
+ 		zend_string *filter = zend_string_tolower(name);
+ 
+-		ZEND_HASH_PACKED_FOREACH_PTR(attributes, attr) {
++		ZEND_HASH_FOREACH_PTR(attributes, attr) {
+ 			if (attr->offset == offset && zend_string_equals(attr->lcname, filter)) {
+ 				reflection_attribute_factory(&tmp, attributes, attr, scope, target, filename);
+ 				add_next_index_zval(ret, &tmp);
+@@ -1144,7 +1144,7 @@ static int read_attributes(zval *ret, HashTable *attributes, zend_class_entry *s
+ 		return SUCCESS;
+ 	}
+ 
+-	ZEND_HASH_PACKED_FOREACH_PTR(attributes, attr) {
++	ZEND_HASH_FOREACH_PTR(attributes, attr) {
+ 		if (attr->offset != offset) {
+ 			continue;
+ 		}
+@@ -1328,7 +1328,6 @@ typedef enum {
+ } reflection_type_kind;
+ 
+ /* For backwards compatibility reasons, we need to return T|null style unions
+- * and transformation from iterable to Traversable|array
+  * as a ReflectionNamedType. Here we determine what counts as a union type and
+  * what doesn't. */
+ static reflection_type_kind get_type_kind(zend_type type) {
+@@ -1343,10 +1342,6 @@ static reflection_type_kind get_type_kind(zend_type type) {
+ 	}
+ 
+ 	if (ZEND_TYPE_IS_COMPLEX(type)) {
+-		/* BC support for 'iterable' type */
+-		if (UNEXPECTED(ZEND_TYPE_IS_ITERABLE_FALLBACK(type))) {
+-			return NAMED_TYPE;
+-		}
+ 		if (type_mask_without_null != 0) {
+ 			return UNION_TYPE;
+ 		}
+@@ -1369,7 +1364,6 @@ static void reflection_type_factory(zend_type type, zval *object, bool legacy_be
+ 	type_reference *reference;
+ 	reflection_type_kind type_kind = get_type_kind(type);
+ 	bool is_mixed = ZEND_TYPE_PURE_MASK(type) == MAY_BE_ANY;
+-	bool is_only_null = (ZEND_TYPE_PURE_MASK(type) == MAY_BE_NULL && !ZEND_TYPE_IS_COMPLEX(type));
+ 
+ 	switch (type_kind) {
+ 		case INTERSECTION_TYPE:
+@@ -1387,7 +1381,7 @@ static void reflection_type_factory(zend_type type, zval *object, bool legacy_be
+ 	intern = Z_REFLECTION_P(object);
+ 	reference = (type_reference*) emalloc(sizeof(type_reference));
+ 	reference->type = type;
+-	reference->legacy_behavior = legacy_behavior && type_kind == NAMED_TYPE && !is_mixed && !is_only_null;
++	reference->legacy_behavior = legacy_behavior && type_kind == NAMED_TYPE && !is_mixed;
+ 	intern->ptr = reference;
+ 	intern->ref_type = REF_TYPE_TYPE;
+ 
+@@ -1483,7 +1477,7 @@ static void reflection_enum_case_factory(zend_class_entry *ce, zend_string *name
+ {
+ 	reflection_object *intern;
+ 
+-	zend_class_entry *case_reflection_class = ce->enum_backing_type == IS_UNDEF
++	zend_class_entry *case_reflection_class = ce->backed_enum_table == IS_UNDEF
+ 		? reflection_enum_unit_case_ptr
+ 		: reflection_enum_backed_case_ptr;
+ 	reflection_instantiate(case_reflection_class, object);
+@@ -1558,7 +1552,7 @@ ZEND_METHOD(Reflection, getModifierNames)
+ 		add_next_index_stringl(return_value, "static", sizeof("static")-1);
+ 	}
+ 
+-	if (modifiers & (ZEND_ACC_READONLY | ZEND_ACC_READONLY_CLASS)) {
++	if (modifiers & ZEND_ACC_READONLY) {
+ 		add_next_index_stringl(return_value, "readonly", sizeof("readonly")-1);
+ 	}
+ }
+@@ -1825,19 +1819,6 @@ ZEND_METHOD(ReflectionFunctionAbstract, isUserDefined)
+ }
+ /* }}} */
+ 
+-/* {{{ Returns whether this function is an anonymous closure or not */
+-ZEND_METHOD(ReflectionFunction, isAnonymous)
+-{
+-	reflection_object *intern;
+-	zend_function *fptr;
+-
+-	ZEND_PARSE_PARAMETERS_NONE();
+-
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-	RETURN_BOOL((fptr->common.fn_flags & (ZEND_ACC_CLOSURE | ZEND_ACC_FAKE_CLOSURE)) == ZEND_ACC_CLOSURE);
+-}
+-/* }}} */
+-
+ /* {{{ Returns whether this function has been disabled or not */
+ ZEND_METHOD(ReflectionFunction, isDisabled)
+ {
+@@ -1961,7 +1942,7 @@ ZEND_METHOD(ReflectionFunctionAbstract, getStaticVariables)
+ 			ht = zend_array_dup(fptr->op_array.static_variables);
+ 			ZEND_MAP_PTR_SET(fptr->op_array.static_variables_ptr, ht);
+ 		}
+-		ZEND_HASH_MAP_FOREACH_VAL(ht, val) {
++		ZEND_HASH_FOREACH_VAL(ht, val) {
+ 			if (UNEXPECTED(zval_update_constant_ex(val, fptr->common.scope) != SUCCESS)) {
+ 				RETURN_THROWS();
+ 			}
+@@ -2036,12 +2017,12 @@ ZEND_METHOD(ReflectionFunction, invokeArgs)
+ 	zend_function *fptr;
+ 	HashTable *params;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "h", &params) == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	fci.size = sizeof(fci);
+ 	ZVAL_UNDEF(&fci.function_name);
+ 	fci.object = NULL;
+@@ -2082,12 +2063,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, returnsReference)
+ 	reflection_object *intern;
+ 	zend_function *fptr;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	RETURN_BOOL((fptr->op_array.fn_flags & ZEND_ACC_RETURN_REFERENCE) != 0);
+ }
+ /* }}} */
+@@ -2099,12 +2080,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, getNumberOfParameters)
+ 	zend_function *fptr;
+ 	uint32_t num_args;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	num_args = fptr->common.num_args;
+ 	if (fptr->common.fn_flags & ZEND_ACC_VARIADIC) {
+ 		num_args++;
+@@ -2120,12 +2101,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, getNumberOfRequiredParameters)
+ 	reflection_object *intern;
+ 	zend_function *fptr;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	RETURN_LONG(fptr->common.required_num_args);
+ }
+ /* }}} */
+@@ -2138,12 +2119,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, getParameters)
+ 	uint32_t i, num_args;
+ 	struct _zend_arg_info *arg_info;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	arg_info= fptr->common.arg_info;
+ 	num_args = fptr->common.num_args;
+ 	if (fptr->common.fn_flags & ZEND_ACC_VARIADIC) {
+@@ -2180,12 +2161,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, getExtension)
+ 	zend_function *fptr;
+ 	zend_internal_function *internal;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	if (fptr->type != ZEND_INTERNAL_FUNCTION) {
+ 		RETURN_NULL();
+ 	}
+@@ -2206,12 +2187,12 @@ ZEND_METHOD(ReflectionFunctionAbstract, getExtensionName)
+ 	zend_function *fptr;
+ 	zend_internal_function *internal;
+ 
++	GET_REFLECTION_OBJECT_PTR(fptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(fptr);
+-
+ 	if (fptr->type != ZEND_INTERNAL_FUNCTION) {
+ 		RETURN_FALSE;
+ 	}
+@@ -2758,11 +2739,6 @@ ZEND_METHOD(ReflectionParameter, isArray)
+ 	}
+ 	GET_REFLECTION_OBJECT_PTR(param);
+ 
+-	/* BC For iterable */
+-	if (ZEND_TYPE_IS_ITERABLE_FALLBACK(param->arg_info->type)) {
+-		RETURN_FALSE;
+-	}
+-
+ 	type_mask = ZEND_TYPE_PURE_MASK_WITHOUT_NULL(param->arg_info->type);
+ 	RETVAL_BOOL(type_mask == MAY_BE_ARRAY);
+ }
+@@ -3043,21 +3019,9 @@ ZEND_METHOD(ReflectionType, allowsNull)
+ }
+ /* }}} */
+ 
+-/* For BC with iterable for named types */
+-static zend_string *zend_named_reflection_type_to_string(zend_type type) {
+-	if (ZEND_TYPE_IS_ITERABLE_FALLBACK(type)) {
+-		zend_string *iterable = ZSTR_KNOWN(ZEND_STR_ITERABLE);
+-		if (ZEND_TYPE_FULL_MASK(type) & MAY_BE_NULL) {
+-			return zend_string_concat2("?", strlen("?"), ZSTR_VAL(iterable), ZSTR_LEN(iterable));
+-		}
+-		return iterable;
+-	}
+-	return zend_type_to_string(type);
+-}
+-
+ static zend_string *zend_type_to_string_without_null(zend_type type) {
+ 	ZEND_TYPE_FULL_MASK(type) &= ~MAY_BE_NULL;
+-	return zend_named_reflection_type_to_string(type);
++	return zend_type_to_string(type);
+ }
+ 
+ /* {{{ Return the text of the type hint */
+@@ -3071,7 +3035,7 @@ ZEND_METHOD(ReflectionType, __toString)
+ 	}
+ 	GET_REFLECTION_OBJECT_PTR(param);
+ 
+-	RETURN_STR(zend_named_reflection_type_to_string(param->type));
++	RETURN_STR(zend_type_to_string(param->type));
+ }
+ /* }}} */
+ 
+@@ -3089,7 +3053,7 @@ ZEND_METHOD(ReflectionNamedType, getName)
+ 	if (param->legacy_behavior) {
+ 		RETURN_STR(zend_type_to_string_without_null(param->type));
+ 	}
+-	RETURN_STR(zend_named_reflection_type_to_string(param->type));
++	RETURN_STR(zend_type_to_string(param->type));
+ }
+ /* }}} */
+ 
+@@ -3104,10 +3068,6 @@ ZEND_METHOD(ReflectionNamedType, isBuiltin)
+ 	}
+ 	GET_REFLECTION_OBJECT_PTR(param);
+ 
+-	if (ZEND_TYPE_IS_ITERABLE_FALLBACK(param->type)) {
+-		RETURN_TRUE;
+-	}
+-
+ 	/* Treat "static" as a class type for the purposes of reflection. */
+ 	RETVAL_BOOL(ZEND_TYPE_IS_ONLY_MASK(param->type)
+ 		&& !(ZEND_TYPE_FULL_MASK(param->type) & MAY_BE_STATIC));
+@@ -3116,11 +3076,6 @@ ZEND_METHOD(ReflectionNamedType, isBuiltin)
+ 
+ static void append_type(zval *return_value, zend_type type) {
+ 	zval reflection_type;
+-	/* Drop iterable BC bit for type list */
+-	if (ZEND_TYPE_IS_ITERABLE_FALLBACK(type)) {
+-		ZEND_TYPE_FULL_MASK(type) &= ~_ZEND_TYPE_ITERABLE_BIT;
+-	}
+-
+ 	reflection_type_factory(type, &reflection_type, 0);
+ 	zend_hash_next_index_insert(Z_ARRVAL_P(return_value), &reflection_type);
+ }
+@@ -3161,6 +3116,9 @@ ZEND_METHOD(ReflectionUnionType, getTypes)
+ 	if (type_mask & MAY_BE_CALLABLE) {
+ 		append_type_mask(return_value, MAY_BE_CALLABLE);
+ 	}
++	if (type_mask & MAY_BE_ITERABLE) {
++		append_type_mask(return_value, MAY_BE_ITERABLE);
++	}
+ 	if (type_mask & MAY_BE_OBJECT) {
+ 		append_type_mask(return_value, MAY_BE_OBJECT);
+ 	}
+@@ -3178,8 +3136,6 @@ ZEND_METHOD(ReflectionUnionType, getTypes)
+ 	}
+ 	if ((type_mask & MAY_BE_BOOL) == MAY_BE_BOOL) {
+ 		append_type_mask(return_value, MAY_BE_BOOL);
+-	} else if (type_mask & MAY_BE_TRUE) {
+-		append_type_mask(return_value, MAY_BE_TRUE);
+ 	} else if (type_mask & MAY_BE_FALSE) {
+ 		append_type_mask(return_value, MAY_BE_FALSE);
+ 	}
+@@ -3717,43 +3673,28 @@ ZEND_METHOD(ReflectionMethod, getDeclaringClass)
+ 	reflection_object *intern;
+ 	zend_function *mptr;
+ 
++	GET_REFLECTION_OBJECT_PTR(mptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(mptr);
+-
+ 	zend_reflection_class_factory(mptr->common.scope, return_value);
+ }
+ /* }}} */
+ 
+-/* {{{ Returns whether a method has a prototype or not */
+-ZEND_METHOD(ReflectionMethod, hasPrototype)
+-{
+-    reflection_object *intern;
+-    zend_function *mptr;
+-
+-    if (zend_parse_parameters_none() == FAILURE) {
+-        RETURN_THROWS();
+-    }
+-
+-    GET_REFLECTION_OBJECT_PTR(mptr);
+-    RETURN_BOOL(mptr->common.prototype != NULL);
+-}
+-/* }}} */
+-
+ /* {{{ Get the prototype */
+ ZEND_METHOD(ReflectionMethod, getPrototype)
+ {
+ 	reflection_object *intern;
+ 	zend_function *mptr;
+ 
++	GET_REFLECTION_OBJECT_PTR(mptr);
++
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+-	GET_REFLECTION_OBJECT_PTR(mptr);
+-
+ 	if (!mptr->common.prototype) {
+ 		zend_throw_exception_ex(reflection_exception_ptr, 0,
+ 			"Method %s::%s does not have a prototype", ZSTR_VAL(intern->ce->name), ZSTR_VAL(mptr->common.function_name));
+@@ -4050,7 +3991,7 @@ static void add_class_vars(zend_class_entry *ce, bool statics, zval *return_valu
+ 	zval *prop, prop_copy;
+ 	zend_string *key;
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
+ 		if (((prop_info->flags & ZEND_ACC_PRIVATE) &&
+ 		     prop_info->ce != ce)) {
+ 			continue;
+@@ -4108,7 +4049,7 @@ ZEND_METHOD(ReflectionClass, getStaticProperties)
+ 
+ 	array_init(return_value);
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
+ 		if (((prop_info->flags & ZEND_ACC_PRIVATE) &&
+ 		     prop_info->ce != ce)) {
+ 			continue;
+@@ -4502,7 +4443,7 @@ ZEND_METHOD(ReflectionClass, getMethods)
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
++	ZEND_HASH_FOREACH_PTR(&ce->function_table, mptr) {
+ 		_addmethod(mptr, ce, Z_ARRVAL_P(return_value), filter);
+ 	} ZEND_HASH_FOREACH_END();
+ 
+@@ -4680,7 +4621,7 @@ ZEND_METHOD(ReflectionClass, getProperties)
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
+ 		_addproperty(prop_info, key, ce, Z_ARRVAL_P(return_value), filter);
+ 	} ZEND_HASH_FOREACH_END();
+ 
+@@ -4736,7 +4677,7 @@ ZEND_METHOD(ReflectionClass, getConstants)
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), key, constant) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), key, constant) {
+ 		if (UNEXPECTED(zval_update_constant_ex(&constant->value, constant->ce) != SUCCESS)) {
+ 			RETURN_THROWS();
+ 		}
+@@ -4770,7 +4711,7 @@ ZEND_METHOD(ReflectionClass, getReflectionConstants)
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
+ 		if (ZEND_CLASS_CONST_FLAGS(constant) & filter) {
+ 			zval class_const;
+ 			reflection_class_constant_factory(name, constant, &class_const);
+@@ -4795,7 +4736,7 @@ ZEND_METHOD(ReflectionClass, getConstant)
+ 
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 	constants_table = CE_CONSTANTS_TABLE(ce);
+-	ZEND_HASH_MAP_FOREACH_PTR(constants_table, c) {
++	ZEND_HASH_FOREACH_PTR(constants_table, c) {
+ 		if (UNEXPECTED(zval_update_constant_ex(&c->value, c->ce) != SUCCESS)) {
+ 			RETURN_THROWS();
+ 		}
+@@ -4927,12 +4868,6 @@ ZEND_METHOD(ReflectionClass, isFinal)
+ }
+ /* }}} */
+ 
+-/* Returns whether this class is readonly */
+-ZEND_METHOD(ReflectionClass, isReadOnly)
+-{
+-	_class_check_flag(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_ACC_READONLY_CLASS);
+-}
+-
+ /* {{{ Returns whether this class is abstract */
+ ZEND_METHOD(ReflectionClass, isAbstract)
+ {
+@@ -4945,7 +4880,8 @@ ZEND_METHOD(ReflectionClass, getModifiers)
+ {
+ 	reflection_object *intern;
+ 	zend_class_entry *ce;
+-	uint32_t keep_flags = ZEND_ACC_FINAL | ZEND_ACC_EXPLICIT_ABSTRACT_CLASS | ZEND_ACC_READONLY_CLASS;
++	uint32_t keep_flags = ZEND_ACC_FINAL
++		| ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
+ 
+ 	if (zend_parse_parameters_none() == FAILURE) {
+ 		RETURN_THROWS();
+@@ -6021,7 +5957,7 @@ ZEND_METHOD(ReflectionExtension, getFunctions)
+ 	GET_REFLECTION_OBJECT_PTR(module);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_PTR(CG(function_table), fptr) {
++	ZEND_HASH_FOREACH_PTR(CG(function_table), fptr) {
+ 		if (fptr->common.type==ZEND_INTERNAL_FUNCTION
+ 			&& fptr->internal_function.module == module) {
+ 			reflection_function_factory(fptr, NULL, &function);
+@@ -6044,7 +5980,7 @@ ZEND_METHOD(ReflectionExtension, getConstants)
+ 	GET_REFLECTION_OBJECT_PTR(module);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), constant) {
++	ZEND_HASH_FOREACH_PTR(EG(zend_constants), constant) {
+ 		if (module->module_number == ZEND_CONSTANT_MODULE_NUMBER(constant)) {
+ 			zval const_val;
+ 			ZVAL_COPY_OR_DUP(&const_val, &constant->value);
+@@ -6082,7 +6018,7 @@ ZEND_METHOD(ReflectionExtension, getINIEntries)
+ 	GET_REFLECTION_OBJECT_PTR(module);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_PTR(EG(ini_directives), ini_entry) {
++	ZEND_HASH_FOREACH_PTR(EG(ini_directives), ini_entry) {
+ 		_addinientry(ini_entry, return_value, module->module_number);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -6126,7 +6062,7 @@ ZEND_METHOD(ReflectionExtension, getClasses)
+ 	GET_REFLECTION_OBJECT_PTR(module);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
+ 		add_extension_class(ce, key, return_value, module, 1);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -6146,7 +6082,7 @@ ZEND_METHOD(ReflectionExtension, getClassNames)
+ 	GET_REFLECTION_OBJECT_PTR(module);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(EG(class_table), key, ce) {
+ 		add_extension_class(ce, key, return_value, module, 0);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -6492,7 +6428,6 @@ ZEND_METHOD(ReflectionReference, getId)
+ 
+ ZEND_METHOD(ReflectionAttribute, __construct)
+ {
+-	_DO_THROW("Cannot directly instantiate ReflectionAttribute");
+ }
+ 
+ ZEND_METHOD(ReflectionAttribute, __clone)
+@@ -6891,7 +6826,7 @@ ZEND_METHOD(ReflectionEnum, getCases)
+ 	GET_REFLECTION_OBJECT_PTR(ce);
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
+ 		if (ZEND_CLASS_CONST_FLAGS(constant) & ZEND_CLASS_CONST_IS_CASE) {
+ 			zval class_const;
+ 			reflection_enum_case_factory(ce, name, constant, &class_const);
+@@ -6995,9 +6930,6 @@ ZEND_METHOD(ReflectionEnumBackedCase, getBackingValue)
+ 
+ 	if (Z_TYPE(ref->value) == IS_CONSTANT_AST) {
+ 		zval_update_constant_ex(&ref->value, ref->ce);
+-		if (EG(exception)) {
+-			return;
+-		}
+ 	}
+ 
+ 	ZEND_ASSERT(intern->ce->enum_backing_type != IS_UNDEF);
+@@ -7170,6 +7102,8 @@ PHP_MINIT_FUNCTION(reflection) /* {{{ */
+ 	reflection_function_ptr = register_class_ReflectionFunction(reflection_function_abstract_ptr);
+ 	reflection_function_ptr->create_object = reflection_objects_new;
+ 
++	REGISTER_REFLECTION_CLASS_CONST_LONG(function, "IS_DEPRECATED", ZEND_ACC_DEPRECATED);
++
+ 	reflection_generator_ptr = register_class_ReflectionGenerator();
+ 	reflection_generator_ptr->create_object = reflection_objects_new;
+ 
+@@ -7191,18 +7125,41 @@ PHP_MINIT_FUNCTION(reflection) /* {{{ */
+ 	reflection_method_ptr = register_class_ReflectionMethod(reflection_function_abstract_ptr);
+ 	reflection_method_ptr->create_object = reflection_objects_new;
+ 
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_STATIC", ZEND_ACC_STATIC);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_PUBLIC", ZEND_ACC_PUBLIC);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_PROTECTED", ZEND_ACC_PROTECTED);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_PRIVATE", ZEND_ACC_PRIVATE);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_ABSTRACT", ZEND_ACC_ABSTRACT);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(method, "IS_FINAL", ZEND_ACC_FINAL);
++
+ 	reflection_class_ptr = register_class_ReflectionClass(reflector_ptr);
+ 	reflection_class_ptr->create_object = reflection_objects_new;
+ 
++	/* IS_IMPLICIT_ABSTRACT is not longer used */
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class, "IS_IMPLICIT_ABSTRACT", ZEND_ACC_IMPLICIT_ABSTRACT_CLASS);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class, "IS_EXPLICIT_ABSTRACT", ZEND_ACC_EXPLICIT_ABSTRACT_CLASS);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class, "IS_FINAL", ZEND_ACC_FINAL);
++
+ 	reflection_object_ptr = register_class_ReflectionObject(reflection_class_ptr);
+ 	reflection_object_ptr->create_object = reflection_objects_new;
+ 
+ 	reflection_property_ptr = register_class_ReflectionProperty(reflector_ptr);
+ 	reflection_property_ptr->create_object = reflection_objects_new;
+ 
++	REGISTER_REFLECTION_CLASS_CONST_LONG(property, "IS_STATIC", ZEND_ACC_STATIC);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(property, "IS_READONLY", ZEND_ACC_READONLY);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(property, "IS_PUBLIC", ZEND_ACC_PUBLIC);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(property, "IS_PROTECTED", ZEND_ACC_PROTECTED);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(property, "IS_PRIVATE", ZEND_ACC_PRIVATE);
++
+ 	reflection_class_constant_ptr = register_class_ReflectionClassConstant(reflector_ptr);
+ 	reflection_class_constant_ptr->create_object = reflection_objects_new;
+ 
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class_constant, "IS_PUBLIC", ZEND_ACC_PUBLIC);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class_constant, "IS_PROTECTED", ZEND_ACC_PROTECTED);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class_constant, "IS_PRIVATE", ZEND_ACC_PRIVATE);
++	REGISTER_REFLECTION_CLASS_CONST_LONG(class_constant, "IS_FINAL", ZEND_ACC_FINAL);
++
+ 	reflection_extension_ptr = register_class_ReflectionExtension(reflector_ptr);
+ 	reflection_extension_ptr->create_object = reflection_objects_new;
+ 
+@@ -7227,6 +7184,8 @@ PHP_MINIT_FUNCTION(reflection) /* {{{ */
+ 	reflection_fiber_ptr = register_class_ReflectionFiber();
+ 	reflection_fiber_ptr->create_object = reflection_objects_new;
+ 
++	REGISTER_REFLECTION_CLASS_CONST_LONG(attribute, "IS_INSTANCEOF", REFLECTION_ATTRIBUTE_IS_INSTANCEOF);
++
+ 	REFLECTION_G(key_initialized) = 0;
+ 
+ 	return SUCCESS;
+diff --git a/ext/reflection/php_reflection.stub.php b/ext/reflection/php_reflection.stub.php
+index c3d290d7..592ccf57 100644
+--- a/ext/reflection/php_reflection.stub.php
++++ b/ext/reflection/php_reflection.stub.php
+@@ -116,18 +116,10 @@ abstract class ReflectionFunctionAbstract implements Reflector
+ 
+ class ReflectionFunction extends ReflectionFunctionAbstract
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_DEPRECATED
+-     */
+-    public const IS_DEPRECATED = UNKNOWN;
+-
+     public function __construct(Closure|string $function) {}
+ 
+     public function __toString(): string {}
+ 
+-    public function isAnonymous(): bool {}
+-
+     /**
+      * @tentative-return-type
+      * @deprecated ReflectionFunction can no longer be constructed for disabled functions
+@@ -170,37 +162,6 @@ final class ReflectionGenerator
+ 
+ class ReflectionMethod extends ReflectionFunctionAbstract
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_STATIC
+-     */
+-    public const IS_STATIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PUBLIC
+-     */
+-    public const IS_PUBLIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PROTECTED
+-     */
+-    public const IS_PROTECTED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PRIVATE
+-     */
+-    public const IS_PRIVATE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_ABSTRACT
+-     */
+-    public const IS_ABSTRACT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_FINAL
+-     */
+-    public const IS_FINAL = UNKNOWN;
+-
+     public string $class;
+ 
+     public function __construct(object|string $objectOrMethod, ?string $method = null) {}
+@@ -246,8 +207,6 @@ class ReflectionMethod extends ReflectionFunctionAbstract
+     /** @tentative-return-type */
+     public function getPrototype(): ReflectionMethod {}
+ 
+-    public function hasPrototype(): bool {}
+-
+     /** @tentative-return-type */
+     public function setAccessible(bool $accessible): void {}
+ }
+@@ -255,28 +214,6 @@ class ReflectionMethod extends ReflectionFunctionAbstract
+ /** @not-serializable */
+ class ReflectionClass implements Reflector
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_IMPLICIT_ABSTRACT_CLASS
+-     * @todo deprecate
+-     */
+-    public const IS_IMPLICIT_ABSTRACT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_EXPLICIT_ABSTRACT_CLASS
+-     */
+-    public const IS_EXPLICIT_ABSTRACT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_FINAL
+-     */
+-    public const IS_FINAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_READONLY_CLASS
+-     */
+-    public const IS_READONLY = UNKNOWN;
+-
+     public string $name;
+ 
+     private function __clone(): void {}
+@@ -380,8 +317,6 @@ class ReflectionClass implements Reflector
+     /** @tentative-return-type */
+     public function isFinal(): bool {}
+ 
+-    public function isReadOnly(): bool {}
+-
+     /** @tentative-return-type */
+     public function getModifiers(): int {}
+ 
+@@ -453,32 +388,6 @@ class ReflectionObject extends ReflectionClass
+ /** @not-serializable */
+ class ReflectionProperty implements Reflector
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_STATIC
+-     */
+-    public const IS_STATIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_READONLY
+-     */
+-    public const IS_READONLY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PUBLIC
+-     */
+-    public const IS_PUBLIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PROTECTED
+-     */
+-    public const IS_PROTECTED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PRIVATE
+-     */
+-    public const IS_PRIVATE = UNKNOWN;
+-
+     public string $name;
+     public string $class;
+ 
+@@ -549,27 +458,6 @@ class ReflectionProperty implements Reflector
+ /** @not-serializable */
+ class ReflectionClassConstant implements Reflector
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PUBLIC
+-     */
+-    public const IS_PUBLIC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PROTECTED
+-     */
+-    public const IS_PROTECTED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_PRIVATE
+-     */
+-    public const IS_PRIVATE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ACC_FINAL
+-     */
+-    public const IS_FINAL = UNKNOWN;
+-
+     public string $name;
+     public string $class;
+ 
+@@ -813,12 +701,6 @@ final class ReflectionReference
+ /** @not-serializable */
+ class ReflectionAttribute implements Reflector
+ {
+-    /**
+-     * @var int
+-     * @cvalue REFLECTION_ATTRIBUTE_IS_INSTANCEOF
+-     */
+-    public const IS_INSTANCEOF = UNKNOWN;
+-
+     public function getName(): string {}
+     public function getTarget(): int {}
+     public function isRepeated(): bool {}
+@@ -844,7 +726,7 @@ class ReflectionEnum extends ReflectionClass
+ 
+     public function isBacked(): bool {}
+ 
+-    public function getBackingType(): ?ReflectionNamedType {}
++    public function getBackingType(): ?ReflectionType {}
+ }
+ 
+ class ReflectionEnumUnitCase extends ReflectionClassConstant
+diff --git a/ext/reflection/php_reflection_arginfo.h b/ext/reflection/php_reflection_arginfo.h
+index 22474d70..3292c5c7 100644
+--- a/ext/reflection/php_reflection_arginfo.h
++++ b/ext/reflection/php_reflection_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: b247a6a7fed18525f611001da064da58e7583501 */
++ * Stub hash: 164878e6c43f0e4c8bb7a7ae1e5c9650c240d775 */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_Reflection_getModifierNames, 0, 1, IS_ARRAY, 0)
+ 	ZEND_ARG_TYPE_INFO(0, modifiers, IS_LONG, 0)
+@@ -93,8 +93,6 @@ ZEND_END_ARG_INFO()
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_ReflectionFunction___toString, 0, 0, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#define arginfo_class_ReflectionFunction_isAnonymous arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
+-
+ #define arginfo_class_ReflectionFunction_isDisabled arginfo_class_ReflectionFunctionAbstract_inNamespace
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_ReflectionFunction_invoke, 0, 0, IS_MIXED, 0)
+@@ -171,8 +169,6 @@ ZEND_END_ARG_INFO()
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_OBJ_INFO_EX(arginfo_class_ReflectionMethod_getPrototype, 0, 0, ReflectionMethod, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#define arginfo_class_ReflectionMethod_hasPrototype arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
+-
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_ReflectionMethod_setAccessible, 0, 1, IS_VOID, 0)
+ 	ZEND_ARG_TYPE_INFO(0, accessible, _IS_BOOL, 0)
+ ZEND_END_ARG_INFO()
+@@ -262,8 +258,6 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_class_ReflectionClass_isFinal arginfo_class_ReflectionFunctionAbstract_inNamespace
+ 
+-#define arginfo_class_ReflectionClass_isReadOnly arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
+-
+ #define arginfo_class_ReflectionClass_getModifiers arginfo_class_ReflectionFunctionAbstract_getNumberOfParameters
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_ReflectionClass_isInstance, 0, 1, _IS_BOOL, 0)
+@@ -570,8 +564,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_class_ReflectionEnum_isBacked arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_ReflectionEnum_getBackingType, 0, 0, ReflectionNamedType, 1)
+-ZEND_END_ARG_INFO()
++#define arginfo_class_ReflectionEnum_getBackingType arginfo_class_ReflectionFunctionAbstract_getTentativeReturnType
+ 
+ #define arginfo_class_ReflectionEnumUnitCase___construct arginfo_class_ReflectionClassConstant___construct
+ 
+@@ -642,7 +635,6 @@ ZEND_METHOD(ReflectionFunctionAbstract, getTentativeReturnType);
+ ZEND_METHOD(ReflectionFunctionAbstract, getAttributes);
+ ZEND_METHOD(ReflectionFunction, __construct);
+ ZEND_METHOD(ReflectionFunction, __toString);
+-ZEND_METHOD(ReflectionFunction, isAnonymous);
+ ZEND_METHOD(ReflectionFunction, isDisabled);
+ ZEND_METHOD(ReflectionFunction, invoke);
+ ZEND_METHOD(ReflectionFunction, invokeArgs);
+@@ -669,7 +661,6 @@ ZEND_METHOD(ReflectionMethod, invoke);
+ ZEND_METHOD(ReflectionMethod, invokeArgs);
+ ZEND_METHOD(ReflectionMethod, getDeclaringClass);
+ ZEND_METHOD(ReflectionMethod, getPrototype);
+-ZEND_METHOD(ReflectionMethod, hasPrototype);
+ ZEND_METHOD(ReflectionMethod, setAccessible);
+ ZEND_METHOD(ReflectionClass, __construct);
+ ZEND_METHOD(ReflectionClass, __toString);
+@@ -705,7 +696,6 @@ ZEND_METHOD(ReflectionClass, isTrait);
+ ZEND_METHOD(ReflectionClass, isEnum);
+ ZEND_METHOD(ReflectionClass, isAbstract);
+ ZEND_METHOD(ReflectionClass, isFinal);
+-ZEND_METHOD(ReflectionClass, isReadOnly);
+ ZEND_METHOD(ReflectionClass, getModifiers);
+ ZEND_METHOD(ReflectionClass, isInstance);
+ ZEND_METHOD(ReflectionClass, newInstance);
+@@ -894,7 +884,6 @@ static const zend_function_entry class_ReflectionFunctionAbstract_methods[] = {
+ static const zend_function_entry class_ReflectionFunction_methods[] = {
+ 	ZEND_ME(ReflectionFunction, __construct, arginfo_class_ReflectionFunction___construct, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionFunction, __toString, arginfo_class_ReflectionFunction___toString, ZEND_ACC_PUBLIC)
+-	ZEND_ME(ReflectionFunction, isAnonymous, arginfo_class_ReflectionFunction_isAnonymous, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionFunction, isDisabled, arginfo_class_ReflectionFunction_isDisabled, ZEND_ACC_PUBLIC|ZEND_ACC_DEPRECATED)
+ 	ZEND_ME(ReflectionFunction, invoke, arginfo_class_ReflectionFunction_invoke, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionFunction, invokeArgs, arginfo_class_ReflectionFunction_invokeArgs, ZEND_ACC_PUBLIC)
+@@ -931,7 +920,6 @@ static const zend_function_entry class_ReflectionMethod_methods[] = {
+ 	ZEND_ME(ReflectionMethod, invokeArgs, arginfo_class_ReflectionMethod_invokeArgs, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionMethod, getDeclaringClass, arginfo_class_ReflectionMethod_getDeclaringClass, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionMethod, getPrototype, arginfo_class_ReflectionMethod_getPrototype, ZEND_ACC_PUBLIC)
+-	ZEND_ME(ReflectionMethod, hasPrototype, arginfo_class_ReflectionMethod_hasPrototype, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionMethod, setAccessible, arginfo_class_ReflectionMethod_setAccessible, ZEND_ACC_PUBLIC)
+ 	ZEND_FE_END
+ };
+@@ -973,7 +961,6 @@ static const zend_function_entry class_ReflectionClass_methods[] = {
+ 	ZEND_ME(ReflectionClass, isEnum, arginfo_class_ReflectionClass_isEnum, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionClass, isAbstract, arginfo_class_ReflectionClass_isAbstract, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionClass, isFinal, arginfo_class_ReflectionClass_isFinal, ZEND_ACC_PUBLIC)
+-	ZEND_ME(ReflectionClass, isReadOnly, arginfo_class_ReflectionClass_isReadOnly, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionClass, getModifiers, arginfo_class_ReflectionClass_getModifiers, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionClass, isInstance, arginfo_class_ReflectionClass_isInstance, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(ReflectionClass, newInstance, arginfo_class_ReflectionClass_newInstance, ZEND_ACC_PUBLIC)
+@@ -1252,12 +1239,6 @@ static zend_class_entry *register_class_ReflectionFunction(zend_class_entry *cla
+ 	INIT_CLASS_ENTRY(ce, "ReflectionFunction", class_ReflectionFunction_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_ReflectionFunctionAbstract);
+ 
+-	zval const_IS_DEPRECATED_value;
+-	ZVAL_LONG(&const_IS_DEPRECATED_value, ZEND_ACC_DEPRECATED);
+-	zend_string *const_IS_DEPRECATED_name = zend_string_init_interned("IS_DEPRECATED", sizeof("IS_DEPRECATED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_DEPRECATED_name, &const_IS_DEPRECATED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_DEPRECATED_name);
+-
+ 	return class_entry;
+ }
+ 
+@@ -1279,42 +1260,6 @@ static zend_class_entry *register_class_ReflectionMethod(zend_class_entry *class
+ 	INIT_CLASS_ENTRY(ce, "ReflectionMethod", class_ReflectionMethod_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_ReflectionFunctionAbstract);
+ 
+-	zval const_IS_STATIC_value;
+-	ZVAL_LONG(&const_IS_STATIC_value, ZEND_ACC_STATIC);
+-	zend_string *const_IS_STATIC_name = zend_string_init_interned("IS_STATIC", sizeof("IS_STATIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_STATIC_name, &const_IS_STATIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_STATIC_name);
+-
+-	zval const_IS_PUBLIC_value;
+-	ZVAL_LONG(&const_IS_PUBLIC_value, ZEND_ACC_PUBLIC);
+-	zend_string *const_IS_PUBLIC_name = zend_string_init_interned("IS_PUBLIC", sizeof("IS_PUBLIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PUBLIC_name, &const_IS_PUBLIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PUBLIC_name);
+-
+-	zval const_IS_PROTECTED_value;
+-	ZVAL_LONG(&const_IS_PROTECTED_value, ZEND_ACC_PROTECTED);
+-	zend_string *const_IS_PROTECTED_name = zend_string_init_interned("IS_PROTECTED", sizeof("IS_PROTECTED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PROTECTED_name, &const_IS_PROTECTED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PROTECTED_name);
+-
+-	zval const_IS_PRIVATE_value;
+-	ZVAL_LONG(&const_IS_PRIVATE_value, ZEND_ACC_PRIVATE);
+-	zend_string *const_IS_PRIVATE_name = zend_string_init_interned("IS_PRIVATE", sizeof("IS_PRIVATE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PRIVATE_name, &const_IS_PRIVATE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PRIVATE_name);
+-
+-	zval const_IS_ABSTRACT_value;
+-	ZVAL_LONG(&const_IS_ABSTRACT_value, ZEND_ACC_ABSTRACT);
+-	zend_string *const_IS_ABSTRACT_name = zend_string_init_interned("IS_ABSTRACT", sizeof("IS_ABSTRACT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_ABSTRACT_name, &const_IS_ABSTRACT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_ABSTRACT_name);
+-
+-	zval const_IS_FINAL_value;
+-	ZVAL_LONG(&const_IS_FINAL_value, ZEND_ACC_FINAL);
+-	zend_string *const_IS_FINAL_name = zend_string_init_interned("IS_FINAL", sizeof("IS_FINAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_FINAL_name, &const_IS_FINAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_FINAL_name);
+-
+ 	zval property_class_default_value;
+ 	ZVAL_UNDEF(&property_class_default_value);
+ 	zend_string *property_class_name = zend_string_init("class", sizeof("class") - 1, 1);
+@@ -1333,30 +1278,6 @@ static zend_class_entry *register_class_ReflectionClass(zend_class_entry *class_
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 	zend_class_implements(class_entry, 1, class_entry_Reflector);
+ 
+-	zval const_IS_IMPLICIT_ABSTRACT_value;
+-	ZVAL_LONG(&const_IS_IMPLICIT_ABSTRACT_value, ZEND_ACC_IMPLICIT_ABSTRACT_CLASS);
+-	zend_string *const_IS_IMPLICIT_ABSTRACT_name = zend_string_init_interned("IS_IMPLICIT_ABSTRACT", sizeof("IS_IMPLICIT_ABSTRACT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_IMPLICIT_ABSTRACT_name, &const_IS_IMPLICIT_ABSTRACT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_IMPLICIT_ABSTRACT_name);
+-
+-	zval const_IS_EXPLICIT_ABSTRACT_value;
+-	ZVAL_LONG(&const_IS_EXPLICIT_ABSTRACT_value, ZEND_ACC_EXPLICIT_ABSTRACT_CLASS);
+-	zend_string *const_IS_EXPLICIT_ABSTRACT_name = zend_string_init_interned("IS_EXPLICIT_ABSTRACT", sizeof("IS_EXPLICIT_ABSTRACT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_EXPLICIT_ABSTRACT_name, &const_IS_EXPLICIT_ABSTRACT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_EXPLICIT_ABSTRACT_name);
+-
+-	zval const_IS_FINAL_value;
+-	ZVAL_LONG(&const_IS_FINAL_value, ZEND_ACC_FINAL);
+-	zend_string *const_IS_FINAL_name = zend_string_init_interned("IS_FINAL", sizeof("IS_FINAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_FINAL_name, &const_IS_FINAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_FINAL_name);
+-
+-	zval const_IS_READONLY_value;
+-	ZVAL_LONG(&const_IS_READONLY_value, ZEND_ACC_READONLY_CLASS);
+-	zend_string *const_IS_READONLY_name = zend_string_init_interned("IS_READONLY", sizeof("IS_READONLY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_READONLY_name, &const_IS_READONLY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_READONLY_name);
+-
+ 	zval property_name_default_value;
+ 	ZVAL_UNDEF(&property_name_default_value);
+ 	zend_string *property_name_name = zend_string_init("name", sizeof("name") - 1, 1);
+@@ -1385,36 +1306,6 @@ static zend_class_entry *register_class_ReflectionProperty(zend_class_entry *cla
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 	zend_class_implements(class_entry, 1, class_entry_Reflector);
+ 
+-	zval const_IS_STATIC_value;
+-	ZVAL_LONG(&const_IS_STATIC_value, ZEND_ACC_STATIC);
+-	zend_string *const_IS_STATIC_name = zend_string_init_interned("IS_STATIC", sizeof("IS_STATIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_STATIC_name, &const_IS_STATIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_STATIC_name);
+-
+-	zval const_IS_READONLY_value;
+-	ZVAL_LONG(&const_IS_READONLY_value, ZEND_ACC_READONLY);
+-	zend_string *const_IS_READONLY_name = zend_string_init_interned("IS_READONLY", sizeof("IS_READONLY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_READONLY_name, &const_IS_READONLY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_READONLY_name);
+-
+-	zval const_IS_PUBLIC_value;
+-	ZVAL_LONG(&const_IS_PUBLIC_value, ZEND_ACC_PUBLIC);
+-	zend_string *const_IS_PUBLIC_name = zend_string_init_interned("IS_PUBLIC", sizeof("IS_PUBLIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PUBLIC_name, &const_IS_PUBLIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PUBLIC_name);
+-
+-	zval const_IS_PROTECTED_value;
+-	ZVAL_LONG(&const_IS_PROTECTED_value, ZEND_ACC_PROTECTED);
+-	zend_string *const_IS_PROTECTED_name = zend_string_init_interned("IS_PROTECTED", sizeof("IS_PROTECTED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PROTECTED_name, &const_IS_PROTECTED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PROTECTED_name);
+-
+-	zval const_IS_PRIVATE_value;
+-	ZVAL_LONG(&const_IS_PRIVATE_value, ZEND_ACC_PRIVATE);
+-	zend_string *const_IS_PRIVATE_name = zend_string_init_interned("IS_PRIVATE", sizeof("IS_PRIVATE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PRIVATE_name, &const_IS_PRIVATE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PRIVATE_name);
+-
+ 	zval property_name_default_value;
+ 	ZVAL_UNDEF(&property_name_default_value);
+ 	zend_string *property_name_name = zend_string_init("name", sizeof("name") - 1, 1);
+@@ -1439,30 +1330,6 @@ static zend_class_entry *register_class_ReflectionClassConstant(zend_class_entry
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 	zend_class_implements(class_entry, 1, class_entry_Reflector);
+ 
+-	zval const_IS_PUBLIC_value;
+-	ZVAL_LONG(&const_IS_PUBLIC_value, ZEND_ACC_PUBLIC);
+-	zend_string *const_IS_PUBLIC_name = zend_string_init_interned("IS_PUBLIC", sizeof("IS_PUBLIC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PUBLIC_name, &const_IS_PUBLIC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PUBLIC_name);
+-
+-	zval const_IS_PROTECTED_value;
+-	ZVAL_LONG(&const_IS_PROTECTED_value, ZEND_ACC_PROTECTED);
+-	zend_string *const_IS_PROTECTED_name = zend_string_init_interned("IS_PROTECTED", sizeof("IS_PROTECTED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PROTECTED_name, &const_IS_PROTECTED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PROTECTED_name);
+-
+-	zval const_IS_PRIVATE_value;
+-	ZVAL_LONG(&const_IS_PRIVATE_value, ZEND_ACC_PRIVATE);
+-	zend_string *const_IS_PRIVATE_name = zend_string_init_interned("IS_PRIVATE", sizeof("IS_PRIVATE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_PRIVATE_name, &const_IS_PRIVATE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_PRIVATE_name);
+-
+-	zval const_IS_FINAL_value;
+-	ZVAL_LONG(&const_IS_FINAL_value, ZEND_ACC_FINAL);
+-	zend_string *const_IS_FINAL_name = zend_string_init_interned("IS_FINAL", sizeof("IS_FINAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_FINAL_name, &const_IS_FINAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_FINAL_name);
+-
+ 	zval property_name_default_value;
+ 	ZVAL_UNDEF(&property_name_default_value);
+ 	zend_string *property_name_name = zend_string_init("name", sizeof("name") - 1, 1);
+@@ -1594,12 +1461,6 @@ static zend_class_entry *register_class_ReflectionAttribute(zend_class_entry *cl
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 	zend_class_implements(class_entry, 1, class_entry_Reflector);
+ 
+-	zval const_IS_INSTANCEOF_value;
+-	ZVAL_LONG(&const_IS_INSTANCEOF_value, REFLECTION_ATTRIBUTE_IS_INSTANCEOF);
+-	zend_string *const_IS_INSTANCEOF_name = zend_string_init_interned("IS_INSTANCEOF", sizeof("IS_INSTANCEOF") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IS_INSTANCEOF_name, &const_IS_INSTANCEOF_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IS_INSTANCEOF_name);
+-
+ 	return class_entry;
+ }
+ 
+diff --git a/ext/reflection/tests/002.phpt b/ext/reflection/tests/002.phpt
+index 5e35859c..b10013d2 100644
+--- a/ext/reflection/tests/002.phpt
++++ b/ext/reflection/tests/002.phpt
+@@ -3,7 +3,6 @@ Reflection properties are read only
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class ReflectionMethodEx extends ReflectionMethod
+ {
+     public $foo = "xyz";
+diff --git a/ext/reflection/tests/024.phpt b/ext/reflection/tests/024.phpt
+index fe2b346e..46db75c9 100644
+--- a/ext/reflection/tests/024.phpt
++++ b/ext/reflection/tests/024.phpt
+@@ -2,7 +2,6 @@
+ ReflectionObject::__toString (filtering privates/protected dynamic properties)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class C1 {
+     private   $p1 = 1;
+     protected $p2 = 2;
+@@ -18,7 +17,7 @@ echo $obj;
+ ?>
+ --EXPECTF--
+ Object of class [ <user> class C1 ] {
+-  @@ %s
++  @@ %s024.php 2-6
+ 
+   - Constants [0] {
+   }
+diff --git a/ext/reflection/tests/ReflectionAttribute_constructor_001.phpt b/ext/reflection/tests/ReflectionAttribute_constructor_001.phpt
+deleted file mode 100644
+index ad895dc4..00000000
+--- a/ext/reflection/tests/ReflectionAttribute_constructor_001.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-ReflectionAttribute cannot be instantiated directly
+---FILE--
+-<?php
+-#[Attribute]
+-class A {}
+-
+-class Foo {
+-    #[A]
+-    public function bar() {}
+-}
+-
+-$rm = new ReflectionMethod(Foo::class, "bar");
+-$attribute = $rm->getAttributes()[0];
+-
+-$rm = new ReflectionMethod($attribute, "__construct");
+-
+-try {
+-    var_dump($rm->invoke($attribute, 0, 1, 2));
+-} catch (ReflectionException $exception) {
+-    echo $exception->getMessage();
+-}
+-?>
+---EXPECT--
+-Cannot directly instantiate ReflectionAttribute
+diff --git a/ext/reflection/tests/ReflectionClass_CannotClone_basic.phpt b/ext/reflection/tests/ReflectionClass_CannotClone_basic.phpt
+index 58ce9c65..0e6e249b 100644
+--- a/ext/reflection/tests/ReflectionClass_CannotClone_basic.phpt
++++ b/ext/reflection/tests/ReflectionClass_CannotClone_basic.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Reflection class cannot be cloned
++Reflection class can not be cloned
+ --CREDITS--
+ Stefan Koopmanschap <stefan@phpgg.nl>
+ TestFest PHP|Tek
+diff --git a/ext/reflection/tests/ReflectionClass_getInterfaces_003.phpt b/ext/reflection/tests/ReflectionClass_getInterfaces_003.phpt
+index b5fbf59b..f1cac44e 100644
+--- a/ext/reflection/tests/ReflectionClass_getInterfaces_003.phpt
++++ b/ext/reflection/tests/ReflectionClass_getInterfaces_003.phpt
+@@ -58,8 +58,6 @@ array(1) {
+   }
+ }
+ Modify the object, and it is apparently no longer referenced.
+-
+-Deprecated: Creation of dynamic property ReflectionClass::$x is deprecated in %s on line %d
+ array(1) {
+   ["I"]=>
+   object(ReflectionClass)#%d (2) {
+diff --git a/ext/reflection/tests/ReflectionClass_modifiers_001.phpt b/ext/reflection/tests/ReflectionClass_modifiers_001.phpt
+index 6be2f155..cb2a6555 100644
+--- a/ext/reflection/tests/ReflectionClass_modifiers_001.phpt
++++ b/ext/reflection/tests/ReflectionClass_modifiers_001.phpt
+@@ -9,17 +9,15 @@ abstract class A {}
+ class B extends A {}
+ class C {}
+ final class D {}
+-readonly class E {}
+ interface I {}
+ 
+-$classes = array("A", "B", "C", "D", "E", "I");
++$classes = array("A", "B", "C", "D", "I");
+ 
+ foreach ($classes as $class) {
+     $rc = new ReflectionClass($class);
+     var_dump($rc->isFinal());
+     var_dump($rc->isInterface());
+     var_dump($rc->isAbstract());
+-    var_dump($rc->isReadOnly());
+     var_dump($rc->getModifiers());
+ }
+ ?>
+@@ -27,30 +25,20 @@ foreach ($classes as $class) {
+ bool(false)
+ bool(false)
+ bool(true)
+-bool(false)
+ int(64)
+ bool(false)
+ bool(false)
+ bool(false)
+-bool(false)
+ int(0)
+ bool(false)
+ bool(false)
+ bool(false)
+-bool(false)
+ int(0)
+ bool(true)
+ bool(false)
+ bool(false)
+-bool(false)
+ int(32)
+ bool(false)
+-bool(false)
+-bool(false)
+-bool(true)
+-int(65536)
+-bool(false)
+ bool(true)
+ bool(false)
+-bool(false)
+ int(0)
+diff --git a/ext/reflection/tests/ReflectionClass_toString_001.phpt b/ext/reflection/tests/ReflectionClass_toString_001.phpt
+index 3b2c276e..3ca0d9a3 100644
+--- a/ext/reflection/tests/ReflectionClass_toString_001.phpt
++++ b/ext/reflection/tests/ReflectionClass_toString_001.phpt
+@@ -11,11 +11,10 @@ echo $rc;
+ --EXPECT--
+ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Reflector ] {
+ 
+-  - Constants [4] {
++  - Constants [3] {
+     Constant [ public int IS_IMPLICIT_ABSTRACT ] { 16 }
+     Constant [ public int IS_EXPLICIT_ABSTRACT ] { 64 }
+     Constant [ public int IS_FINAL ] { 32 }
+-    Constant [ public int IS_READONLY ] { 65536 }
+   }
+ 
+   - Static properties [0] {
+@@ -28,7 +27,7 @@ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Refle
+     Property [ public string $name ]
+   }
+ 
+-  - Methods [56] {
++  - Methods [55] {
+     Method [ <internal:Reflection> private method __clone ] {
+ 
+       - Parameters [0] {
+@@ -285,13 +284,6 @@ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Refle
+       - Tentative return [ bool ]
+     }
+ 
+-    Method [ <internal:Reflection> public method isReadOnly ] {
+-
+-      - Parameters [0] {
+-      }
+-      - Return [ bool ]
+-    }
+-
+     Method [ <internal:Reflection> public method getModifiers ] {
+ 
+       - Parameters [0] {
+diff --git a/ext/reflection/tests/ReflectionClass_toString_005.phpt b/ext/reflection/tests/ReflectionClass_toString_005.phpt
+deleted file mode 100644
+index 4d417882..00000000
+--- a/ext/reflection/tests/ReflectionClass_toString_005.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-Using ReflectionClass::__toString() on readonly classes
+---FILE--
+-<?php
+-
+-readonly class Foo {
+-    public int $bar;
+-    public readonly int $baz;
+-}
+-
+-echo new ReflectionClass(Foo::class);
+-
+-?>
+---EXPECTF--
+-Class [ <user> readonly class Foo ] {
+-  @@ %s 3-6
+-
+-  - Constants [0] {
+-  }
+-
+-  - Static properties [0] {
+-  }
+-
+-  - Static methods [0] {
+-  }
+-
+-  - Properties [2] {
+-    Property [ public readonly int $bar ]
+-    Property [ public readonly int $baz ]
+-  }
+-
+-  - Methods [0] {
+-  }
+-}
+diff --git a/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt b/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt
+deleted file mode 100644
+index 7a942e31..00000000
+--- a/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-ReflectionEnumBackedCase::getBackingValue() exception
+---FILE--
+-<?php
+-enum Inm:int {
+-    case Foo=y;
+-}
+-try {
+-    var_dump((new ReflectionEnumBackedCase(Inm::class,'Foo'))->getBackingValue());
+-} catch (Error $e) {
+-    echo $e->getMessage() . "\n";
+-}
+-?>
+---EXPECT--
+-Undefined constant "y"
+diff --git a/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt b/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt
+new file mode 100644
+index 00000000..de0c9abe
+--- /dev/null
++++ b/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt
+@@ -0,0 +1,62 @@
++--TEST--
++GH-11121: Segfault when using ReflectionFiber
++--FILE--
++<?php
++function f() {
++    Fiber::suspend();
++}
++
++function g() {
++    (new Fiber(function() {
++        global $f;
++        var_dump((new ReflectionFiber($f))->getTrace());
++    }))->start();
++}
++
++$f = new Fiber(function() { f(); max(...[1,2,3,4,5,6,7,8,9,10,11,12]); g(); });
++$f->start();
++$f->resume();
++
++?>
++--EXPECTF--
++array(3) {
++  [0]=>
++  array(7) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_1.php"
++    ["line"]=>
++    int(10)
++    ["function"]=>
++    string(5) "start"
++    ["class"]=>
++    string(5) "Fiber"
++    ["object"]=>
++    object(Fiber)#3 (0) {
++    }
++    ["type"]=>
++    string(2) "->"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [1]=>
++  array(4) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_1.php"
++    ["line"]=>
++    int(13)
++    ["function"]=>
++    string(1) "g"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [2]=>
++  array(2) {
++    ["function"]=>
++    string(9) "{closure}"
++    ["args"]=>
++    array(0) {
++    }
++  }
++}
+diff --git a/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt b/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt
+new file mode 100644
+index 00000000..b7affb2c
+--- /dev/null
++++ b/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt
+@@ -0,0 +1,63 @@
++--TEST--
++GH-11121: Segfault when using ReflectionFiber
++--FILE--
++<?php
++
++function f() {
++    Fiber::suspend();
++}
++
++function g() {
++    (new Fiber(function() {
++        global $f;
++        var_dump((new ReflectionFiber($f))->getTrace());
++    }))->start();
++}
++
++$f = new Fiber(function() { f(); g(); });
++$f->start();
++$f->resume();
++
++?>
++--EXPECTF--
++array(3) {
++  [0]=>
++  array(7) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_2.php"
++    ["line"]=>
++    int(11)
++    ["function"]=>
++    string(5) "start"
++    ["class"]=>
++    string(5) "Fiber"
++    ["object"]=>
++    object(Fiber)#3 (0) {
++    }
++    ["type"]=>
++    string(2) "->"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [1]=>
++  array(4) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_2.php"
++    ["line"]=>
++    int(14)
++    ["function"]=>
++    string(1) "g"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [2]=>
++  array(2) {
++    ["function"]=>
++    string(9) "{closure}"
++    ["args"]=>
++    array(0) {
++    }
++  }
++}
+diff --git a/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt b/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt
+deleted file mode 100644
+index 004e0b09..00000000
+--- a/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-ReflectionFunction::isAnonymous
+---FILE--
+-<?php
+-$rf = new ReflectionFunction(function() {});
+-var_dump($rf->isAnonymous());
+-
+-$rf = new ReflectionFunction('strlen');
+-var_dump($rf->isAnonymous());
+-
+-$rf = new ReflectionFunction(strlen(...));
+-var_dump($rf->isAnonymous());
+-?>
+---EXPECT--
+-bool(true)
+-bool(false)
+-bool(false)
+diff --git a/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt b/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt
+deleted file mode 100644
+index d94c8962..00000000
+--- a/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-public ReflectionMethod ReflectionMethod::hasPrototype ( void );
+---FILE--
+-<?php
+-class Hello {
+-    public function sayHelloTo($name) {
+-        return 'Hello ' . $name;
+-    }
+-}
+-
+-class HelloWorld extends Hello {
+-    public function sayHelloTo($name) {
+-        return 'Hello world: ' . $name;
+-    }
+-
+-    public function sayHiTo($name) {
+-        return 'Hi: ' . $name;
+-    }
+-}
+-
+-$reflectionMethod1 = new ReflectionMethod('HelloWorld', 'sayHelloTo');
+-var_dump($reflectionMethod1->hasPrototype());
+-
+-$reflectionMethod2 = new ReflectionMethod('Hello', 'sayHelloTo');
+-var_dump($reflectionMethod2->hasPrototype());
+-
+-$reflectionMethod3 = new ReflectionMethod('HelloWorld', 'sayHiTo');
+-var_dump($reflectionMethod3->hasPrototype());
+-
+-?>
+---EXPECT--
+-bool(true)
+-bool(false)
+-bool(false)
+diff --git a/ext/reflection/tests/ReflectionObject___toString_basic2.phpt b/ext/reflection/tests/ReflectionObject___toString_basic2.phpt
+index 4d0a48d9..e93dd9b3 100644
+--- a/ext/reflection/tests/ReflectionObject___toString_basic2.phpt
++++ b/ext/reflection/tests/ReflectionObject___toString_basic2.phpt
+@@ -3,7 +3,6 @@ ReflectionObject::__toString() : very basic test with dynamic properties
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Foo  {
+     public $bar = 1;
+ }
+@@ -15,7 +14,7 @@ echo new ReflectionObject($f);
+ ?>
+ --EXPECTF--
+ Object of class [ <user> class Foo ] {
+-  @@ %s
++  @@ %s 3-5
+ 
+   - Constants [0] {
+   }
+diff --git a/ext/reflection/tests/ReflectionObject_export_basic3.phpt b/ext/reflection/tests/ReflectionObject_export_basic3.phpt
+index 9c3d78da..612bfa59 100644
+--- a/ext/reflection/tests/ReflectionObject_export_basic3.phpt
++++ b/ext/reflection/tests/ReflectionObject_export_basic3.phpt
+@@ -6,7 +6,6 @@ class C {
+     private $p = 1;
+ }
+ 
+-#[AllowDynamicProperties]
+ class D extends C{
+ }
+ 
+@@ -16,7 +15,7 @@ echo new ReflectionObject($Obj);
+ ?>
+ --EXPECTF--
+ Object of class [ <user> class D extends C ] {
+-  @@ %s
++  @@ %s 6-7
+ 
+   - Constants [0] {
+   }
+diff --git a/ext/reflection/tests/ReflectionParameter_isDefault.phpt b/ext/reflection/tests/ReflectionParameter_isDefault.phpt
+index 3ab0d980..ea958781 100644
+--- a/ext/reflection/tests/ReflectionParameter_isDefault.phpt
++++ b/ext/reflection/tests/ReflectionParameter_isDefault.phpt
+@@ -2,7 +2,6 @@
+ ReflectionParameter::isDefault()
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class A {
+ public $defprop;
+ }
+diff --git a/ext/reflection/tests/ReflectionProperty_getDefaultValue.phpt b/ext/reflection/tests/ReflectionProperty_getDefaultValue.phpt
+index 423edfe9..26614f5c 100644
+--- a/ext/reflection/tests/ReflectionProperty_getDefaultValue.phpt
++++ b/ext/reflection/tests/ReflectionProperty_getDefaultValue.phpt
+@@ -5,7 +5,6 @@ reflection: ReflectionProperty::getDefaultValue
+ 
+ define('FOO', 42);
+ 
+-#[AllowDynamicProperties]
+ class TestClass
+ {
+     public $foo;
+diff --git a/ext/reflection/tests/ReflectionProperty_hasDefaultValue.phpt b/ext/reflection/tests/ReflectionProperty_hasDefaultValue.phpt
+index d5fad620..57090003 100644
+--- a/ext/reflection/tests/ReflectionProperty_hasDefaultValue.phpt
++++ b/ext/reflection/tests/ReflectionProperty_hasDefaultValue.phpt
+@@ -3,7 +3,6 @@ reflection: ReflectionProperty::hasDefaultValue
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class TestClass
+ {
+     public $foo;
+diff --git a/ext/reflection/tests/ReflectionProperty_isInitialized.phpt b/ext/reflection/tests/ReflectionProperty_isInitialized.phpt
+index 2ba6ff43..cf0903d9 100644
+--- a/ext/reflection/tests/ReflectionProperty_isInitialized.phpt
++++ b/ext/reflection/tests/ReflectionProperty_isInitialized.phpt
+@@ -3,7 +3,6 @@ Test ReflectionProperty::isInitialized()
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class A {
+     public static ?string $ssv = null;
+     public static ?string $ss;
+diff --git a/ext/reflection/tests/ReflectionProperty_setValue_error.phpt b/ext/reflection/tests/ReflectionProperty_setValue_error.phpt
+index 287a0367..24fd8d1a 100644
+--- a/ext/reflection/tests/ReflectionProperty_setValue_error.phpt
++++ b/ext/reflection/tests/ReflectionProperty_setValue_error.phpt
+@@ -11,7 +11,6 @@ class TestClass {
+     private $priv = "keepOut";
+ }
+ 
+-#[AllowDynamicProperties]
+ class AnotherClass {
+ }
+ 
+diff --git a/ext/reflection/tests/types/ReflectionType_001.phpt b/ext/reflection/tests/ReflectionType_001.phpt
+similarity index 98%
+rename from ext/reflection/tests/types/ReflectionType_001.phpt
+rename to ext/reflection/tests/ReflectionType_001.phpt
+index b4baf535..d0f327d0 100644
+--- a/ext/reflection/tests/types/ReflectionType_001.phpt
++++ b/ext/reflection/tests/ReflectionType_001.phpt
+@@ -80,6 +80,7 @@ class PropTypeTest {
+     public int $int;
+     public string $string;
+     public array $arr;
++    public iterable $iterable;
+     public stdClass $std;
+     public OtherThing $other;
+     public $mixed;
+@@ -215,6 +216,7 @@ string(4) "Test"
+ public int $int;
+ public string $string;
+ public array $arr;
++public iterable $iterable;
+ public stdClass $std;
+ public OtherThing $other;
+ public $mixed;
+diff --git a/ext/reflection/tests/types/ReflectionType_002.phpt b/ext/reflection/tests/ReflectionType_002.phpt
+similarity index 100%
+rename from ext/reflection/tests/types/ReflectionType_002.phpt
+rename to ext/reflection/tests/ReflectionType_002.phpt
+diff --git a/ext/reflection/tests/types/ReflectionType_possible_types.phpt b/ext/reflection/tests/ReflectionType_possible_types.phpt
+similarity index 83%
+rename from ext/reflection/tests/types/ReflectionType_possible_types.phpt
+rename to ext/reflection/tests/ReflectionType_possible_types.phpt
+index 45a2d438..ccb87254 100644
+--- a/ext/reflection/tests/types/ReflectionType_possible_types.phpt
++++ b/ext/reflection/tests/ReflectionType_possible_types.phpt
+@@ -11,9 +11,7 @@ $functions = [
+     function(): bool {},
+     function(): array {},
+     function(): callable {},
+-    function(): null {},
+-    function(): false {},
+-    function(): true {},
++    function(): iterable {},
+     function(): StdClass {}
+ ];
+ 
+@@ -31,7 +29,5 @@ string(6) "string"
+ string(4) "bool"
+ string(5) "array"
+ string(8) "callable"
+-string(4) "null"
+-string(5) "false"
+-string(4) "true"
++string(8) "iterable"
+ string(8) "StdClass"
+diff --git a/ext/reflection/tests/Reflection_getModifierNames_001.phpt b/ext/reflection/tests/Reflection_getModifierNames_001.phpt
+index e095e959..6506bce6 100644
+--- a/ext/reflection/tests/Reflection_getModifierNames_001.phpt
++++ b/ext/reflection/tests/Reflection_getModifierNames_001.phpt
+@@ -13,7 +13,6 @@ printModifiers(ReflectionProperty::IS_PUBLIC | ReflectionProperty::IS_READONLY);
+ printModifiers(ReflectionClass::IS_EXPLICIT_ABSTRACT);
+ printModifiers(ReflectionMethod::IS_ABSTRACT | ReflectionMethod::IS_FINAL);
+ printModifiers(ReflectionProperty::IS_PUBLIC | ReflectionProperty::IS_STATIC | ReflectionProperty::IS_READONLY);
+-printModifiers(ReflectionClass::IS_READONLY);
+ ?>
+ --EXPECT--
+ private
+@@ -22,4 +21,3 @@ public,readonly
+ abstract
+ abstract,final
+ public,static,readonly
+-readonly
+diff --git a/ext/reflection/tests/bug40431.phpt b/ext/reflection/tests/bug40431.phpt
+index 023810f4..41620a39 100644
+--- a/ext/reflection/tests/bug40431.phpt
++++ b/ext/reflection/tests/bug40431.phpt
+@@ -21,7 +21,6 @@ echo "=== 2nd test ===\n";
+ class test1 {
+ }
+ 
+-#[AllowDynamicProperties]
+ class test2 extends test1{
+ }
+ 
+@@ -39,7 +38,6 @@ var_dump($props[0]->isProtected());
+ 
+ echo "=== 3rd test ===\n";
+ 
+-#[AllowDynamicProperties]
+ class test3 {
+ }
+ 
+@@ -61,7 +59,6 @@ class test5 {
+     private $value = 1;
+ }
+ 
+-#[AllowDynamicProperties]
+ class test4 extends test5{
+ }
+ 
+diff --git a/ext/reflection/tests/bug46064.phpt b/ext/reflection/tests/bug46064.phpt
+index c866ee83..4a97b3b2 100644
+--- a/ext/reflection/tests/bug46064.phpt
++++ b/ext/reflection/tests/bug46064.phpt
+@@ -3,7 +3,6 @@ Bug #46064 (Exception when creating ReflectionProperty object on dynamicly creat
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class x {
+     public $zzz = 2;
+ }
+@@ -33,7 +32,6 @@ class test {
+     protected $a = 1;
+ }
+ 
+-#[AllowDynamicProperties]
+ class bar extends test {
+     public function __construct() {
+         $this->foobar = 2;
+diff --git a/ext/reflection/tests/bug46064_2.phpt b/ext/reflection/tests/bug46064_2.phpt
+index 623b6743..f1aac5b5 100644
+--- a/ext/reflection/tests/bug46064_2.phpt
++++ b/ext/reflection/tests/bug46064_2.phpt
+@@ -3,7 +3,6 @@ Bug #46064.2 (Exception when creating ReflectionProperty object on dynamicly cre
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class foo {
+ }
+ 
+@@ -15,7 +14,6 @@ $p = new ReflectionObject($x);
+ var_dump($p->getProperty('test'));
+ 
+ 
+-#[AllowDynamicProperties]
+ class bar {
+     public function __construct() {
+         $this->a = 1;
+diff --git a/ext/reflection/tests/bug53366.phpt b/ext/reflection/tests/bug53366.phpt
+index e2bc250e..61493d53 100644
+--- a/ext/reflection/tests/bug53366.phpt
++++ b/ext/reflection/tests/bug53366.phpt
+@@ -3,7 +3,6 @@ Bug #53366 (Reflection doesn't get dynamic property value from getProperty())
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class UserClass {
+ }
+ 
+diff --git a/ext/reflection/tests/bug72661.phpt b/ext/reflection/tests/bug72661.phpt
+new file mode 100644
+index 00000000..b1cb764b
+--- /dev/null
++++ b/ext/reflection/tests/bug72661.phpt
+@@ -0,0 +1,10 @@
++--TEST--
++Bug #72661 (ReflectionType::__toString crashes with iterable)
++--FILE--
++<?php
++function test(iterable $arg) { }
++
++var_dump((string)(new ReflectionParameter("test", 0))->getType());
++?>
++--EXPECT--
++string(8) "iterable"
+diff --git a/ext/reflection/tests/bug79820.phpt b/ext/reflection/tests/bug79820.phpt
+index 3fa7871e..ff81f0e7 100644
+--- a/ext/reflection/tests/bug79820.phpt
++++ b/ext/reflection/tests/bug79820.phpt
+@@ -3,7 +3,6 @@ Bug #79820: Use after free when type duplicated into ReflectionProperty gets res
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public stdClass $prop;
+ }
+diff --git a/ext/reflection/tests/bug80370.phpt b/ext/reflection/tests/bug80370.phpt
+index e1131d43..41d01c2e 100644
+--- a/ext/reflection/tests/bug80370.phpt
++++ b/ext/reflection/tests/bug80370.phpt
+@@ -2,7 +2,6 @@
+ Bug #80370: Segfault on ReflectionProperty::getAttributes of dynamic property
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Foobar {
+ 
+ }
+diff --git a/ext/reflection/tests/types/intersection_types.phpt b/ext/reflection/tests/intersection_types.phpt
+similarity index 100%
+rename from ext/reflection/tests/types/intersection_types.phpt
+rename to ext/reflection/tests/intersection_types.phpt
+diff --git a/ext/reflection/tests/iterable_Reflection.phpt b/ext/reflection/tests/iterable_Reflection.phpt
+deleted file mode 100644
+index 0a8a30a6..00000000
+--- a/ext/reflection/tests/iterable_Reflection.phpt
++++ /dev/null
+@@ -1,98 +0,0 @@
+---TEST--
+-iterable Type in Reflection
+---FILE--
+-<?php
+-
+-$function = function(iterable $arg): iterable {};
+-
+-$paramType = (new ReflectionParameter($function, 0))->getType();
+-var_dump($paramType::class);
+-var_dump($paramType);
+-var_dump($paramType->getName());
+-var_dump((string) $paramType);
+-var_dump($paramType->isBuiltin());
+-
+-$reflectionFunc = new ReflectionFunction($function);
+-$returnType = $reflectionFunc->getReturnType();
+-var_dump($returnType::class);
+-var_dump($returnType);
+-var_dump($returnType->getName());
+-var_dump((string) $returnType);
+-var_dump($returnType->isBuiltin());
+-
+-class PropIterableTypeTest {
+-    public iterable $iterable;
+-    public ?iterable $nullableIterable;
+-    public array $control;
+-    public ?array $nullableControl;
+-}
+-
+-$reflector = new ReflectionClass(PropIterableTypeTest::class);
+-
+-[$property, $nullable, $control, $nullableControl] = $reflector->getProperties();
+-$iterableType = $property->getType();
+-var_dump($iterableType::class);
+-var_dump($iterableType);
+-var_dump($iterableType->getName());
+-var_dump((string) $iterableType);
+-var_dump($iterableType->isBuiltin());
+-
+-$nullableIterableType = $nullable->getType();
+-var_dump($nullableIterableType::class);
+-var_dump($nullableIterableType);
+-var_dump($nullableIterableType->getName());
+-var_dump((string) $nullableIterableType);
+-var_dump($nullableIterableType->isBuiltin());
+-
+-$controlType = $control->getType();
+-var_dump($controlType::class);
+-var_dump($controlType);
+-var_dump($controlType->getName());
+-var_dump((string) $controlType);
+-var_dump($controlType->isBuiltin());
+-
+-$nullableControlType = $nullableControl->getType();
+-var_dump($nullableControlType::class);
+-var_dump($nullableControlType);
+-var_dump($nullableControlType->getName());
+-var_dump((string) $nullableControlType);
+-var_dump($nullableControlType->isBuiltin());
+-
+-?>
+---EXPECTF--
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(9) "?iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(5) "array"
+-string(5) "array"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(5) "array"
+-string(6) "?array"
+-bool(true)
+diff --git a/ext/reflection/tests/types/mixed_type.phpt b/ext/reflection/tests/mixed_type.phpt
+similarity index 100%
+rename from ext/reflection/tests/types/mixed_type.phpt
+rename to ext/reflection/tests/mixed_type.phpt
+diff --git a/ext/reflection/tests/property_exists.phpt b/ext/reflection/tests/property_exists.phpt
+index 879b9c4a..3af7bc4c 100644
+--- a/ext/reflection/tests/property_exists.phpt
++++ b/ext/reflection/tests/property_exists.phpt
+@@ -3,7 +3,6 @@ Reflection and property_exists()
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class A
+ {
+     public    $a = 1;
+diff --git a/ext/reflection/tests/readonly_class.phpt b/ext/reflection/tests/readonly_class.phpt
+deleted file mode 100644
+index dd685b90..00000000
+--- a/ext/reflection/tests/readonly_class.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Readonly class reflection
+---FILE--
+-<?php
+-
+-class Foo {
+-}
+-
+-readonly class Bar {
+-}
+-
+-$foo = new ReflectionClass(Foo::class);
+-var_dump($foo->isReadOnly());
+-var_dump(($foo->getModifiers() & ReflectionClass::IS_READONLY) != 0);
+-
+-$bar = new ReflectionClass(Bar::class);
+-var_dump($bar->isReadOnly());
+-var_dump(($bar->getModifiers() & ReflectionClass::IS_READONLY) != 0);
+-
+-?>
+---EXPECT--
+-bool(false)
+-bool(false)
+-bool(true)
+-bool(true)
+diff --git a/ext/reflection/tests/types/dnf_types.phpt b/ext/reflection/tests/types/dnf_types.phpt
+deleted file mode 100644
+index 46f3ab0f..00000000
+--- a/ext/reflection/tests/types/dnf_types.phpt
++++ /dev/null
+@@ -1,85 +0,0 @@
+---TEST--
+-Disjunctive Normal Form types in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-            echo $str_indent . "  Allows Null: " . json_encode($type->allowsNull()) . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function test1(): (X&Y)|(Z&Traversable)|Countable { }
+-
+-class Test {
+-    public (X&Y)|Countable $prop;
+-}
+-
+-dumpType((new ReflectionFunction('test1'))->getReturnType());
+-
+-$rc = new ReflectionClass(Test::class);
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-/* Force CE resolution of the property type */
+-
+-interface y {}
+-class x implements Y, Countable {
+-    public function count(): int { return 0; }
+-}
+-$test = new Test;
+-$test->prop = new x;
+-
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|(Z&Traversable)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Type Z&Traversable is ReflectionIntersectionType:
+-    Name: Z
+-    String: Z
+-    Allows Null: false
+-    Name: Traversable
+-    String: Traversable
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type (X&Y)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type (X&Y)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+diff --git a/ext/reflection/tests/types/dnf_types_with_null.phpt b/ext/reflection/tests/types/dnf_types_with_null.phpt
+deleted file mode 100644
+index ade21993..00000000
+--- a/ext/reflection/tests/types/dnf_types_with_null.phpt
++++ /dev/null
+@@ -1,81 +0,0 @@
+---TEST--
+-Disjunctive Normal Form types in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    echo $str_indent . "Allows Null: " . json_encode($rt->allowsNull()) . "\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function test1(): (X&Y)|(Z&Traversable)|null { }
+-
+-class Test {
+-    public (X&Y)|null $prop;
+-}
+-
+-dumpType((new ReflectionFunction('test1'))->getReturnType());
+-
+-$rc = new ReflectionClass(Test::class);
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-/* Force CE resolution of the property type */
+-
+-interface y {}
+-class x implements Y, Countable {
+-    public function count(): int { return 0; }
+-}
+-$test = new Test;
+-$test->prop = new x;
+-
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|(Z&Traversable)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Type Z&Traversable is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: Z
+-    String: Z
+-    Name: Traversable
+-    String: Traversable
+-  Name: null
+-  String: null
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null
+diff --git a/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt b/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt
+deleted file mode 100644
+index de2474cf..00000000
+--- a/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt
++++ /dev/null
+@@ -1,37 +0,0 @@
+---TEST--
+-Intersection type which is implicitly nullable should be a DNF type in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    echo $str_indent . "Allows Null: " . json_encode($rt->allowsNull()) . "\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-dumpType((new ReflectionFunction('foo'))->getParameters()[0]->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null
+diff --git a/ext/reflection/tests/types/union_types.phpt b/ext/reflection/tests/union_types.phpt
+similarity index 59%
+rename from ext/reflection/tests/types/union_types.phpt
+rename to ext/reflection/tests/union_types.phpt
+index 22de6b8d..8dbbbdab 100644
+--- a/ext/reflection/tests/types/union_types.phpt
++++ b/ext/reflection/tests/union_types.phpt
+@@ -13,20 +13,8 @@ function dumpType(ReflectionUnionType $rt) {
+     }
+ }
+ 
+-function dumpBCType(ReflectionNamedType $rt) {
+-    echo "Type $rt:\n";
+-    echo "  Name: " . $rt->getName() . "\n";
+-    echo "  String: " . (string) $rt . "\n";
+-    echo "  Allows Null: " . ($rt->allowsNull() ? "true" : "false") . "\n";
+-}
+-
+ function test1(): X|Y|int|float|false|null { }
+ function test2(): X|iterable|bool { }
+-function test3(): null|false { }
+-function test4(): ?false { }
+-function test5(): X|iterable|true { }
+-function test6(): null|true { }
+-function test7(): ?true { }
+ 
+ class Test {
+     public X|Y|int $prop;
+@@ -34,11 +22,6 @@ class Test {
+ 
+ dumpType((new ReflectionFunction('test1'))->getReturnType());
+ dumpType((new ReflectionFunction('test2'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test3'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test4'))->getReturnType());
+-dumpType((new ReflectionFunction('test5'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test6'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test7'))->getReturnType());
+ 
+ $rc = new ReflectionClass(Test::class);
+ $rp = $rc->getProperty('prop');
+@@ -81,50 +64,17 @@ Allows null: true
+   Name: null
+   String: null
+   Allows Null: true
+-Type X|Traversable|array|bool:
++Type X|iterable|bool:
+ Allows null: false
+   Name: X
+   String: X
+   Allows Null: false
+-  Name: Traversable
+-  String: Traversable
+-  Allows Null: false
+-  Name: array
+-  String: array
++  Name: iterable
++  String: iterable
+   Allows Null: false
+   Name: bool
+   String: bool
+   Allows Null: false
+-Type ?false:
+-  Name: false
+-  String: ?false
+-  Allows Null: true
+-Type ?false:
+-  Name: false
+-  String: ?false
+-  Allows Null: true
+-Type X|Traversable|array|true:
+-Allows null: false
+-  Name: X
+-  String: X
+-  Allows Null: false
+-  Name: Traversable
+-  String: Traversable
+-  Allows Null: false
+-  Name: array
+-  String: array
+-  Allows Null: false
+-  Name: true
+-  String: true
+-  Allows Null: false
+-Type ?true:
+-  Name: true
+-  String: ?true
+-  Allows Null: true
+-Type ?true:
+-  Name: true
+-  String: ?true
+-  Allows Null: true
+ Type X|Y|int:
+ Allows null: false
+   Name: X
+diff --git a/ext/session/mod_files.c b/ext/session/mod_files.c
+index e640f96f..e774de74 100644
+--- a/ext/session/mod_files.c
++++ b/ext/session/mod_files.c
+@@ -89,8 +89,9 @@
+ #endif
+ 
+ typedef struct {
+-	zend_string *last_key;
+-	zend_string *basedir;
++	char *lastkey;
++	char *basedir;
++	size_t basedir_len;
+ 	size_t dirdepth;
+ 	size_t st_size;
+ 	int filemode;
+@@ -103,20 +104,22 @@ const ps_module ps_mod_files = {
+ };
+ 
+ 
+-static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, const zend_string *key)
++static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, const char *key)
+ {
++	size_t key_len;
+ 	const char *p;
+ 	int i;
+ 	size_t n;
+ 
+-	if (!data || ZSTR_LEN(key) <= data->dirdepth ||
+-		buflen < (ZSTR_LEN(data->basedir) + 2 * data->dirdepth + ZSTR_LEN(key) + 5 + sizeof(FILE_PREFIX))) {
++	key_len = strlen(key);
++	if (!data || key_len <= data->dirdepth ||
++		buflen < (strlen(data->basedir) + 2 * data->dirdepth + key_len + 5 + sizeof(FILE_PREFIX))) {
+ 		return NULL;
+ 	}
+ 
+-	p = ZSTR_VAL(key);
+-	memcpy(buf, ZSTR_VAL(data->basedir), ZSTR_LEN(data->basedir));
+-	n = ZSTR_LEN(data->basedir);
++	p = key;
++	memcpy(buf, data->basedir, data->basedir_len);
++	n = data->basedir_len;
+ 	buf[n++] = PHP_DIR_SEPARATOR;
+ 	for (i = 0; i < (int)data->dirdepth; i++) {
+ 		buf[n++] = *p++;
+@@ -124,8 +127,8 @@ static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, cons
+ 	}
+ 	memcpy(buf + n, FILE_PREFIX, sizeof(FILE_PREFIX) - 1);
+ 	n += sizeof(FILE_PREFIX) - 1;
+-	memcpy(buf + n, ZSTR_VAL(key), ZSTR_LEN(key));
+-	n += ZSTR_LEN(key);
++	memcpy(buf + n, key, key_len);
++	n += key_len;
+ 	buf[n] = '\0';
+ 
+ 	return buf;
+@@ -148,23 +151,23 @@ static void ps_files_close(ps_files *data)
+ 	}
+ }
+ 
+-static void ps_files_open(ps_files *data, /* const */ zend_string *key)
++static void ps_files_open(ps_files *data, const char *key)
+ {
+ 	char buf[MAXPATHLEN];
+ #if !defined(O_NOFOLLOW) || !defined(PHP_WIN32)
+-    struct stat sbuf = {0};
++    struct stat sbuf;
+ #endif
+ 	int ret;
+ 
+-	if (data->fd < 0 || !data->last_key || !zend_string_equals(key, data->last_key)) {
+-		if (data->last_key) {
+-			zend_string_release_ex(data->last_key, /* persistent */ false);
+-			data->last_key = NULL;
++	if (data->fd < 0 || !data->lastkey || strcmp(key, data->lastkey)) {
++		if (data->lastkey) {
++			efree(data->lastkey);
++			data->lastkey = NULL;
+ 		}
+ 
+ 		ps_files_close(data);
+ 
+-		if (php_session_valid_key(ZSTR_VAL(key)) == FAILURE) {
++		if (php_session_valid_key(key) == FAILURE) {
+ 			php_error_docref(NULL, E_WARNING, "Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, \"-\", and \",\" characters are allowed");
+ 			return;
+ 		}
+@@ -174,7 +177,7 @@ static void ps_files_open(ps_files *data, /* const */ zend_string *key)
+ 			return;
+ 		}
+ 
+-		data->last_key = zend_string_copy(key);
++		data->lastkey = estrdup(key);
+ 
+ 		/* O_NOFOLLOW to prevent us from following evil symlinks */
+ #ifdef O_NOFOLLOW
+@@ -223,14 +226,14 @@ static void ps_files_open(ps_files *data, /* const */ zend_string *key)
+ 	}
+ }
+ 
+-static zend_result ps_files_write(ps_files *data, zend_string *key, zend_string *val)
++static int ps_files_write(ps_files *data, zend_string *key, zend_string *val)
+ {
+ 	size_t n = 0;
+ 
+ 	/* PS(id) may be changed by calling session_regenerate_id().
+ 	   Re-initialization should be tried here. ps_files_open() checks
+-       data->last_key and reopen when it is needed. */
+-	ps_files_open(data, key);
++       data->lastkey and reopen when it is needed. */
++	ps_files_open(data, ZSTR_VAL(key));
+ 	if (data->fd < 0) {
+ 		return FAILURE;
+ 	}
+@@ -276,32 +279,35 @@ static zend_result ps_files_write(ps_files *data, zend_string *key, zend_string
+ 	return SUCCESS;
+ }
+ 
+-static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetime)
++static int ps_files_cleanup_dir(const char *dirname, zend_long maxlifetime)
+ {
+ 	DIR *dir;
+ 	struct dirent *entry;
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 	char buf[MAXPATHLEN];
+ 	time_t now;
+ 	int nrdels = 0;
++	size_t dirname_len;
+ 
+-	dir = opendir(ZSTR_VAL(dirname));
++	dir = opendir(dirname);
+ 	if (!dir) {
+-		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: opendir(%s) failed: %s (%d)", ZSTR_VAL(dirname), strerror(errno), errno);
++		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: opendir(%s) failed: %s (%d)", dirname, strerror(errno), errno);
+ 		return -1;
+ 	}
+ 
+ 	time(&now);
+ 
+-	if (ZSTR_LEN(dirname) >= MAXPATHLEN) {
+-		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: dirname(%s) is too long", ZSTR_VAL(dirname));
++	dirname_len = strlen(dirname);
++
++	if (dirname_len >= MAXPATHLEN) {
++		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: dirname(%s) is too long", dirname);
+ 		closedir(dir);
+ 		return -1;
+ 	}
+ 
+ 	/* Prepare buffer (dirname never changes) */
+-	memcpy(buf, ZSTR_VAL(dirname), ZSTR_LEN(dirname));
+-	buf[ZSTR_LEN(dirname)] = PHP_DIR_SEPARATOR;
++	memcpy(buf, dirname, dirname_len);
++	buf[dirname_len] = PHP_DIR_SEPARATOR;
+ 
+ 	while ((entry = readdir(dir))) {
+ 		/* does the file start with our prefix? */
+@@ -309,12 +315,12 @@ static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetim
+ 			size_t entry_len = strlen(entry->d_name);
+ 
+ 			/* does it fit into our buffer? */
+-			if (entry_len + ZSTR_LEN(dirname) + 2 < MAXPATHLEN) {
++			if (entry_len + dirname_len + 2 < MAXPATHLEN) {
+ 				/* create the full path.. */
+-				memcpy(buf + ZSTR_LEN(dirname) + 1, entry->d_name, entry_len);
++				memcpy(buf + dirname_len + 1, entry->d_name, entry_len);
+ 
+ 				/* NUL terminate it and */
+-				buf[ZSTR_LEN(dirname) + entry_len + 1] = '\0';
++				buf[dirname_len + entry_len + 1] = '\0';
+ 
+ 				/* check whether its last access was more than maxlifetime ago */
+ 				if (VCWD_STAT(buf, &sbuf) == 0 &&
+@@ -331,10 +337,10 @@ static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetim
+ 	return (nrdels);
+ }
+ 
+-static zend_result ps_files_key_exists(ps_files *data, const zend_string *key)
++static int ps_files_key_exists(ps_files *data, const char *key)
+ {
+ 	char buf[MAXPATHLEN];
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 
+ 	if (!key || !ps_files_path_create(buf, sizeof(buf), data, key)) {
+ 		return FAILURE;
+@@ -413,7 +419,8 @@ PS_OPEN_FUNC(files)
+ 	data->fd = -1;
+ 	data->dirdepth = dirdepth;
+ 	data->filemode = filemode;
+-	data->basedir = zend_string_init(save_path, strlen(save_path), /* persistent */ false);
++	data->basedir_len = strlen(save_path);
++	data->basedir = estrndup(save_path, data->basedir_len);
+ 
+ 	if (PS_GET_MOD_DATA()) {
+ 		ps_close_files(mod_data);
+@@ -440,12 +447,12 @@ PS_CLOSE_FUNC(files)
+ 
+ 	ps_files_close(data);
+ 
+-	if (data->last_key) {
+-		zend_string_release_ex(data->last_key, /* persistent */ false);
+-		data->last_key = NULL;
++	if (data->lastkey) {
++		efree(data->lastkey);
++		data->lastkey = NULL;
+ 	}
+ 
+-	zend_string_release_ex(data->basedir, /* persistent */ false);
++	efree(data->basedir);
+ 	efree(data);
+ 	PS_SET_MOD_DATA(NULL);
+ 
+@@ -466,10 +473,10 @@ PS_CLOSE_FUNC(files)
+ PS_READ_FUNC(files)
+ {
+ 	zend_long n = 0;
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 	PS_FILES_DATA;
+ 
+-	ps_files_open(data, key);
++	ps_files_open(data, ZSTR_VAL(key));
+ 	if (data->fd < 0) {
+ 		return FAILURE;
+ 	}
+@@ -564,7 +571,7 @@ PS_UPDATE_TIMESTAMP_FUNC(files)
+ 	int ret;
+ 	PS_FILES_DATA;
+ 
+-	if (!ps_files_path_create(buf, sizeof(buf), data, key)) {
++	if (!ps_files_path_create(buf, sizeof(buf), data, ZSTR_VAL(key))) {
+ 		return FAILURE;
+ 	}
+ 
+@@ -594,7 +601,7 @@ PS_DESTROY_FUNC(files)
+ 	char buf[MAXPATHLEN];
+ 	PS_FILES_DATA;
+ 
+-	if (!ps_files_path_create(buf, sizeof(buf), data, key)) {
++	if (!ps_files_path_create(buf, sizeof(buf), data, ZSTR_VAL(key))) {
+ 		return FAILURE;
+ 	}
+ 
+@@ -673,7 +680,7 @@ PS_CREATE_SID_FUNC(files)
+ 		}
+ 		/* Check collision */
+ 		/* FIXME: mod_data(data) should not be NULL (User handler could be NULL) */
+-		if (data && ps_files_key_exists(data, sid) == SUCCESS) {
++		if (data && ps_files_key_exists(data, ZSTR_VAL(sid)) == SUCCESS) {
+ 			if (sid) {
+ 				zend_string_release_ex(sid, 0);
+ 				sid = NULL;
+@@ -701,5 +708,5 @@ PS_VALIDATE_SID_FUNC(files)
+ {
+ 	PS_FILES_DATA;
+ 
+-	return ps_files_key_exists(data, key);
++	return ps_files_key_exists(data, ZSTR_VAL(key));
+ }
+diff --git a/ext/session/mod_mm.c b/ext/session/mod_mm.c
+index b997a2bd..baec6f5a 100644
+--- a/ext/session/mod_mm.c
++++ b/ext/session/mod_mm.c
+@@ -24,8 +24,8 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <fcntl.h>
+-#include <stdint.h>
+ 
++#include "php_stdint.h"
+ #include "php_session.h"
+ #include "mod_mm.h"
+ #include "SAPI.h"
+@@ -45,7 +45,7 @@ typedef struct ps_sd {
+ 	void *data;
+ 	size_t datalen;		/* amount of valid data */
+ 	size_t alloclen;	/* amount of allocated memory for data */
+-	zend_string *key;
++	char key[1];		/* inline key */
+ } ps_sd;
+ 
+ typedef struct {
+@@ -64,15 +64,14 @@ static ps_mm *ps_mm_instance = NULL;
+ # define ps_mm_debug(a)
+ #endif
+ 
+-static inline uint32_t ps_sd_hash(const zend_string *data)
++static inline uint32_t ps_sd_hash(const char *data, int len)
+ {
+ 	uint32_t h;
+-	const char *data_char = ZSTR_VAL(data);
+-	const char *e = ZSTR_VAL(data) + ZSTR_LEN(data);
++	const char *e = data + len;
+ 
+-	for (h = 2166136261U; data_char < e; ) {
++	for (h = 2166136261U; data < e; ) {
+ 		h *= 16777619;
+-		h ^= *data_char++;
++		h ^= *data++;
+ 	}
+ 
+ 	return h;
+@@ -107,19 +106,22 @@ static void hash_split(ps_mm *data)
+ 	data->hash_max = nmax;
+ }
+ 
+-static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
++static ps_sd *ps_sd_new(ps_mm *data, const char *key)
+ {
+ 	uint32_t hv, slot;
+ 	ps_sd *sd;
++	int keylen;
+ 
+-	sd = mm_malloc(data->mm, sizeof(ps_sd) + ZSTR_LEN(key));
++	keylen = strlen(key);
++
++	sd = mm_malloc(data->mm, sizeof(ps_sd) + keylen);
+ 	if (!sd) {
+ 
+ 		php_error_docref(NULL, E_WARNING, "mm_malloc failed, avail %ld, err %s", mm_available(data->mm), mm_error());
+ 		return NULL;
+ 	}
+ 
+-	hv = ps_sd_hash(key);
++	hv = ps_sd_hash(key, keylen);
+ 	slot = hv & data->hash_max;
+ 
+ 	sd->ctime = 0;
+@@ -127,7 +129,7 @@ static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
+ 	sd->data = NULL;
+ 	sd->alloclen = sd->datalen = 0;
+ 
+-	sd->key = zend_string_copy(key);
++	memcpy(sd->key, key, keylen + 1);
+ 
+ 	sd->next = data->hash[slot];
+ 	data->hash[slot] = sd;
+@@ -140,7 +142,7 @@ static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
+ 		}
+ 	}
+ 
+-	ps_mm_debug(("inserting %s(%p) into slot %d\n", ZSTR_VAL(key), sd, slot));
++	ps_mm_debug(("inserting %s(%p) into slot %d\n", key, sd, slot));
+ 
+ 	return sd;
+ }
+@@ -149,7 +151,7 @@ static void ps_sd_destroy(ps_mm *data, ps_sd *sd)
+ {
+ 	uint32_t slot;
+ 
+-	slot = ps_sd_hash(sd->key) & data->hash_max;
++	slot = ps_sd_hash(sd->key, strlen(sd->key)) & data->hash_max;
+ 
+ 	if (data->hash[slot] == sd) {
+ 		data->hash[slot] = sd->next;
+@@ -166,21 +168,20 @@ static void ps_sd_destroy(ps_mm *data, ps_sd *sd)
+ 	if (sd->data) {
+ 		mm_free(data->mm, sd->data);
+ 	}
+-	zend_string_release(sd->key);
+ 
+ 	mm_free(data->mm, sd);
+ }
+ 
+-static ps_sd *ps_sd_lookup(ps_mm *data, const zend_string *key, bool rw)
++static ps_sd *ps_sd_lookup(ps_mm *data, const char *key, int rw)
+ {
+ 	uint32_t hv, slot;
+ 	ps_sd *ret, *prev;
+ 
+-	hv = ps_sd_hash(key);
++	hv = ps_sd_hash(key, strlen(key));
+ 	slot = hv & data->hash_max;
+ 
+ 	for (prev = NULL, ret = data->hash[slot]; ret; prev = ret, ret = ret->next) {
+-		if (ret->hv == hv && zend_string_equals(ret->key, key)) {
++		if (ret->hv == hv && !strcmp(ret->key, key)) {
+ 			break;
+ 		}
+ 	}
+@@ -195,12 +196,12 @@ static ps_sd *ps_sd_lookup(ps_mm *data, const zend_string *key, bool rw)
+ 		data->hash[slot] = ret;
+ 	}
+ 
+-	ps_mm_debug(("lookup(%s): ret=%p,hv=%u,slot=%d\n", ZSTR_VAL(key), ret, hv, slot));
++	ps_mm_debug(("lookup(%s): ret=%p,hv=%u,slot=%d\n", key, ret, hv, slot));
+ 
+ 	return ret;
+ }
+ 
+-static zend_result ps_mm_key_exists(ps_mm *data, const zend_string *key)
++static int ps_mm_key_exists(ps_mm *data, const char *key)
+ {
+ 	ps_sd *sd;
+ 
+@@ -220,7 +221,7 @@ const ps_module ps_mod_mm = {
+ 
+ #define PS_MM_DATA ps_mm *data = PS_GET_MOD_DATA()
+ 
+-static zend_result ps_mm_initialize(ps_mm *data, const char *path)
++static int ps_mm_initialize(ps_mm *data, const char *path)
+ {
+ 	data->owner = getpid();
+ 	data->mm = mm_create(0, path);
+@@ -241,6 +242,7 @@ static zend_result ps_mm_initialize(ps_mm *data, const char *path)
+ 
+ static void ps_mm_destroy(ps_mm *data)
+ {
++	int h;
+ 	ps_sd *sd, *next;
+ 
+ 	/* This function is called during each module shutdown,
+@@ -250,7 +252,7 @@ static void ps_mm_destroy(ps_mm *data)
+ 		return;
+ 	}
+ 
+-	for (int h = 0; h < data->hash_max + 1; h++) {
++	for (h = 0; h < data->hash_max + 1; h++) {
+ 		for (sd = data->hash[h]; sd; sd = next) {
+ 			next = sd->next;
+ 			ps_sd_destroy(data, sd);
+@@ -264,11 +266,11 @@ static void ps_mm_destroy(ps_mm *data)
+ 
+ PHP_MINIT_FUNCTION(ps_mm)
+ {
+-	size_t save_path_len = strlen(PS(save_path));
+-	size_t mod_name_len = strlen(sapi_module.name);
+-	size_t euid_len;
++	int save_path_len = strlen(PS(save_path));
++	int mod_name_len = strlen(sapi_module.name);
++	int euid_len;
+ 	char *ps_mm_path, euid[30];
+-	zend_result ret;
++	int ret;
+ 
+ 	ps_mm_instance = calloc(sizeof(*ps_mm_instance), 1);
+ 	if (!ps_mm_instance) {
+@@ -300,7 +302,7 @@ PHP_MINIT_FUNCTION(ps_mm)
+ 
+ 	efree(ps_mm_path);
+ 
+-	if (ret == FAILURE) {
++	if (ret != SUCCESS) {
+ 		free(ps_mm_instance);
+ 		ps_mm_instance = NULL;
+ 		return FAILURE;
+@@ -342,13 +344,13 @@ PS_READ_FUNC(mm)
+ {
+ 	PS_MM_DATA;
+ 	ps_sd *sd;
+-	zend_result ret = FAILURE;
++	int ret = FAILURE;
+ 
+ 	mm_lock(data->mm, MM_LOCK_RD);
+ 
+ 	/* If there is an ID and strict mode, verify existence */
+ 	if (PS(use_strict_mode)
+-		&& ps_mm_key_exists(data, key) == FAILURE) {
++		&& ps_mm_key_exists(data, key->val) == FAILURE) {
+ 		/* key points to PS(id), but cannot change here. */
+ 		if (key) {
+ 			efree(PS(id));
+@@ -365,7 +367,7 @@ PS_READ_FUNC(mm)
+ 		PS(session_status) = php_session_active;
+ 	}
+ 
+-	sd = ps_sd_lookup(data, PS(id), 0);
++	sd = ps_sd_lookup(data, PS(id)->val, 0);
+ 	if (sd) {
+ 		*val = zend_string_init(sd->data, sd->datalen, 0);
+ 		ret = SUCCESS;
+@@ -383,10 +385,10 @@ PS_WRITE_FUNC(mm)
+ 
+ 	mm_lock(data->mm, MM_LOCK_RW);
+ 
+-	sd = ps_sd_lookup(data, key, 1);
++	sd = ps_sd_lookup(data, key->val, 1);
+ 	if (!sd) {
+-		sd = ps_sd_new(data, key);
+-		ps_mm_debug(("new entry for %s\n", ZSTR_VAL(key)));
++		sd = ps_sd_new(data, key->val);
++		ps_mm_debug(("new entry for %s\n", key->val));
+ 	}
+ 
+ 	if (sd) {
+@@ -422,7 +424,7 @@ PS_DESTROY_FUNC(mm)
+ 
+ 	mm_lock(data->mm, MM_LOCK_RW);
+ 
+-	sd = ps_sd_lookup(data, key, 0);
++	sd = ps_sd_lookup(data, key->val, 0);
+ 	if (sd) {
+ 		ps_sd_destroy(data, sd);
+ 	}
+@@ -453,7 +455,7 @@ PS_GC_FUNC(mm)
+ 		for (sd = *ohash; sd; sd = next) {
+ 			next = sd->next;
+ 			if (sd->ctime < limit) {
+-				ps_mm_debug(("purging %s\n", ZSTR_VAL(sd->key)));
++				ps_mm_debug(("purging %s\n", sd->key));
+ 				ps_sd_destroy(data, sd);
+ 				(*nrdels)++;
+ 			}
+@@ -474,7 +476,7 @@ PS_CREATE_SID_FUNC(mm)
+ 	do {
+ 		sid = php_session_create_id((void **)&data);
+ 		/* Check collision */
+-		if (ps_mm_key_exists(data, sid) == SUCCESS) {
++		if (ps_mm_key_exists(data, sid->val) == SUCCESS) {
+ 			if (sid) {
+ 				zend_string_release_ex(sid, 0);
+ 				sid = NULL;
+diff --git a/ext/session/mod_user.c b/ext/session/mod_user.c
+index 005e6d06..214275db 100644
+--- a/ext/session/mod_user.c
++++ b/ext/session/mod_user.c
+@@ -47,7 +47,7 @@ static void ps_call_handler(zval *func, int argc, zval *argv, zval *retval)
+ 
+ #define STDVARS								\
+ 	zval retval;							\
+-	zend_result ret = FAILURE
++	int ret = FAILURE
+ 
+ #define PSF(a) PS(mod_user_names).name.ps_##a
+ 
+diff --git a/ext/session/mod_user_class.c b/ext/session/mod_user_class.c
+index d5b71da5..1332ecdd 100644
+--- a/ext/session/mod_user_class.c
++++ b/ext/session/mod_user_class.c
+@@ -39,7 +39,7 @@ PHP_METHOD(SessionHandler, open)
+ {
+ 	char *save_path = NULL, *session_name = NULL;
+ 	size_t save_path_len, session_name_len;
+-	zend_result ret;
++	int ret;
+ 
+ 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ss", &save_path, &save_path_len, &session_name, &session_name_len) == FAILURE) {
+ 		RETURN_THROWS();
+@@ -56,14 +56,14 @@ PHP_METHOD(SessionHandler, open)
+ 		zend_bailout();
+ 	} zend_end_try();
+ 
+-	RETURN_BOOL(SUCCESS == ret);
++	RETVAL_BOOL(SUCCESS == ret);
+ }
+ /* }}} */
+ 
+ /* {{{ Wraps the old close handler */
+ PHP_METHOD(SessionHandler, close)
+ {
+-	zend_result ret;
++	int ret;
+ 
+ 	// don't return on failure, since not closing the default handler
+ 	// could result in memory leaks or other nasties
+@@ -80,7 +80,7 @@ PHP_METHOD(SessionHandler, close)
+ 		zend_bailout();
+ 	} zend_end_try();
+ 
+-	RETURN_BOOL(SUCCESS == ret);
++	RETVAL_BOOL(SUCCESS == ret);
+ }
+ /* }}} */
+ 
+diff --git a/ext/session/php_session.h b/ext/session/php_session.h
+index 31b96340..bc8c3548 100644
+--- a/ext/session/php_session.h
++++ b/ext/session/php_session.h
+@@ -39,29 +39,29 @@
+ 
+ typedef struct ps_module_struct {
+ 	const char *s_name;
+-	zend_result (*s_open)(PS_OPEN_ARGS);
+-	zend_result (*s_close)(PS_CLOSE_ARGS);
+-	zend_result (*s_read)(PS_READ_ARGS);
+-	zend_result (*s_write)(PS_WRITE_ARGS);
+-	zend_result (*s_destroy)(PS_DESTROY_ARGS);
++	int (*s_open)(PS_OPEN_ARGS);
++	int (*s_close)(PS_CLOSE_ARGS);
++	int (*s_read)(PS_READ_ARGS);
++	int (*s_write)(PS_WRITE_ARGS);
++	int (*s_destroy)(PS_DESTROY_ARGS);
+ 	zend_long (*s_gc)(PS_GC_ARGS);
+ 	zend_string *(*s_create_sid)(PS_CREATE_SID_ARGS);
+-	zend_result (*s_validate_sid)(PS_VALIDATE_SID_ARGS);
+-	zend_result (*s_update_timestamp)(PS_UPDATE_TIMESTAMP_ARGS);
++	int (*s_validate_sid)(PS_VALIDATE_SID_ARGS);
++	int (*s_update_timestamp)(PS_UPDATE_TIMESTAMP_ARGS);
+ } ps_module;
+ 
+ #define PS_GET_MOD_DATA() *mod_data
+ #define PS_SET_MOD_DATA(a) *mod_data = (a)
+ 
+-#define PS_OPEN_FUNC(x) 	zend_result ps_open_##x(PS_OPEN_ARGS)
+-#define PS_CLOSE_FUNC(x) 	zend_result ps_close_##x(PS_CLOSE_ARGS)
+-#define PS_READ_FUNC(x) 	zend_result ps_read_##x(PS_READ_ARGS)
+-#define PS_WRITE_FUNC(x) 	zend_result ps_write_##x(PS_WRITE_ARGS)
+-#define PS_DESTROY_FUNC(x) 	zend_result ps_delete_##x(PS_DESTROY_ARGS)
++#define PS_OPEN_FUNC(x) 	int ps_open_##x(PS_OPEN_ARGS)
++#define PS_CLOSE_FUNC(x) 	int ps_close_##x(PS_CLOSE_ARGS)
++#define PS_READ_FUNC(x) 	int ps_read_##x(PS_READ_ARGS)
++#define PS_WRITE_FUNC(x) 	int ps_write_##x(PS_WRITE_ARGS)
++#define PS_DESTROY_FUNC(x) 	int ps_delete_##x(PS_DESTROY_ARGS)
+ #define PS_GC_FUNC(x) 		zend_long ps_gc_##x(PS_GC_ARGS)
+ #define PS_CREATE_SID_FUNC(x)	zend_string *ps_create_sid_##x(PS_CREATE_SID_ARGS)
+-#define PS_VALIDATE_SID_FUNC(x)	zend_result ps_validate_sid_##x(PS_VALIDATE_SID_ARGS)
+-#define PS_UPDATE_TIMESTAMP_FUNC(x) 	zend_result ps_update_timestamp_##x(PS_UPDATE_TIMESTAMP_ARGS)
++#define PS_VALIDATE_SID_FUNC(x)	int ps_validate_sid_##x(PS_VALIDATE_SID_ARGS)
++#define PS_UPDATE_TIMESTAMP_FUNC(x) 	int ps_update_timestamp_##x(PS_UPDATE_TIMESTAMP_ARGS)
+ 
+ /* Legacy save handler module definitions */
+ #define PS_FUNCS(x) \
+@@ -174,9 +174,8 @@ typedef struct _php_ps_globals {
+ 			zval ps_update_timestamp;
+ 		} name;
+ 	} mod_user_names;
+-	bool mod_user_implemented;
+-	bool mod_user_is_open;
+-	zend_string *mod_user_class_name;
++	int mod_user_implemented;
++	int mod_user_is_open;
+ 	const struct ps_serializer_struct *serializer;
+ 	zval http_session_vars;
+ 	bool auto_start;
+@@ -186,8 +185,8 @@ typedef struct _php_ps_globals {
+ 
+ 	zend_long sid_length;
+ 	zend_long sid_bits_per_character;
+-	bool send_cookie;
+-	bool define_sid;
++	int send_cookie;
++	int define_sid;
+ 
+ 	php_session_rfc1867_progress *rfc1867_progress;
+ 	bool rfc1867_enabled; /* session.upload_progress.enabled */
+@@ -224,7 +223,7 @@ ZEND_TSRMLS_CACHE_EXTERN()
+ typedef struct ps_serializer_struct {
+ 	const char *name;
+ 	zend_string *(*encode)(PS_SERIALIZER_ENCODE_ARGS);
+-	zend_result (*decode)(PS_SERIALIZER_DECODE_ARGS);
++	int (*decode)(PS_SERIALIZER_DECODE_ARGS);
+ } ps_serializer;
+ 
+ #define PS_SERIALIZER_ENCODE_NAME(x) ps_srlzr_encode_##x
+@@ -233,7 +232,7 @@ typedef struct ps_serializer_struct {
+ #define PS_SERIALIZER_ENCODE_FUNC(x) \
+ 	zend_string *PS_SERIALIZER_ENCODE_NAME(x)(PS_SERIALIZER_ENCODE_ARGS)
+ #define PS_SERIALIZER_DECODE_FUNC(x) \
+-	zend_result PS_SERIALIZER_DECODE_NAME(x)(PS_SERIALIZER_DECODE_ARGS)
++	int PS_SERIALIZER_DECODE_NAME(x)(PS_SERIALIZER_DECODE_ARGS)
+ 
+ #define PS_SERIALIZER_FUNCS(x) \
+ 	PS_SERIALIZER_ENCODE_FUNC(x); \
+@@ -245,30 +244,30 @@ typedef struct ps_serializer_struct {
+ /* default create id function */
+ PHPAPI zend_string *php_session_create_id(PS_CREATE_SID_ARGS);
+ /* Dummy PS module functions */
+-PHPAPI zend_result php_session_validate_sid(PS_VALIDATE_SID_ARGS);
+-PHPAPI zend_result php_session_update_timestamp(PS_UPDATE_TIMESTAMP_ARGS);
++PHPAPI int php_session_validate_sid(PS_VALIDATE_SID_ARGS);
++PHPAPI int php_session_update_timestamp(PS_UPDATE_TIMESTAMP_ARGS);
+ 
+ PHPAPI void session_adapt_url(const char *url, size_t url_len, char **new_url, size_t *new_len);
+ 
+-PHPAPI zend_result php_session_destroy(void);
++PHPAPI int php_session_destroy(void);
+ PHPAPI void php_add_session_var(zend_string *name);
+ PHPAPI zval *php_set_session_var(zend_string *name, zval *state_val, php_unserialize_data_t *var_hash);
+ PHPAPI zval *php_get_session_var(zend_string *name);
+ 
+-PHPAPI zend_result php_session_register_module(const ps_module *);
++PHPAPI int php_session_register_module(const ps_module *);
+ 
+-PHPAPI zend_result php_session_register_serializer(const char *name,
++PHPAPI int php_session_register_serializer(const char *name,
+ 	        zend_string *(*encode)(PS_SERIALIZER_ENCODE_ARGS),
+-	        zend_result (*decode)(PS_SERIALIZER_DECODE_ARGS));
++	        int (*decode)(PS_SERIALIZER_DECODE_ARGS));
+ 
+-PHPAPI zend_result php_session_start(void);
+-PHPAPI zend_result php_session_flush(int write);
++PHPAPI int php_session_start(void);
++PHPAPI int php_session_flush(int write);
+ 
+ PHPAPI const ps_module *_php_find_ps_module(const char *name);
+ PHPAPI const ps_serializer *_php_find_ps_serializer(const char *name);
+ 
+-PHPAPI zend_result php_session_valid_key(const char *key);
+-PHPAPI zend_result php_session_reset_id(void);
++PHPAPI int php_session_valid_key(const char *key);
++PHPAPI int php_session_reset_id(void);
+ 
+ #define PS_ADD_VARL(name) do {										\
+ 	php_add_session_var(name);							\
+diff --git a/ext/session/session.c b/ext/session/session.c
+index 69984321..114df24b 100644
+--- a/ext/session/session.c
++++ b/ext/session/session.c
+@@ -37,15 +37,16 @@
+ #include "php_variables.h"
+ #include "php_session.h"
+ #include "session_arginfo.h"
++#include "ext/standard/php_random.h"
+ #include "ext/standard/php_var.h"
+ #include "ext/date/php_date.h"
++#include "ext/standard/php_lcg.h"
+ #include "ext/standard/url_scanner_ex.h"
+ #include "ext/standard/info.h"
+ #include "zend_smart_str.h"
+ #include "ext/standard/url.h"
+ #include "ext/standard/basic_functions.h"
+ #include "ext/standard/head.h"
+-#include "ext/random/php_random.h"
+ 
+ #include "mod_files.h"
+ #include "mod_user.h"
+@@ -144,20 +145,15 @@ static inline void php_rshutdown_session_globals(void) /* {{{ */
+ 		PS(session_vars) = NULL;
+ 	}
+ 
+-	if (PS(mod_user_class_name)) {
+-		zend_string_release(PS(mod_user_class_name));
+-		PS(mod_user_class_name) = NULL;
+-	}
+-
+ 	/* User save handlers may end up directly here by misuse, bugs in user script, etc. */
+ 	/* Set session status to prevent error while restoring save handler INI value. */
+ 	PS(session_status) = php_session_none;
+ }
+ /* }}} */
+ 
+-PHPAPI zend_result php_session_destroy(void) /* {{{ */
++PHPAPI int php_session_destroy(void) /* {{{ */
+ {
+-	zend_result retval = SUCCESS;
++	int retval = SUCCESS;
+ 
+ 	if (PS(session_status) != php_session_active) {
+ 		php_error_docref(NULL, E_WARNING, "Trying to destroy uninitialized session");
+@@ -246,7 +242,7 @@ static zend_string *php_session_encode(void) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result php_session_decode(zend_string *data) /* {{{ */
++static int php_session_decode(zend_string *data) /* {{{ */
+ {
+ 	if (!PS(serializer)) {
+ 		php_error_docref(NULL, E_WARNING, "Unknown session.serialize_handler. Failed to decode session object");
+@@ -333,12 +329,12 @@ PHPAPI zend_string *php_session_create_id(PS_CREATE_SID_ARGS) /* {{{ */
+ /* Default session id char validation function allowed by ps_modules.
+  * If you change the logic here, please also update the error message in
+  * ps_modules appropriately */
+-PHPAPI zend_result php_session_valid_key(const char *key) /* {{{ */
++PHPAPI int php_session_valid_key(const char *key) /* {{{ */
+ {
+ 	size_t len;
+ 	const char *p;
+ 	char c;
+-	zend_result ret = SUCCESS;
++	int ret = SUCCESS;
+ 
+ 	for (p = key; (c = *p); p++) {
+ 		/* valid characters are a..z,A..Z,0..9 */
+@@ -384,7 +380,7 @@ static zend_long php_session_gc(bool immediate) /* {{{ */
+ 	return num;
+ } /* }}} */
+ 
+-static zend_result php_session_initialize(void) /* {{{ */
++static int php_session_initialize(void) /* {{{ */
+ {
+ 	zend_string *val = NULL;
+ 
+@@ -474,13 +470,10 @@ static zend_result php_session_initialize(void) /* {{{ */
+ 
+ static void php_session_save_current_state(int write) /* {{{ */
+ {
+-	zend_result ret = FAILURE;
++	int ret = FAILURE;
+ 
+ 	if (write) {
+ 		IF_SESSION_VARS() {
+-			zend_string *handler_class_name = PS(mod_user_class_name);
+-			const char *handler_function_name;
+-
+ 			if (PS(mod_data) || PS(mod_user_implemented)) {
+ 				zend_string *val;
+ 
+@@ -492,15 +485,12 @@ static void php_session_save_current_state(int write) /* {{{ */
+ 						&& zend_string_equals(val, PS(session_vars))
+ 					) {
+ 						ret = PS(mod)->s_update_timestamp(&PS(mod_data), PS(id), val, PS(gc_maxlifetime));
+-						handler_function_name = handler_class_name != NULL ? "updateTimestamp" : "update_timestamp";
+ 					} else {
+ 						ret = PS(mod)->s_write(&PS(mod_data), PS(id), val, PS(gc_maxlifetime));
+-						handler_function_name = "write";
+ 					}
+ 					zend_string_release_ex(val, 0);
+ 				} else {
+ 					ret = PS(mod)->s_write(&PS(mod_data), PS(id), ZSTR_EMPTY_ALLOC(), PS(gc_maxlifetime));
+-					handler_function_name = "write";
+ 				}
+ 			}
+ 
+@@ -511,14 +501,9 @@ static void php_session_save_current_state(int write) /* {{{ */
+ 									 "is correct (%s)",
+ 									 PS(mod)->s_name,
+ 									 PS(save_path));
+-				} else if (handler_class_name != NULL) {
+-					php_error_docref(NULL, E_WARNING, "Failed to write session data using user "
+-									 "defined save handler. (session.save_path: %s, handler: %s::%s)", PS(save_path),
+-									 ZSTR_VAL(handler_class_name), handler_function_name);
+ 				} else {
+ 					php_error_docref(NULL, E_WARNING, "Failed to write session data using user "
+-									 "defined save handler. (session.save_path: %s, handler: %s)", PS(save_path),
+-									 handler_function_name);
++									 "defined save handler. (session.save_path: %s)", PS(save_path));
+ 				}
+ 			}
+ 		}
+@@ -616,6 +601,22 @@ static PHP_INI_MH(OnUpdateSerializer) /* {{{ */
+ }
+ /* }}} */
+ 
++static PHP_INI_MH(OnUpdateTransSid) /* {{{ */
++{
++	SESSION_CHECK_ACTIVE_STATE;
++	SESSION_CHECK_OUTPUT_STATE;
++
++	if (zend_string_equals_literal_ci(new_value, "on")) {
++		PS(use_trans_sid) = (bool) 1;
++	} else {
++		PS(use_trans_sid) = (bool) atoi(ZSTR_VAL(new_value));
++	}
++
++	return SUCCESS;
++}
++/* }}} */
++
++
+ static PHP_INI_MH(OnUpdateSaveDir) /* {{{ */
+ {
+ 	SESSION_CHECK_ACTIVE_STATE;
+@@ -710,8 +711,8 @@ static PHP_INI_MH(OnUpdateSessionString) /* {{{ */
+ 
+ static PHP_INI_MH(OnUpdateSessionBool) /* {{{ */
+ {
+-	SESSION_CHECK_ACTIVE_STATE;
+ 	SESSION_CHECK_OUTPUT_STATE;
++	SESSION_CHECK_ACTIVE_STATE;
+ 	return OnUpdateBool(entry, new_value, mh_arg1, mh_arg2, mh_arg3, stage);
+ }
+ /* }}} */
+@@ -722,8 +723,8 @@ static PHP_INI_MH(OnUpdateSidLength) /* {{{ */
+ 	zend_long val;
+ 	char *endptr = NULL;
+ 
+-	SESSION_CHECK_ACTIVE_STATE;
+ 	SESSION_CHECK_OUTPUT_STATE;
++	SESSION_CHECK_ACTIVE_STATE;
+ 	val = ZEND_STRTOL(ZSTR_VAL(new_value), &endptr, 10);
+ 	if (endptr && (*endptr == '\0')
+ 		&& val >= 22 && val <= PS_MAX_SID_LENGTH) {
+@@ -742,8 +743,8 @@ static PHP_INI_MH(OnUpdateSidBits) /* {{{ */
+ 	zend_long val;
+ 	char *endptr = NULL;
+ 
+-	SESSION_CHECK_ACTIVE_STATE;
+ 	SESSION_CHECK_OUTPUT_STATE;
++	SESSION_CHECK_ACTIVE_STATE;
+ 	val = ZEND_STRTOL(ZSTR_VAL(new_value), &endptr, 10);
+ 	if (endptr && (*endptr == '\0')
+ 		&& val >= 4 && val <=6) {
+@@ -757,6 +758,17 @@ static PHP_INI_MH(OnUpdateSidBits) /* {{{ */
+ }
+ /* }}} */
+ 
++
++static PHP_INI_MH(OnUpdateLazyWrite) /* {{{ */
++{
++	SESSION_CHECK_ACTIVE_STATE;
++	SESSION_CHECK_OUTPUT_STATE;
++	return OnUpdateBool(entry, new_value, mh_arg1, mh_arg2, mh_arg3, stage);
++}
++/* }}} */
++
++
++
+ static PHP_INI_MH(OnUpdateRfc1867Freq) /* {{{ */
+ {
+ 	int tmp = ZEND_ATOL(ZSTR_VAL(new_value));
+@@ -789,19 +801,19 @@ PHP_INI_BEGIN()
+ 	STD_PHP_INI_ENTRY("session.cookie_lifetime",    "0",         PHP_INI_ALL, OnUpdateCookieLifetime,cookie_lifetime,    php_ps_globals,    ps_globals)
+ 	STD_PHP_INI_ENTRY("session.cookie_path",        "/",         PHP_INI_ALL, OnUpdateSessionString, cookie_path,        php_ps_globals,    ps_globals)
+ 	STD_PHP_INI_ENTRY("session.cookie_domain",      "",          PHP_INI_ALL, OnUpdateSessionString, cookie_domain,      php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.cookie_secure",    "0",         PHP_INI_ALL, OnUpdateSessionBool,   cookie_secure,      php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.cookie_httponly",  "0",         PHP_INI_ALL, OnUpdateSessionBool,   cookie_httponly,    php_ps_globals,    ps_globals)
+-	STD_PHP_INI_ENTRY("session.cookie_samesite",    "",          PHP_INI_ALL, OnUpdateSessionString, cookie_samesite,    php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.use_cookies",      "1",         PHP_INI_ALL, OnUpdateSessionBool,   use_cookies,        php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.use_only_cookies", "1",         PHP_INI_ALL, OnUpdateSessionBool,   use_only_cookies,   php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.use_strict_mode",  "0",         PHP_INI_ALL, OnUpdateSessionBool,   use_strict_mode,    php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.cookie_secure",      "0",         PHP_INI_ALL, OnUpdateSessionBool,   cookie_secure,      php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.cookie_httponly",    "0",         PHP_INI_ALL, OnUpdateSessionBool,   cookie_httponly,    php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.cookie_samesite",    "",          PHP_INI_ALL, OnUpdateString,        cookie_samesite,    php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.use_cookies",        "1",         PHP_INI_ALL, OnUpdateSessionBool,   use_cookies,        php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.use_only_cookies",   "1",         PHP_INI_ALL, OnUpdateSessionBool,   use_only_cookies,   php_ps_globals,    ps_globals)
++	STD_PHP_INI_ENTRY("session.use_strict_mode",    "0",         PHP_INI_ALL, OnUpdateSessionBool,   use_strict_mode,    php_ps_globals,    ps_globals)
+ 	STD_PHP_INI_ENTRY("session.referer_check",      "",          PHP_INI_ALL, OnUpdateSessionString, extern_referer_chk, php_ps_globals,    ps_globals)
+ 	STD_PHP_INI_ENTRY("session.cache_limiter",      "nocache",   PHP_INI_ALL, OnUpdateSessionString, cache_limiter,      php_ps_globals,    ps_globals)
+ 	STD_PHP_INI_ENTRY("session.cache_expire",       "180",       PHP_INI_ALL, OnUpdateSessionLong,   cache_expire,       php_ps_globals,    ps_globals)
+-	STD_PHP_INI_BOOLEAN("session.use_trans_sid",    "0",         PHP_INI_ALL, OnUpdateSessionBool,   use_trans_sid,      php_ps_globals,    ps_globals)
++	PHP_INI_ENTRY("session.use_trans_sid",          "0",         PHP_INI_ALL, OnUpdateTransSid)
+ 	PHP_INI_ENTRY("session.sid_length",             "32",        PHP_INI_ALL, OnUpdateSidLength)
+ 	PHP_INI_ENTRY("session.sid_bits_per_character", "4",         PHP_INI_ALL, OnUpdateSidBits)
+-	STD_PHP_INI_BOOLEAN("session.lazy_write",       "1",         PHP_INI_ALL, OnUpdateSessionBool,    lazy_write,         php_ps_globals,    ps_globals)
++	STD_PHP_INI_BOOLEAN("session.lazy_write",       "1",         PHP_INI_ALL, OnUpdateLazyWrite,     lazy_write,         php_ps_globals,    ps_globals)
+ 
+ 	/* Upload progress */
+ 	STD_PHP_INI_BOOLEAN("session.upload_progress.enabled",
+@@ -843,7 +855,7 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 	const char *endptr = val + vallen;
+ 	zval session_vars;
+ 	php_unserialize_data_t var_hash;
+-	bool result;
++	int result;
+ 	zend_string *var_name = zend_string_init("_SESSION", sizeof("_SESSION") - 1, 0);
+ 
+ 	ZVAL_NULL(&session_vars);
+@@ -900,6 +912,7 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ {
+ 	const char *p;
+ 	const char *endptr = val + vallen;
++	int namelen;
+ 	zend_string *name;
+ 	php_unserialize_data_t var_hash;
+ 	zval *current, rv;
+@@ -907,8 +920,7 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 
+ 	for (p = val; p < endptr; ) {
+-		// Can this be changed to size_t?
+-		int namelen = ((unsigned char)(*p)) & (~PS_BIN_UNDEF);
++		namelen = ((unsigned char)(*p)) & (~PS_BIN_UNDEF);
+ 
+ 		if (namelen < 0 || namelen > PS_BIN_MAX || (p + namelen) >= endptr) {
+ 			PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+@@ -972,7 +984,7 @@ PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+ 	const char *endptr = val + vallen;
+ 	ptrdiff_t namelen;
+ 	zend_string *name;
+-	zend_result retval = SUCCESS;
++	int retval = SUCCESS;
+ 	php_unserialize_data_t var_hash;
+ 	zval *current, rv;
+ 
+@@ -1024,11 +1036,12 @@ static ps_serializer ps_serializers[MAX_SERIALIZERS + 1] = {
+ 	PS_SERIALIZER_ENTRY(php_binary)
+ };
+ 
+-PHPAPI zend_result php_session_register_serializer(const char *name, zend_string *(*encode)(PS_SERIALIZER_ENCODE_ARGS), zend_result (*decode)(PS_SERIALIZER_DECODE_ARGS)) /* {{{ */
++PHPAPI int php_session_register_serializer(const char *name, zend_string *(*encode)(PS_SERIALIZER_ENCODE_ARGS), int (*decode)(PS_SERIALIZER_DECODE_ARGS)) /* {{{ */
+ {
+-	zend_result ret = FAILURE;
++	int ret = FAILURE;
++	int i;
+ 
+-	for (int i = 0; i < MAX_SERIALIZERS; i++) {
++	for (i = 0; i < MAX_SERIALIZERS; i++) {
+ 		if (ps_serializers[i].name == NULL) {
+ 			ps_serializers[i].name = name;
+ 			ps_serializers[i].encode = encode;
+@@ -1054,11 +1067,12 @@ static const ps_module *ps_modules[MAX_MODULES + 1] = {
+ 	ps_user_ptr
+ };
+ 
+-PHPAPI zend_result php_session_register_module(const ps_module *ptr) /* {{{ */
++PHPAPI int php_session_register_module(const ps_module *ptr) /* {{{ */
+ {
+ 	int ret = FAILURE;
++	int i;
+ 
+-	for (int i = 0; i < MAX_MODULES; i++) {
++	for (i = 0; i < MAX_MODULES; i++) {
+ 		if (!ps_modules[i]) {
+ 			ps_modules[i] = ptr;
+ 			ret = SUCCESS;
+@@ -1072,12 +1086,12 @@ PHPAPI zend_result php_session_register_module(const ps_module *ptr) /* {{{ */
+ /* Dummy PS module function */
+ /* We consider any ID valid (thus also implying that a session with such an ID exists),
+ 	thus we always return SUCCESS */
+-PHPAPI zend_result php_session_validate_sid(PS_VALIDATE_SID_ARGS) {
++PHPAPI int php_session_validate_sid(PS_VALIDATE_SID_ARGS) {
+ 	return SUCCESS;
+ }
+ 
+ /* Dummy PS module function */
+-PHPAPI zend_result php_session_update_timestamp(PS_UPDATE_TIMESTAMP_ARGS) {
++PHPAPI int php_session_update_timestamp(PS_UPDATE_TIMESTAMP_ARGS) {
+ 	return SUCCESS;
+ }
+ 
+@@ -1132,7 +1146,7 @@ static inline void strcpy_gmt(char *ubuf, time_t *when) /* {{{ */
+ static inline void last_modified(void) /* {{{ */
+ {
+ 	const char *path;
+-	zend_stat_t sb = {0};
++	zend_stat_t sb;
+ 	char buf[MAX_STR + 1];
+ 
+ 	path = SG(request_info).path_translated;
+@@ -1285,7 +1299,7 @@ static void php_session_remove_cookie(void) {
+ 	efree(session_cookie);
+ }
+ 
+-static zend_result php_session_send_cookie(void) /* {{{ */
++static int php_session_send_cookie(void) /* {{{ */
+ {
+ 	smart_str ncookie = {0};
+ 	zend_string *date_fmt = NULL;
+@@ -1327,7 +1341,7 @@ static zend_result php_session_send_cookie(void) /* {{{ */
+ 		t = tv.tv_sec + PS(cookie_lifetime);
+ 
+ 		if (t > 0) {
+-			date_fmt = php_format_date("D, d M Y H:i:s \\G\\M\\T", sizeof("D, d M Y H:i:s \\G\\M\\T")-1, t, 0);
++			date_fmt = php_format_date("D, d-M-Y H:i:s T", sizeof("D, d-M-Y H:i:s T")-1, t, 0);
+ 			smart_str_appends(&ncookie, COOKIE_EXPIRES);
+ 			smart_str_appendl(&ncookie, ZSTR_VAL(date_fmt), ZSTR_LEN(date_fmt));
+ 			zend_string_release_ex(date_fmt, 0);
+@@ -1415,7 +1429,7 @@ static void ppid2sid(zval *ppid) {
+ }
+ 
+ 
+-PHPAPI zend_result php_session_reset_id(void) /* {{{ */
++PHPAPI int php_session_reset_id(void) /* {{{ */
+ {
+ 	int module_number = PS(module_number);
+ 	zval *sid, *data, *ppid;
+@@ -1445,7 +1459,7 @@ PHPAPI zend_result php_session_reset_id(void) /* {{{ */
+ 		smart_str_0(&var);
+ 		if (sid) {
+ 			zval_ptr_dtor_str(sid);
+-			ZVAL_STR(sid, smart_str_extract(&var));
++			ZVAL_NEW_STR(sid, var.s);
+ 		} else {
+ 			REGISTER_STRINGL_CONSTANT("SID", ZSTR_VAL(var.s), ZSTR_LEN(var.s), 0);
+ 			smart_str_free(&var);
+@@ -1485,7 +1499,7 @@ PHPAPI zend_result php_session_reset_id(void) /* {{{ */
+ /* }}} */
+ 
+ 
+-PHPAPI zend_result php_session_start(void) /* {{{ */
++PHPAPI int php_session_start(void) /* {{{ */
+ {
+ 	zval *ppid;
+ 	zval *data;
+@@ -1593,7 +1607,7 @@ PHPAPI zend_result php_session_start(void) /* {{{ */
+ }
+ /* }}} */
+ 
+-PHPAPI zend_result php_session_flush(int write) /* {{{ */
++PHPAPI int php_session_flush(int write) /* {{{ */
+ {
+ 	if (PS(session_status) == php_session_active) {
+ 		php_session_save_current_state(write);
+@@ -1604,7 +1618,7 @@ PHPAPI zend_result php_session_flush(int write) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result php_session_abort(void) /* {{{ */
++static int php_session_abort(void) /* {{{ */
+ {
+ 	if (PS(session_status) == php_session_active) {
+ 		if (PS(mod_data) || PS(mod_user_implemented)) {
+@@ -1617,7 +1631,7 @@ static zend_result php_session_abort(void) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result php_session_reset(void) /* {{{ */
++static int php_session_reset(void) /* {{{ */
+ {
+ 	if (PS(session_status) == php_session_active
+ 		&& php_session_initialize() == SUCCESS) {
+@@ -1653,7 +1667,7 @@ PHP_FUNCTION(session_set_cookie_params)
+ 	bool secure = 0, secure_null = 1;
+ 	bool httponly = 0, httponly_null = 1;
+ 	zend_string *ini_name;
+-	zend_result result;
++	int result;
+ 	int found = 0;
+ 
+ 	if (!PS(use_cookies)) {
+@@ -1702,6 +1716,7 @@ PHP_FUNCTION(session_set_cookie_params)
+ 			zend_argument_value_error(5, "must be null when argument #1 ($lifetime_or_options) is an array");
+ 			RETURN_THROWS();
+ 		}
++
+ 		ZEND_HASH_FOREACH_STR_KEY_VAL(options_ht, key, value) {
+ 			if (key) {
+ 				ZVAL_DEREF(value);
+@@ -1911,7 +1926,7 @@ PHP_FUNCTION(session_module_name)
+ }
+ /* }}} */
+ 
+-static zend_result save_handler_check_session(void) {
++static int save_handler_check_session(void) {
+ 	if (PS(session_status) == php_session_active) {
+ 		php_error_docref(NULL, E_WARNING, "Session save handler cannot be changed when a session is active");
+ 		return FAILURE;
+@@ -1960,7 +1975,7 @@ PHP_FUNCTION(session_set_save_handler)
+ 		/* For compatibility reason, implemented interface is not checked */
+ 		/* Find implemented methods - SessionHandlerInterface */
+ 		i = 0;
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&php_session_iface_entry->function_table, func_name) {
++		ZEND_HASH_FOREACH_STR_KEY(&php_session_iface_entry->function_table, func_name) {
+ 			if ((current_mptr = zend_hash_find_ptr(&Z_OBJCE_P(obj)->function_table, func_name))) {
+ 				if (!Z_ISUNDEF(PS(mod_user_names).names[i])) {
+ 					zval_ptr_dtor(&PS(mod_user_names).names[i]);
+@@ -1979,7 +1994,7 @@ PHP_FUNCTION(session_set_save_handler)
+ 		} ZEND_HASH_FOREACH_END();
+ 
+ 		/* Find implemented methods - SessionIdInterface (optional) */
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&php_session_id_iface_entry->function_table, func_name) {
++		ZEND_HASH_FOREACH_STR_KEY(&php_session_id_iface_entry->function_table, func_name) {
+ 			if ((current_mptr = zend_hash_find_ptr(&Z_OBJCE_P(obj)->function_table, func_name))) {
+ 				if (!Z_ISUNDEF(PS(mod_user_names).names[i])) {
+ 					zval_ptr_dtor(&PS(mod_user_names).names[i]);
+@@ -1999,7 +2014,7 @@ PHP_FUNCTION(session_set_save_handler)
+ 		} ZEND_HASH_FOREACH_END();
+ 
+ 		/* Find implemented methods - SessionUpdateTimestampInterface (optional) */
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&php_session_update_timestamp_iface_entry->function_table, func_name) {
++		ZEND_HASH_FOREACH_STR_KEY(&php_session_update_timestamp_iface_entry->function_table, func_name) {
+ 			if ((current_mptr = zend_hash_find_ptr(&Z_OBJCE_P(obj)->function_table, func_name))) {
+ 				if (!Z_ISUNDEF(PS(mod_user_names).names[i])) {
+ 					zval_ptr_dtor(&PS(mod_user_names).names[i]);
+@@ -2017,12 +2032,6 @@ PHP_FUNCTION(session_set_save_handler)
+ 			++i;
+ 		} ZEND_HASH_FOREACH_END();
+ 
+-
+-		if (PS(mod_user_class_name)) {
+-			zend_string_release(PS(mod_user_class_name));
+-		}
+-		PS(mod_user_class_name) = zend_string_copy(Z_OBJCE_P(obj)->name);
+-
+ 		if (register_shutdown) {
+ 			/* create shutdown function */
+ 			php_shutdown_function_entry shutdown_function_entry;
+@@ -2064,7 +2073,7 @@ PHP_FUNCTION(session_set_save_handler)
+ 
+ 	/* At this point argc can only be between 6 and PS_NUM_APIS */
+ 	for (i = 0; i < argc; i++) {
+-		if (!zend_is_callable(&args[i], IS_CALLABLE_SUPPRESS_DEPRECATIONS, NULL)) {
++		if (!zend_is_callable(&args[i], 0, NULL)) {
+ 			zend_string *name = zend_get_callable_name(&args[i]);
+ 			zend_argument_type_error(i + 1, "must be a valid callback, function \"%s\" not found or invalid function name", ZSTR_VAL(name));
+ 			zend_string_release(name);
+@@ -2076,11 +2085,6 @@ PHP_FUNCTION(session_set_save_handler)
+ 		RETURN_FALSE;
+ 	}
+ 
+-	if (PS(mod_user_class_name)) {
+-		zend_string_release(PS(mod_user_class_name));
+-		PS(mod_user_class_name) = NULL;
+-	}
+-
+ 	/* remove shutdown function */
+ 	remove_user_shutdown_function("session_shutdown", sizeof("session_shutdown") - 1);
+ 
+@@ -2133,8 +2137,9 @@ PHP_FUNCTION(session_save_path)
+ PHP_FUNCTION(session_id)
+ {
+ 	zend_string *name = NULL;
++	int argc = ZEND_NUM_ARGS();
+ 
+-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "|S!", &name) == FAILURE) {
++	if (zend_parse_parameters(argc, "|S!", &name) == FAILURE) {
+ 		RETURN_THROWS();
+ 	}
+ 
+@@ -2201,7 +2206,7 @@ PHP_FUNCTION(session_regenerate_id)
+ 			RETURN_FALSE;
+ 		}
+ 	} else {
+-		zend_result ret;
++		int ret;
+ 		data = php_session_encode();
+ 		if (data) {
+ 			ret = PS(mod)->s_write(&PS(mod_data), PS(id), data, PS(gc_maxlifetime));
+@@ -2333,7 +2338,8 @@ PHP_FUNCTION(session_create_id)
+ 		php_error_docref(NULL, E_WARNING, "Failed to create new ID");
+ 		RETURN_FALSE;
+ 	}
+-	RETVAL_STR(smart_str_extract(&id));
++	smart_str_0(&id);
++	RETVAL_NEW_STR(id.s);
+ }
+ /* }}} */
+ 
+@@ -2438,8 +2444,8 @@ PHP_FUNCTION(session_decode)
+ }
+ /* }}} */
+ 
+-static zend_result php_session_start_set_ini(zend_string *varname, zend_string *new_value) {
+-	zend_result ret;
++static int php_session_start_set_ini(zend_string *varname, zend_string *new_value) {
++	int ret;
+ 	smart_str buf ={0};
+ 	smart_str_appends(&buf, "session");
+ 	smart_str_appendc(&buf, '.');
+@@ -2682,7 +2688,7 @@ PHP_FUNCTION(session_register_shutdown)
+    * Module Setup and Destruction *
+    ******************************** */
+ 
+-static zend_result php_rinit_session(bool auto_start) /* {{{ */
++static int php_rinit_session(bool auto_start) /* {{{ */
+ {
+ 	php_rinit_session_globals();
+ 
+@@ -2726,6 +2732,8 @@ static PHP_RINIT_FUNCTION(session) /* {{{ */
+ 
+ static PHP_RSHUTDOWN_FUNCTION(session) /* {{{ */
+ {
++	int i;
++
+ 	if (PS(session_status) == php_session_active) {
+ 		zend_try {
+ 			php_session_flush(1);
+@@ -2734,7 +2742,7 @@ static PHP_RSHUTDOWN_FUNCTION(session) /* {{{ */
+ 	php_rshutdown_session_globals();
+ 
+ 	/* this should NOT be done in php_rshutdown_session_globals() */
+-	for (int i = 0; i < PS_NUM_APIS; i++) {
++	for (i = 0; i < PS_NUM_APIS; i++) {
+ 		if (!Z_ISUNDEF(PS(mod_user_names).names[i])) {
+ 			zval_ptr_dtor(&PS(mod_user_names).names[i]);
+ 			ZVAL_UNDEF(&PS(mod_user_names).names[i]);
+@@ -2747,6 +2755,8 @@ static PHP_RSHUTDOWN_FUNCTION(session) /* {{{ */
+ 
+ static PHP_GINIT_FUNCTION(ps) /* {{{ */
+ {
++	int i;
++
+ #if defined(COMPILE_DL_SESSION) && defined(ZTS)
+ 	ZEND_TSRMLS_CACHE_UPDATE();
+ #endif
+@@ -2760,11 +2770,10 @@ static PHP_GINIT_FUNCTION(ps) /* {{{ */
+ 	ps_globals->session_status = php_session_none;
+ 	ps_globals->default_mod = NULL;
+ 	ps_globals->mod_user_implemented = 0;
+-	ps_globals->mod_user_class_name = NULL;
+ 	ps_globals->mod_user_is_open = 0;
+ 	ps_globals->session_vars = NULL;
+ 	ps_globals->set_handler = 0;
+-	for (int i = 0; i < PS_NUM_APIS; i++) {
++	for (i = 0; i < PS_NUM_APIS; i++) {
+ 		ZVAL_UNDEF(&ps_globals->mod_user_names.names[i]);
+ 	}
+ 	ZVAL_UNDEF(&ps_globals->http_session_vars);
+@@ -2797,7 +2806,9 @@ static PHP_MINIT_FUNCTION(session) /* {{{ */
+ 	/* Register base class */
+ 	php_session_class_entry = register_class_SessionHandler(php_session_iface_entry, php_session_id_iface_entry);
+ 
+-	register_session_symbols(module_number);
++	REGISTER_LONG_CONSTANT("PHP_SESSION_DISABLED", php_session_disabled, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_SESSION_NONE", php_session_none, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_SESSION_ACTIVE", php_session_active, CONST_CS | CONST_PERSISTENT);
+ 
+ 	return SUCCESS;
+ }
+@@ -2981,10 +2992,10 @@ static void php_session_rfc1867_cleanup(php_session_rfc1867_progress *progress)
+ 	php_session_flush(1);
+ } /* }}} */
+ 
+-static zend_result php_session_rfc1867_callback(unsigned int event, void *event_data, void **extra) /* {{{ */
++static int php_session_rfc1867_callback(unsigned int event, void *event_data, void **extra) /* {{{ */
+ {
+ 	php_session_rfc1867_progress *progress;
+-	zend_result retval = SUCCESS;
++	int retval = SUCCESS;
+ 
+ 	if (php_session_rfc1867_orig_callback) {
+ 		retval = php_session_rfc1867_orig_callback(event, event_data, extra);
+diff --git a/ext/session/session.stub.php b/ext/session/session.stub.php
+index 246c02f1..19c2f84d 100644
+--- a/ext/session/session.stub.php
++++ b/ext/session/session.stub.php
+@@ -2,22 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue php_session_disabled
+- */
+-const PHP_SESSION_DISABLED = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue php_session_none
+- */
+-const PHP_SESSION_NONE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue php_session_active
+- */
+-const PHP_SESSION_ACTIVE = UNKNOWN;
+-
+ /** @refcount 1 */
+ function session_name(?string $name = null): string|false {}
+ 
+diff --git a/ext/session/session_arginfo.h b/ext/session/session_arginfo.h
+index f8253025..f38313c2 100644
+--- a/ext/session/session_arginfo.h
++++ b/ext/session/session_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: f64e67d8e955bc14c03dfd884dd9e5f7f047dc44 */
++ * Stub hash: 27358fb446398ea651c62abb29c81589a37df028 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_session_name, 0, 0, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, name, IS_STRING, 1, "null")
+@@ -230,13 +230,6 @@ static const zend_function_entry class_SessionHandler_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_session_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("PHP_SESSION_DISABLED", php_session_disabled, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_SESSION_NONE", php_session_none, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_SESSION_ACTIVE", php_session_active, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_SessionHandlerInterface(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/session/tests/001.phpt b/ext/session/tests/001.phpt
+index 03b2d046..cb1ce59d 100644
+--- a/ext/session/tests/001.phpt
++++ b/ext/session/tests/001.phpt
+@@ -13,7 +13,6 @@ session.save_handler=files
+ <?php
+ error_reporting(E_ALL);
+ 
+-#[AllowDynamicProperties]
+ class foo {
+     public $bar = "ok";
+ 
+diff --git a/ext/session/tests/003.phpt b/ext/session/tests/003.phpt
+index ab1739ed..c0628e28 100644
+--- a/ext/session/tests/003.phpt
++++ b/ext/session/tests/003.phpt
+@@ -16,7 +16,6 @@ error_reporting(E_ALL);
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 
+diff --git a/ext/session/tests/004.phpt b/ext/session/tests/004.phpt
+index d6b53072..09012860 100644
+--- a/ext/session/tests/004.phpt
++++ b/ext/session/tests/004.phpt
+@@ -52,7 +52,6 @@ $hnd = new handler;
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 
+diff --git a/ext/session/tests/005.phpt b/ext/session/tests/005.phpt
+index c4083557..6c7f246a 100644
+--- a/ext/session/tests/005.phpt
++++ b/ext/session/tests/005.phpt
+@@ -53,7 +53,6 @@ $hnd = new handler;
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 
+diff --git a/ext/session/tests/022.phpt b/ext/session/tests/022.phpt
+new file mode 100644
+index 00000000..43e12fcd
+--- /dev/null
++++ b/ext/session/tests/022.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++session object serialization
++--EXTENSIONS--
++session
++--SKIPIF--
++<?php include('skipif.inc'); ?>
++--INI--
++session.use_cookies=0
++session.cache_limiter=
++session.serialize_handler=php
++session.save_handler=files
++--FILE--
++<?php
++error_reporting(E_ALL);
++
++class foo {
++    public $bar = "ok";
++
++    function method() { $this->yes = "done"; }
++}
++
++$baz = new foo;
++$baz->method();
++
++$arr[3] = new foo;
++$arr[3]->method();
++session_start();
++$_SESSION["baz"] = $baz;
++$_SESSION["arr"] = $arr;
++var_dump(session_encode());
++session_destroy();
++?>
++--EXPECT--
++string(126) "baz|O:3:"foo":2:{s:3:"bar";s:2:"ok";s:3:"yes";s:4:"done";}arr|a:1:{i:3;O:3:"foo":2:{s:3:"bar";s:2:"ok";s:3:"yes";s:4:"done";}}"
+diff --git a/ext/session/tests/023.phpt b/ext/session/tests/023.phpt
+index 092f8db6..78f6e41c 100644
+--- a/ext/session/tests/023.phpt
++++ b/ext/session/tests/023.phpt
+@@ -16,7 +16,6 @@ error_reporting(E_ALL);
+ 
+ class foo {
+     public $bar = "ok";
+-    public $yes;
+     function method() { $this->yes++; }
+ }
+ 

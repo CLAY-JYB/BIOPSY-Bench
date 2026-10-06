@@ -1,0 +1,69 @@
+diff --git a/compat/win32/syslog.c b/compat/win32/syslog.c
+index 0af18d88..4e479474 100644
+--- a/compat/win32/syslog.c
++++ b/compat/win32/syslog.c
+@@ -2,7 +2,7 @@
+ 
+ static HANDLE ms_eventlog;
+ 
+-void openlog(const char *ident, int logopt, int facility)
++void openlog(const char *ident, int logopt UNUSED, int facility UNUSED)
+ {
+ 	if (ms_eventlog)
+ 		return;
+diff --git a/compat/win32mmap.c b/compat/win32mmap.c
+index 519d51f2..a4ab4cb9 100644
+--- a/compat/win32mmap.c
++++ b/compat/win32mmap.c
+@@ -40,7 +40,7 @@ void *git_mmap(void *start, size_t length, int prot, int flags, int fd, off_t of
+ 	return MAP_FAILED;
+ }
+ 
+-int git_munmap(void *start, size_t length)
++int git_munmap(void *start, size_t length UNUSED)
+ {
+ 	return !UnmapViewOfFile(start);
+ }
+diff --git a/compat/winansi.c b/compat/winansi.c
+index 575813bd..1b3f916b 100644
+--- a/compat/winansi.c
++++ b/compat/winansi.c
+@@ -340,7 +340,7 @@ enum {
+ 	TEXT = 0, ESCAPE = 033, BRACKET = '['
+ };
+ 
+-static DWORD WINAPI console_thread(LPVOID unused)
++static DWORD WINAPI console_thread(LPVOID data UNUSED)
+ {
+ 	unsigned char buffer[BUFFER_SIZE];
+ 	DWORD bytes;
+diff --git a/config.c b/config.c
+index 98508975..56b5862e 100644
+--- a/config.c
++++ b/config.c
+@@ -2694,9 +2694,10 @@ void git_protected_config(config_fn_t fn, void *data)
+ 	configset_iter(&protected_config, fn, data);
+ }
+ 
+-int repo_config_get_expiry(struct repository *r, const char *key, const char **output)
++int repo_config_get_expiry(struct repository *r, const char *key, char **output)
+ {
+-	int ret = repo_config_get_string(r, key, (char **)output);
++	int ret = repo_config_get_string(r, key, output);
++
+ 	if (ret)
+ 		return ret;
+ 	if (strcmp(*output, "now")) {
+diff --git a/config.h b/config.h
+index 4d319a41..d0497157 100644
+--- a/config.h
++++ b/config.h
+@@ -672,7 +672,7 @@ int repo_config_get_split_index(struct repository *r);
+ int repo_config_get_max_percent_split_change(struct repository *r);
+ 
+ /* This dies if the configured or default date is in the future */
+-int repo_config_get_expiry(struct repository *r, const char *key, const char **output);
++int repo_config_get_expiry(struct repository *r, const char *key, char **output);
+ 
+ /* parse either "this many days" integer, or "5.days.ago" approxidate */
+ int repo_config_get_expiry_in_days(struct repository *r, const char *key,

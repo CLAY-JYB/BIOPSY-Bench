@@ -1,0 +1,31 @@
+From 819be3bd Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0193] Fix use-after-free of constant name (part 29/53)
+
+---
+diff --git a/Zend/zend_enum.c b/Zend/zend_enum.c
+index 25261cf5..3366fb7d 100644
+--- a/Zend/zend_enum.c
++++ b/Zend/zend_enum.c
+@@ -56,7 +53,7 @@ static void zend_verify_enum_properties(zend_class_entry *ce)
+ {
+ 	zend_property_info *property_info;
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, property_info) {
++	ZEND_HASH_FOREACH_PTR(&ce->properties_info, property_info) {
+ 		if (zend_string_equals_literal(property_info->name, "name")) {
+ 			continue;
+ 		}
+@@ -67,7 +64,7 @@ static void zend_verify_enum_properties(zend_class_entry *ce)
+ 			continue;
+ 		}
+ 		// FIXME: File/line number for traits?
+-		zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties",
++		zend_error_noreturn(E_COMPILE_ERROR, "Enum \"%s\" may not include properties",
+ 			ZSTR_VAL(ce->name));
+ 	} ZEND_HASH_FOREACH_END();
+ }
+
+-- 
+2.43.0

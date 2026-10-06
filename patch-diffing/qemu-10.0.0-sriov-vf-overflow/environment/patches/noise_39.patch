@@ -1,0 +1,831 @@
+diff --git a/target/arm/gdbstub64.c b/target/arm/gdbstub64.c
+index caa31ff3fa..2e2bc2700b 100644
+--- a/target/arm/gdbstub64.c
++++ b/target/arm/gdbstub64.c
+@@ -21,6 +21,12 @@
+ #include "cpu.h"
+ #include "internals.h"
+ #include "gdbstub/helpers.h"
++#include "gdbstub/commands.h"
++#include "tcg/mte_helper.h"
++#if defined(CONFIG_USER_ONLY) && defined(CONFIG_LINUX)
++#include <sys/prctl.h>
++#include "mte_user_helper.h"
++#endif
+ 
+ int aarch64_cpu_gdb_read_register(CPUState *cs, GByteArray *mem_buf, int n)
+ {
+@@ -381,3 +387,220 @@ GDBFeature *arm_gen_dynamic_svereg_feature(CPUState *cs, int base_reg)
+ 
+     return &cpu->dyn_svereg_feature.desc;
+ }
++
++#ifdef CONFIG_USER_ONLY
++int aarch64_gdb_get_tag_ctl_reg(CPUState *cs, GByteArray *buf, int reg)
++{
++    ARMCPU *cpu = ARM_CPU(cs);
++    CPUARMState *env = &cpu->env;
++    uint64_t tcf0;
++
++    assert(reg == 0);
++
++    tcf0 = extract64(env->cp15.sctlr_el[1], 38, 2);
++
++    return gdb_get_reg64(buf, tcf0);
++}
++
++int aarch64_gdb_set_tag_ctl_reg(CPUState *cs, uint8_t *buf, int reg)
++{
++    ARMCPU *cpu = ARM_CPU(cs);
++    CPUARMState *env = &cpu->env;
++
++    uint8_t tcf;
++
++    assert(reg == 0);
++
++    tcf = *buf << PR_MTE_TCF_SHIFT;
++
++    if (!tcf) {
++        return 0;
++    }
++
++    /*
++     * 'tag_ctl' register is actually a "pseudo-register" provided by GDB to
++     * expose options regarding the type of MTE fault that can be controlled at
++     * runtime.
++     */
++    arm_set_mte_tcf0(env, tcf);
++
++    return 1;
++}
++
++static void handle_q_memtag(GArray *params, void *user_ctx)
++{
++    ARMCPU *cpu = ARM_CPU(user_ctx);
++    CPUARMState *env = &cpu->env;
++
++    uint64_t addr = gdb_get_cmd_param(params, 0)->val_ull;
++    uint64_t len = gdb_get_cmd_param(params, 1)->val_ul;
++    int type = gdb_get_cmd_param(params, 2)->val_ul;
++
++    uint8_t *tags;
++    uint8_t addr_tag;
++
++    g_autoptr(GString) str_buf = g_string_new(NULL);
++
++    /*
++     * GDB does not query multiple tags for a memory range on remote targets, so
++     * that's not supported either by gdbstub.
++     */
++    if (len != 1) {
++        gdb_put_packet("E02");
++    }
++
++    /* GDB never queries a tag different from an allocation tag (type 1). */
++    if (type != 1) {
++        gdb_put_packet("E03");
++    }
++
++    /* Note that tags are packed here (2 tags packed in one byte). */
++    tags = allocation_tag_mem_probe(env, 0, addr, MMU_DATA_LOAD, 8 /* 64-bit */,
++                                    MMU_DATA_LOAD, true, 0);
++    if (!tags) {
++        /* Address is not in a tagged region. */
++        gdb_put_packet("E04");
++        return;
++    }
++
++    /* Unpack tag from byte. */
++    addr_tag = load_tag1(addr, tags);
++    g_string_printf(str_buf, "m%.2x", addr_tag);
++
++    gdb_put_packet(str_buf->str);
++}
++
++static void handle_q_isaddresstagged(GArray *params, void *user_ctx)
++{
++    ARMCPU *cpu = ARM_CPU(user_ctx);
++    CPUARMState *env = &cpu->env;
++
++    uint64_t addr = gdb_get_cmd_param(params, 0)->val_ull;
++
++    uint8_t *tags;
++    const char *reply;
++
++    tags = allocation_tag_mem_probe(env, 0, addr, MMU_DATA_LOAD, 8 /* 64-bit */,
++                                    MMU_DATA_LOAD, true, 0);
++    reply = tags ? "01" : "00";
++
++    gdb_put_packet(reply);
++}
++
++static void handle_Q_memtag(GArray *params, void *user_ctx)
++{
++    ARMCPU *cpu = ARM_CPU(user_ctx);
++    CPUARMState *env = &cpu->env;
++
++    uint64_t start_addr = gdb_get_cmd_param(params, 0)->val_ull;
++    uint64_t len = gdb_get_cmd_param(params, 1)->val_ul;
++    int type = gdb_get_cmd_param(params, 2)->val_ul;
++    char const *new_tags_str = gdb_get_cmd_param(params, 3)->data;
++
++    uint64_t end_addr;
++
++    int num_new_tags;
++    uint8_t *tags;
++
++    g_autoptr(GByteArray) new_tags = g_byte_array_new();
++
++    /*
++     * Only the allocation tag (i.e. type 1) can be set at the stub side.
++     */
++    if (type != 1) {
++        gdb_put_packet("E02");
++        return;
++    }
++
++    end_addr = start_addr + (len - 1); /* 'len' is always >= 1 */
++    /* Check if request's memory range does not cross page boundaries. */
++    if ((start_addr ^ end_addr) & TARGET_PAGE_MASK) {
++        gdb_put_packet("E03");
++        return;
++    }
++
++    /*
++     * Get all tags in the page starting from the tag of the start address.
++     * Note that there are two tags packed into a single byte here.
++     */
++    tags = allocation_tag_mem_probe(env, 0, start_addr, MMU_DATA_STORE,
++                                    8 /* 64-bit */, MMU_DATA_STORE, true, 0);
++    if (!tags) {
++        /* Address is not in a tagged region. */
++        gdb_put_packet("E04");
++        return;
++    }
++
++    /* Convert tags provided by GDB, 2 hex digits per tag. */
++    num_new_tags = strlen(new_tags_str) / 2;
++    gdb_hextomem(new_tags, new_tags_str, num_new_tags);
++
++    uint64_t address = start_addr;
++    int new_tag_index = 0;
++    while (address <= end_addr) {
++        uint8_t new_tag;
++        int packed_index;
++
++        /*
++         * Find packed tag index from unpacked tag index. There are two tags
++         * in one packed index (one tag per nibble).
++         */
++        packed_index = new_tag_index / 2;
++
++        new_tag = new_tags->data[new_tag_index % num_new_tags];
++        store_tag1(address, tags + packed_index, new_tag);
++
++        address += TAG_GRANULE;
++        new_tag_index++;
++    }
++
++    gdb_put_packet("OK");
++}
++
++enum Command {
++    qMemTags,
++    qIsAddressTagged,
++    QMemTags,
++    NUM_CMDS
++};
++
++static GdbCmdParseEntry cmd_handler_table[NUM_CMDS] = {
++    [qMemTags] = {
++        .handler = handle_q_memtag,
++        .cmd_startswith = true,
++        .cmd = "MemTags:",
++        .schema = "L,l:l0",
++        .need_cpu_context = true
++    },
++    [qIsAddressTagged] = {
++        .handler = handle_q_isaddresstagged,
++        .cmd_startswith = true,
++        .cmd = "IsAddressTagged:",
++        .schema = "L0",
++        .need_cpu_context = true
++    },
++    [QMemTags] = {
++        .handler = handle_Q_memtag,
++        .cmd_startswith = true,
++        .cmd = "MemTags:",
++        .schema = "L,l:l:s0",
++        .need_cpu_context = true
++    },
++};
++#endif /* CONFIG_USER_ONLY */
++
++void aarch64_cpu_register_gdb_commands(ARMCPU *cpu, GString *qsupported,
++                                       GArray *qtable, GArray *stable)
++{
++#ifdef CONFIG_USER_ONLY
++    /* MTE */
++    if (cpu_isar_feature(aa64_mte, cpu)) {
++        g_string_append(qsupported, ";memory-tagging+");
++
++        g_array_append_val(qtable, cmd_handler_table[qMemTags]);
++        g_array_append_val(qtable, cmd_handler_table[qIsAddressTagged]);
++
++        g_array_append_val(stable, cmd_handler_table[QMemTags]);
++    }
++#endif
++}
+diff --git a/target/arm/helper.h b/target/arm/helper.h
+index eca2043fc2..970d059dec 100644
+--- a/target/arm/helper.h
++++ b/target/arm/helper.h
+@@ -979,6 +979,16 @@ DEF_HELPER_FLAGS_5(neon_sqrdmulh_idx_h, TCG_CALL_NO_RWG,
+ DEF_HELPER_FLAGS_5(neon_sqrdmulh_idx_s, TCG_CALL_NO_RWG,
+                    void, ptr, ptr, ptr, ptr, i32)
+ 
++DEF_HELPER_FLAGS_5(neon_sqrdmlah_idx_h, TCG_CALL_NO_RWG,
++                   void, ptr, ptr, ptr, ptr, i32)
++DEF_HELPER_FLAGS_5(neon_sqrdmlah_idx_s, TCG_CALL_NO_RWG,
++                   void, ptr, ptr, ptr, ptr, i32)
++
++DEF_HELPER_FLAGS_5(neon_sqrdmlsh_idx_h, TCG_CALL_NO_RWG,
++                   void, ptr, ptr, ptr, ptr, i32)
++DEF_HELPER_FLAGS_5(neon_sqrdmlsh_idx_s, TCG_CALL_NO_RWG,
++                   void, ptr, ptr, ptr, ptr, i32)
++
+ DEF_HELPER_FLAGS_4(sve2_sqdmulh_b, TCG_CALL_NO_RWG, void, ptr, ptr, ptr, i32)
+ DEF_HELPER_FLAGS_4(sve2_sqdmulh_h, TCG_CALL_NO_RWG, void, ptr, ptr, ptr, i32)
+ DEF_HELPER_FLAGS_4(sve2_sqdmulh_s, TCG_CALL_NO_RWG, void, ptr, ptr, ptr, i32)
+diff --git a/target/arm/hvf/hvf.c b/target/arm/hvf/hvf.c
+index ef9bc42738..eb090e67a2 100644
+--- a/target/arm/hvf/hvf.c
++++ b/target/arm/hvf/hvf.c
+@@ -1278,6 +1278,7 @@ static int hvf_sysreg_read(CPUState *cpu, uint32_t reg, uint32_t rt)
+         /* Call the TCG sysreg handler. This is only safe for GICv3 regs. */
+         if (!hvf_sysreg_read_cp(cpu, reg, &val)) {
+             hvf_raise_exception(cpu, EXCP_UDEF, syn_uncategorized());
++            return 1;
+         }
+         break;
+     case SYSREG_DBGBVR0_EL1:
+diff --git a/target/arm/internals.h b/target/arm/internals.h
+index 11b5da2562..da22d04121 100644
+--- a/target/arm/internals.h
++++ b/target/arm/internals.h
+@@ -358,12 +358,19 @@ void init_cpreg_list(ARMCPU *cpu);
+ void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu);
+ void arm_translate_init(void);
+ 
++void arm_cpu_register_gdb_commands(ARMCPU *cpu);
++void aarch64_cpu_register_gdb_commands(ARMCPU *cpu, GString *, GArray *,
++                                       GArray *);
++
+ void arm_restore_state_to_opc(CPUState *cs,
+                               const TranslationBlock *tb,
+                               const uint64_t *data);
+ 
+ #ifdef CONFIG_TCG
+ void arm_cpu_synchronize_from_tb(CPUState *cs, const TranslationBlock *tb);
++
++/* Our implementation of TCGCPUOps::cpu_exec_halt */
++bool arm_cpu_exec_halt(CPUState *cs);
+ #endif /* CONFIG_TCG */
+ 
+ typedef enum ARMFPRounding {
+@@ -1640,6 +1647,8 @@ int aarch64_gdb_get_fpu_reg(CPUState *cs, GByteArray *buf, int reg);
+ int aarch64_gdb_set_fpu_reg(CPUState *cs, uint8_t *buf, int reg);
+ int aarch64_gdb_get_pauth_reg(CPUState *cs, GByteArray *buf, int reg);
+ int aarch64_gdb_set_pauth_reg(CPUState *cs, uint8_t *buf, int reg);
++int aarch64_gdb_get_tag_ctl_reg(CPUState *cs, GByteArray *buf, int reg);
++int aarch64_gdb_set_tag_ctl_reg(CPUState *cs, uint8_t *buf, int reg);
+ void arm_cpu_sve_finalize(ARMCPU *cpu, Error **errp);
+ void arm_cpu_sme_finalize(ARMCPU *cpu, Error **errp);
+ void arm_cpu_pauth_finalize(ARMCPU *cpu, Error **errp);
+diff --git a/target/arm/machine.c b/target/arm/machine.c
+index 0a722ca7e7..a3c1e05e65 100644
+--- a/target/arm/machine.c
++++ b/target/arm/machine.c
+@@ -18,6 +18,35 @@ static bool vfp_needed(void *opaque)
+             : cpu_isar_feature(aa32_vfp_simd, cpu));
+ }
+ 
++static bool vfp_fpcr_fpsr_needed(void *opaque)
++{
++    /*
++     * If either the FPCR or the FPSR include set bits that are not
++     * visible in the AArch32 FPSCR view of floating point control/status
++     * then we must send the FPCR and FPSR as two separate fields in the
++     * cpu/vfp/fpcr_fpsr subsection, and we will send a 0 for the old
++     * FPSCR field in cpu/vfp.
++     *
++     * If all the set bits are representable in an AArch32 FPSCR then we
++     * send that value as the cpu/vfp FPSCR field, and don't send the
++     * cpu/vfp/fpcr_fpsr subsection.
++     *
++     * On incoming migration, if the cpu/vfp FPSCR field is non-zero we
++     * use it, and if the fpcr_fpsr subsection is present we use that.
++     * (The subsection will never be present with a non-zero FPSCR field,
++     * and if FPSCR is zero and the subsection is not present that means
++     * that FPSCR/FPSR/FPCR are zero.)
++     *
++     * This preserves migration compatibility with older QEMU versions,
++     * in both directions.
++     */
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++
++    return (vfp_get_fpcr(env) & ~FPSCR_FPCR_MASK) ||
++        (vfp_get_fpsr(env) & ~FPSCR_FPSR_MASK);
++}
++
+ static int get_fpscr(QEMUFile *f, void *opaque, size_t size,
+                      const VMStateField *field)
+ {
+@@ -25,7 +54,10 @@ static int get_fpscr(QEMUFile *f, void *opaque, size_t size,
+     CPUARMState *env = &cpu->env;
+     uint32_t val = qemu_get_be32(f);
+ 
+-    vfp_set_fpscr(env, val);
++    if (val) {
++        /* 0 means we might have the data in the fpcr_fpsr subsection */
++        vfp_set_fpscr(env, val);
++    }
+     return 0;
+ }
+ 
+@@ -34,8 +66,9 @@ static int put_fpscr(QEMUFile *f, void *opaque, size_t size,
+ {
+     ARMCPU *cpu = opaque;
+     CPUARMState *env = &cpu->env;
++    uint32_t fpscr = vfp_fpcr_fpsr_needed(opaque) ? 0 : vfp_get_fpscr(env);
+ 
+-    qemu_put_be32(f, vfp_get_fpscr(env));
++    qemu_put_be32(f, fpscr);
+     return 0;
+ }
+ 
+@@ -45,6 +78,86 @@ static const VMStateInfo vmstate_fpscr = {
+     .put = put_fpscr,
+ };
+ 
++static int get_fpcr(QEMUFile *f, void *opaque, size_t size,
++                     const VMStateField *field)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++    uint64_t val = qemu_get_be64(f);
++
++    vfp_set_fpcr(env, val);
++    return 0;
++}
++
++static int put_fpcr(QEMUFile *f, void *opaque, size_t size,
++                     const VMStateField *field, JSONWriter *vmdesc)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++
++    qemu_put_be64(f, vfp_get_fpcr(env));
++    return 0;
++}
++
++static const VMStateInfo vmstate_fpcr = {
++    .name = "fpcr",
++    .get = get_fpcr,
++    .put = put_fpcr,
++};
++
++static int get_fpsr(QEMUFile *f, void *opaque, size_t size,
++                     const VMStateField *field)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++    uint64_t val = qemu_get_be64(f);
++
++    vfp_set_fpsr(env, val);
++    return 0;
++}
++
++static int put_fpsr(QEMUFile *f, void *opaque, size_t size,
++                     const VMStateField *field, JSONWriter *vmdesc)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++
++    qemu_put_be64(f, vfp_get_fpsr(env));
++    return 0;
++}
++
++static const VMStateInfo vmstate_fpsr = {
++    .name = "fpsr",
++    .get = get_fpsr,
++    .put = put_fpsr,
++};
++
++static const VMStateDescription vmstate_vfp_fpcr_fpsr = {
++    .name = "cpu/vfp/fpcr_fpsr",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .needed = vfp_fpcr_fpsr_needed,
++    .fields = (const VMStateField[]) {
++        {
++            .name = "fpcr",
++            .version_id = 0,
++            .size = sizeof(uint64_t),
++            .info = &vmstate_fpcr,
++            .flags = VMS_SINGLE,
++            .offset = 0,
++        },
++        {
++            .name = "fpsr",
++            .version_id = 0,
++            .size = sizeof(uint64_t),
++            .info = &vmstate_fpsr,
++            .flags = VMS_SINGLE,
++            .offset = 0,
++        },
++        VMSTATE_END_OF_LIST()
++    },
++};
++
+ static const VMStateDescription vmstate_vfp = {
+     .name = "cpu/vfp",
+     .version_id = 3,
+@@ -100,6 +213,10 @@ static const VMStateDescription vmstate_vfp = {
+             .offset = 0,
+         },
+         VMSTATE_END_OF_LIST()
++    },
++    .subsections = (const VMStateDescription * const []) {
++        &vmstate_vfp_fpcr_fpsr,
++        NULL
+     }
+ };
+ 
+@@ -784,6 +901,20 @@ static int cpu_pre_load(void *opaque)
+     ARMCPU *cpu = opaque;
+     CPUARMState *env = &cpu->env;
+ 
++    /*
++     * In an inbound migration where on the source FPSCR/FPSR/FPCR are 0,
++     * there will be no fpcr_fpsr subsection so we won't call vfp_set_fpcr()
++     * and vfp_set_fpsr() from get_fpcr() and get_fpsr(); also the get_fpscr()
++     * function will not call vfp_set_fpscr() because it will see a 0 in the
++     * inbound data. Ensure that in this case we have a correctly set up
++     * zero FPSCR/FPCR/FPSR.
++     *
++     * This is not strictly needed because FPSCR is zero out of reset, but
++     * it avoids the possibility of future confusing migration bugs if some
++     * future architecture change makes the reset value non-zero.
++     */
++    vfp_set_fpscr(env, 0);
++
+     /*
+      * Pre-initialize irq_line_state to a value that's never valid as
+      * real data, so cpu_post_load() can tell whether we've seen the
+diff --git a/target/arm/tcg/a64.decode b/target/arm/tcg/a64.decode
+index 2b7a3254a0..62df4c4ceb 100644
+--- a/target/arm/tcg/a64.decode
++++ b/target/arm/tcg/a64.decode
+@@ -61,6 +61,7 @@
+ 
+ @qrrr_b         . q:1 ...... ... rm:5 ...... rn:5 rd:5  &qrrr_e esz=0
+ @qrrr_h         . q:1 ...... ... rm:5 ...... rn:5 rd:5  &qrrr_e esz=1
++@qrrr_s         . q:1 ...... ... rm:5 ...... rn:5 rd:5  &qrrr_e esz=2
+ @qrrr_sd        . q:1 ...... ... rm:5 ...... rn:5 rd:5  &qrrr_e esz=%esz_sd
+ @qrrr_e         . q:1 ...... esz:2 . rm:5 ...... rn:5 rd:5  &qrrr_e
+ @qr2r_e         . q:1 ...... esz:2 . ..... ...... rm:5 rd:5 &qrrr_e rn=%rd
+@@ -519,7 +520,7 @@ LDAPR           sz:2 111 0 00 1 0 1 11111 1100 00 rn:5 rt:5
+ LDRA            11 111 0 00 m:1 . 1 ......... w:1 1 rn:5 rt:5 imm=%ldra_imm
+ 
+ &ldapr_stlr_i   rn rt imm sz sign ext
+-@ldapr_stlr_i   .. ...... .. . imm:9 .. rn:5 rt:5 &ldapr_stlr_i
++@ldapr_stlr_i   .. ...... .. . imm:s9 .. rn:5 rt:5 &ldapr_stlr_i
+ STLR_i          sz:2 011001 00 0 ......... 00 ..... ..... @ldapr_stlr_i sign=0 ext=0
+ LDAPR_i         sz:2 011001 01 0 ......... 00 ..... ..... @ldapr_stlr_i sign=0 ext=0
+ LDAPR_i         00 011001 10 0 ......... 00 ..... ..... @ldapr_stlr_i sign=1 ext=0 sz=0
+@@ -781,6 +782,16 @@ CMEQ_s          0111 1110 111 ..... 10001 1 ..... ..... @rrr_d
+ 
+ SQDMULH_s       0101 1110 ..1 ..... 10110 1 ..... ..... @rrr_e
+ SQRDMULH_s      0111 1110 ..1 ..... 10110 1 ..... ..... @rrr_e
++SQRDMLAH_s      0111 1110 ..0 ..... 10000 1 ..... ..... @rrr_e
++SQRDMLSH_s      0111 1110 ..0 ..... 10001 1 ..... ..... @rrr_e
++
++# Decode scalar x scalar as scalar x indexed, with index 0.
++SQDMULL_si      0101 1110 011 rm:5  11010 0 rn:5  rd:5  &rrx_e idx=0 esz=1
++SQDMULL_si      0101 1110 101 rm:5  11010 0 rn:5  rd:5  &rrx_e idx=0 esz=2
++SQDMLAL_si      0101 1110 011 rm:5  10010 0 rn:5  rd:5  &rrx_e idx=0 esz=1
++SQDMLAL_si      0101 1110 101 rm:5  10010 0 rn:5  rd:5  &rrx_e idx=0 esz=2
++SQDMLSL_si      0101 1110 011 rm:5  10110 0 rn:5  rd:5  &rrx_e idx=0 esz=1
++SQDMLSL_si      0101 1110 101 rm:5  10110 0 rn:5  rd:5  &rrx_e idx=0 esz=2
+ 
+ ### Advanced SIMD scalar pairwise
+ 
+@@ -941,6 +952,59 @@ MLS_v           0.10 1110 ..1 ..... 10010 1 ..... ..... @qrrr_e
+ 
+ SQDMULH_v       0.00 1110 ..1 ..... 10110 1 ..... ..... @qrrr_e
+ SQRDMULH_v      0.10 1110 ..1 ..... 10110 1 ..... ..... @qrrr_e
++SQRDMLAH_v      0.10 1110 ..0 ..... 10000 1 ..... ..... @qrrr_e
++SQRDMLSH_v      0.10 1110 ..0 ..... 10001 1 ..... ..... @qrrr_e
++
++SDOT_v          0.00 1110 100 ..... 10010 1 ..... ..... @qrrr_s
++UDOT_v          0.10 1110 100 ..... 10010 1 ..... ..... @qrrr_s
++USDOT_v         0.00 1110 100 ..... 10011 1 ..... ..... @qrrr_s
++BFDOT_v         0.10 1110 010 ..... 11111 1 ..... ..... @qrrr_s
++BFMLAL_v        0.10 1110 110 ..... 11111 1 ..... ..... @qrrr_h
++BFMMLA          0110 1110 010 ..... 11101 1 ..... ..... @rrr_q1e0
++SMMLA           0100 1110 100 ..... 10100 1 ..... ..... @rrr_q1e0
++UMMLA           0110 1110 100 ..... 10100 1 ..... ..... @rrr_q1e0
++USMMLA          0100 1110 100 ..... 10101 1 ..... ..... @rrr_q1e0
++
++FCADD_90        0.10 1110 ..0 ..... 11100 1 ..... ..... @qrrr_e
++FCADD_270       0.10 1110 ..0 ..... 11110 1 ..... ..... @qrrr_e
++
++FCMLA_v         0 q:1 10 1110 esz:2 0 rm:5 110 rot:2 1 rn:5 rd:5
++
++SMULL_v         0.00 1110 ..1 ..... 11000 0 ..... ..... @qrrr_e
++UMULL_v         0.10 1110 ..1 ..... 11000 0 ..... ..... @qrrr_e
++SMLAL_v         0.00 1110 ..1 ..... 10000 0 ..... ..... @qrrr_e
++UMLAL_v         0.10 1110 ..1 ..... 10000 0 ..... ..... @qrrr_e
++SMLSL_v         0.00 1110 ..1 ..... 10100 0 ..... ..... @qrrr_e
++UMLSL_v         0.10 1110 ..1 ..... 10100 0 ..... ..... @qrrr_e
++
++SADDL_v         0.00 1110 ..1 ..... 00000 0 ..... ..... @qrrr_e
++UADDL_v         0.10 1110 ..1 ..... 00000 0 ..... ..... @qrrr_e
++SSUBL_v         0.00 1110 ..1 ..... 00100 0 ..... ..... @qrrr_e
++USUBL_v         0.10 1110 ..1 ..... 00100 0 ..... ..... @qrrr_e
++SABAL_v         0.00 1110 ..1 ..... 01010 0 ..... ..... @qrrr_e
++UABAL_v         0.10 1110 ..1 ..... 01010 0 ..... ..... @qrrr_e
++SABDL_v         0.00 1110 ..1 ..... 01110 0 ..... ..... @qrrr_e
++UABDL_v         0.10 1110 ..1 ..... 01110 0 ..... ..... @qrrr_e
++
++SQDMULL_v       0.00 1110 011 ..... 11010 0 ..... ..... @qrrr_h
++SQDMULL_v       0.00 1110 101 ..... 11010 0 ..... ..... @qrrr_s
++SQDMLAL_v       0.00 1110 011 ..... 10010 0 ..... ..... @qrrr_h
++SQDMLAL_v       0.00 1110 101 ..... 10010 0 ..... ..... @qrrr_s
++SQDMLSL_v       0.00 1110 011 ..... 10110 0 ..... ..... @qrrr_h
++SQDMLSL_v       0.00 1110 101 ..... 10110 0 ..... ..... @qrrr_s
++
++SADDW           0.00 1110 ..1 ..... 00010 0 ..... ..... @qrrr_e
++UADDW           0.10 1110 ..1 ..... 00010 0 ..... ..... @qrrr_e
++SSUBW           0.00 1110 ..1 ..... 00110 0 ..... ..... @qrrr_e
++USUBW           0.10 1110 ..1 ..... 00110 0 ..... ..... @qrrr_e
++
++ADDHN           0.00 1110 ..1 ..... 01000 0 ..... ..... @qrrr_e
++RADDHN          0.10 1110 ..1 ..... 01000 0 ..... ..... @qrrr_e
++SUBHN           0.00 1110 ..1 ..... 01100 0 ..... ..... @qrrr_e
++RSUBHN          0.10 1110 ..1 ..... 01100 0 ..... ..... @qrrr_e
++
++PMULL_p8        0.00 1110 001 ..... 11100 0 ..... ..... @qrrr_b
++PMULL_p64       0.00 1110 111 ..... 11100 0 ..... ..... @qrrr_b
+ 
+ ### Advanced SIMD scalar x indexed element
+ 
+@@ -966,6 +1030,21 @@ SQDMULH_si      0101 1111 10 .. .... 1100 . 0 ..... .....   @rrx_s
+ SQRDMULH_si     0101 1111 01 .. .... 1101 . 0 ..... .....   @rrx_h
+ SQRDMULH_si     0101 1111 10 . ..... 1101 . 0 ..... .....   @rrx_s
+ 
++SQRDMLAH_si     0111 1111 01 .. .... 1101 . 0 ..... .....   @rrx_h
++SQRDMLAH_si     0111 1111 10 .. .... 1101 . 0 ..... .....   @rrx_s
++
++SQRDMLSH_si     0111 1111 01 .. .... 1111 . 0 ..... .....   @rrx_h
++SQRDMLSH_si     0111 1111 10 .. .... 1111 . 0 ..... .....   @rrx_s
++
++SQDMULL_si      0101 1111 01 .. .... 1011 . 0 ..... .....   @rrx_h
++SQDMULL_si      0101 1111 10 . ..... 1011 . 0 ..... .....   @rrx_s
++
++SQDMLAL_si      0101 1111 01 .. .... 0011 . 0 ..... .....   @rrx_h
++SQDMLAL_si      0101 1111 10 . ..... 0011 . 0 ..... .....   @rrx_s
++
++SQDMLSL_si      0101 1111 01 .. .... 0111 . 0 ..... .....   @rrx_h
++SQDMLSL_si      0101 1111 10 . ..... 0111 . 0 ..... .....   @rrx_s
++
+ ### Advanced SIMD vector x indexed element
+ 
+ FMUL_vi         0.00 1111 00 .. .... 1001 . 0 ..... .....   @qrrx_h
+@@ -1004,6 +1083,47 @@ SQDMULH_vi      0.00 1111 10 . ..... 1100 . 0 ..... .....   @qrrx_s
+ SQRDMULH_vi     0.00 1111 01 .. .... 1101 . 0 ..... .....   @qrrx_h
+ SQRDMULH_vi     0.00 1111 10 . ..... 1101 . 0 ..... .....   @qrrx_s
+ 
++SQRDMLAH_vi     0.10 1111 01 .. .... 1101 . 0 ..... .....   @qrrx_h
++SQRDMLAH_vi     0.10 1111 10 .. .... 1101 . 0 ..... .....   @qrrx_s
++
++SQRDMLSH_vi     0.10 1111 01 .. .... 1111 . 0 ..... .....   @qrrx_h
++SQRDMLSH_vi     0.10 1111 10 .. .... 1111 . 0 ..... .....   @qrrx_s
++
++SDOT_vi         0.00 1111 10 .. .... 1110 . 0 ..... .....   @qrrx_s
++UDOT_vi         0.10 1111 10 .. .... 1110 . 0 ..... .....   @qrrx_s
++SUDOT_vi        0.00 1111 00 .. .... 1111 . 0 ..... .....   @qrrx_s
++USDOT_vi        0.00 1111 10 .. .... 1111 . 0 ..... .....   @qrrx_s
++BFDOT_vi        0.00 1111 01 .. .... 1111 . 0 ..... .....   @qrrx_s
++BFMLAL_vi       0.00 1111 11 .. .... 1111 . 0 ..... .....   @qrrx_h
++
++FCMLA_vi        0 0 10 1111 01 idx:1 rm:5 0 rot:2 1 0 0 rn:5 rd:5 esz=1 q=0
++FCMLA_vi        0 1 10 1111 01 . rm:5 0 rot:2 1 . 0 rn:5 rd:5 esz=1 idx=%hl q=1
++FCMLA_vi        0 1 10 1111 10 0 rm:5 0 rot:2 1 idx:1 0 rn:5 rd:5 esz=2 q=1
++
++SMULL_vi        0.00 1111 01 .. .... 1010 . 0 ..... .....   @qrrx_h
++SMULL_vi        0.00 1111 10 . ..... 1010 . 0 ..... .....   @qrrx_s
++UMULL_vi        0.10 1111 01 .. .... 1010 . 0 ..... .....   @qrrx_h
++UMULL_vi        0.10 1111 10 . ..... 1010 . 0 ..... .....   @qrrx_s
++
++SMLAL_vi        0.00 1111 01 .. .... 0010 . 0 ..... .....   @qrrx_h
++SMLAL_vi        0.00 1111 10 . ..... 0010 . 0 ..... .....   @qrrx_s
++UMLAL_vi        0.10 1111 01 .. .... 0010 . 0 ..... .....   @qrrx_h
++UMLAL_vi        0.10 1111 10 . ..... 0010 . 0 ..... .....   @qrrx_s
++
++SMLSL_vi        0.00 1111 01 .. .... 0110 . 0 ..... .....   @qrrx_h
++SMLSL_vi        0.00 1111 10 . ..... 0110 . 0 ..... .....   @qrrx_s
++UMLSL_vi        0.10 1111 01 .. .... 0110 . 0 ..... .....   @qrrx_h
++UMLSL_vi        0.10 1111 10 . ..... 0110 . 0 ..... .....   @qrrx_s
++
++SQDMULL_vi      0.00 1111 01 .. .... 1011 . 0 ..... .....   @qrrx_h
++SQDMULL_vi      0.00 1111 10 . ..... 1011 . 0 ..... .....   @qrrx_s
++
++SQDMLAL_vi      0.00 1111 01 .. .... 0011 . 0 ..... .....   @qrrx_h
++SQDMLAL_vi      0.00 1111 10 . ..... 0011 . 0 ..... .....   @qrrx_s
++
++SQDMLSL_vi      0.00 1111 01 .. .... 0111 . 0 ..... .....   @qrrx_h
++SQDMLSL_vi      0.00 1111 10 . ..... 0111 . 0 ..... .....   @qrrx_s
++
+ # Floating-point conditional select
+ 
+ FCSEL           0001 1110 .. 1 rm:5 cond:4 11 rn:5 rd:5     esz=%esz_hsd
+diff --git a/target/arm/tcg/cpu-v7m.c b/target/arm/tcg/cpu-v7m.c
+index c059c681e9..5496f14dc1 100644
+--- a/target/arm/tcg/cpu-v7m.c
++++ b/target/arm/tcg/cpu-v7m.c
+@@ -244,6 +244,7 @@ static const TCGCPUOps arm_v7m_tcg_ops = {
+ #else
+     .tlb_fill = arm_cpu_tlb_fill,
+     .cpu_exec_interrupt = arm_v7m_cpu_exec_interrupt,
++    .cpu_exec_halt = arm_cpu_exec_halt,
+     .do_interrupt = arm_v7m_cpu_do_interrupt,
+     .do_transaction_failed = arm_cpu_do_transaction_failed,
+     .do_unaligned_access = arm_cpu_do_unaligned_access,
+diff --git a/target/arm/tcg/cpu32.c b/target/arm/tcg/cpu32.c
+index bdd82d912a..20c2737f17 100644
+--- a/target/arm/tcg/cpu32.c
++++ b/target/arm/tcg/cpu32.c
+@@ -82,11 +82,39 @@ void aa32_max_features(ARMCPU *cpu)
+     cpu->isar.id_pfr2 = t;
+ 
+     t = cpu->isar.id_dfr0;
+-    t = FIELD_DP32(t, ID_DFR0, COPDBG, 9);        /* FEAT_Debugv8p4 */
+-    t = FIELD_DP32(t, ID_DFR0, COPSDBG, 9);       /* FEAT_Debugv8p4 */
++    t = FIELD_DP32(t, ID_DFR0, COPDBG, 10);       /* FEAT_Debugv8p8 */
++    t = FIELD_DP32(t, ID_DFR0, COPSDBG, 10);      /* FEAT_Debugv8p8 */
+     t = FIELD_DP32(t, ID_DFR0, PERFMON, 6);       /* FEAT_PMUv3p5 */
+     cpu->isar.id_dfr0 = t;
+ 
++    /* Debug ID registers. */
++
++    /* Bit[15] is RES1, Bit[13] and Bits[11:0] are RES0. */
++    t = 0x00008000;
++    t = FIELD_DP32(t, DBGDIDR, SE_IMP, 1);
++    t = FIELD_DP32(t, DBGDIDR, NSUHD_IMP, 1);
++    t = FIELD_DP32(t, DBGDIDR, VERSION, 10);      /* FEAT_Debugv8p8 */
++    t = FIELD_DP32(t, DBGDIDR, CTX_CMPS, 1);
++    t = FIELD_DP32(t, DBGDIDR, BRPS, 5);
++    t = FIELD_DP32(t, DBGDIDR, WRPS, 3);
++    cpu->isar.dbgdidr = t;
++
++    t = 0;
++    t = FIELD_DP32(t, DBGDEVID, PCSAMPLE, 3);
++    t = FIELD_DP32(t, DBGDEVID, WPADDRMASK, 1);
++    t = FIELD_DP32(t, DBGDEVID, BPADDRMASK, 15);
++    t = FIELD_DP32(t, DBGDEVID, VECTORCATCH, 0);
++    t = FIELD_DP32(t, DBGDEVID, VIRTEXTNS, 1);
++    t = FIELD_DP32(t, DBGDEVID, DOUBLELOCK, 1);
++    t = FIELD_DP32(t, DBGDEVID, AUXREGS, 0);
++    t = FIELD_DP32(t, DBGDEVID, CIDMASK, 0);
++    cpu->isar.dbgdevid = t;
++
++    /* Bits[31:4] are RES0. */
++    t = 0;
++    t = FIELD_DP32(t, DBGDEVID1, PCSROFFSET, 2);
++    cpu->isar.dbgdevid1 = t;
++
+     t = cpu->isar.id_dfr1;
+     t = FIELD_DP32(t, ID_DFR1, HPMN0, 1);         /* FEAT_HPMN0 */
+     cpu->isar.id_dfr1 = t;
+@@ -955,9 +983,6 @@ static void arm_max_initfn(Object *obj)
+     cpu->isar.id_isar4 = 0x00011142;
+     cpu->isar.id_isar5 = 0x00011121;
+     cpu->isar.id_isar6 = 0;
+-    cpu->isar.dbgdidr = 0x3516d000;
+-    cpu->isar.dbgdevid = 0x00110f13;
+-    cpu->isar.dbgdevid1 = 0x2;
+     cpu->isar.reset_pmcr_el0 = 0x41013000;
+     cpu->clidr = 0x0a200023;
+     cpu->ccsidr[0] = 0x701fe00a; /* 32KB L1 dcache */
+diff --git a/target/arm/tcg/cpu64.c b/target/arm/tcg/cpu64.c
+index 0899251eef..fe232eb306 100644
+--- a/target/arm/tcg/cpu64.c
++++ b/target/arm/tcg/cpu64.c
+@@ -1167,7 +1167,7 @@ void aarch64_max_tcg_initfn(Object *obj)
+ 
+     t = cpu->isar.id_aa64isar2;
+     t = FIELD_DP64(t, ID_AA64ISAR2, MOPS, 1);     /* FEAT_MOPS */
+-    t = FIELD_DP64(t, ID_AA64ISAR2, BC, 1);      /* FEAT_HBC */
++    t = FIELD_DP64(t, ID_AA64ISAR2, BC, 1);       /* FEAT_HBC */
+     t = FIELD_DP64(t, ID_AA64ISAR2, WFXT, 2);     /* FEAT_WFxT */
+     cpu->isar.id_aa64isar2 = t;
+ 
+@@ -1253,7 +1253,7 @@ void aarch64_max_tcg_initfn(Object *obj)
+     cpu->isar.id_aa64zfr0 = t;
+ 
+     t = cpu->isar.id_aa64dfr0;
+-    t = FIELD_DP64(t, ID_AA64DFR0, DEBUGVER, 9);  /* FEAT_Debugv8p4 */
++    t = FIELD_DP64(t, ID_AA64DFR0, DEBUGVER, 10); /* FEAT_Debugv8p8 */
+     t = FIELD_DP64(t, ID_AA64DFR0, PMUVER, 6);    /* FEAT_PMUv3p5 */
+     t = FIELD_DP64(t, ID_AA64DFR0, HPMN0, 1);     /* FEAT_HPMN0 */
+     cpu->isar.id_aa64dfr0 = t;
+diff --git a/target/arm/tcg/mte_helper.c b/target/arm/tcg/mte_helper.c
+index 037ac6dd60..9d2ba287ee 100644
+--- a/target/arm/tcg/mte_helper.c
++++ b/target/arm/tcg/mte_helper.c
+@@ -29,6 +29,7 @@
+ #include "hw/core/tcg-cpu-ops.h"
+ #include "qapi/error.h"
+ #include "qemu/guest-random.h"
++#include "mte_helper.h"
+ 
+ 
+ static int choose_nonexcluded_tag(int tag, int offset, uint16_t exclude)
+@@ -50,42 +51,10 @@ static int choose_nonexcluded_tag(int tag, int offset, uint16_t exclude)
+     return tag;
+ }
+ 
+-/**
+- * allocation_tag_mem_probe:
+- * @env: the cpu environment
+- * @ptr_mmu_idx: the addressing regime to use for the virtual address
+- * @ptr: the virtual address for which to look up tag memory
+- * @ptr_access: the access to use for the virtual address
+- * @ptr_size: the number of bytes in the normal memory access
+- * @tag_access: the access to use for the tag memory
+- * @probe: true to merely probe, never taking an exception
+- * @ra: the return address for exception handling
+- *
+- * Our tag memory is formatted as a sequence of little-endian nibbles.
+- * That is, the byte at (addr >> (LOG2_TAG_GRANULE + 1)) contains two
+- * tags, with the tag at [3:0] for the lower addr and the tag at [7:4]
+- * for the higher addr.
+- *
+- * Here, resolve the physical address from the virtual address, and return
+- * a pointer to the corresponding tag byte.
+- *
+- * If there is no tag storage corresponding to @ptr, return NULL.
+- *
+- * If the page is inaccessible for @ptr_access, or has a watchpoint, there are
+- * three options:
+- * (1) probe = true, ra = 0 : pure probe -- we return NULL if the page is not
+- *     accessible, and do not take watchpoint traps. The calling code must
+- *     handle those cases in the right priority compared to MTE traps.
+- * (2) probe = false, ra = 0 : probe, no fault expected -- the caller guarantees
+- *     that the page is going to be accessible. We will take watchpoint traps.
+- * (3) probe = false, ra != 0 : non-probe -- we will take both memory access
+- *     traps and watchpoint traps.
+- * (probe = true, ra != 0 is invalid and will assert.)
+- */
+-static uint8_t *allocation_tag_mem_probe(CPUARMState *env, int ptr_mmu_idx,
+-                                         uint64_t ptr, MMUAccessType ptr_access,
+-                                         int ptr_size, MMUAccessType tag_access,
+-                                         bool probe, uintptr_t ra)
++uint8_t *allocation_tag_mem_probe(CPUARMState *env, int ptr_mmu_idx,
++                                  uint64_t ptr, MMUAccessType ptr_access,
++                                  int ptr_size, MMUAccessType tag_access,
++                                  bool probe, uintptr_t ra)
+ {
+ #ifdef CONFIG_USER_ONLY
+     uint64_t clean_ptr = useronly_clean_ptr(ptr);
+@@ -96,6 +65,9 @@ static uint8_t *allocation_tag_mem_probe(CPUARMState *env, int ptr_mmu_idx,
+     assert(!(probe && ra));
+ 
+     if (!(flags & (ptr_access == MMU_DATA_STORE ? PAGE_WRITE_ORG : PAGE_READ))) {
++        if (probe) {
++            return NULL;
++        }
+         cpu_loop_exit_sigsegv(env_cpu(env), ptr, ptr_access,
+                               !(flags & PAGE_VALID), ra);
+     }
+@@ -284,7 +256,7 @@ uint64_t HELPER(addsubg)(CPUARMState *env, uint64_t ptr,
+     return address_with_allocation_tag(ptr + offset, rtag);
+ }
+ 
+-static int load_tag1(uint64_t ptr, uint8_t *mem)
++int load_tag1(uint64_t ptr, uint8_t *mem)
+ {
+     int ofs = extract32(ptr, LOG2_TAG_GRANULE, 1) * 4;
+     return extract32(*mem, ofs, 4);
+@@ -318,7 +290,7 @@ static void check_tag_aligned(CPUARMState *env, uint64_t ptr, uintptr_t ra)
+ }
+ 
+ /* For use in a non-parallel context, store to the given nibble.  */
+-static void store_tag1(uint64_t ptr, uint8_t *mem, int tag)
++void store_tag1(uint64_t ptr, uint8_t *mem, int tag)
+ {
+     int ofs = extract32(ptr, LOG2_TAG_GRANULE, 1) * 4;
+     *mem = deposit32(*mem, ofs, 4, tag);

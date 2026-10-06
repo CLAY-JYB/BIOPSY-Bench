@@ -1,0 +1,69 @@
+From 9a8edb21 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0062] pcie_sriov: Ensure VF function number does not overflow (part 20/26)
+
+---
+diff --git a/hw/pci/pcie_sriov.c b/hw/pci/pcie_sriov.c
+index 499becd527..56523ab4e8 100644
+--- a/hw/pci/pcie_sriov.c
++++ b/hw/pci/pcie_sriov.c
+@@ -168,49 +196,31 @@ static void register_vfs(PCIDevice *dev)
+     uint16_t num_vfs;
+     uint16_t i;
+     uint16_t sriov_cap = dev->exp.sriov_cap;
+-    uint16_t vf_offset =
+-        pci_get_word(dev->config + sriov_cap + PCI_SRIOV_VF_OFFSET);
+-    uint16_t vf_stride =
+-        pci_get_word(dev->config + sriov_cap + PCI_SRIOV_VF_STRIDE);
+-    int32_t devfn = dev->devfn + vf_offset;
+ 
+     assert(sriov_cap > 0);
+     num_vfs = pci_get_word(dev->config + sriov_cap + PCI_SRIOV_NUM_VF);
+     if (num_vfs > pci_get_word(dev->config + sriov_cap + PCI_SRIOV_TOTAL_VF)) {
++        clear_ctrl_vfe(dev);
+         return;
+     }
+ 
+-    dev->exp.sriov_pf.vf = g_new(PCIDevice *, num_vfs);
+-
+     trace_sriov_register_vfs(dev->name, PCI_SLOT(dev->devfn),
+                              PCI_FUNC(dev->devfn), num_vfs);
+     for (i = 0; i < num_vfs; i++) {
+-        dev->exp.sriov_pf.vf[i] = register_vf(dev, devfn,
+-                                              dev->exp.sriov_pf.vfname, i);
+-        if (!dev->exp.sriov_pf.vf[i]) {
+-            num_vfs = i;
+-            break;
+-        }
+-        devfn += vf_stride;
++        pci_set_enabled(dev->exp.sriov_pf.vf[i], true);
+     }
+-    dev->exp.sriov_pf.num_vfs = num_vfs;
+ }
+ 
+ static void unregister_vfs(PCIDevice *dev)
+ {
+-    uint16_t num_vfs = dev->exp.sriov_pf.num_vfs;
+     uint16_t i;
++    uint8_t *cfg = dev->config + dev->exp.sriov_cap;
+ 
+     trace_sriov_unregister_vfs(dev->name, PCI_SLOT(dev->devfn),
+-                               PCI_FUNC(dev->devfn), num_vfs);
+-    for (i = 0; i < num_vfs; i++) {
+-        PCIDevice *vf = dev->exp.sriov_pf.vf[i];
+-        object_unparent(OBJECT(vf));
+-        object_unref(OBJECT(vf));
++                               PCI_FUNC(dev->devfn));
++    for (i = 0; i < pci_get_word(cfg + PCI_SRIOV_TOTAL_VF); i++) {
++        pci_set_enabled(dev->exp.sriov_pf.vf[i], false);
+     }
+-    g_free(dev->exp.sriov_pf.vf);
+-    dev->exp.sriov_pf.vf = NULL;
+-    dev->exp.sriov_pf.num_vfs = 0;
+ }
+ 
+ void pcie_sriov_config_write(PCIDevice *dev, uint32_t address,
+
+-- 
+2.43.0

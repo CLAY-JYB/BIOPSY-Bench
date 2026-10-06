@@ -1,0 +1,37 @@
+From bff14339 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0015] remote: fix leak in reachability check of a remote-track (part 8/29)
+
+---
+diff --git a/ref-filter.c b/ref-filter.c
+index 6d8b5919..0f51095b 100644
+--- a/ref-filter.c
++++ b/ref-filter.c
+@@ -891,6 +906,23 @@ static int ahead_behind_atom_parser(struct ref_format *format,
+ 	return 0;
+ }
+ 
++static int is_base_atom_parser(struct ref_format *format,
++			       struct used_atom *atom UNUSED,
++			       const char *arg, struct strbuf *err)
++{
++	struct string_list_item *item;
++
++	if (!arg)
++		return strbuf_addf_ret(err, -1, _("expected format: %%(is-base:<committish>)"));
++
++	item = string_list_append(&format->is_base_tips, arg);
++	item->util = lookup_commit_reference_by_name(arg);
++	if (!item->util)
++		die("failed to find '%s'", arg);
++
++	return 0;
++}
++
+ static int head_atom_parser(struct ref_format *format UNUSED,
+ 			    struct used_atom *atom,
+ 			    const char *arg, struct strbuf *err)
+
+-- 
+2.43.0

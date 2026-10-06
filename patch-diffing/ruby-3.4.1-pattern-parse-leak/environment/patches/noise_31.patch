@@ -1,0 +1,578 @@
+diff --git a/spec/ruby/library/getoptlong/initialize_spec.rb b/spec/ruby/library/getoptlong/initialize_spec.rb
+index f0e5d605b..782edbd98 100644
+--- a/spec/ruby/library/getoptlong/initialize_spec.rb
++++ b/spec/ruby/library/getoptlong/initialize_spec.rb
+@@ -1,31 +1,28 @@
+ require_relative '../../spec_helper'
++require 'getoptlong'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'getoptlong'
++describe "GetoptLong#initialize" do
++  it "sets ordering to REQUIRE_ORDER if ENV['POSIXLY_CORRECT'] is set" do
++    begin
++      old_env_value = ENV["POSIXLY_CORRECT"]
++      ENV["POSIXLY_CORRECT"] = ""
+ 
+-  describe "GetoptLong#initialize" do
+-    it "sets ordering to REQUIRE_ORDER if ENV['POSIXLY_CORRECT'] is set" do
+-      begin
+-        old_env_value = ENV["POSIXLY_CORRECT"]
+-        ENV["POSIXLY_CORRECT"] = ""
+-
+-        opt = GetoptLong.new
+-        opt.ordering.should == GetoptLong::REQUIRE_ORDER
+-      ensure
+-        ENV["POSIXLY_CORRECT"] = old_env_value
+-      end
++      opt = GetoptLong.new
++      opt.ordering.should == GetoptLong::REQUIRE_ORDER
++    ensure
++      ENV["POSIXLY_CORRECT"] = old_env_value
+     end
++  end
+ 
+-    it "sets ordering to PERMUTE if ENV['POSIXLY_CORRECT'] is not set" do
+-      begin
+-        old_env_value = ENV["POSIXLY_CORRECT"]
+-        ENV["POSIXLY_CORRECT"] = nil
++  it "sets ordering to PERMUTE if ENV['POSIXLY_CORRECT'] is not set" do
++    begin
++      old_env_value = ENV["POSIXLY_CORRECT"]
++      ENV["POSIXLY_CORRECT"] = nil
+ 
+-        opt = GetoptLong.new
+-        opt.ordering.should == GetoptLong::PERMUTE
+-      ensure
+-        ENV["POSIXLY_CORRECT"] = old_env_value
+-      end
++      opt = GetoptLong.new
++      opt.ordering.should == GetoptLong::PERMUTE
++    ensure
++      ENV["POSIXLY_CORRECT"] = old_env_value
+     end
+   end
+ end
+diff --git a/spec/ruby/library/getoptlong/ordering_spec.rb b/spec/ruby/library/getoptlong/ordering_spec.rb
+index b0b5b9be5..695d1cafa 100644
+--- a/spec/ruby/library/getoptlong/ordering_spec.rb
++++ b/spec/ruby/library/getoptlong/ordering_spec.rb
+@@ -1,41 +1,38 @@
+ require_relative '../../spec_helper'
++require 'getoptlong'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'getoptlong'
+-
+-  describe "GetoptLong#ordering=" do
+-    it "raises an ArgumentError if called after processing has started" do
+-      argv [ "--size", "10k", "--verbose" ] do
+-        opts = GetoptLong.new([ '--size', GetoptLong::REQUIRED_ARGUMENT ],
+-          [ '--verbose', GetoptLong::NO_ARGUMENT ])
+-        opts.quiet = true
+-        opts.get
+-
+-        -> {
+-          opts.ordering = GetoptLong::PERMUTE
+-        }.should raise_error(ArgumentError)
+-      end
+-    end
+-
+-    it "raises an ArgumentError if given an invalid value" do
+-      opts = GetoptLong.new
++describe "GetoptLong#ordering=" do
++  it "raises an ArgumentError if called after processing has started" do
++    argv [ "--size", "10k", "--verbose" ] do
++      opts = GetoptLong.new([ '--size', GetoptLong::REQUIRED_ARGUMENT ],
++        [ '--verbose', GetoptLong::NO_ARGUMENT ])
++      opts.quiet = true
++      opts.get
+ 
+       -> {
+-        opts.ordering = 12345
++        opts.ordering = GetoptLong::PERMUTE
+       }.should raise_error(ArgumentError)
+     end
++  end
+ 
+-    it "does not allow changing ordering to PERMUTE if ENV['POSIXLY_CORRECT'] is set" do
+-      begin
+-        old_env_value = ENV['POSIXLY_CORRECT']
+-        ENV['POSIXLY_CORRECT'] = ""
++  it "raises an ArgumentError if given an invalid value" do
++    opts = GetoptLong.new
+ 
+-        opts = GetoptLong.new
+-        opts.ordering = GetoptLong::PERMUTE
+-        opts.ordering.should == GetoptLong::REQUIRE_ORDER
+-      ensure
+-        ENV['POSIXLY_CORRECT'] = old_env_value
+-      end
++    -> {
++      opts.ordering = 12345
++    }.should raise_error(ArgumentError)
++  end
++
++  it "does not allow changing ordering to PERMUTE if ENV['POSIXLY_CORRECT'] is set" do
++    begin
++      old_env_value = ENV['POSIXLY_CORRECT']
++      ENV['POSIXLY_CORRECT'] = ""
++
++      opts = GetoptLong.new
++      opts.ordering = GetoptLong::PERMUTE
++      opts.ordering.should == GetoptLong::REQUIRE_ORDER
++    ensure
++      ENV['POSIXLY_CORRECT'] = old_env_value
+     end
+   end
+ end
+diff --git a/spec/ruby/library/getoptlong/set_options_spec.rb b/spec/ruby/library/getoptlong/set_options_spec.rb
+index 0e77696a9..36b9c579c 100644
+--- a/spec/ruby/library/getoptlong/set_options_spec.rb
++++ b/spec/ruby/library/getoptlong/set_options_spec.rb
+@@ -1,101 +1,98 @@
+ require_relative '../../spec_helper'
++require 'getoptlong'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'getoptlong'
+-
+-  describe "GetoptLong#set_options" do
+-    before :each do
+-      @opts = GetoptLong.new
+-    end
++describe "GetoptLong#set_options" do
++  before :each do
++    @opts = GetoptLong.new
++  end
+ 
+-    it "allows setting command line options" do
+-      argv ["--size", "10k", "-v", "arg1", "arg2"] do
+-        @opts.set_options(
+-          ["--size", GetoptLong::REQUIRED_ARGUMENT],
+-          ["--verbose", "-v", GetoptLong::NO_ARGUMENT]
+-        )
++  it "allows setting command line options" do
++    argv ["--size", "10k", "-v", "arg1", "arg2"] do
++      @opts.set_options(
++        ["--size", GetoptLong::REQUIRED_ARGUMENT],
++        ["--verbose", "-v", GetoptLong::NO_ARGUMENT]
++      )
+ 
+-        @opts.get.should == ["--size", "10k"]
+-        @opts.get.should == ["--verbose", ""]
+-        @opts.get.should == nil
+-      end
++      @opts.get.should == ["--size", "10k"]
++      @opts.get.should == ["--verbose", ""]
++      @opts.get.should == nil
+     end
++  end
+ 
+-    it "discards previously defined command line options" do
+-      argv ["--size", "10k", "-v", "arg1", "arg2"] do
+-        @opts.set_options(
+-          ["--size", GetoptLong::REQUIRED_ARGUMENT],
+-          ["--verbose", "-v", GetoptLong::NO_ARGUMENT]
+-        )
++  it "discards previously defined command line options" do
++    argv ["--size", "10k", "-v", "arg1", "arg2"] do
++      @opts.set_options(
++        ["--size", GetoptLong::REQUIRED_ARGUMENT],
++        ["--verbose", "-v", GetoptLong::NO_ARGUMENT]
++      )
+ 
+-        @opts.set_options(
+-          ["-s", "--size", GetoptLong::REQUIRED_ARGUMENT],
+-          ["-v", GetoptLong::NO_ARGUMENT]
+-        )
++      @opts.set_options(
++        ["-s", "--size", GetoptLong::REQUIRED_ARGUMENT],
++        ["-v", GetoptLong::NO_ARGUMENT]
++      )
+ 
+-        @opts.get.should == ["-s", "10k"]
+-        @opts.get.should == ["-v", ""]
+-        @opts.get.should == nil
+-      end
++      @opts.get.should == ["-s", "10k"]
++      @opts.get.should == ["-v", ""]
++      @opts.get.should == nil
+     end
++  end
+ 
+-    it "raises an ArgumentError if too many argument flags where given" do
+-      argv [] do
+-        -> {
+-          @opts.set_options(["--size", GetoptLong::NO_ARGUMENT, GetoptLong::REQUIRED_ARGUMENT])
+-        }.should raise_error(ArgumentError)
+-      end
++  it "raises an ArgumentError if too many argument flags where given" do
++    argv [] do
++      -> {
++        @opts.set_options(["--size", GetoptLong::NO_ARGUMENT, GetoptLong::REQUIRED_ARGUMENT])
++      }.should raise_error(ArgumentError)
+     end
++  end
+ 
+-    it "raises a RuntimeError if processing has already started" do
+-      argv [] do
+-        @opts.get
+-        -> {
+-          @opts.set_options()
+-        }.should raise_error(RuntimeError)
+-      end
++  it "raises a RuntimeError if processing has already started" do
++    argv [] do
++      @opts.get
++      -> {
++        @opts.set_options()
++      }.should raise_error(RuntimeError)
+     end
++  end
+ 
+-    it "raises an ArgumentError if no argument flag was given" do
+-      argv [] do
+-        -> {
+-          @opts.set_options(["--size"])
+-        }.should raise_error(ArgumentError)
+-      end
++  it "raises an ArgumentError if no argument flag was given" do
++    argv [] do
++      -> {
++        @opts.set_options(["--size"])
++      }.should raise_error(ArgumentError)
+     end
++  end
+ 
+-    it "raises an ArgumentError if one of the given arguments is not an Array" do
+-      argv [] do
+-        -> {
+-          @opts.set_options(
+-            ["--size", GetoptLong::REQUIRED_ARGUMENT],
+-            "test")
+-        }.should raise_error(ArgumentError)
+-      end
++  it "raises an ArgumentError if one of the given arguments is not an Array" do
++    argv [] do
++      -> {
++        @opts.set_options(
++          ["--size", GetoptLong::REQUIRED_ARGUMENT],
++          "test")
++      }.should raise_error(ArgumentError)
+     end
++  end
+ 
+-    it "raises an ArgumentError if the same option is given twice" do
+-      argv [] do
+-        -> {
+-          @opts.set_options(
+-            ["--size", GetoptLong::NO_ARGUMENT],
+-            ["--size", GetoptLong::OPTIONAL_ARGUMENT])
+-        }.should raise_error(ArgumentError)
++  it "raises an ArgumentError if the same option is given twice" do
++    argv [] do
++      -> {
++        @opts.set_options(
++          ["--size", GetoptLong::NO_ARGUMENT],
++          ["--size", GetoptLong::OPTIONAL_ARGUMENT])
++      }.should raise_error(ArgumentError)
+ 
+-        -> {
+-          @opts.set_options(
+-            ["--size", GetoptLong::NO_ARGUMENT],
+-            ["-s", "--size", GetoptLong::OPTIONAL_ARGUMENT])
+-        }.should raise_error(ArgumentError)
+-      end
++      -> {
++        @opts.set_options(
++          ["--size", GetoptLong::NO_ARGUMENT],
++          ["-s", "--size", GetoptLong::OPTIONAL_ARGUMENT])
++      }.should raise_error(ArgumentError)
+     end
++  end
+ 
+-    it "raises an ArgumentError if the given option is invalid" do
+-      argv [] do
+-        -> {
+-          @opts.set_options(["-size", GetoptLong::NO_ARGUMENT])
+-        }.should raise_error(ArgumentError)
+-      end
++  it "raises an ArgumentError if the given option is invalid" do
++    argv [] do
++      -> {
++        @opts.set_options(["-size", GetoptLong::NO_ARGUMENT])
++      }.should raise_error(ArgumentError)
+     end
+   end
+ end
+diff --git a/spec/ruby/library/getoptlong/terminate_spec.rb b/spec/ruby/library/getoptlong/terminate_spec.rb
+index f767fcaa0..a12d1df2e 100644
+--- a/spec/ruby/library/getoptlong/terminate_spec.rb
++++ b/spec/ruby/library/getoptlong/terminate_spec.rb
+@@ -1,33 +1,30 @@
+ require_relative '../../spec_helper'
++require 'getoptlong'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'getoptlong'
+-
+-  describe "GetoptLong#terminate" do
+-    before :each do
+-      @opts = GetoptLong.new(
+-        [ '--size', '-s',             GetoptLong::REQUIRED_ARGUMENT ],
+-        [ '--verbose', '-v',          GetoptLong::NO_ARGUMENT ],
+-        [ '--query', '-q',            GetoptLong::NO_ARGUMENT ],
+-        [ '--check', '--valid', '-c', GetoptLong::NO_ARGUMENT ]
+-      )
+-    end
++describe "GetoptLong#terminate" do
++  before :each do
++    @opts = GetoptLong.new(
++      [ '--size', '-s',             GetoptLong::REQUIRED_ARGUMENT ],
++      [ '--verbose', '-v',          GetoptLong::NO_ARGUMENT ],
++      [ '--query', '-q',            GetoptLong::NO_ARGUMENT ],
++      [ '--check', '--valid', '-c', GetoptLong::NO_ARGUMENT ]
++    )
++  end
+ 
+-    it "terminates option processing" do
+-      argv [ "--size", "10k", "-v", "-q", "a.txt", "b.txt" ] do
+-        @opts.get.should == [ "--size", "10k" ]
+-        @opts.terminate
+-        @opts.get.should == nil
+-      end
++  it "terminates option processing" do
++    argv [ "--size", "10k", "-v", "-q", "a.txt", "b.txt" ] do
++      @opts.get.should == [ "--size", "10k" ]
++      @opts.terminate
++      @opts.get.should == nil
+     end
++  end
+ 
+-    it "returns self when option processing is terminated" do
+-      @opts.terminate.should == @opts
+-    end
++  it "returns self when option processing is terminated" do
++    @opts.terminate.should == @opts
++  end
+ 
+-    it "returns nil when option processing was already terminated" do
+-      @opts.terminate
+-      @opts.terminate.should == nil
+-    end
++  it "returns nil when option processing was already terminated" do
++    @opts.terminate
++    @opts.terminate.should == nil
+   end
+ end
+diff --git a/spec/ruby/library/getoptlong/terminated_spec.rb b/spec/ruby/library/getoptlong/terminated_spec.rb
+index 06c2ce71f..6108a7f6e 100644
+--- a/spec/ruby/library/getoptlong/terminated_spec.rb
++++ b/spec/ruby/library/getoptlong/terminated_spec.rb
+@@ -1,20 +1,17 @@
+ require_relative '../../spec_helper'
++require 'getoptlong'
+ 
+-ruby_version_is ""..."3.4" do
+-  require 'getoptlong'
++describe "GetoptLong#terminated?" do
++  it "returns true if option processing has terminated" do
++    argv [ "--size", "10k" ] do
++      opts = GetoptLong.new(["--size", GetoptLong::REQUIRED_ARGUMENT])
++      opts.should_not.terminated?
+ 
+-  describe "GetoptLong#terminated?" do
+-    it "returns true if option processing has terminated" do
+-      argv [ "--size", "10k" ] do
+-        opts = GetoptLong.new(["--size", GetoptLong::REQUIRED_ARGUMENT])
+-        opts.should_not.terminated?
++      opts.get.should == ["--size", "10k"]
++      opts.should_not.terminated?
+ 
+-        opts.get.should == ["--size", "10k"]
+-        opts.should_not.terminated?
+-
+-        opts.get.should == nil
+-        opts.should.terminated?
+-      end
++      opts.get.should == nil
++      opts.should.terminated?
+     end
+   end
+ end
+diff --git a/spec/ruby/library/observer/add_observer_spec.rb b/spec/ruby/library/observer/add_observer_spec.rb
+index 4c33c6473..5217ae6dc 100644
+--- a/spec/ruby/library/observer/add_observer_spec.rb
++++ b/spec/ruby/library/observer/add_observer_spec.rb
+@@ -1,26 +1,23 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
++describe "Observer#add_observer" do
+ 
+-  describe "Observer#add_observer" do
+-
+-    before :each do
+-      @observable = ObservableSpecs.new
+-      @observer = ObserverCallbackSpecs.new
+-    end
+-
+-    it "adds the observer" do
+-      @observer.value.should == nil
+-      @observable.changed
+-      @observable.notify_observers("test")
+-      @observer.value.should == nil
++  before :each do
++    @observable = ObservableSpecs.new
++    @observer = ObserverCallbackSpecs.new
++  end
+ 
+-      @observable.add_observer(@observer)
+-      @observable.changed
+-      @observable.notify_observers("test2")
+-      @observer.value.should == "test2"
+-    end
++  it "adds the observer" do
++    @observer.value.should == nil
++    @observable.changed
++    @observable.notify_observers("test")
++    @observer.value.should == nil
+ 
++    @observable.add_observer(@observer)
++    @observable.changed
++    @observable.notify_observers("test2")
++    @observer.value.should == "test2"
+   end
++
+ end
+diff --git a/spec/ruby/library/observer/count_observers_spec.rb b/spec/ruby/library/observer/count_observers_spec.rb
+index ab733e4e4..c93674196 100644
+--- a/spec/ruby/library/observer/count_observers_spec.rb
++++ b/spec/ruby/library/observer/count_observers_spec.rb
+@@ -1,26 +1,23 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
+-
+-  describe "Observer#count_observers" do
+-    before :each do
+-      @observable = ObservableSpecs.new
+-      @observer   = ObserverCallbackSpecs.new
+-      @observer2  = ObserverCallbackSpecs.new
+-    end
++describe "Observer#count_observers" do
++  before :each do
++    @observable = ObservableSpecs.new
++    @observer   = ObserverCallbackSpecs.new
++    @observer2  = ObserverCallbackSpecs.new
++  end
+ 
+-    it "returns the number of observers" do
+-      @observable.count_observers.should == 0
+-      @observable.add_observer(@observer)
+-      @observable.count_observers.should == 1
+-      @observable.add_observer(@observer2)
+-      @observable.count_observers.should == 2
+-    end
++  it "returns the number of observers" do
++    @observable.count_observers.should == 0
++    @observable.add_observer(@observer)
++    @observable.count_observers.should == 1
++    @observable.add_observer(@observer2)
++    @observable.count_observers.should == 2
++  end
+ 
+-    it "returns the number of unique observers" do
+-      2.times { @observable.add_observer(@observer) }
+-      @observable.count_observers.should == 1
+-    end
++  it "returns the number of unique observers" do
++    2.times { @observable.add_observer(@observer) }
++    @observable.count_observers.should == 1
+   end
+ end
+diff --git a/spec/ruby/library/observer/delete_observer_spec.rb b/spec/ruby/library/observer/delete_observer_spec.rb
+index 83db19bae..52be1a6cb 100644
+--- a/spec/ruby/library/observer/delete_observer_spec.rb
++++ b/spec/ruby/library/observer/delete_observer_spec.rb
+@@ -1,22 +1,19 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
+-
+-  describe "Observer#delete_observer" do
+-    before :each do
+-      @observable = ObservableSpecs.new
+-      @observer = ObserverCallbackSpecs.new
+-    end
+-
+-    it "deletes the observer" do
+-      @observable.add_observer(@observer)
+-      @observable.delete_observer(@observer)
++describe "Observer#delete_observer" do
++  before :each do
++    @observable = ObservableSpecs.new
++    @observer = ObserverCallbackSpecs.new
++  end
+ 
+-      @observable.changed
+-      @observable.notify_observers("test")
+-      @observer.value.should == nil
+-    end
++  it "deletes the observer" do
++    @observable.add_observer(@observer)
++    @observable.delete_observer(@observer)
+ 
++    @observable.changed
++    @observable.notify_observers("test")
++    @observer.value.should == nil
+   end
++
+ end
+diff --git a/spec/ruby/library/observer/delete_observers_spec.rb b/spec/ruby/library/observer/delete_observers_spec.rb
+index 5e7fe21d7..186e93a01 100644
+--- a/spec/ruby/library/observer/delete_observers_spec.rb
++++ b/spec/ruby/library/observer/delete_observers_spec.rb
+@@ -1,22 +1,19 @@
+ require_relative '../../spec_helper'
++require_relative 'fixtures/classes'
+ 
+-ruby_version_is ""..."3.4" do
+-  require_relative 'fixtures/classes'
+-
+-  describe "Observer#delete_observers" do
+-    before :each do
+-      @observable = ObservableSpecs.new
+-      @observer = ObserverCallbackSpecs.new
+-    end
+-
+-    it "deletes the observers" do
+-      @observable.add_observer(@observer)
+-      @observable.delete_observers
++describe "Observer#delete_observers" do
++  before :each do
++    @observable = ObservableSpecs.new
++    @observer = ObserverCallbackSpecs.new
++  end
+ 
+-      @observable.changed
+-      @observable.notify_observers("test")
+-      @observer.value.should == nil
+-    end
++  it "deletes the observers" do
++    @observable.add_observer(@observer)
++    @observable.delete_observers
+ 
++    @observable.changed
++    @observable.notify_observers("test")
++    @observer.value.should == nil
+   end
++
+ end

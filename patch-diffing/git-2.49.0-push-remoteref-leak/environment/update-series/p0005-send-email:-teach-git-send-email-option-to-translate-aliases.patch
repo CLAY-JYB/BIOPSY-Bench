@@ -1,0 +1,198 @@
+From 7daac03c Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0005] send-email: teach git send-email option to translate aliases
+
+---
+diff --git a/Documentation/git-send-email.txt b/Documentation/git-send-email.txt
+index c5d664f4..2e6f1d63 100644
+--- a/Documentation/git-send-email.txt
++++ b/Documentation/git-send-email.txt
+@@ -12,6 +12,7 @@ SYNOPSIS
+ 'git send-email' [<options>] (<file>|<directory>)...
+ 'git send-email' [<options>] <format-patch-options>
+ 'git send-email' --dump-aliases
++'git send-email' --translate-aliases
+ 
+ 
+ DESCRIPTION
+@@ -475,6 +476,12 @@ Information
+ 	that this only includes the alias name and not its expanded email addresses.
+ 	See 'sendemail.aliasesFile' for more information about aliases.
+ 
++--translate-aliases::
++	Instead of the normal operation, read from standard input and
++	interpret each line as an email alias. Translate it according to the
++	configured alias file(s). Output each translated name and email
++	address to standard output, one per line. See 'sendemail.aliasFile'
++	for more information about aliases.
+ 
+ CONFIGURATION
+ -------------
+diff --git a/Documentation/technical/api-trace2.txt b/Documentation/technical/api-trace2.txt
+index de5fc250..5817b183 100644
+--- a/Documentation/technical/api-trace2.txt
++++ b/Documentation/technical/api-trace2.txt
+@@ -128,7 +128,7 @@ yields
+ 
+ ------------
+ $ cat ~/log.event
+-{"event":"version","sid":"20190408T191610.507018Z-H9b68c35f-P000059a8","thread":"main","time":"2019-01-16T17:28:42.620713Z","file":"common-main.c","line":38,"evt":"3","exe":"2.20.1.155.g426c96fcdb"}
++{"event":"version","sid":"20190408T191610.507018Z-H9b68c35f-P000059a8","thread":"main","time":"2019-01-16T17:28:42.620713Z","file":"common-main.c","line":38,"evt":"4","exe":"2.20.1.155.g426c96fcdb"}
+ {"event":"start","sid":"20190408T191610.507018Z-H9b68c35f-P000059a8","thread":"main","time":"2019-01-16T17:28:42.621027Z","file":"common-main.c","line":39,"t_abs":0.001173,"argv":["git","version"]}
+ {"event":"cmd_name","sid":"20190408T191610.507018Z-H9b68c35f-P000059a8","thread":"main","time":"2019-01-16T17:28:42.621122Z","file":"git.c","line":432,"name":"version","hierarchy":"version"}
+ {"event":"exit","sid":"20190408T191610.507018Z-H9b68c35f-P000059a8","thread":"main","time":"2019-01-16T17:28:42.621236Z","file":"git.c","line":662,"t_abs":0.001227,"code":0}
+@@ -344,7 +344,7 @@ only present on the "start" and "atexit" events.
+ {
+ 	"event":"version",
+ 	...
+-	"evt":"3",		       # EVENT format version
++	"evt":"4",		       # EVENT format version
+ 	"exe":"2.20.1.155.g426c96fcdb" # git version
+ }
+ ------------
+@@ -835,6 +835,19 @@ The "value" field may be an integer or a string.
+ }
+ ------------
+ 
++`"printf"`::
++	This event logs a human-readable message with no particular formatting
++	guidelines.
+++
++------------
++{
++	"event":"printf",
++	...
++	"t_abs":0.015905,      # elapsed time in seconds
++	"msg":"Hello world"    # optional
++}
++------------
++
+ 
+ == Example Trace2 API Usage
+ 
+diff --git a/Makefile b/Makefile
+index e298c8b5..91f65d7d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -385,6 +385,10 @@ include shared.mak
+ # supports calling _NSGetExecutablePath to retrieve the path of the running
+ # executable.
+ #
++# When using RUNTIME_PREFIX, define HAVE_ZOS_GET_EXECUTABLE_PATH if your platform
++# supports calling __getprogramdir and getprogname to retrieve the path of the
++# running executable.
++#
+ # When using RUNTIME_PREFIX, define HAVE_WPGMPTR if your platform offers
+ # the global variable _wpgmptr containing the absolute path of the current
+ # executable (this is the case on Windows).
+@@ -843,7 +847,6 @@ TEST_BUILTINS_OBJS += test-submodule.o
+ TEST_BUILTINS_OBJS += test-subprocess.o
+ TEST_BUILTINS_OBJS += test-trace2.o
+ TEST_BUILTINS_OBJS += test-truncate.o
+-TEST_BUILTINS_OBJS += test-urlmatch-normalization.o
+ TEST_BUILTINS_OBJS += test-userdiff.o
+ TEST_BUILTINS_OBJS += test-wildmatch.o
+ TEST_BUILTINS_OBJS += test-windows-named-pipe.o
+@@ -1341,6 +1344,7 @@ UNIT_TEST_PROGRAMS += t-oidmap
+ UNIT_TEST_PROGRAMS += t-oidtree
+ UNIT_TEST_PROGRAMS += t-prio-queue
+ UNIT_TEST_PROGRAMS += t-reftable-basics
++UNIT_TEST_PROGRAMS += t-reftable-block
+ UNIT_TEST_PROGRAMS += t-reftable-merged
+ UNIT_TEST_PROGRAMS += t-reftable-pq
+ UNIT_TEST_PROGRAMS += t-reftable-readwrite
+@@ -1350,6 +1354,7 @@ UNIT_TEST_PROGRAMS += t-strbuf
+ UNIT_TEST_PROGRAMS += t-strcmp-offset
+ UNIT_TEST_PROGRAMS += t-strvec
+ UNIT_TEST_PROGRAMS += t-trailer
++UNIT_TEST_PROGRAMS += t-urlmatch-normalization
+ UNIT_TEST_PROGS = $(patsubst %,$(UNIT_TEST_BIN)/%$X,$(UNIT_TEST_PROGRAMS))
+ UNIT_TEST_OBJS = $(patsubst %,$(UNIT_TEST_DIR)/%.o,$(UNIT_TEST_PROGRAMS))
+ UNIT_TEST_OBJS += $(UNIT_TEST_DIR)/test-lib.o
+@@ -2156,6 +2161,10 @@ ifdef HAVE_NS_GET_EXECUTABLE_PATH
+ 	BASIC_CFLAGS += -DHAVE_NS_GET_EXECUTABLE_PATH
+ endif
+ 
++ifdef HAVE_ZOS_GET_EXECUTABLE_PATH
++        BASIC_CFLAGS += -DHAVE_ZOS_GET_EXECUTABLE_PATH
++endif
++
+ ifdef HAVE_WPGMPTR
+ 	BASIC_CFLAGS += -DHAVE_WPGMPTR
+ endif
+@@ -2678,13 +2687,10 @@ REFTABLE_OBJS += reftable/merged.o
+ REFTABLE_OBJS += reftable/pq.o
+ REFTABLE_OBJS += reftable/reader.o
+ REFTABLE_OBJS += reftable/record.o
+-REFTABLE_OBJS += reftable/generic.o
+ REFTABLE_OBJS += reftable/stack.o
+ REFTABLE_OBJS += reftable/tree.o
+ REFTABLE_OBJS += reftable/writer.o
+ 
+-REFTABLE_TEST_OBJS += reftable/block_test.o
+-REFTABLE_TEST_OBJS += reftable/dump.o
+ REFTABLE_TEST_OBJS += reftable/stack_test.o
+ REFTABLE_TEST_OBJS += reftable/test_framework.o
+ 
+diff --git a/archive.c b/archive.c
+index 7bd60d06..9ba96aae 100644
+--- a/archive.c
++++ b/archive.c
+@@ -736,6 +736,7 @@ int write_archive(int argc, const char **argv, const char *prefix,
+ 	struct pretty_print_describe_status describe_status = {0};
+ 	struct pretty_print_context ctx = {0};
+ 	struct archiver_args args;
++	const char **argv_copy;
+ 	int rc;
+ 
+ 	git_config_get_bool("uploadarchive.allowunreachable", &remote_allow_unreachable);
+@@ -749,6 +750,14 @@ int write_archive(int argc, const char **argv, const char *prefix,
+ 	args.repo = repo;
+ 	args.prefix = prefix;
+ 	string_list_init_dup(&args.extra_files);
++
++	/*
++	 * `parse_archive_args()` modifies contents of `argv`, which is what we
++	 * want. Our callers may not want it though, so we create a copy here.
++	 */
++	DUP_ARRAY(argv_copy, argv, argc);
++	argv = argv_copy;
++
+ 	argc = parse_archive_args(argc, argv, &ar, &args, name_hint, remote);
+ 	if (!startup_info->have_repository) {
+ 		/*
+@@ -767,6 +776,7 @@ int write_archive(int argc, const char **argv, const char *prefix,
+ 	string_list_clear_func(&args.extra_files, extra_file_info_clear);
+ 	free(args.refname);
+ 	clear_pathspec(&args.pathspec);
++	free(argv_copy);
+ 
+ 	return rc;
+ }
+diff --git a/builtin/archive.c b/builtin/archive.c
+index b5098150..63f02990 100644
+--- a/builtin/archive.c
++++ b/builtin/archive.c
+@@ -100,13 +100,16 @@ int cmd_archive(int argc, const char **argv, const char *prefix)
+ 	if (output)
+ 		create_output_file(output);
+ 
+-	if (remote)
+-		return run_remote_archiver(argc, argv, remote, exec, output);
++	if (remote) {
++		ret = run_remote_archiver(argc, argv, remote, exec, output);
++		goto out;
++	}
+ 
+ 	setvbuf(stderr, NULL, _IOLBF, BUFSIZ);
+ 
+ 	ret = write_archive(argc, argv, prefix, the_repository, output, 0);
+ 
++out:
+ 	free(output);
+ 	return ret;
+ }
+
+-- 
+2.43.0

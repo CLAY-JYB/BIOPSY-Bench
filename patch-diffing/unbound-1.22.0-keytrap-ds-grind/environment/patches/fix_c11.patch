@@ -1,0 +1,36 @@
+diff --git a/validator/val_sigcrypt.c b/validator/val_sigcrypt.c
+index 37730f1..f4b8663 100644
+--- a/validator/val_sigcrypt.c
++++ b/validator/val_sigcrypt.c
+@@ -552,7 +557,8 @@ dnskeyset_verify_rrset_sig(struct module_env* env, struct val_env* ve,
+ 	struct ub_packed_rrset_key* dnskey, size_t sig_idx,
+ 	struct rbtree_type** sortree,
+ 	char** reason, sldns_ede_code *reason_bogus,
+-	sldns_pkt_section section, struct module_qstate* qstate)
++	sldns_pkt_section section, struct module_qstate* qstate,
++	int* numverified)
+ {
+ 	/* find matching keys and check them */
+ 	enum sec_status sec = sec_status_bogus;
+@@ -576,6 +582,7 @@ dnskeyset_verify_rrset_sig(struct module_env* env, struct val_env* ve,
+ 			tag != dnskey_calc_keytag(dnskey, i))
+ 			continue;
+ 		numchecked ++;
++		(*numverified)++;
+ 
+ 		/* see if key verifies */
+ 		sec = dnskey_verify_rrset_sig(env->scratch,
+@@ -586,6 +593,13 @@ dnskeyset_verify_rrset_sig(struct module_env* env, struct val_env* ve,
+ 			return sec;
+ 		else if(sec == sec_status_indeterminate)
+ 			numindeterminate ++;
++		if(*numverified > MAX_VALIDATE_RRSIGS) {
++			*reason = "too many RRSIG validations";
++			if(reason_bogus)
++				*reason_bogus = LDNS_EDE_DNSSEC_BOGUS;
++			verbose(VERB_ALGO, "verify sig: too many RRSIG validations");
++			return sec_status_bogus;
++		}
+ 	}
+ 	if(numchecked == 0) {
+ 		*reason = "signatures from unknown keys";

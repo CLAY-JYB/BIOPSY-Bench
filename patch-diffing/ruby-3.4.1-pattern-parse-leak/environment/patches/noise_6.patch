@@ -1,0 +1,448 @@
+diff --git a/internal/object.h b/internal/object.h
+index 06595bdd9..903e2d29a 100644
+--- a/internal/object.h
++++ b/internal/object.h
+@@ -16,6 +16,8 @@ VALUE rb_class_search_ancestor(VALUE klass, VALUE super);
+ NORETURN(void rb_undefined_alloc(VALUE klass));
+ double rb_num_to_dbl(VALUE val);
+ VALUE rb_obj_dig(int argc, VALUE *argv, VALUE self, VALUE notfound);
++VALUE rb_obj_clone_setup(VALUE obj, VALUE clone, VALUE kwfreeze);
++VALUE rb_obj_dup_setup(VALUE obj, VALUE dup);
+ VALUE rb_immutable_obj_clone(int, VALUE *, VALUE);
+ VALUE rb_check_convert_type_with_id(VALUE,int,const char*,ID);
+ int rb_bool_expected(VALUE, const char *, int raise);
+diff --git a/internal/ruby_parser.h b/internal/ruby_parser.h
+index ed0165f89..a93a12ae9 100644
+--- a/internal/ruby_parser.h
++++ b/internal/ruby_parser.h
+@@ -76,7 +76,10 @@ RUBY_SYMBOL_EXPORT_BEGIN
+ VALUE rb_str_new_parser_string(rb_parser_string_t *str);
+ RUBY_SYMBOL_EXPORT_END
+ 
++VALUE rb_node_str_string_val(const NODE *);
+ VALUE rb_node_sym_string_val(const NODE *);
++VALUE rb_node_dstr_string_val(const NODE *);
++VALUE rb_node_dregx_string_val(const NODE *);
+ VALUE rb_node_line_lineno_val(const NODE *);
+ VALUE rb_node_file_path_val(const NODE *);
+ VALUE rb_node_encoding_val(const NODE *);
+diff --git a/io.c b/io.c
+index eb2698d04..621d5c845 100644
+--- a/io.c
++++ b/io.c
+@@ -15094,56 +15094,64 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *
+  *  == Line \IO
+  *
+- *  You can read an \IO stream line-by-line using these methods:
++ *  \Class \IO supports line-oriented
++ *  {input}[rdoc-ref:IO@Line+Input] and {output}[rdoc-ref:IO@Line+Output]
+  *
+- *  - IO#each_line: Reads each remaining line, passing it to the given block.
+- *  - IO#gets: Returns the next line.
+- *  - IO#readline: Like #gets, but raises an exception at end-of-stream.
+- *  - IO#readlines: Returns all remaining lines in an array.
++ *  === Line Input
++ *
++ *  \Class \IO supports line-oriented input for
++ *  {files}[rdoc-ref:IO@File+Line+Input] and {IO streams}[rdoc-ref:IO@Stream+Line+Input]
++ *
++ *  ==== \File Line Input
+  *
+- *  Each of these reader methods accepts:
++ *  You can read lines from a file using these methods:
+  *
+- *  - An optional line separator, +sep+;
++ *  - IO.foreach: Reads each line and passes it to the given block.
++ *  - IO.readlines: Reads and returns all lines in an array.
++ *
++ *  For each of these methods:
++ *
++ *  - You can specify {open options}[rdoc-ref:IO@Open+Options].
++ *  - Line parsing depends on the effective <i>line separator</i>;
+  *    see {Line Separator}[rdoc-ref:IO@Line+Separator].
+- *  - An optional line-size limit, +limit+;
++ *  - The length of each returned line depends on the effective <i>line limit</i>;
+  *    see {Line Limit}[rdoc-ref:IO@Line+Limit].
+  *
+- *  For each of these reader methods, reading may begin mid-line,
+- *  depending on the stream's position;
+- *  see {Position}[rdoc-ref:IO@Position]:
++ *  ==== Stream Line Input
+  *
+- *    f = File.new('t.txt')
+- *    f.pos = 27
+- *    f.each_line {|line| p line }
+- *    f.close
++ *  You can read lines from an \IO stream using these methods:
+  *
+- *  Output:
+- *
+- *    "rth line\n"
+- *    "Fifth line\n"
++ *  - IO#each_line: Reads each remaining line, passing it to the given block.
++ *  - IO#gets: Returns the next line.
++ *  - IO#readline: Like #gets, but raises an exception at end-of-stream.
++ *  - IO#readlines: Returns all remaining lines in an array.
+  *
+- *  You can write to an \IO stream line-by-line using this method:
++ *  For each of these methods:
+  *
+- *  - IO#puts: Writes objects to the stream.
++ *  - Reading may begin mid-line,
++ *    depending on the stream's _position_;
++ *    see {Position}[rdoc-ref:IO@Position].
++ *  - Line parsing depends on the effective <i>line separator</i>;
++ *    see {Line Separator}[rdoc-ref:IO@Line+Separator].
++ *  - The length of each returned line depends on the effective <i>line limit</i>;
++ *    see {Line Limit}[rdoc-ref:IO@Line+Limit].
+  *
+- *  === Line Separator
++ *  ===== Line Separator
+  *
+- *  Each of these methods uses a <i>line separator</i>,
+- *  which is the string that delimits lines:
++ *  Each of the {line input methods}[rdoc-ref:IO@Line+Input] uses a <i>line separator</i>:
++ *  the string that determines what is considered a line;
++ *  it is sometimes called the <i>input record separator</i>.
+  *
+- *  - IO.foreach.
+- *  - IO.readlines.
+- *  - IO#each_line.
+- *  - IO#gets.
+- *  - IO#readline.
+- *  - IO#readlines.
++ *  The default line separator is taken from global variable <tt>$/</tt>,
++ *  whose initial value is <tt>"\n"</tt>.
+  *
+- *  The default line separator is the given by the global variable <tt>$/</tt>,
+- *  whose value is by default <tt>"\n"</tt>.
+- *  The line to be read next is all data from the current position
+- *  to the next line separator:
++ *  Generally, the line to be read next is all data
++ *  from the current {position}[rdoc-ref:IO@Position]
++ *  to the next line separator
++ *  (but see {Special Line Separator Values}[rdoc-ref:IO@Special+Line+Separator+Values]):
+  *
+  *    f = File.new('t.txt')
++ *    # Method gets with no sep argument returns the next line, according to $/.
+  *    f.gets # => "First line\n"
+  *    f.gets # => "Second line\n"
+  *    f.gets # => "\n"
+@@ -15151,7 +15159,7 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *    f.gets # => "Fifth line\n"
+  *    f.close
+  *
+- *  You can specify a different line separator:
++ *  You can use a different line separator by passing argument +sep+:
+  *
+  *    f = File.new('t.txt')
+  *    f.gets('l')   # => "First l"
+@@ -15160,15 +15168,27 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *    f.gets        # => "e\n"
+  *    f.close
+  *
+- *  There are two special line separators:
++ *  Or by setting global variable <tt>$/</tt>:
++ *
++ *    f = File.new('t.txt')
++ *    $/ = 'l'
++ *    f.gets # => "First l"
++ *    f.gets # => "ine\nSecond l"
++ *    f.gets # => "ine\n\nFourth l"
++ *    f.close
++ *
++ *  ===== Special Line Separator Values
++ *
++ *  Each of the {line input methods}[rdoc-ref:IO@Line+Input]
++ *  accepts two special values for parameter +sep+:
+  *
+- *  - +nil+: The entire stream is read into a single string:
++ *  - +nil+: The entire stream is to be read ("slurped") into a single string:
+  *
+  *      f = File.new('t.txt')
+  *      f.gets(nil) # => "First line\nSecond line\n\nFourth line\nFifth line\n"
+  *      f.close
+  *
+- *  - <tt>''</tt> (the empty string): The next "paragraph" is read
++ *  - <tt>''</tt> (the empty string): The next "paragraph" is to be read
+  *    (paragraphs being separated by two consecutive line separators):
+  *
+  *      f = File.new('t.txt')
+@@ -15176,23 +15196,18 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *      f.gets('') # => "Fourth line\nFifth line\n"
+  *      f.close
+  *
+- *  === Line Limit
++ *  ===== Line Limit
+  *
+- *  Each of these methods uses a <i>line limit</i>,
+- *  which specifies that the number of bytes returned may not be (much) longer
+- *  than the given +limit+;
++ *  Each of the {line input methods}[rdoc-ref:IO@Line+Input]
++ *  uses an integer <i>line limit</i>,
++ *  which restricts the number of bytes that may be returned.
++ *  (A multi-byte character will not be split, and so a returned line may be slightly longer
++ *  than the limit).
+  *
+- *  - IO.foreach.
+- *  - IO.readlines.
+- *  - IO#each_line.
+- *  - IO#gets.
+- *  - IO#readline.
+- *  - IO#readlines.
++ *  The default limit value is <tt>-1</tt>;
++ *  any negative limit value means that there is no limit.
+  *
+- *  A multi-byte character will not be split, and so a line may be slightly longer
+- *  than the given limit.
+- *
+- *  If +limit+ is not given, the line is determined only by +sep+.
++ *  If there is no limit, the line is determined only by +sep+.
+  *
+  *    # Text with 1-byte characters.
+  *    File.open('t.txt') {|f| f.gets(1) }  # => "F"
+@@ -15210,24 +15225,9 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *    File.open('t.rus') {|f| f.gets(3).size } # => 2
+  *    File.open('t.rus') {|f| f.gets(4).size } # => 2
+  *
+- *  === Line Separator and Line Limit
+- *
+- *  With arguments +sep+ and +limit+ given,
+- *  combines the two behaviors:
++ *  ===== Line Number
+  *
+- *  - Returns the next line as determined by line separator +sep+.
+- *  - But returns no more bytes than are allowed by the limit.
+- *
+- *  Example:
+- *
+- *    File.open('t.txt') {|f| f.gets('li', 20) } # => "First li"
+- *    File.open('t.txt') {|f| f.gets('li', 2) }  # => "Fi"
+- *
+- *  === Line Number
+- *
+- *  A readable \IO stream has a non-negative integer <i>line number</i>.
+- *
+- *  The relevant methods:
++ *  A readable \IO stream has a non-negative integer <i>line number</i>:
+  *
+  *  - IO#lineno: Returns the line number.
+  *  - IO#lineno=: Resets and returns the line number.
+@@ -15235,7 +15235,7 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *  Unless modified by a call to method IO#lineno=,
+  *  the line number is the number of lines read
+  *  by certain line-oriented methods,
+- *  according to the given line separator +sep+:
++ *  according to the effective {line separator}[rdoc-ref:IO@Line+Separator]:
+  *
+  *  - IO.foreach: Increments the line number on each call to the block.
+  *  - IO#each_line: Increments the line number on each call to the block.
+@@ -15325,6 +15325,12 @@ set_LAST_READ_LINE(VALUE val, ID _x, VALUE *_y)
+  *      $.          # => 5
+  *      f.close
+  *
++ *  === Line Output
++ *
++ *  You can write to an \IO stream line-by-line using this method:
++ *
++ *  - IO#puts: Writes objects to the stream.
++ *
+  *  == Character \IO
+  *
+  *  You can process an \IO stream character-by-character using these methods:
+diff --git a/lib/bundler.rb b/lib/bundler.rb
+index 7bb6690e5..59a1107bb 100644
+--- a/lib/bundler.rb
++++ b/lib/bundler.rb
+@@ -200,12 +200,13 @@ module Bundler
+     #
+     # @param unlock [Hash, Boolean, nil] Gems that have been requested
+     #   to be updated or true if all gems should be updated
++    # @param lockfile [Pathname] Path to Gemfile.lock
+     # @return [Bundler::Definition]
+-    def definition(unlock = nil)
++    def definition(unlock = nil, lockfile = default_lockfile)
+       @definition = nil if unlock
+       @definition ||= begin
+         configure
+-        Definition.build(default_gemfile, default_lockfile, unlock)
++        Definition.build(default_gemfile, lockfile, unlock)
+       end
+     end
+ 
+diff --git a/lib/bundler/cli/lock.rb b/lib/bundler/cli/lock.rb
+index 7247121df..dac3d2a09 100644
+--- a/lib/bundler/cli/lock.rb
++++ b/lib/bundler/cli/lock.rb
+@@ -33,8 +33,11 @@ module Bundler
+         update = { bundler: bundler }
+       end
+ 
++      file = options[:lockfile]
++      file = file ? Pathname.new(file).expand_path : Bundler.default_lockfile
++
+       Bundler.settings.temporary(frozen: false) do
+-        definition = Bundler.definition(update)
++        definition = Bundler.definition(update, file)
+ 
+         Bundler::CLI::Common.configure_gem_version_promoter(definition, options) if options[:update]
+ 
+@@ -60,10 +63,8 @@ module Bundler
+         if print
+           puts definition.to_lock
+         else
+-          file = options[:lockfile]
+-          file = file ? File.expand_path(file) : Bundler.default_lockfile
+           puts "Writing lockfile to #{file}"
+-          definition.lock(file)
++          definition.lock
+         end
+       end
+ 
+diff --git a/lib/bundler/definition.rb b/lib/bundler/definition.rb
+index 0b0e63f77..c8faf77b3 100644
+--- a/lib/bundler/definition.rb
++++ b/lib/bundler/definition.rb
+@@ -320,38 +320,26 @@ module Bundler
+       dependencies.map(&:groups).flatten.uniq
+     end
+ 
+-    def lock(file, preserve_unknown_sections = false)
+-      return if Definition.no_lock
+-
+-      contents = to_lock
+-
+-      # Convert to \r\n if the existing lock has them
+-      # i.e., Windows with `git config core.autocrlf=true`
+-      contents.gsub!(/\n/, "\r\n") if @lockfile_contents.match?("\r\n")
+-
+-      if @locked_bundler_version
+-        locked_major = @locked_bundler_version.segments.first
+-        current_major = bundler_version_to_lock.segments.first
+-
+-        updating_major = locked_major < current_major
+-      end
++    def lock(file_or_preserve_unknown_sections = false, preserve_unknown_sections_or_unused = false)
++      if [true, false, nil].include?(file_or_preserve_unknown_sections)
++        target_lockfile = lockfile || Bundler.default_lockfile
++        preserve_unknown_sections = file_or_preserve_unknown_sections
++      else
++        target_lockfile = file_or_preserve_unknown_sections
++        preserve_unknown_sections = preserve_unknown_sections_or_unused
+ 
+-      preserve_unknown_sections ||= !updating_major && (Bundler.frozen_bundle? || !(unlocking? || @unlocking_bundler))
++        suggestion = if target_lockfile == lockfile
++          "To fix this warning, remove it from the `Definition#lock` call."
++        else
++          "Instead, instantiate a new definition passing `#{target_lockfile}`, and call `lock` without a file argument on that definition"
++        end
+ 
+-      if file && File.exist?(file) && lockfiles_equal?(@lockfile_contents, contents, preserve_unknown_sections)
+-        return if Bundler.frozen_bundle?
+-        SharedHelpers.filesystem_access(file) { FileUtils.touch(file) }
+-        return
+-      end
++        msg = "`Definition#lock` was passed a target file argument. #{suggestion}"
+ 
+-      if Bundler.frozen_bundle?
+-        Bundler.ui.error "Cannot write a changed lockfile while frozen."
+-        return
++        Bundler::SharedHelpers.major_deprecation 2, msg
+       end
+ 
+-      SharedHelpers.filesystem_access(file) do |p|
+-        File.open(p, "wb") {|f| f.puts(contents) }
+-      end
++      write_lock(target_lockfile, preserve_unknown_sections)
+     end
+ 
+     def locked_ruby_version
+@@ -518,7 +506,45 @@ module Bundler
+     end
+ 
+     def lockfile_exists?
+-      lockfile && File.exist?(lockfile)
++      file_exists?(lockfile)
++    end
++
++    def file_exists?(file)
++      file && File.exist?(file)
++    end
++
++    def write_lock(file, preserve_unknown_sections)
++      return if Definition.no_lock
++
++      contents = to_lock
++
++      # Convert to \r\n if the existing lock has them
++      # i.e., Windows with `git config core.autocrlf=true`
++      contents.gsub!(/\n/, "\r\n") if @lockfile_contents.match?("\r\n")
++
++      if @locked_bundler_version
++        locked_major = @locked_bundler_version.segments.first
++        current_major = bundler_version_to_lock.segments.first
++
++        updating_major = locked_major < current_major
++      end
++
++      preserve_unknown_sections ||= !updating_major && (Bundler.frozen_bundle? || !(unlocking? || @unlocking_bundler))
++
++      if file_exists?(file) && lockfiles_equal?(@lockfile_contents, contents, preserve_unknown_sections)
++        return if Bundler.frozen_bundle?
++        SharedHelpers.filesystem_access(file) { FileUtils.touch(file) }
++        return
++      end
++
++      if Bundler.frozen_bundle?
++        Bundler.ui.error "Cannot write a changed lockfile while frozen."
++        return
++      end
++
++      SharedHelpers.filesystem_access(file) do |p|
++        File.open(p, "wb") {|f| f.puts(contents) }
++      end
+     end
+ 
+     def resolver
+diff --git a/lib/bundler/injector.rb b/lib/bundler/injector.rb
+index 2cf7754ec..cf561c2ee 100644
+--- a/lib/bundler/injector.rb
++++ b/lib/bundler/injector.rb
+@@ -50,7 +50,7 @@ module Bundler
+         append_to(gemfile_path, build_gem_lines(@options[:conservative_versioning])) if @deps.any?
+ 
+         # since we resolved successfully, write out the lockfile
+-        @definition.lock(Bundler.default_lockfile)
++        @definition.lock
+ 
+         # invalidate the cached Bundler.definition
+         Bundler.reset_paths!
+diff --git a/lib/bundler/installer.rb b/lib/bundler/installer.rb
+index e837f732c..018324f84 100644
+--- a/lib/bundler/installer.rb
++++ b/lib/bundler/installer.rb
+@@ -260,8 +260,8 @@ module Bundler
+       true
+     end
+ 
+-    def lock(opts = {})
+-      @definition.lock(Bundler.default_lockfile, opts[:preserve_unknown_sections])
++    def lock
++      @definition.lock
+     end
+   end
+ end
+diff --git a/lib/bundler/rubygems_ext.rb b/lib/bundler/rubygems_ext.rb
+index 3cb4e70a5..e0582beba 100644
+--- a/lib/bundler/rubygems_ext.rb
++++ b/lib/bundler/rubygems_ext.rb
+@@ -282,7 +282,7 @@ module Gem
+ 
+   # On universal Rubies, resolve the "universal" arch to the real CPU arch, without changing the extension directory.
+   class BasicSpecification
+-    if /^universal\.(?<arch>.*?)-/ =~ (CROSS_COMPILING || RUBY_PLATFORM) # rubocop:disable Style/RedundantParentheses
++    if /^universal\.(?<arch>.*?)-/ =~ (CROSS_COMPILING || RUBY_PLATFORM)
+       local_platform = Platform.local
+       if local_platform.cpu == "universal"
+         ORIGINAL_LOCAL_PLATFORM = local_platform.to_s.freeze

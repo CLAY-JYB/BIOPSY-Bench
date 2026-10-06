@@ -1,0 +1,547 @@
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index e2804312fc..b8c278b91d 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -6281,15 +6281,6 @@ abi_long do_arch_prctl(CPUX86State *env, int code, abi_ulong addr)
+ # define PR_GET_TAGGED_ADDR_CTRL 56
+ # define PR_TAGGED_ADDR_ENABLE  (1UL << 0)
+ #endif
+-#ifndef PR_MTE_TCF_SHIFT
+-# define PR_MTE_TCF_SHIFT       1
+-# define PR_MTE_TCF_NONE        (0UL << PR_MTE_TCF_SHIFT)
+-# define PR_MTE_TCF_SYNC        (1UL << PR_MTE_TCF_SHIFT)
+-# define PR_MTE_TCF_ASYNC       (2UL << PR_MTE_TCF_SHIFT)
+-# define PR_MTE_TCF_MASK        (3UL << PR_MTE_TCF_SHIFT)
+-# define PR_MTE_TAG_SHIFT       3
+-# define PR_MTE_TAG_MASK        (0xffffUL << PR_MTE_TAG_SHIFT)
+-#endif
+ #ifndef PR_SET_IO_FLUSHER
+ # define PR_SET_IO_FLUSHER 57
+ # define PR_GET_IO_FLUSHER 58
+diff --git a/meson.build b/meson.build
+index efd3d4c6e5..a1e51277b0 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1,4 +1,4 @@
+-project('qemu', ['c'], meson_version: '>=0.63.0',
++project('qemu', ['c'], meson_version: '>=1.1.0',
+         default_options: ['warning_level=1', 'c_std=gnu11', 'cpp_std=gnu++11', 'b_colorout=auto',
+                           'b_staticpic=false', 'stdsplit=false', 'optimization=2', 'b_pie=true'],
+         version: files('VERSION'))
+@@ -1070,7 +1070,8 @@ if get_option('attr').allowed()
+   endif
+ endif
+ 
+-cocoa = dependency('appleframeworks', modules: ['Cocoa', 'CoreVideo'],
++cocoa = dependency('appleframeworks',
++                   modules: ['Cocoa', 'CoreVideo', 'QuartzCore'],
+                    required: get_option('cocoa'))
+ 
+ vmnet = dependency('appleframeworks', modules: 'vmnet', required: get_option('vmnet'))
+@@ -2862,6 +2863,12 @@ have_cpuid_h = cc.links('''
+   }''')
+ config_host_data.set('CONFIG_CPUID_H', have_cpuid_h)
+ 
++# Don't bother to advertise asm/hwprobe.h for old versions that do
++# not contain RISCV_HWPROBE_EXT_ZBA.
++config_host_data.set('CONFIG_ASM_HWPROBE_H',
++                     cc.has_header_symbol('asm/hwprobe.h',
++                                          'RISCV_HWPROBE_EXT_ZBA'))
++
+ config_host_data.set('CONFIG_AVX2_OPT', get_option('avx2') \
+   .require(have_cpuid_h, error_message: 'cpuid.h not available, cannot enable AVX2') \
+   .require(cc.links('''
+@@ -3461,22 +3468,21 @@ endif
+ 
+ if enable_modules
+   libmodulecommon = static_library('module-common', files('module-common.c') + genh, pic: true, c_args: '-DBUILD_DSO')
+-  modulecommon = declare_dependency(link_whole: libmodulecommon, compile_args: '-DBUILD_DSO')
++  modulecommon = declare_dependency(objects: libmodulecommon.extract_all_objects(recursive: false), compile_args: '-DBUILD_DSO')
+ endif
+ 
+ qom_ss = qom_ss.apply({})
+ libqom = static_library('qom', qom_ss.sources() + genh,
+                         dependencies: [qom_ss.dependencies()],
+-                        name_suffix: 'fa',
+                         build_by_default: false)
+-qom = declare_dependency(link_whole: libqom)
++qom = declare_dependency(objects: libqom.extract_all_objects(recursive: false),
++                         dependencies: qom_ss.dependencies())
+ 
+ event_loop_base = files('event-loop-base.c')
+ event_loop_base = static_library('event-loop-base',
+                                  sources: event_loop_base + genh,
+-                                 name_suffix: 'fa',
+                                  build_by_default: false)
+-event_loop_base = declare_dependency(link_whole: event_loop_base,
++event_loop_base = declare_dependency(objects: event_loop_base.extract_all_objects(recursive: false),
+                                      dependencies: [qom])
+ 
+ stub_ss = stub_ss.apply({})
+@@ -3525,7 +3531,7 @@ if have_block
+     'blockdev-nbd.c',
+     'iothread.c',
+     'job-qmp.c',
+-  ), gnutls)
++  ))
+ 
+   # os-posix.c contains POSIX-specific functions used by qemu-storage-daemon,
+   # os-win32.c does not
+@@ -3602,6 +3608,7 @@ modinfo_files = []
+ 
+ block_mods = []
+ system_mods = []
++emulator_modules = []
+ foreach d, list : modules
+   if not (d == 'block' ? have_block : have_system)
+     continue
+@@ -3609,14 +3616,21 @@ foreach d, list : modules
+ 
+   foreach m, module_ss : list
+     if enable_modules
++      module_ss.add(modulecommon)
+       module_ss = module_ss.apply(config_all_devices, strict: false)
+       sl = static_library(d + '-' + m, [genh, module_ss.sources()],
+-                          dependencies: [modulecommon, module_ss.dependencies()], pic: true)
++                          dependencies: module_ss.dependencies(), pic: true)
+       if d == 'block'
+         block_mods += sl
+       else
+         system_mods += sl
+       endif
++      emulator_modules += shared_module(sl.name(),
++                    name_prefix: '',
++                    objects: sl.extract_all_objects(recursive: false),
++                    dependencies: module_ss.dependencies(),
++                    install: true,
++                    install_dir: qemu_moddir)
+       if module_ss.sources() != []
+         # FIXME: Should use sl.extract_all_objects(recursive: true) as
+         # input. Sources can be used multiple times but objects are
+@@ -3642,6 +3656,7 @@ endforeach
+ foreach d, list : target_modules
+   foreach m, module_ss : list
+     if enable_modules
++      module_ss.add(modulecommon)
+       foreach target : target_dirs
+         if target.endswith('-softmmu')
+           config_target = config_target_mak[target]
+@@ -3654,11 +3669,17 @@ foreach d, list : target_modules
+             module_name = d + '-' + m + '-' + config_target['TARGET_NAME']
+             sl = static_library(module_name,
+                                 [genh, target_module_ss.sources()],
+-                                dependencies: [modulecommon, target_module_ss.dependencies()],
++                                dependencies: target_module_ss.dependencies(),
+                                 include_directories: target_inc,
+                                 c_args: c_args,
+                                 pic: true)
+             system_mods += sl
++            emulator_modules += shared_module(sl.name(),
++                    name_prefix: '',
++                    objects: sl.extract_all_objects(recursive: false),
++                    dependencies: target_module_ss.dependencies(),
++                    install: true,
++                    install_dir: qemu_moddir)
+             # FIXME: Should use sl.extract_all_objects(recursive: true) too.
+             modinfo_files += custom_target(module_name + '.modinfo',
+                                            output: module_name + '.modinfo',
+@@ -3692,6 +3713,10 @@ if enable_modules
+       hw_arch[arch].add(modinfo_dep)
+     endif
+   endforeach
++
++  if emulator_modules.length() > 0
++    alias_target('modules', emulator_modules)
++  endif
+ endif
+ 
+ nm = find_program('nm')
+@@ -3708,96 +3733,75 @@ qemu_syms = custom_target('qemu.syms', output: 'qemu.syms',
+ authz_ss = authz_ss.apply({})
+ libauthz = static_library('authz', authz_ss.sources() + genh,
+                           dependencies: [authz_ss.dependencies()],
+-                          name_suffix: 'fa',
+                           build_by_default: false)
+ 
+-authz = declare_dependency(link_whole: libauthz,
+-                           dependencies: qom)
++authz = declare_dependency(objects: libauthz.extract_all_objects(recursive: false),
++                           dependencies: [authz_ss.dependencies(), qom])
+ 
+ crypto_ss = crypto_ss.apply({})
+ libcrypto = static_library('crypto', crypto_ss.sources() + genh,
+                            dependencies: [crypto_ss.dependencies()],
+-                           name_suffix: 'fa',
+                            build_by_default: false)
+ 
+-crypto = declare_dependency(link_whole: libcrypto,
+-                            dependencies: [authz, qom])
++crypto = declare_dependency(objects: libcrypto.extract_all_objects(recursive: false),
++                            dependencies: [crypto_ss.dependencies(), authz, qom])
+ 
+ io_ss = io_ss.apply({})
+ libio = static_library('io', io_ss.sources() + genh,
+                        dependencies: [io_ss.dependencies()],
+                        link_with: libqemuutil,
+-                       name_suffix: 'fa',
+                        build_by_default: false)
+ 
+-io = declare_dependency(link_whole: libio, dependencies: [crypto, qom])
++io = declare_dependency(objects: libio.extract_all_objects(recursive: false),
++                        dependencies: [io_ss.dependencies(), crypto, qom])
+ 
+ libmigration = static_library('migration', sources: migration_files + genh,
+-                              name_suffix: 'fa',
+                               build_by_default: false)
+-migration = declare_dependency(link_with: libmigration,
++migration = declare_dependency(objects: libmigration.extract_all_objects(recursive: false),
+                                dependencies: [qom, io])
+ system_ss.add(migration)
+ 
+ block_ss = block_ss.apply({})
+ libblock = static_library('block', block_ss.sources() + genh,
+                           dependencies: block_ss.dependencies(),
+-                          link_depends: block_syms,
+-                          name_suffix: 'fa',
+                           build_by_default: false)
+ 
+-block = declare_dependency(link_whole: [libblock],
+-                           link_args: '@block.syms',
+-                           dependencies: [crypto, io])
++block = declare_dependency(objects: libblock.extract_all_objects(recursive: false),
++                           dependencies: [block_ss.dependencies(), crypto, io])
+ 
+ blockdev_ss = blockdev_ss.apply({})
+ libblockdev = static_library('blockdev', blockdev_ss.sources() + genh,
+                              dependencies: blockdev_ss.dependencies(),
+-                             name_suffix: 'fa',
+                              build_by_default: false)
+ 
+-blockdev = declare_dependency(link_whole: [libblockdev],
+-                              dependencies: [block, event_loop_base])
++blockdev = declare_dependency(objects: libblockdev.extract_all_objects(recursive: false),
++                              dependencies: [blockdev_ss.dependencies(), block, event_loop_base])
+ 
+ qmp_ss = qmp_ss.apply({})
+ libqmp = static_library('qmp', qmp_ss.sources() + genh,
+                         dependencies: qmp_ss.dependencies(),
+-                        name_suffix: 'fa',
+                         build_by_default: false)
+ 
+-qmp = declare_dependency(link_whole: [libqmp])
++qmp = declare_dependency(objects: libqmp.extract_all_objects(recursive: false),
++                         dependencies: qmp_ss.dependencies())
+ 
+ libchardev = static_library('chardev', chardev_ss.sources() + genh,
+-                            name_suffix: 'fa',
+                             dependencies: chardev_ss.dependencies(),
+                             build_by_default: false)
+ 
+-chardev = declare_dependency(link_whole: libchardev)
++chardev = declare_dependency(objects: libchardev.extract_all_objects(recursive: false),
++                             dependencies: chardev_ss.dependencies())
+ 
+ hwcore_ss = hwcore_ss.apply({})
+ libhwcore = static_library('hwcore', sources: hwcore_ss.sources() + genh,
+-                           name_suffix: 'fa',
+                            build_by_default: false)
+-hwcore = declare_dependency(link_whole: libhwcore)
++hwcore = declare_dependency(objects: libhwcore.extract_all_objects(recursive: false))
+ common_ss.add(hwcore)
+ 
+ ###########
+ # Targets #
+ ###########
+ 
+-emulator_modules = []
+-foreach m : block_mods + system_mods
+-  emulator_modules += shared_module(m.name(),
+-                build_by_default: true,
+-                name_prefix: '',
+-                link_whole: m,
+-                install: true,
+-                install_dir: qemu_moddir)
+-endforeach
+-if emulator_modules.length() > 0
+-  alias_target('modules', emulator_modules)
+-endif
+-
+ system_ss.add(authz, blockdev, chardev, crypto, io, qmp)
+ common_ss.add(qom, qemuutil)
+ 
+@@ -3812,8 +3816,7 @@ common_all = static_library('common',
+                             sources: common_ss.all_sources() + genh,
+                             include_directories: common_user_inc,
+                             implicit_include_directories: false,
+-                            dependencies: common_ss.all_dependencies(),
+-                            name_suffix: 'fa')
++                            dependencies: common_ss.all_dependencies())
+ 
+ feature_to_c = find_program('scripts/feature_to_c.py')
+ 
+@@ -3922,8 +3925,7 @@ foreach target : target_dirs
+                  objects: objects,
+                  include_directories: target_inc,
+                  c_args: c_args,
+-                 build_by_default: false,
+-                 name_suffix: 'fa')
++                 build_by_default: false)
+ 
+   if target.endswith('-softmmu')
+     execs = [{
+@@ -4029,11 +4031,14 @@ endif
+ 
+ if have_tools
+   qemu_img = executable('qemu-img', [files('qemu-img.c'), hxdep],
++             link_args: '@block.syms', link_depends: block_syms,
+              dependencies: [authz, block, crypto, io, qom, qemuutil], install: true)
+   qemu_io = executable('qemu-io', files('qemu-io.c'),
++             link_args: '@block.syms', link_depends: block_syms,
+              dependencies: [block, qemuutil], install: true)
+   qemu_nbd = executable('qemu-nbd', files('qemu-nbd.c'),
+-               dependencies: [blockdev, qemuutil, gnutls, selinux],
++               link_args: '@block.syms', link_depends: block_syms,
++               dependencies: [blockdev, qemuutil, selinux],
+                install: true)
+ 
+   subdir('storage-daemon')
+diff --git a/net/vmnet-bridged.m b/net/vmnet-bridged.m
+index 76a28abe79..a04a14fa11 100644
+--- a/net/vmnet-bridged.m
++++ b/net/vmnet-bridged.m
+@@ -88,15 +88,6 @@ static bool validate_options(const Netdev *netdev, Error **errp)
+         return false;
+     }
+ 
+-#if !defined(MAC_OS_VERSION_11_0) || \
+-    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_11_0
+-    if (options->has_isolated) {
+-        error_setg(errp,
+-                   "vmnet-bridged.isolated feature is "
+-                   "unavailable: outdated vmnet.framework API");
+-        return false;
+-    }
+-#endif
+     return true;
+ }
+ 
+@@ -115,12 +106,10 @@ static xpc_object_t build_if_desc(const Netdev *netdev)
+                               vmnet_shared_interface_name_key,
+                               options->ifname);
+ 
+-#if defined(MAC_OS_VERSION_11_0) && \
+-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+     xpc_dictionary_set_bool(if_desc,
+                             vmnet_enable_isolation_key,
+                             options->isolated);
+-#endif
++
+     return if_desc;
+ }
+ 
+diff --git a/net/vmnet-common.m b/net/vmnet-common.m
+index 2958283485..30c4e53c13 100644
+--- a/net/vmnet-common.m
++++ b/net/vmnet-common.m
+@@ -47,11 +47,8 @@ const char *vmnet_status_map_str(vmnet_return_t status)
+         return "buffers exhausted in kernel";
+     case VMNET_TOO_MANY_PACKETS:
+         return "packet count exceeds limit";
+-#if defined(MAC_OS_VERSION_11_0) && \
+-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+     case VMNET_SHARING_SERVICE_BUSY:
+         return "conflict, sharing service is in use";
+-#endif
+     default:
+         return "unknown vmnet error";
+     }
+diff --git a/net/vmnet-host.c b/net/vmnet-host.c
+index 1f95f7343a..49fb25c224 100644
+--- a/net/vmnet-host.c
++++ b/net/vmnet-host.c
+@@ -21,31 +21,13 @@
+ static bool validate_options(const Netdev *netdev, Error **errp)
+ {
+     const NetdevVmnetHostOptions *options = &(netdev->u.vmnet_host);
+-
+-#if defined(MAC_OS_VERSION_11_0) && \
+-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+-
+     QemuUUID net_uuid;
++
+     if (options->net_uuid &&
+         qemu_uuid_parse(options->net_uuid, &net_uuid) < 0) {
+         error_setg(errp, "Invalid UUID provided in 'net-uuid'");
+         return false;
+     }
+-#else
+-    if (options->has_isolated) {
+-        error_setg(errp,
+-                   "vmnet-host.isolated feature is "
+-                   "unavailable: outdated vmnet.framework API");
+-        return false;
+-    }
+-
+-    if (options->net_uuid) {
+-        error_setg(errp,
+-                   "vmnet-host.net-uuid feature is "
+-                   "unavailable: outdated vmnet.framework API");
+-        return false;
+-    }
+-#endif
+ 
+     if ((options->start_address ||
+          options->end_address ||
+@@ -71,9 +53,6 @@ static xpc_object_t build_if_desc(const Netdev *netdev)
+                               vmnet_operation_mode_key,
+                               VMNET_HOST_MODE);
+ 
+-#if defined(MAC_OS_VERSION_11_0) && \
+-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+-
+     xpc_dictionary_set_bool(if_desc,
+                             vmnet_enable_isolation_key,
+                             options->isolated);
+@@ -85,7 +64,6 @@ static xpc_object_t build_if_desc(const Netdev *netdev)
+                                 vmnet_network_identifier_key,
+                                 net_uuid.data);
+     }
+-#endif
+ 
+     if (options->start_address) {
+         xpc_dictionary_set_string(if_desc,
+diff --git a/net/vmnet-shared.c b/net/vmnet-shared.c
+index 40c7306a75..4726b07253 100644
+--- a/net/vmnet-shared.c
++++ b/net/vmnet-shared.c
+@@ -21,16 +21,6 @@ static bool validate_options(const Netdev *netdev, Error **errp)
+ {
+     const NetdevVmnetSharedOptions *options = &(netdev->u.vmnet_shared);
+ 
+-#if !defined(MAC_OS_VERSION_11_0) || \
+-    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_11_0
+-    if (options->has_isolated) {
+-        error_setg(errp,
+-                   "vmnet-shared.isolated feature is "
+-                   "unavailable: outdated vmnet.framework API");
+-        return false;
+-    }
+-#endif
+-
+     if ((options->start_address ||
+          options->end_address ||
+          options->subnet_mask) &&
+@@ -76,14 +66,11 @@ static xpc_object_t build_if_desc(const Netdev *netdev)
+                                   options->subnet_mask);
+     }
+ 
+-#if defined(MAC_OS_VERSION_11_0) && \
+-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+     xpc_dictionary_set_bool(
+         if_desc,
+         vmnet_enable_isolation_key,
+         options->isolated
+     );
+-#endif
+ 
+     return if_desc;
+ }
+diff --git a/pc-bios/s390-ccw/Makefile b/pc-bios/s390-ccw/Makefile
+index acfcd1e71a..6207911b53 100644
+--- a/pc-bios/s390-ccw/Makefile
++++ b/pc-bios/s390-ccw/Makefile
+@@ -40,7 +40,7 @@ EXTRA_CFLAGS += -ffreestanding -fno-delete-null-pointer-checks -fno-common -fPIE
+ EXTRA_CFLAGS += -fwrapv -fno-strict-aliasing -fno-asynchronous-unwind-tables
+ EXTRA_CFLAGS += -msoft-float
+ EXTRA_CFLAGS += -std=gnu99
+-LDFLAGS += -Wl,-pie -nostdlib
++LDFLAGS += -Wl,-pie -nostdlib -z noexecstack
+ 
+ cc-test = $(CC) -Werror $1 -c -o /dev/null -xc /dev/null >/dev/null 2>/dev/null
+ cc-option = if $(call cc-test, $1); then \
+@@ -55,8 +55,6 @@ config-cc.mak: Makefile
+ 	    $(call cc-option,-march=z900,-march=z10)) 3> config-cc.mak
+ -include config-cc.mak
+ 
+-LDFLAGS += -Wl,-pie -nostdlib -z noexecstack
+-
+ build-all: s390-ccw.img s390-netboot.img
+ 
+ s390-ccw.elf: $(OBJECTS)
+diff --git a/plugins/core.c b/plugins/core.c
+index 9d737d8278..12c67b4b4e 100644
+--- a/plugins/core.c
++++ b/plugins/core.c
+@@ -241,10 +241,11 @@ static void plugin_grow_scoreboards__locked(CPUState *cpu)
+     end_exclusive();
+ }
+ 
+-void qemu_plugin_vcpu_init_hook(CPUState *cpu)
++static void qemu_plugin_vcpu_init__async(CPUState *cpu, run_on_cpu_data unused)
+ {
+     bool success;
+ 
++    assert(cpu->cpu_index != UNASSIGNED_CPU_INDEX);
+     qemu_rec_mutex_lock(&plugin.lock);
+     plugin.num_vcpus = MAX(plugin.num_vcpus, cpu->cpu_index + 1);
+     plugin_cpu_update__locked(&cpu->cpu_index, NULL, NULL);
+@@ -257,12 +258,19 @@ void qemu_plugin_vcpu_init_hook(CPUState *cpu)
+     plugin_vcpu_cb__simple(cpu, QEMU_PLUGIN_EV_VCPU_INIT);
+ }
+ 
++void qemu_plugin_vcpu_init_hook(CPUState *cpu)
++{
++    /* Plugin initialization must wait until the cpu start executing code */
++    async_run_on_cpu(cpu, qemu_plugin_vcpu_init__async, RUN_ON_CPU_NULL);
++}
++
+ void qemu_plugin_vcpu_exit_hook(CPUState *cpu)
+ {
+     bool success;
+ 
+     plugin_vcpu_cb__simple(cpu, QEMU_PLUGIN_EV_VCPU_EXIT);
+ 
++    assert(cpu->cpu_index != UNASSIGNED_CPU_INDEX);
+     qemu_rec_mutex_lock(&plugin.lock);
+     success = g_hash_table_remove(plugin.cpu_ht, &cpu->cpu_index);
+     g_assert(success);
+diff --git a/plugins/meson.build b/plugins/meson.build
+index 51b4350c2a..18a0303bff 100644
+--- a/plugins/meson.build
++++ b/plugins/meson.build
+@@ -1,4 +1,3 @@
+-plugin_ldflags = []
+ # Modules need more symbols than just those in plugins/qemu-plugins.symbols
+ if not enable_modules
+   if host_os == 'darwin'
+@@ -7,9 +6,9 @@ if not enable_modules
+       output: 'qemu-plugins-ld64.symbols',
+       capture: true,
+       command: ['sed', '-ne', 's/^[[:space:]]*\\(qemu_.*\\);/_\\1/p', '@INPUT@'])
+-    plugin_ldflags = ['-Wl,-exported_symbols_list,plugins/qemu-plugins-ld64.symbols']
++    emulator_link_args += ['-Wl,-exported_symbols_list,plugins/qemu-plugins-ld64.symbols']
+   else
+-    plugin_ldflags = ['-Xlinker', '--dynamic-list=' + (meson.project_source_root() / 'plugins/qemu-plugins.symbols')]
++    emulator_link_args += ['-Xlinker', '--dynamic-list=' + (meson.project_source_root() / 'plugins/qemu-plugins.symbols')]
+   endif
+ endif
+ 
+@@ -37,5 +36,5 @@ if get_option('plugins')
+     'loader.c',
+     'core.c',
+     'api.c',
+-  ), declare_dependency(link_args: plugin_ldflags))
++  ))
+ endif
+diff --git a/python/qemu/machine/machine.py b/python/qemu/machine/machine.py
+index f648f6af45..ebb58d5b68 100644
+--- a/python/qemu/machine/machine.py
++++ b/python/qemu/machine/machine.py
+@@ -335,6 +335,7 @@ class QEMUMachine:
+ 
+     def _pre_launch(self) -> None:
+         if self._qmp_set:
++            sock = None
+             if self._monitor_address is None:
+                 self._sock_pair = socket.socketpair()
+                 os.set_inheritable(self._sock_pair[0].fileno(), True)

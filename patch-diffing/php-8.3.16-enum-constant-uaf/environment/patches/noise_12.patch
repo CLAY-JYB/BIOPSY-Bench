@@ -1,0 +1,4679 @@
+diff --git a/ext/dba/dba_db1.c b/ext/dba/dba_db1.c
+index 3a95cea4..202c05ab 100644
+--- a/ext/dba/dba_db1.c
++++ b/ext/dba/dba_db1.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB1
++#if DBA_DB1
+ #include "php_db1.h"
+ 
+ #ifdef DB1_INCLUDE_FILE
+@@ -31,6 +31,9 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define DB1_DATA dba_db1_data *dba = info->dbf
++#define DB1_GKEY DBT gkey; gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB  *dbp;
+ } dba_db1_data;
+@@ -41,7 +44,11 @@ DBA_OPEN_FUNC(db1)
+ 	DB		*db;
+ 
+ 	int gmode;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
++
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
+ 
+ 	gmode = 0;
+ 	switch (info->mode) {
+@@ -77,91 +84,82 @@ DBA_OPEN_FUNC(db1)
+ 
+ DBA_CLOSE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
++	DB1_DATA;
+ 	dba->dbp->close(dba->dbp);
+ 	pefree(info->dbf, info->flags&DBA_PERSISTENT);
+ }
+ 
+ DBA_FETCH_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (dba->dbp->get(dba->dbp, &gkey, &gval, 0) == RET_SUCCESS) {
+-		return zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		return estrndup(gval.data, gval.size);
+ 	}
+ 	return NULL;
+ }
+ 
+ DBA_UPDATE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
++	DB1_DATA;
++	DB1_GKEY;
+ 
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
+-
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	return dba->dbp->put(dba->dbp, &gkey, &gval, mode == 1 ? R_NOOVERWRITE : 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_EXISTS_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	return dba->dbp->get(dba->dbp, &gkey, &gval, 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_DELETE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, &gkey, 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gkey;
+ 	DBT gval;
++	DB1_DATA;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->dbp->seq(dba->dbp, &gkey, &gval, R_FIRST) == RET_SUCCESS) {
+-		return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++		if (newlen) *newlen = gkey.size;
++		return estrndup(gkey.data, gkey.size);
+ 	}
+ 	return NULL;
+ }
+ 
+ DBA_NEXTKEY_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gkey;
+ 	DBT gval;
++	DB1_DATA;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->dbp->seq(dba->dbp, &gkey, &gval, R_NEXT) == RET_SUCCESS) {
+-		return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++		if (newlen) *newlen = gkey.size;
++		return estrndup(gkey.data, gkey.size);
+ 	}
+ 	return NULL;
+ }
+diff --git a/ext/dba/dba_db2.c b/ext/dba/dba_db2.c
+index 8f6d47a9..2c1cb43b 100644
+--- a/ext/dba/dba_db2.c
++++ b/ext/dba/dba_db2.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB2
++#if DBA_DB2
+ #include "php_db2.h"
+ #include <sys/stat.h>
+ 
+@@ -29,6 +29,12 @@
+ #include DB2_INCLUDE_FILE
+ #endif
+ 
++#define DB2_DATA dba_db2_data *dba = info->dbf
++#define DB2_GKEY \
++	DBT gkey = {0}; \
++	gkey.data = (char *) key; \
++	gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -39,7 +45,7 @@ DBA_OPEN_FUNC(db2)
+ 	DB *dbp;
+ 	DBTYPE type;
+ 	int gmode = 0;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -61,6 +67,10 @@ DBA_OPEN_FUNC(db2)
+ 		return FAILURE;/* not possible */
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ 	if (db_open(info->path, type, gmode, filemode, NULL, NULL, &dbp)) {
+ 		return FAILURE;
+ 	}
+@@ -73,7 +83,7 @@ DBA_OPEN_FUNC(db2)
+ 
+ DBA_CLOSE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	if (dba->cursor)
+ 		dba->cursor->c_close(dba->cursor);
+@@ -83,31 +93,26 @@ DBA_CLOSE_FUNC(db2)
+ 
+ DBA_FETCH_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	if (dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+ 		return NULL;
+ 	}
+ 
+-	return zend_string_init(gval.data, gval.size, /* persistent */ false);
++	if (newlen) *newlen = gval.size;
++	return estrndup(gval.data, gval.size);
+ }
+ 
+ DBA_UPDATE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
++	DB2_DATA;
++	DB2_GKEY;
+ 
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
+-
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -118,12 +123,9 @@ DBA_UPDATE_FUNC(db2)
+ 
+ DBA_EXISTS_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	if (dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+ 		return FAILURE;
+@@ -133,18 +135,15 @@ DBA_EXISTS_FUNC(db2)
+ 
+ DBA_DELETE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -159,20 +158,21 @@ DBA_FIRSTKEY_FUNC(db2)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db2(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db2(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 	DBT gkey = {0}, gval = {0};
+ 
+ 	if (dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT)
+-			|| !gkey.data) {
++			|| !gkey.data)
+ 		return NULL;
+-	}
+ 
+-	return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++	if (newlen) *newlen = gkey.size;
++	return estrndup(gkey.data, gkey.size);
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db2)
+@@ -182,7 +182,7 @@ DBA_OPTIMIZE_FUNC(db2)
+ 
+ DBA_SYNC_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_db3.c b/ext/dba/dba_db3.c
+index d9e948a6..2f05901b 100644
+--- a/ext/dba/dba_db3.c
++++ b/ext/dba/dba_db3.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB3
++#if DBA_DB3
+ #include "php_db3.h"
+ #include <sys/stat.h>
+ 
+@@ -41,6 +41,12 @@ static void php_dba_db3_errcall_fcn(
+ 	php_error_docref(NULL, E_NOTICE, "%s%s", errpfx?errpfx:"", msg);
+ }
+ 
++#define DB3_DATA dba_db3_data *dba = info->dbf
++#define DB3_GKEY \
++	DBT gkey; \
++	memset(&gkey, 0, sizeof(gkey)); \
++	gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -51,7 +57,7 @@ DBA_OPEN_FUNC(db3)
+ 	DB *dbp = NULL;
+ 	DBTYPE type;
+ 	int gmode = 0, err;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -73,6 +79,10 @@ DBA_OPEN_FUNC(db3)
+ 		return FAILURE; /* not possible */
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ #ifdef DB_FCNTL_LOCKING
+ 	gmode |= DB_FCNTL_LOCKING;
+ #endif
+@@ -106,7 +116,7 @@ DBA_OPEN_FUNC(db3)
+ 
+ DBA_CLOSE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	if (dba->cursor) dba->cursor->c_close(dba->cursor);
+ 	dba->dbp->close(dba->dbp, 0);
+@@ -115,34 +125,28 @@ DBA_CLOSE_FUNC(db3)
+ 
+ DBA_FETCH_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	char *new = NULL;
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+-		return zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		new = estrndup(gval.data, gval.size);
+ 	}
+-	return NULL;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (!dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -153,13 +157,9 @@ DBA_UPDATE_FUNC(db3)
+ 
+ DBA_EXISTS_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+@@ -170,19 +170,15 @@ DBA_EXISTS_FUNC(db3)
+ 
+ DBA_DELETE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -193,24 +189,27 @@ DBA_FIRSTKEY_FUNC(db3)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db3(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db3(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 	DBT gkey, gval;
++	char *nkey = NULL;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT) == 0) {
+ 		if (gkey.data) {
+-			return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++			nkey = estrndup(gkey.data, gkey.size);
++			if (newlen) *newlen = gkey.size;
+ 		}
+ 	}
+ 
+-	return NULL;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db3)
+@@ -220,7 +219,7 @@ DBA_OPTIMIZE_FUNC(db3)
+ 
+ DBA_SYNC_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_db4.c b/ext/dba/dba_db4.c
+index 3de66a42..93dd36d5 100644
+--- a/ext/dba/dba_db4.c
++++ b/ext/dba/dba_db4.c
+@@ -21,7 +21,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB4
++#if DBA_DB4
+ #include "php_db4.h"
+ #include <sys/stat.h>
+ 
+@@ -55,6 +55,12 @@ static void php_dba_db4_errcall_fcn(
+ 	php_error_docref(NULL, E_NOTICE, "%s%s", errpfx?errpfx:"", msg);
+ }
+ 
++#define DB4_DATA dba_db4_data *dba = info->dbf
++#define DB4_GKEY \
++	DBT gkey; \
++	memset(&gkey, 0, sizeof(gkey)); \
++	gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -65,7 +71,7 @@ DBA_OPEN_FUNC(db4)
+ 	DB *dbp = NULL;
+ 	DBTYPE type;
+ 	int gmode = 0, err;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -106,6 +112,10 @@ DBA_OPEN_FUNC(db4)
+ 		gmode |= DB_THREAD;
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ 	if ((err=db_create(&dbp, NULL, 0)) == 0) {
+ 	    dbp->set_errcall(dbp, php_dba_db4_errcall_fcn);
+ 	    if (
+@@ -135,7 +145,7 @@ DBA_OPEN_FUNC(db4)
+ 
+ DBA_CLOSE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	if (dba->cursor) dba->cursor->c_close(dba->cursor);
+ 	dba->dbp->close(dba->dbp, 0);
+@@ -144,41 +154,34 @@ DBA_CLOSE_FUNC(db4)
+ 
+ DBA_FETCH_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-	zend_string *fetched_value = NULL;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	char *new = NULL;
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (info->flags & DBA_PERSISTENT) {
+ 		gval.flags |= DB_DBT_MALLOC;
+ 	}
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+-		fetched_value = zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		new = estrndup(gval.data, gval.size);
+ 		if (info->flags & DBA_PERSISTENT) {
+ 			free(gval.data);
+ 		}
+ 	}
+-	return fetched_value;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (!dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -189,13 +192,9 @@ DBA_UPDATE_FUNC(db4)
+ 
+ DBA_EXISTS_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 
+@@ -214,19 +213,15 @@ DBA_EXISTS_FUNC(db4)
+ 
+ DBA_DELETE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -237,14 +232,15 @@ DBA_FIRSTKEY_FUNC(db4)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db4(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db4(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 	DBT gkey, gval;
+-	zend_string *key = NULL;
++	char *nkey = NULL;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+@@ -255,7 +251,8 @@ DBA_NEXTKEY_FUNC(db4)
+ 	}
+ 	if (dba->cursor && dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT) == 0) {
+ 		if (gkey.data) {
+-			key = zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++			nkey = estrndup(gkey.data, gkey.size);
++			if (newlen) *newlen = gkey.size;
+ 		}
+ 		if (info->flags & DBA_PERSISTENT) {
+ 			if (gkey.data) {
+@@ -267,7 +264,7 @@ DBA_NEXTKEY_FUNC(db4)
+ 		}
+ 	}
+ 
+-	return key;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db4)
+@@ -277,7 +274,7 @@ DBA_OPTIMIZE_FUNC(db4)
+ 
+ DBA_SYNC_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_dbm.c b/ext/dba/dba_dbm.c
+index afa645cb..3412124c 100644
+--- a/ext/dba/dba_dbm.c
++++ b/ext/dba/dba_dbm.c
+@@ -20,13 +20,13 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DBM
++#if DBA_DBM
+ #include "php_dbm.h"
+ 
+ #ifdef DBM_INCLUDE_FILE
+ #include DBM_INCLUDE_FILE
+ #endif
+-#ifdef DBA_GDBM
++#if DBA_GDBM
+ #include "php_gdbm.h"
+ #endif
+ 
+@@ -35,6 +35,9 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define DBM_DATA dba_dbm_data *dba = info->dbf
++#define DBM_GKEY datum gkey; gkey.dptr = (char *) key; gkey.dsize = keylen
++
+ #define TRUNC_IT(extension, mode) \
+ 	snprintf(buf, MAXPATHLEN, "%s" extension, info->path); \
+ 	buf[MAXPATHLEN-1] = '\0'; \
+@@ -50,7 +53,11 @@ typedef struct {
+ DBA_OPEN_FUNC(dbm)
+ {
+ 	int fd;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
++
++	if(info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
+ 
+ 	if(info->mode == DBA_TRUNC) {
+ 		char buf[MAXPATHLEN];
+@@ -85,34 +92,32 @@ DBA_CLOSE_FUNC(dbm)
+ DBA_FETCH_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
++	char *new = NULL;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 	gval = fetch(gkey);
+-	if (gval.dptr) {
+-		return zend_string_init(gval.dptr, gval.dsize, /* persistent */ false);
++	if(gval.dptr) {
++		if(newlen) *newlen = gval.dsize;
++		new = estrndup(gval.dptr, gval.dsize);
+ 	}
+-	return NULL;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 
+ 	if (mode == 1) { /* insert */
+ 		gval = fetch(gkey);
+-		if (gval.dptr) {
++		if(gval.dptr) {
+ 			return FAILURE;
+ 		}
+ 	}
+ 
+-	gval.dptr = ZSTR_VAL(val);
+-	gval.dsize = ZSTR_LEN(val);
++	gval.dptr = (char *) val;
++	gval.dsize = vallen;
+ 
+ 	return (store(gkey, gval) == -1 ? FAILURE : SUCCESS);
+ }
+@@ -120,13 +125,10 @@ DBA_UPDATE_FUNC(dbm)
+ DBA_EXISTS_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 
+ 	gval = fetch(gkey);
+-	if (gval.dptr) {
++	if(gval.dptr) {
+ 		return SUCCESS;
+ 	}
+ 	return FAILURE;
+@@ -134,45 +136,42 @@ DBA_EXISTS_FUNC(dbm)
+ 
+ DBA_DELETE_FUNC(dbm)
+ {
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 	return(delete(gkey) == -1 ? FAILURE : SUCCESS);
+ }
+ 
+ DBA_FIRSTKEY_FUNC(dbm)
+ {
+-	dba_dbm_data *dba = info->dbf;
++	DBM_DATA;
+ 	datum gkey;
+-	zend_string *key = NULL;
++	char *key = NULL;
+ 
+ 	gkey = firstkey();
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		key = estrndup(gkey.dptr, gkey.dsize);
+ 		dba->nextkey = gkey;
+-	} else {
++	} else
+ 		dba->nextkey.dptr = NULL;
+-	}
+ 	return key;
+ }
+ 
+ DBA_NEXTKEY_FUNC(dbm)
+ {
+-	dba_dbm_data *dba = info->dbf;
++	DBM_DATA;
+ 	datum gkey;
+-	zend_string *key = NULL;
++	char *nkey = NULL;
+ 
+-	if (!dba->nextkey.dptr) { return NULL; }
++	if(!dba->nextkey.dptr) return NULL;
+ 
+ 	gkey = nextkey(dba->nextkey);
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		nkey = estrndup(gkey.dptr, gkey.dsize);
+ 		dba->nextkey = gkey;
+-	} else {
++	} else
+ 		dba->nextkey.dptr = NULL;
+-	}
+-	return key;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(dbm)
+diff --git a/ext/dba/dba_flatfile.c b/ext/dba/dba_flatfile.c
+index 9d5b3112..246ba68c 100644
+--- a/ext/dba/dba_flatfile.c
++++ b/ext/dba/dba_flatfile.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_FLATFILE
++#if DBA_FLATFILE
+ #include "php_flatfile.h"
+ 
+ #include "libflatfile/flatfile.h"
+@@ -32,6 +32,9 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define FLATFILE_DATA flatfile *dba = info->dbf
++#define FLATFILE_GKEY datum gkey; gkey.dptr = (char *) key; gkey.dsize = keylen
++
+ DBA_OPEN_FUNC(flatfile)
+ {
+ 	info->dbf = pemalloc(sizeof(flatfile), info->flags&DBA_PERSISTENT);
+@@ -44,7 +47,7 @@ DBA_OPEN_FUNC(flatfile)
+ 
+ DBA_CLOSE_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
++	FLATFILE_DATA;
+ 
+ 	if (dba->nextkey.dptr) {
+ 		efree(dba->nextkey.dptr);
+@@ -54,32 +57,31 @@ DBA_CLOSE_FUNC(flatfile)
+ 
+ DBA_FETCH_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
+ 	datum gval;
+-	datum gkey;
+-	zend_string *fetched_val = NULL;
++	char *new = NULL;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	FLATFILE_DATA;
++	FLATFILE_GKEY;
+ 
+ 	gval = flatfile_fetch(dba, gkey);
+ 	if (gval.dptr) {
+-		fetched_val = zend_string_init(gval.dptr, gval.dsize, /* persistent */ false);
++		if (newlen) {
++			*newlen = gval.dsize;
++		}
++		new = estrndup(gval.dptr, gval.dsize);
+ 		efree(gval.dptr);
+ 	}
+-	return fetched_val;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
+ 	datum gval;
+-	datum gkey;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
+-	gval.dptr = ZSTR_VAL(val);
+-	gval.dsize = ZSTR_LEN(val);
++	FLATFILE_DATA;
++	FLATFILE_GKEY;
++	gval.dptr = (char *) val;
++	gval.dsize = vallen;
+ 
+ 	switch(flatfile_store(dba, gkey, gval, mode==1 ? FLATFILE_INSERT : FLATFILE_REPLACE)) {
+ 		case 0:
+@@ -87,24 +89,20 @@ DBA_UPDATE_FUNC(flatfile)
+ 		case 1:
+ 			return FAILURE;
+ 		case -1:
+-			// TODO Check when this happens and confirm this can even happen
+-			php_error_docref(NULL, E_WARNING, "Operation not possible");
++			php_error_docref1(NULL, key, E_WARNING, "Operation not possible");
+ 			return FAILURE;
+ 		default:
+-			// TODO Convert this to an assertion failure
+-			php_error_docref(NULL, E_WARNING, "Unknown return value");
++			php_error_docref2(NULL, key, val, E_WARNING, "Unknown return value");
+ 			return FAILURE;
+ 	}
+ }
+ 
+ DBA_EXISTS_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
+ 	datum gval;
+-	datum gkey;
++	FLATFILE_DATA;
++	FLATFILE_GKEY;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
+ 	gval = flatfile_fetch(dba, gkey);
+ 	if (gval.dptr) {
+ 		efree(gval.dptr);
+@@ -115,31 +113,31 @@ DBA_EXISTS_FUNC(flatfile)
+ 
+ DBA_DELETE_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	FLATFILE_DATA;
++	FLATFILE_GKEY;
+ 	return(flatfile_delete(dba, gkey) == -1 ? FAILURE : SUCCESS);
+ }
+ 
+ DBA_FIRSTKEY_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
++	FLATFILE_DATA;
+ 
+ 	if (dba->nextkey.dptr) {
+ 		efree(dba->nextkey.dptr);
+ 	}
+ 	dba->nextkey = flatfile_firstkey(dba);
+ 	if (dba->nextkey.dptr) {
+-		return zend_string_init(dba->nextkey.dptr, dba->nextkey.dsize, /* persistent */ false);
++		if (newlen)  {
++			*newlen = dba->nextkey.dsize;
++		}
++		return estrndup(dba->nextkey.dptr, dba->nextkey.dsize);
+ 	}
+ 	return NULL;
+ }
+ 
+ DBA_NEXTKEY_FUNC(flatfile)
+ {
+-	flatfile *dba = info->dbf;
++	FLATFILE_DATA;
+ 
+ 	if (!dba->nextkey.dptr) {
+ 		return NULL;
+@@ -150,7 +148,10 @@ DBA_NEXTKEY_FUNC(flatfile)
+ 	}
+ 	dba->nextkey = flatfile_nextkey(dba);
+ 	if (dba->nextkey.dptr) {
+-		return zend_string_init(dba->nextkey.dptr, dba->nextkey.dsize, /* persistent */ false);
++		if (newlen) {
++			*newlen = dba->nextkey.dsize;
++		}
++		return estrndup(dba->nextkey.dptr, dba->nextkey.dsize);
+ 	}
+ 	return NULL;
+ }
+diff --git a/ext/dba/dba_gdbm.c b/ext/dba/dba_gdbm.c
+index c3fbb5bf..2f98b8a9 100644
+--- a/ext/dba/dba_gdbm.c
++++ b/ext/dba/dba_gdbm.c
+@@ -20,13 +20,16 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_GDBM
++#if DBA_GDBM
+ #include "php_gdbm.h"
+ 
+ #ifdef GDBM_INCLUDE_FILE
+ #include GDBM_INCLUDE_FILE
+ #endif
+ 
++#define GDBM_DATA dba_gdbm_data *dba = info->dbf
++#define GDBM_GKEY datum gkey; gkey.dptr = (char *) key; gkey.dsize = keylen
++
+ typedef struct {
+ 	GDBM_FILE dbf;
+ 	datum nextkey;
+@@ -36,7 +39,7 @@ DBA_OPEN_FUNC(gdbm)
+ {
+ 	GDBM_FILE dbf;
+ 	int gmode = 0;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 
+ 	gmode = info->mode == DBA_READER ? GDBM_READER :
+ 		info->mode == DBA_WRITER ? GDBM_WRITER :
+@@ -46,7 +49,11 @@ DBA_OPEN_FUNC(gdbm)
+ 	if(gmode == -1)
+ 		return FAILURE; /* not possible */
+ 
+-	dbf = gdbm_open(info->path, /* int block_size */ 0, gmode, filemode, NULL);
++	if(info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
++	dbf = gdbm_open(info->path, 0, gmode, filemode, NULL);
+ 
+ 	if(dbf) {
+ 		info->dbf = pemalloc(sizeof(dba_gdbm_data), info->flags&DBA_PERSISTENT);
+@@ -60,7 +67,7 @@ DBA_OPEN_FUNC(gdbm)
+ 
+ DBA_CLOSE_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
++	GDBM_DATA;
+ 
+ 	if(dba->nextkey.dptr) free(dba->nextkey.dptr);
+ 	gdbm_close(dba->dbf);
+@@ -69,32 +76,28 @@ DBA_CLOSE_FUNC(gdbm)
+ 
+ DBA_FETCH_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
++	GDBM_DATA;
+ 	datum gval;
+-	datum gkey;
+-	zend_string *fetched_val = NULL;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	char *new = NULL;
+ 
++	GDBM_GKEY;
+ 	gval = gdbm_fetch(dba->dbf, gkey);
+-	if (gval.dptr) {
+-		fetched_val = zend_string_init(gval.dptr, gval.dsize, /* persistent */ false);
++	if(gval.dptr) {
++		if(newlen) *newlen = gval.dsize;
++		new = estrndup(gval.dptr, gval.dsize);
+ 		free(gval.dptr);
+ 	}
+-	return fetched_val;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
+ 	datum gval;
+-	datum gkey;
++	GDBM_DATA;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
+-	gval.dptr = ZSTR_VAL(val);
+-	gval.dsize = ZSTR_LEN(val);
++	GDBM_GKEY;
++	gval.dptr = (char *) val;
++	gval.dsize = vallen;
+ 
+ 	switch (gdbm_store(dba->dbf, gkey, gval, mode == 1 ? GDBM_INSERT : GDBM_REPLACE)) {
+ 		case 0:
+@@ -102,51 +105,44 @@ DBA_UPDATE_FUNC(gdbm)
+ 		case 1:
+ 			return FAILURE;
+ 		case -1:
+-			// TODO Check when this happens and confirm this can even happen
+-			php_error_docref(NULL, E_WARNING, "%s", gdbm_strerror(gdbm_errno));
++			php_error_docref2(NULL, key, val, E_WARNING, "%s", gdbm_strerror(gdbm_errno));
+ 			return FAILURE;
+ 		default:
+-			// TODO Convert this to an assertion failure
+-			php_error_docref(NULL, E_WARNING, "Unknown return value");
++			php_error_docref2(NULL, key, val, E_WARNING, "Unknown return value");
+ 			return FAILURE;
+ 	}
+ }
+ 
+ DBA_EXISTS_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	GDBM_DATA;
++	GDBM_GKEY;
+ 
+ 	return gdbm_exists(dba->dbf, gkey) ? SUCCESS : FAILURE;
+ }
+ 
+ DBA_DELETE_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	GDBM_DATA;
++	GDBM_GKEY;
+ 
+ 	return gdbm_delete(dba->dbf, gkey) == -1 ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
++	GDBM_DATA;
+ 	datum gkey;
+-	zend_string *key = NULL;
++	char *key = NULL;
+ 
+-	if (dba->nextkey.dptr) {
++	if(dba->nextkey.dptr) {
+ 		free(dba->nextkey.dptr);
+ 	}
+ 
+ 	gkey = gdbm_firstkey(dba->dbf);
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		key = estrndup(gkey.dptr, gkey.dsize);
++		if(newlen) *newlen = gkey.dsize;
+ 		dba->nextkey = gkey;
+ 	} else {
+ 		dba->nextkey.dptr = NULL;
+@@ -156,34 +152,34 @@ DBA_FIRSTKEY_FUNC(gdbm)
+ 
+ DBA_NEXTKEY_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
+-	zend_string *key = NULL;
++	GDBM_DATA;
++	char *nkey = NULL;
+ 	datum gkey;
+ 
+-	if(!dba->nextkey.dptr) { return NULL; }
++	if(!dba->nextkey.dptr) return NULL;
+ 
+ 	gkey = gdbm_nextkey(dba->dbf, dba->nextkey);
+ 	free(dba->nextkey.dptr);
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		nkey = estrndup(gkey.dptr, gkey.dsize);
++		if(newlen) *newlen = gkey.dsize;
+ 		dba->nextkey = gkey;
+ 	} else {
+ 		dba->nextkey.dptr = NULL;
+ 	}
+-	return key;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
+-
++	GDBM_DATA;
+ 	gdbm_reorganize(dba->dbf);
+ 	return SUCCESS;
+ }
+ 
+ DBA_SYNC_FUNC(gdbm)
+ {
+-	dba_gdbm_data *dba = info->dbf;
++	GDBM_DATA;
+ 
+ 	gdbm_sync(dba->dbf);
+ 	return SUCCESS;
+diff --git a/ext/dba/dba_inifile.c b/ext/dba/dba_inifile.c
+index fe0adbcc..3d2f4c45 100644
+--- a/ext/dba/dba_inifile.c
++++ b/ext/dba/dba_inifile.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_INIFILE
++#if DBA_INIFILE
+ #include "php_inifile.h"
+ 
+ #include "libinifile/inifile.h"
+@@ -32,6 +32,20 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define INIFILE_DATA \
++	inifile *dba = info->dbf
++
++#define INIFILE_GKEY \
++	key_type ini_key; \
++	if (!key) { \
++		php_error_docref(NULL, E_WARNING, "No key specified"); \
++		return 0; \
++	} \
++	ini_key = inifile_key_split((char*)key) /* keylen not needed here */
++
++#define INIFILE_DONE \
++	inifile_key_free(&ini_key)
++
+ DBA_OPEN_FUNC(inifile)
+ {
+ 	info->dbf = inifile_alloc(info->fp, info->mode == DBA_READER, info->flags&DBA_PERSISTENT);
+@@ -41,58 +55,43 @@ DBA_OPEN_FUNC(inifile)
+ 
+ DBA_CLOSE_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
++	INIFILE_DATA;
+ 
+ 	inifile_free(dba, info->flags&DBA_PERSISTENT);
+ }
+ 
+ DBA_FETCH_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
+ 	val_type ini_val;
+-	key_type ini_key;
+-	zend_string *fetched_val = NULL;
+ 
+-	if (!key) {
+-		php_error_docref(NULL, E_WARNING, "No key specified");
+-		return 0;
+-	}
+-	ini_key = inifile_key_split(ZSTR_VAL(key)); /* keylen not needed here */
++	INIFILE_DATA;
++	INIFILE_GKEY;
+ 
+ 	ini_val = inifile_fetch(dba, &ini_key, skip);
+-	inifile_key_free(&ini_key);
+-	if (ini_val.value) {
+-		fetched_val = zend_string_init(ini_val.value, strlen(ini_val.value), /* persistent */ false);
+-		inifile_val_free(&ini_val);
+-	}
+-	return fetched_val;
++	*newlen = ini_val.value ? strlen(ini_val.value) : 0;
++	INIFILE_DONE;
++	return ini_val.value;
+ }
+ 
+ DBA_UPDATE_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
+ 	val_type ini_val;
+ 	int res;
+-	key_type ini_key;
+ 
+-	if (!key) {
+-		php_error_docref(NULL, E_WARNING, "No key specified");
+-		return 0;
+-	}
+-	ini_key = inifile_key_split(ZSTR_VAL(key)); /* keylen not needed here */
++	INIFILE_DATA;
++	INIFILE_GKEY;
+ 
+-	ini_val.value = ZSTR_VAL(val);
++	ini_val.value = val;
+ 
+ 	if (mode == 1) {
+ 		res = inifile_append(dba, &ini_key, &ini_val);
+ 	} else {
+ 		res = inifile_replace(dba, &ini_key, &ini_val);
+ 	}
+-	inifile_key_free(&ini_key);
++	INIFILE_DONE;
+ 	switch(res) {
+ 	case -1:
+-		// TODO Check when this happens and confirm this can even happen
+-		php_error_docref(NULL, E_WARNING, "Operation not possible");
++		php_error_docref1(NULL, key, E_WARNING, "Operation not possible");
+ 		return FAILURE;
+ 	default:
+ 	case 0:
+@@ -104,18 +103,13 @@ DBA_UPDATE_FUNC(inifile)
+ 
+ DBA_EXISTS_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
+ 	val_type ini_val;
+-	key_type ini_key;
+ 
+-	if (!key) {
+-		php_error_docref(NULL, E_WARNING, "No key specified");
+-		return 0;
+-	}
+-	ini_key = inifile_key_split(ZSTR_VAL(key)); /* keylen not needed here */
++	INIFILE_DATA;
++	INIFILE_GKEY;
+ 
+ 	ini_val = inifile_fetch(dba, &ini_key, 0);
+-	inifile_key_free(&ini_key);
++	INIFILE_DONE;
+ 	if (ini_val.value) {
+ 		inifile_val_free(&ini_val);
+ 		return SUCCESS;
+@@ -125,32 +119,26 @@ DBA_EXISTS_FUNC(inifile)
+ 
+ DBA_DELETE_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
+ 	int res;
+ 	bool found = 0;
+-	key_type ini_key;
+ 
+-	if (!key) {
+-		php_error_docref(NULL, E_WARNING, "No key specified");
+-		return 0;
+-	}
+-	ini_key = inifile_key_split(ZSTR_VAL(key)); /* keylen not needed here */
++	INIFILE_DATA;
++	INIFILE_GKEY;
+ 
+ 	res =  inifile_delete_ex(dba, &ini_key, &found);
+ 
+-	inifile_key_free(&ini_key);
++	INIFILE_DONE;
+ 	return (res == -1 || !found ? FAILURE : SUCCESS);
+ }
+ 
+ DBA_FIRSTKEY_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
++	INIFILE_DATA;
+ 
+ 	if (inifile_firstkey(dba)) {
+ 		char *result = inifile_key_string(&dba->curr.key);
+-		zend_string *key = zend_string_init(result, strlen(result), /* persistent */ false);
+-		efree(result);
+-		return key;
++		*newlen = strlen(result);
++		return result;
+ 	} else {
+ 		return NULL;
+ 	}
+@@ -158,7 +146,7 @@ DBA_FIRSTKEY_FUNC(inifile)
+ 
+ DBA_NEXTKEY_FUNC(inifile)
+ {
+-	inifile *dba = info->dbf;
++	INIFILE_DATA;
+ 
+ 	if (!dba->curr.key.group && !dba->curr.key.name) {
+ 		return NULL;
+@@ -166,9 +154,8 @@ DBA_NEXTKEY_FUNC(inifile)
+ 
+ 	if (inifile_nextkey(dba)) {
+ 		char *result = inifile_key_string(&dba->curr.key);
+-		zend_string *key = zend_string_init(result, strlen(result), /* persistent */ false);
+-		efree(result);
+-		return key;
++		*newlen = strlen(result);
++		return result;
+ 	} else {
+ 		return NULL;
+ 	}
+diff --git a/ext/dba/dba_lmdb.c b/ext/dba/dba_lmdb.c
+index 16454533..569c300e 100644
+--- a/ext/dba/dba_lmdb.c
++++ b/ext/dba/dba_lmdb.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_LMDB
++#if DBA_LMDB
+ #include "php_lmdb.h"
+ 
+ #ifdef LMDB_INCLUDE_FILE
+@@ -40,31 +40,20 @@ DBA_OPEN_FUNC(lmdb)
+ {
+ 	MDB_env *env;
+ 	MDB_txn *txn;
+-	int rc;
+-	int mode = info->file_permission;
+-	zend_long map_size = info->map_size;
+-
+-	ZEND_ASSERT(map_size >= 0);
+-
+-	/* By default use the MDB_NOSUBDIR flag */
+-	int flags = MDB_NOSUBDIR;
+-	/* Use flags passed by the user for driver flags */
+-	if (info->driver_flags != DBA_DEFAULT_DRIVER_FLAGS) {
+-		ZEND_ASSERT(info->driver_flags >= 0);
+-		switch (info->driver_flags) {
+-			case 0:
+-			case MDB_NOSUBDIR:
+-				flags = info->driver_flags;
+-				break;
+-			default:
+-				zend_argument_value_error(6, "must be either DBA_LMDB_USE_SUB_DIR or DBA_LMDB_NO_SUB_DIR for LMDB driver");
++	int rc, mode = 0644, flags = MDB_NOSUBDIR;
++	zend_long mapsize = 0;
++
++	if(info->argc > 0) {
++		mode = zval_get_long(&info->argv[0]);
++
++		if (info->argc > 1) {
++			mapsize = zval_get_long(&info->argv[1]);
++			if (mapsize < 0) {
++				*error = "mapsize must be greater than or equal to zero";
+ 				return FAILURE;
++			}
+ 		}
+-	}
+-
+-	/* Add readonly flag if DB is opened in read only mode */
+-	if (info->mode == DBA_READER) {
+-		flags |= MDB_RDONLY;
++		/* TODO implement handling of the additional flags. */
+ 	}
+ 
+ 	rc = mdb_env_create(&env);
+@@ -73,8 +62,8 @@ DBA_OPEN_FUNC(lmdb)
+ 		return FAILURE;
+ 	}
+ 
+-	if (map_size > 0) {
+-		rc = mdb_env_set_mapsize(env, (size_t) map_size);
++	if (mapsize > 0) {
++		rc = mdb_env_set_mapsize(env, (size_t) mapsize);
+ 		if (rc) {
+ 			*error = mdb_strerror(rc);
+ 			return FAILURE;
+@@ -83,14 +72,12 @@ DBA_OPEN_FUNC(lmdb)
+ 
+ 	rc = mdb_env_open(env, info->path, flags, mode);
+ 	if (rc) {
+-		/* If this function [mdb_env_open()] fails, mdb_env_close() must be called to discard the MDB_env handle.
+-		 * http://www.lmdb.tech/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340 */
+ 		mdb_env_close(env);
+ 		*error = mdb_strerror(rc);
+ 		return FAILURE;
+ 	}
+ 
+-	rc = mdb_txn_begin(env, NULL, /* flags */ MDB_RDONLY, &txn);
++	rc = mdb_txn_begin(env, NULL, 0, &txn);
+ 	if (rc) {
+ 		mdb_env_close(env);
+ 		*error = mdb_strerror(rc);
+@@ -132,7 +119,7 @@ DBA_FETCH_FUNC(lmdb)
+ {
+ 	int rc;
+ 	MDB_val k, v;
+-	zend_string *ret = NULL;
++	char *ret = NULL;
+ 
+ 	if (LMDB_IT(cur)) {
+ 		rc = mdb_txn_renew(LMDB_IT(txn));
+@@ -140,24 +127,25 @@ DBA_FETCH_FUNC(lmdb)
+ 		rc = mdb_txn_begin(LMDB_IT(env), NULL, MDB_RDONLY, &LMDB_IT(txn));
+ 	}
+ 	if (rc) {
+-		php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++		php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 		return NULL;
+ 	}
+ 
+-	k.mv_size = ZSTR_LEN(key);
+-	k.mv_data = ZSTR_VAL(key);
++	k.mv_size = keylen;
++	k.mv_data = key;
+ 
+ 	rc = mdb_get(LMDB_IT(txn), LMDB_IT(dbi), &k, &v);
+ 	if (rc) {
+ 		if (MDB_NOTFOUND != rc) {
+-			php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++			php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 		}
+ 		mdb_txn_abort(LMDB_IT(txn));
+ 		return NULL;
+ 	}
+ 
+ 	if (v.mv_data) {
+-		ret = zend_string_init(v.mv_data, v.mv_size, /* persistent */ false);
++		if(newlen) *newlen = v.mv_size;
++		ret = estrndup(v.mv_data, v.mv_size);
+ 	}
+ 
+ 	if (LMDB_IT(cur)) {
+@@ -176,19 +164,19 @@ DBA_UPDATE_FUNC(lmdb)
+ 
+ 	rc = mdb_txn_begin(LMDB_IT(env), NULL, 0, &LMDB_IT(txn));
+ 	if (rc) {
+-		php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++		php_error_docref2(NULL, key, val, E_WARNING, "%s", mdb_strerror(rc));
+ 		return FAILURE;
+ 	}
+ 
+-	k.mv_size = ZSTR_LEN(key);
+-	k.mv_data = ZSTR_VAL(key);
+-	v.mv_size = ZSTR_LEN(val);
+-	v.mv_data = ZSTR_VAL(val);
++	k.mv_size = keylen;
++	k.mv_data = key;
++	v.mv_size = vallen;
++	v.mv_data = val;
+ 
+ 	rc = mdb_put(LMDB_IT(txn), LMDB_IT(dbi), &k, &v, mode == 1 ? MDB_NOOVERWRITE : 0);
+ 	if (rc) {
+ 		if (MDB_KEYEXIST != rc) {
+-			php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++			php_error_docref2(NULL, key, val, E_WARNING, "%s", mdb_strerror(rc));
+ 		}
+ 		mdb_txn_abort(LMDB_IT(txn));
+ 		return FAILURE;
+@@ -196,7 +184,7 @@ DBA_UPDATE_FUNC(lmdb)
+ 
+ 	rc = mdb_txn_commit(LMDB_IT(txn));
+ 	if (rc) {
+-		php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++		php_error_docref2(NULL, key, val, E_WARNING, "%s", mdb_strerror(rc));
+ 		mdb_txn_abort(LMDB_IT(txn));
+ 		return FAILURE;
+ 	}
+@@ -215,17 +203,17 @@ DBA_EXISTS_FUNC(lmdb)
+ 		rc = mdb_txn_begin(LMDB_IT(env), NULL, MDB_RDONLY, &LMDB_IT(txn));
+ 	}
+ 	if (rc) {
+-		php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++		php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 		return FAILURE;
+ 	}
+ 
+-	k.mv_size = ZSTR_LEN(key);
+-	k.mv_data = ZSTR_VAL(key);
++	k.mv_size = keylen;
++	k.mv_data = key;
+ 
+ 	rc = mdb_get(LMDB_IT(txn), LMDB_IT(dbi), &k, &v);
+ 	if (rc) {
+ 		if (MDB_NOTFOUND != rc) {
+-			php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++			php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 		}
+ 		mdb_txn_abort(LMDB_IT(txn));
+ 		return FAILURE;
+@@ -247,25 +235,25 @@ DBA_DELETE_FUNC(lmdb)
+ 
+ 	rc = mdb_txn_begin(LMDB_IT(env), NULL, 0, &LMDB_IT(txn));
+ 	if (rc) {
+-		php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++		php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 		return FAILURE;
+ 	}
+ 
+-	k.mv_size = ZSTR_LEN(key);
+-	k.mv_data = ZSTR_VAL(key);
++	k.mv_size = keylen;
++	k.mv_data = key;
+ 
+ 	rc = mdb_del(LMDB_IT(txn), LMDB_IT(dbi), &k, NULL);
+ 	if (!rc) {
+ 		rc = mdb_txn_commit(LMDB_IT(txn));
+ 		if (rc) {
+-			php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++			php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 			mdb_txn_abort(LMDB_IT(txn));
+ 			return FAILURE;
+ 		}
+ 		return SUCCESS;
+ 	}
+ 
+-	php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
++	php_error_docref1(NULL, key, E_WARNING, "%s", mdb_strerror(rc));
+ 
+ 	mdb_txn_abort(LMDB_IT(txn));
+ 	return FAILURE;
+@@ -275,7 +263,7 @@ DBA_FIRSTKEY_FUNC(lmdb)
+ {
+ 	int rc;
+ 	MDB_val k, v;
+-	zend_string *ret = NULL;
++	char *ret = NULL;
+ 
+ 	rc = mdb_txn_begin(LMDB_IT(env), NULL, MDB_RDONLY, &LMDB_IT(txn));
+ 	if (rc) {
+@@ -301,8 +289,9 @@ DBA_FIRSTKEY_FUNC(lmdb)
+ 		return NULL;
+ 	}
+ 
+-	if (k.mv_data) {
+-		ret = zend_string_init(k.mv_data, k.mv_size, /* persistent */ false);
++	if(k.mv_data) {
++		if(newlen) *newlen = k.mv_size;
++		ret = estrndup(k.mv_data, k.mv_size);
+ 	}
+ 
+ 	mdb_txn_reset(LMDB_IT(txn));
+@@ -314,7 +303,7 @@ DBA_NEXTKEY_FUNC(lmdb)
+ {
+ 	int rc;
+ 	MDB_val k, v;
+-	zend_string *ret = NULL;
++	char *ret = NULL;
+ 
+ 	rc = mdb_txn_renew(LMDB_IT(txn));
+ 	if (rc) {
+@@ -333,8 +322,9 @@ DBA_NEXTKEY_FUNC(lmdb)
+ 		return NULL;
+ 	}
+ 
+-	if (k.mv_data) {
+-		ret = zend_string_init(k.mv_data, k.mv_size, /* persistent */ false);
++	if(k.mv_data) {
++		if(newlen) *newlen = k.mv_size;
++		ret = estrndup(k.mv_data, k.mv_size);
+ 	}
+ 
+ 	mdb_txn_reset(LMDB_IT(txn));
+diff --git a/ext/dba/dba_ndbm.c b/ext/dba/dba_ndbm.c
+index d872add4..20914b29 100644
+--- a/ext/dba/dba_ndbm.c
++++ b/ext/dba/dba_ndbm.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_NDBM
++#if DBA_NDBM
+ #include "php_ndbm.h"
+ 
+ #include <fcntl.h>
+@@ -28,11 +28,13 @@
+ #include NDBM_INCLUDE_FILE
+ #endif
+ 
++#define NDBM_GKEY datum gkey; gkey.dptr = (char *) key; gkey.dsize = keylen
++
+ DBA_OPEN_FUNC(ndbm)
+ {
+ 	DBM *dbf;
+ 	int gmode = 0;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	dba_info *pinfo = (dba_info *) info;
+ 
+ 	switch(info->mode) {
+@@ -52,6 +54,10 @@ DBA_OPEN_FUNC(ndbm)
+ 			return FAILURE; /* not possible */
+ 	}
+ 
++	if(info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ 	dbf = dbm_open(info->path, gmode, filemode);
+ 
+ 	pinfo->dbf = dbf;
+@@ -66,26 +72,24 @@ DBA_CLOSE_FUNC(ndbm)
+ DBA_FETCH_FUNC(ndbm)
+ {
+ 	datum gval;
+-	datum gkey;
++	char *new = NULL;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	NDBM_GKEY;
+ 	gval = dbm_fetch(info->dbf, gkey);
+-	if (gval.dptr) {
+-		return zend_string_init(gval.dptr, gval.dsize, /* persistent */ false);
++	if(gval.dptr) {
++		if(newlen) *newlen = gval.dsize;
++		new = estrndup(gval.dptr, gval.dsize);
+ 	}
+-	return NULL;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(ndbm)
+ {
+ 	datum gval;
+-	datum gkey;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
+-	gval.dptr = ZSTR_VAL(val);
+-	gval.dsize = ZSTR_LEN(val);
++	NDBM_GKEY;
++	gval.dptr = (char *) val;
++	gval.dsize = vallen;
+ 
+ 	if(!dbm_store(info->dbf, gkey, gval, mode == 1 ? DBM_INSERT : DBM_REPLACE))
+ 		return SUCCESS;
+@@ -95,12 +99,9 @@ DBA_UPDATE_FUNC(ndbm)
+ DBA_EXISTS_FUNC(ndbm)
+ {
+ 	datum gval;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	NDBM_GKEY;
+ 	gval = dbm_fetch(info->dbf, gkey);
+-	if (gval.dptr) {
++	if(gval.dptr) {
+ 		return SUCCESS;
+ 	}
+ 	return FAILURE;
+@@ -108,33 +109,34 @@ DBA_EXISTS_FUNC(ndbm)
+ 
+ DBA_DELETE_FUNC(ndbm)
+ {
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	NDBM_GKEY;
+ 	return(dbm_delete(info->dbf, gkey) == -1 ? FAILURE : SUCCESS);
+ }
+ 
+ DBA_FIRSTKEY_FUNC(ndbm)
+ {
+ 	datum gkey;
++	char *key = NULL;
+ 
+ 	gkey = dbm_firstkey(info->dbf);
+-	if (gkey.dptr) {
+-		return zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		key = estrndup(gkey.dptr, gkey.dsize);
+ 	}
+-	return NULL;
++	return key;
+ }
+ 
+ DBA_NEXTKEY_FUNC(ndbm)
+ {
+ 	datum gkey;
++	char *nkey = NULL;
+ 
+ 	gkey = dbm_nextkey(info->dbf);
+-	if (gkey.dptr) {
+-		return zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		nkey = estrndup(gkey.dptr, gkey.dsize);
+ 	}
+-	return NULL;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(ndbm)
+diff --git a/ext/dba/dba_qdbm.c b/ext/dba/dba_qdbm.c
+index d06af206..d18108b3 100644
+--- a/ext/dba/dba_qdbm.c
++++ b/ext/dba/dba_qdbm.c
+@@ -20,13 +20,15 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_QDBM
++#if DBA_QDBM
+ #include "php_qdbm.h"
+ 
+ #ifdef QDBM_INCLUDE_FILE
+ #include QDBM_INCLUDE_FILE
+ #endif
+ 
++#define QDBM_DATA dba_qdbm_data *dba = info->dbf
++
+ typedef struct {
+ 	DEPOT *dbf;
+ } dba_qdbm_data;
+@@ -65,7 +67,7 @@ DBA_OPEN_FUNC(qdbm)
+ 
+ DBA_CLOSE_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 
+ 	dpclose(dba->dbf);
+ 	pefree(dba, info->flags & DBA_PERSISTENT);
+@@ -73,30 +75,30 @@ DBA_CLOSE_FUNC(qdbm)
+ 
+ DBA_FETCH_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
+-	char *value;
++	QDBM_DATA;
++	char *value, *new = NULL;
+ 	int value_size;
+-	zend_string *fetched_val = NULL;
+ 
+-	value = dpget(dba->dbf, ZSTR_VAL(key), ZSTR_LEN(key), 0, -1, &value_size);
++	value = dpget(dba->dbf, key, keylen, 0, -1, &value_size);
+ 	if (value) {
+-		fetched_val = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) *newlen = value_size;
++		new = estrndup(value, value_size);
+ 		free(value);
+ 	}
+ 
+-	return fetched_val;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 
+-	if (dpput(dba->dbf, ZSTR_VAL(key), ZSTR_LEN(key), ZSTR_VAL(val), ZSTR_LEN(val), mode == 1 ? DP_DKEEP : DP_DOVER)) {
++	if (dpput(dba->dbf, key, keylen, val, vallen, mode == 1 ? DP_DKEEP : DP_DOVER)) {
+ 		return SUCCESS;
+ 	}
+ 
+ 	if (dpecode != DP_EKEEP) {
+-		php_error_docref(NULL, E_WARNING, "%s", dperrmsg(dpecode));
++		php_error_docref2(NULL, key, val, E_WARNING, "%s", dperrmsg(dpecode));
+ 	}
+ 
+ 	return FAILURE;
+@@ -104,10 +106,10 @@ DBA_UPDATE_FUNC(qdbm)
+ 
+ DBA_EXISTS_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 	char *value;
+ 
+-	value = dpget(dba->dbf, ZSTR_VAL(key), ZSTR_LEN(key), 0, -1, NULL);
++	value = dpget(dba->dbf, key, keylen, 0, -1, NULL);
+ 	if (value) {
+ 		free(value);
+ 		return SUCCESS;
+@@ -118,48 +120,48 @@ DBA_EXISTS_FUNC(qdbm)
+ 
+ DBA_DELETE_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 
+-	return dpout(dba->dbf, ZSTR_VAL(key), ZSTR_LEN(key)) ? SUCCESS : FAILURE;
++	return dpout(dba->dbf, key, keylen) ? SUCCESS : FAILURE;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 	int value_size;
+-	char *value;
+-	zend_string *key = NULL;
++	char *value, *new = NULL;
+ 
+ 	dpiterinit(dba->dbf);
+ 
+ 	value = dpiternext(dba->dbf, &value_size);
+ 	if (value) {
+-		key = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) *newlen = value_size;
++		new = estrndup(value, value_size);
+ 		free(value);
+ 	}
+ 
+-	return key;
++	return new;
+ }
+ 
+ DBA_NEXTKEY_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 	int value_size;
+-	char *value;
+-	zend_string *key = NULL;
++	char *value, *new = NULL;
+ 
+ 	value = dpiternext(dba->dbf, &value_size);
+ 	if (value) {
+-		key = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) *newlen = value_size;
++		new = estrndup(value, value_size);
+ 		free(value);
+ 	}
+ 
+-	return key;
++	return new;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 
+ 	dpoptimize(dba->dbf, 0);
+ 	return SUCCESS;
+@@ -167,7 +169,7 @@ DBA_OPTIMIZE_FUNC(qdbm)
+ 
+ DBA_SYNC_FUNC(qdbm)
+ {
+-	dba_qdbm_data *dba = info->dbf;
++	QDBM_DATA;
+ 
+ 	dpsync(dba->dbf);
+ 	return SUCCESS;
+diff --git a/ext/dba/dba_tcadb.c b/ext/dba/dba_tcadb.c
+index 23c9e2d1..2e954eed 100644
+--- a/ext/dba/dba_tcadb.c
++++ b/ext/dba/dba_tcadb.c
+@@ -20,13 +20,15 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_TCADB
++#if DBA_TCADB
+ #include "php_tcadb.h"
+ 
+ #ifdef TCADB_INCLUDE_FILE
+ #include TCADB_INCLUDE_FILE
+ #endif
+ 
++#define TCADB_DATA dba_tcadb_data *dba = info->dbf
++
+ typedef struct {
+ 	TCADB *tcadb;
+ } dba_tcadb_data;
+@@ -74,7 +76,7 @@ DBA_OPEN_FUNC(tcadb)
+ 
+ DBA_CLOSE_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 
+ 	tcadbclose(dba->tcadb);
+ 	tcadbdel(dba->tcadb);
+@@ -83,49 +85,51 @@ DBA_CLOSE_FUNC(tcadb)
+ 
+ DBA_FETCH_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
+-	char *value;
++	TCADB_DATA;
++	char *value, *new = NULL;
+ 	int value_size;
+-	zend_string *fetched_val = NULL;
+ 
+-	value = tcadbget(dba->tcadb, ZSTR_VAL(key), ZSTR_LEN(key), &value_size);
++	value = tcadbget(dba->tcadb, key, keylen, &value_size);
+ 	if (value) {
+-		fetched_val = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) {
++			*newlen = value_size;
++		}
++		new = estrndup(value, value_size);
+ 		tcfree(value);
+ 	}
+ 
+-	return fetched_val;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 	int result;
+ 
+ 	if (mode == 1) {
+ 		/* Insert */
+-		if (tcadbvsiz(dba->tcadb, ZSTR_VAL(key), ZSTR_LEN(key)) > -1) {
++		if (tcadbvsiz(dba->tcadb, key, keylen) > -1) {
+ 			return FAILURE;
+ 		}
+ 	}
+ 
+-	result = tcadbput(dba->tcadb, ZSTR_VAL(key), ZSTR_LEN(key), ZSTR_VAL(val), ZSTR_LEN(val));
++	result = tcadbput(dba->tcadb, key, keylen, val, vallen);
+ 
+ 	if (result) {
+ 		return SUCCESS;
+ 	}
+ 
+-	php_error_docref(NULL, E_WARNING, "Error updating data");
++	php_error_docref2(NULL, key, val, E_WARNING, "Error updating data");
+ 	return FAILURE;
+ }
+ 
+ DBA_EXISTS_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 	char *value;
+ 	int value_len;
+ 
+-	value = tcadbget(dba->tcadb, ZSTR_VAL(key), ZSTR_LEN(key), &value_len);
++	value = tcadbget(dba->tcadb, key, keylen, &value_len);
+ 	if (value) {
+ 		tcfree(value);
+ 		return SUCCESS;
+@@ -136,48 +140,52 @@ DBA_EXISTS_FUNC(tcadb)
+ 
+ DBA_DELETE_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 
+-	return tcadbout(dba->tcadb, ZSTR_VAL(key), ZSTR_LEN(key)) ? SUCCESS : FAILURE;
++	return tcadbout(dba->tcadb, key, keylen) ? SUCCESS : FAILURE;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 	int value_size;
+-	char *value;
+-	zend_string *key = NULL;
++	char *value, *new = NULL;
+ 
+ 	tcadbiterinit(dba->tcadb);
+ 
+ 	value = tcadbiternext(dba->tcadb, &value_size);
+ 	if (value) {
+-		key = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) {
++			*newlen = value_size;
++		}
++		new = estrndup(value, value_size);
+ 		tcfree(value);
+ 	}
+ 
+-	return key;
++	return new;
+ }
+ 
+ DBA_NEXTKEY_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 	int value_size;
+-	char *value;
+-	zend_string *key = NULL;
++	char *value, *new = NULL;
+ 
+ 	value = tcadbiternext(dba->tcadb, &value_size);
+ 	if (value) {
+-		key = zend_string_init(value, value_size, /* persistent */ false);
++		if (newlen) {
++			*newlen = value_size;
++		}
++		new = estrndup(value, value_size);
+ 		tcfree(value);
+ 	}
+ 
+-	return key;
++	return new;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 
+ #if _TC_LIBVER >= 811
+ 	return tcadboptimize(dba->tcadb, NULL) ? SUCCESS : FAILURE;
+@@ -188,7 +196,7 @@ DBA_OPTIMIZE_FUNC(tcadb)
+ 
+ DBA_SYNC_FUNC(tcadb)
+ {
+-	dba_tcadb_data *dba = info->dbf;
++	TCADB_DATA;
+ 
+ 	return tcadbsync(dba->tcadb) ? SUCCESS : FAILURE;
+ }
+diff --git a/ext/dba/php_cdb.h b/ext/dba/php_cdb.h
+index 9e6ebff9..a046f079 100644
+--- a/ext/dba/php_cdb.h
++++ b/ext/dba/php_cdb.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_CDB_H
+ #define PHP_CDB_H
+ 
+-#ifdef DBA_CDB
++#if DBA_CDB
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_db1.h b/ext/dba/php_db1.h
+index f8a97e6b..c0bb5f08 100644
+--- a/ext/dba/php_db1.h
++++ b/ext/dba/php_db1.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_DB1_H
+ #define PHP_DB1_H
+ 
+-#ifdef DBA_DB1
++#if DBA_DB1
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_db2.h b/ext/dba/php_db2.h
+index b54dcdee..2a95223a 100644
+--- a/ext/dba/php_db2.h
++++ b/ext/dba/php_db2.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_DB2_H
+ #define PHP_DB2_H
+ 
+-#ifdef DBA_DB2
++#if DBA_DB2
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_db3.h b/ext/dba/php_db3.h
+index f27380bb..58bb0b62 100644
+--- a/ext/dba/php_db3.h
++++ b/ext/dba/php_db3.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_DB3_H
+ #define PHP_DB3_H
+ 
+-#ifdef DBA_DB3
++#if DBA_DB3
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_db4.h b/ext/dba/php_db4.h
+index 1eb8067e..fa814c3f 100644
+--- a/ext/dba/php_db4.h
++++ b/ext/dba/php_db4.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_DB4_H
+ #define PHP_DB4_H
+ 
+-#ifdef DBA_DB4
++#if DBA_DB4
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_dba.h b/ext/dba/php_dba.h
+index ce59e485..07faf697 100644
+--- a/ext/dba/php_dba.h
++++ b/ext/dba/php_dba.h
+@@ -20,7 +20,7 @@
+ #include "php_version.h"
+ #define PHP_DBA_VERSION PHP_VERSION
+ 
+-#ifdef HAVE_DBA
++#if HAVE_DBA
+ 
+ typedef enum {
+ 	/* do not allow 0 here */
+@@ -32,6 +32,7 @@ typedef enum {
+ 
+ typedef struct dba_lock {
+ 	php_stream *fp;
++	char *name;
+ 	int mode; /* LOCK_EX,LOCK_SH */
+ } dba_lock;
+ 
+@@ -42,18 +43,15 @@ typedef struct dba_info {
+ 	dba_mode_t mode;
+ 	php_stream *fp;  /* this is the database stream for builtin handlers */
+ 	int fd;
+-	int file_permission;
+-	zend_long map_size;
+-	/* -1 for default driver flags */
+-	zend_long driver_flags;
++	/* arg[cv] are only available when the dba_open handler is called! */
++	int argc;
++	zval *argv;
+ 	/* private */
+ 	int flags; /* whether and how dba did locking and other flags*/
+ 	struct dba_handler *hnd;
+ 	dba_lock lock;
+ } dba_info;
+ 
+-#define DBA_DEFAULT_DRIVER_FLAGS -1
+-
+ #define DBA_LOCK_READER  (0x0001)
+ #define DBA_LOCK_WRITER  (0x0002)
+ #define DBA_LOCK_CREAT   (0x0004)
+@@ -75,16 +73,16 @@ extern zend_module_entry dba_module_entry;
+ typedef struct dba_handler {
+ 	char *name; /* handler name */
+ 	int flags; /* whether and how dba does locking and other flags*/
+-	zend_result (*open)(dba_info *, char **error);
++	int (*open)(dba_info *, char **error);
+ 	void (*close)(dba_info *);
+-	zend_string* (*fetch)(dba_info *, zend_string *, int);
+-	zend_result (*update)(dba_info *, zend_string *, zend_string *, int);
+-	zend_result (*exists)(dba_info *, zend_string *);
+-	zend_result (*delete)(dba_info *, zend_string *);
+-	zend_string* (*firstkey)(dba_info *);
+-	zend_string* (*nextkey)(dba_info *);
+-	zend_result (*optimize)(dba_info *);
+-	zend_result (*sync)(dba_info *);
++	char* (*fetch)(dba_info *, char *, size_t, int, size_t *);
++	int (*update)(dba_info *, char *, size_t, char *, size_t, int);
++	int (*exists)(dba_info *, char *, size_t);
++	int (*delete)(dba_info *, char *, size_t);
++	char* (*firstkey)(dba_info *, size_t *);
++	char* (*nextkey)(dba_info *, size_t *);
++	int (*optimize)(dba_info *);
++	int (*sync)(dba_info *);
+ 	char* (*info)(struct dba_handler *hnd, dba_info *);
+ 		/* dba_info==NULL: Handler info, dba_info!=NULL: Database info */
+ } dba_handler;
+@@ -92,25 +90,25 @@ typedef struct dba_handler {
+ /* common prototypes which must be supplied by modules */
+ 
+ #define DBA_OPEN_FUNC(x) \
+-	zend_result dba_open_##x(dba_info *info, char **error)
++	int dba_open_##x(dba_info *info, char **error)
+ #define DBA_CLOSE_FUNC(x) \
+ 	void dba_close_##x(dba_info *info)
+ #define DBA_FETCH_FUNC(x) \
+-	zend_string *dba_fetch_##x(dba_info *info, zend_string *key, int skip)
++	char *dba_fetch_##x(dba_info *info, char *key, size_t keylen, int skip, size_t *newlen)
+ #define DBA_UPDATE_FUNC(x) \
+-	zend_result dba_update_##x(dba_info *info, zend_string *key, zend_string *val, int mode)
++	int dba_update_##x(dba_info *info, char *key, size_t keylen, char *val, size_t vallen, int mode)
+ #define DBA_EXISTS_FUNC(x) \
+-	zend_result dba_exists_##x(dba_info *info, zend_string *key)
++	int dba_exists_##x(dba_info *info, char *key, size_t keylen)
+ #define DBA_DELETE_FUNC(x) \
+-	zend_result dba_delete_##x(dba_info *info, zend_string *key)
++	int dba_delete_##x(dba_info *info, char *key, size_t keylen)
+ #define DBA_FIRSTKEY_FUNC(x) \
+-	zend_string *dba_firstkey_##x(dba_info *info)
++	char *dba_firstkey_##x(dba_info *info, size_t *newlen)
+ #define DBA_NEXTKEY_FUNC(x) \
+-	zend_string *dba_nextkey_##x(dba_info *info)
++	char *dba_nextkey_##x(dba_info *info, size_t *newlen)
+ #define DBA_OPTIMIZE_FUNC(x) \
+-	zend_result dba_optimize_##x(dba_info *info)
++	int dba_optimize_##x(dba_info *info)
+ #define DBA_SYNC_FUNC(x) \
+-	zend_result dba_sync_##x(dba_info *info)
++	int dba_sync_##x(dba_info *info)
+ #define DBA_INFO_FUNC(x) \
+ 	char *dba_info_##x(dba_handler *hnd, dba_info *info)
+ 
+diff --git a/ext/dba/php_dbm.h b/ext/dba/php_dbm.h
+index d53c09fc..4c963d18 100644
+--- a/ext/dba/php_dbm.h
++++ b/ext/dba/php_dbm.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_DBM_H
+ #define PHP_DBM_H
+ 
+-#ifdef DBA_DBM
++#if DBA_DBM
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_flatfile.h b/ext/dba/php_flatfile.h
+index 71c46a95..afa9f6d5 100644
+--- a/ext/dba/php_flatfile.h
++++ b/ext/dba/php_flatfile.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_FLATFILE_H
+ #define PHP_FLATFILE_H
+ 
+-#ifdef DBA_FLATFILE
++#if DBA_FLATFILE
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_gdbm.h b/ext/dba/php_gdbm.h
+index 0657c424..3068404c 100644
+--- a/ext/dba/php_gdbm.h
++++ b/ext/dba/php_gdbm.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_GDBM_H
+ #define PHP_GDBM_H
+ 
+-#ifdef DBA_GDBM
++#if DBA_GDBM
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_inifile.h b/ext/dba/php_inifile.h
+index eef58acf..69444df3 100644
+--- a/ext/dba/php_inifile.h
++++ b/ext/dba/php_inifile.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_INIFILE_H
+ #define PHP_INIFILE_H
+ 
+-#ifdef DBA_INIFILE
++#if DBA_INIFILE
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_lmdb.h b/ext/dba/php_lmdb.h
+index 3f19e88b..1b4928f4 100644
+--- a/ext/dba/php_lmdb.h
++++ b/ext/dba/php_lmdb.h
+@@ -1,10 +1,9 @@
+ #ifndef PHP_LMDB_H
+ #define PHP_LMDB_H
+ 
+-#ifdef DBA_LMDB
++#if DBA_LMDB
+ 
+ #include "php_dba.h"
+-#include <lmdb.h>
+ 
+ DBA_FUNCS(lmdb);
+ 
+diff --git a/ext/dba/php_ndbm.h b/ext/dba/php_ndbm.h
+index 68c04c68..b1ebf15a 100644
+--- a/ext/dba/php_ndbm.h
++++ b/ext/dba/php_ndbm.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_NDBM_H
+ #define PHP_NDBM_H
+ 
+-#ifdef DBA_NDBM
++#if DBA_NDBM
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_qdbm.h b/ext/dba/php_qdbm.h
+index bec4e8c5..c88efcff 100644
+--- a/ext/dba/php_qdbm.h
++++ b/ext/dba/php_qdbm.h
+@@ -1,7 +1,7 @@
+ #ifndef PHP_QDBM_H
+ #define PHP_QDBM_H
+ 
+-#ifdef DBA_QDBM
++#if DBA_QDBM
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/php_tcadb.h b/ext/dba/php_tcadb.h
+index 6bfecf7d..8b145f3e 100644
+--- a/ext/dba/php_tcadb.h
++++ b/ext/dba/php_tcadb.h
+@@ -17,7 +17,7 @@
+ #ifndef PHP_TCADB_H
+ #define PHP_TCADB_H
+ 
+-#ifdef DBA_TCADB
++#if DBA_TCADB
+ 
+ #include "php_dba.h"
+ 
+diff --git a/ext/dba/tests/CONFLICTS b/ext/dba/tests/CONFLICTS
+new file mode 100644
+index 00000000..7c5f9807
+--- /dev/null
++++ b/ext/dba/tests/CONFLICTS
+@@ -0,0 +1,2 @@
++# Many of these tests work on the same database file
++dba
+diff --git a/ext/dba/tests/bug36436.phpt b/ext/dba/tests/bug36436.phpt
+index 9e7603f5..d101c442 100644
+--- a/ext/dba/tests/bug36436.phpt
++++ b/ext/dba/tests/bug36436.phpt
+@@ -4,17 +4,21 @@ Bug #36436 (DBA problem with Berkeley DB4)
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug36436.db';
+ 
+-$db = set_up_db_ex('db4', $db_name, LockFlag::DbLock, persistent: true);
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
+ 
+-var_dump($db, dba_fetch('key1', $db));
++$db = dba_popen($db_filename, 'c', 'db4');
++
++dba_insert('X', 'XYZ', $db);
++dba_insert('Y', '123', $db);
++
++var_dump($db, dba_fetch('X', $db));
+ 
+ var_dump(dba_firstkey($db));
+ var_dump(dba_nextkey($db));
+@@ -24,12 +28,10 @@ dba_close($db);
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug36436.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECTF--
+ resource(%d) of type (dba persistent)
+-string(16) "Content String 1"
+-string(13) "[key10]name10"
+-string(13) "[key30]name30"
++string(3) "XYZ"
++string(1) "X"
++string(1) "Y"
+diff --git a/ext/dba/tests/bug48240.phpt b/ext/dba/tests/bug48240.phpt
+new file mode 100644
+index 00000000..1c8a9b3c
+--- /dev/null
++++ b/ext/dba/tests/bug48240.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++Bug #48240 (DBA Segmentation fault dba_nextkey)
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_open($db_filename, 'c', 'db4');
++
++var_dump(dba_nextkey($db));
++
++dba_close($db);
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++bool(false)
+diff --git a/ext/dba/tests/bug49125.phpt b/ext/dba/tests/bug49125.phpt
+new file mode 100644
+index 00000000..3228da5b
+--- /dev/null
++++ b/ext/dba/tests/bug49125.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++Bug #49125 (Error in dba_exists C code)
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++error_reporting(E_ALL);
++
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_popen($db_filename, 'c', 'db4');
++
++dba_insert('foo', 'foo', $db);
++
++var_dump(dba_exists('foo', $db));
++
++dba_close($db);
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++bool(true)
+diff --git a/ext/dba/tests/bug62490.phpt b/ext/dba/tests/bug62490.phpt
+new file mode 100644
+index 00000000..6646b27f
+--- /dev/null
++++ b/ext/dba/tests/bug62490.phpt
+@@ -0,0 +1,43 @@
++--TEST--
++Bug #62490 (dba_delete returns true on missing item (inifile))
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "inifile";
++include "skipif.inc";
++?>
++--FILE--
++<?php
++$handler = "inifile";
++include "test.inc";
++
++$dba = dba_open($db_filename, "n", $handler)
++    or die;
++for ($i = 0; $i < 3; ++$i) {
++    echo "insert $i:";
++    var_dump(dba_insert("a", $i, $dba));
++}
++
++echo "exists:";
++var_dump(dba_exists("a", $dba));
++echo "delete:";
++var_dump(dba_delete("a", $dba));
++echo "exists:";
++var_dump(dba_exists("a", $dba));
++echo "delete:";
++var_dump(dba_delete("a", $dba));
++
++?>
++--CLEAN--
++<?php
++include "clean.inc";
++?>
++--EXPECT--
++insert 0:bool(true)
++insert 1:bool(true)
++insert 2:bool(true)
++exists:bool(true)
++delete:bool(true)
++exists:bool(false)
++delete:bool(false)
+diff --git a/ext/dba/tests/bug65708.phpt b/ext/dba/tests/bug65708.phpt
+index 1a5203e9..b821d2b8 100644
+--- a/ext/dba/tests/bug65708.phpt
++++ b/ext/dba/tests/bug65708.phpt
+@@ -4,15 +4,16 @@ Bug #65708 (dba functions cast $key param to string in-place, bypassing copy on
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
++    require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'bug65708.db';
+ 
+-$db = get_any_db($name);
++error_reporting(E_ALL);
++
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_popen($db_filename, 'c');
+ 
+ $key = 1;
+ $copy = $key;
+@@ -30,12 +31,9 @@ dba_close($db);
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug65708.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+---EXPECTF--
+-Using handler: "%s"
++--EXPECT--
+ integer
+ integer
+ integer
+diff --git a/ext/dba/tests/bug70825.phpt b/ext/dba/tests/bug70825.phpt
+index d2e85420..c9ac20b6 100644
+--- a/ext/dba/tests/bug70825.phpt
++++ b/ext/dba/tests/bug70825.phpt
+@@ -66,5 +66,5 @@ string(4) "1337"
+ --CLEAN--
+ <?php
+ $filename = __DIR__ . DIRECTORY_SEPARATOR . 'bug70825.ini';
+-@unlink($filename);
++unlink($filename);
+ ?>
+diff --git a/ext/dba/tests/bug72157.phpt b/ext/dba/tests/bug72157.phpt
+new file mode 100644
+index 00000000..c493f57b
+--- /dev/null
++++ b/ext/dba/tests/bug72157.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #72157 (use-after-free caused by dba_open)
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++$var0 = fopen(__FILE__,"r");
++$var5 = dba_open(null,$var0);
++$var5 = dba_open(null,$var0);
++$var5 = dba_open(null,$var0);
++$var5 = dba_open($var0,$var0);
++?>
++--EXPECTF--
++Warning: dba_open(,Resource id #5): Illegal DBA mode in %sbug72157.php on line %d
++
++Warning: dba_open(,Resource id #5): Illegal DBA mode in %sbug72157.php on line %d
++
++Warning: dba_open(,Resource id #5): Illegal DBA mode in %sbug72157.php on line %d
++
++Warning: dba_open(Resource id #5,Resource id #5): Illegal DBA mode in %sbug72157.php on line %d
+diff --git a/ext/dba/tests/bug72885.phpt b/ext/dba/tests/bug72885.phpt
+new file mode 100644
+index 00000000..9cfb244b
+--- /dev/null
++++ b/ext/dba/tests/bug72885.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++Bug #72885 flatfile: dba_fetch() fails to read replaced entry
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "flatfile";
++require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_open($db_filename, 'c', 'flatfile');
++dba_insert('foo', 'bar', $db);
++var_dump(dba_replace('foo', 'baz', $db));
++var_dump(dba_fetch('foo', $db));
++dba_close($db);
++
++?>
++--CLEAN--
++<?php
++require_once(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++bool(true)
++string(3) "baz"
+diff --git a/ext/dba/tests/bug78808.phpt b/ext/dba/tests/bug78808.phpt
+index be25a85d..329e0db5 100644
+--- a/ext/dba/tests/bug78808.phpt
++++ b/ext/dba/tests/bug78808.phpt
+@@ -4,16 +4,15 @@ Bug #78808 ([LMDB] MDB_MAP_FULL: Environment mapsize limit reached)
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('lmdb');
++$handler = 'lmdb';
++require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug78808.db';
+-
++$handler = 'lmdb';
++require_once __DIR__ .'/test.inc';
+ $value = str_repeat('*', 0x100000);
+-$lmdb_h = dba_open($db_name, 'c', 'lmdb', 0644, 5*1048576);
++$lmdb_h = dba_open($db_filename, 'c', 'lmdb', 0644, 5*1048576);
+ for ($i = 0; $i < 3; $i++) {
+     dba_insert('key' . $i, $value, $lmdb_h);
+ }
+@@ -24,7 +23,5 @@ echo "done\n";
+ done
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug78808.db';
+-cleanup_standard_db($db_name);
++require_once dirname(__FILE__) .'/clean.inc';
+ ?>
+diff --git a/ext/dba/tests/dba001.phpt b/ext/dba/tests/dba001.phpt
+new file mode 100644
+index 00000000..f0adebe0
+--- /dev/null
++++ b/ext/dba/tests/dba001.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++DBA File Creation Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        echo "database file created\n";
++        dba_close($db_file);
++    } else {
++        echo "$db_file does not exist\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++database file created
+diff --git a/ext/dba/tests/dba002.phpt b/ext/dba/tests/dba002.phpt
+new file mode 100644
+index 00000000..771dea12
+--- /dev/null
++++ b/ext/dba/tests/dba002.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++DBA Insert/Fetch Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        dba_insert("key1", "This is a test insert", $db_file);
++        echo dba_fetch("key1", $db_file);
++        dba_close($db_file);
++    } else {
++        echo "Error creating database\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++This is a test insert
+diff --git a/ext/dba/tests/dba003.phpt b/ext/dba/tests/dba003.phpt
+new file mode 100644
+index 00000000..2f15eca2
+--- /dev/null
++++ b/ext/dba/tests/dba003.phpt
+@@ -0,0 +1,30 @@
++--TEST--
++DBA Insert/Replace/Fetch Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        dba_insert("key1", "This is a test insert", $db_file);
++        dba_replace("key1", "This is the replacement text", $db_file);
++        $a = dba_fetch("key1", $db_file);
++        dba_close($db_file);
++        echo $a;
++    } else {
++        echo "Error creating database\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++This is the replacement text
+diff --git a/ext/dba/tests/dba004.phpt b/ext/dba/tests/dba004.phpt
+new file mode 100644
+index 00000000..3e7247ae
+--- /dev/null
++++ b/ext/dba/tests/dba004.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA Multiple Insert/Fetch Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        dba_insert("key1", "Content String 1", $db_file);
++        dba_insert("key2", "Content String 2", $db_file);
++        dba_insert("key3", "Third Content String", $db_file);
++        dba_insert("key4", "Another Content String", $db_file);
++        dba_insert("key5", "The last content string", $db_file);
++        $a = dba_fetch("key4", $db_file);
++        $b = dba_fetch("key2", $db_file);
++        dba_close($db_file);
++        echo "$a $b";
++    } else {
++        echo "Error creating database\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++Another Content String Content String 2
+diff --git a/ext/dba/tests/dba005.phpt b/ext/dba/tests/dba005.phpt
+new file mode 100644
+index 00000000..9871901c
+--- /dev/null
++++ b/ext/dba/tests/dba005.phpt
+@@ -0,0 +1,41 @@
++--TEST--
++DBA FirstKey/NextKey Loop Test With 5 Items
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        dba_insert("key1", "Content String 1", $db_file);
++        dba_insert("key2", "Content String 2", $db_file);
++        dba_insert("key3", "Third Content String", $db_file);
++        dba_insert("key4", "Another Content String", $db_file);
++        dba_insert("key5", "The last content string", $db_file);
++        $a = dba_firstkey($db_file);
++        $i=0;
++        while($a) {
++            $a = dba_nextkey($db_file);
++            $i++;
++        }
++        echo $i;
++        for ($i=1; $i<6; $i++) {
++            echo dba_exists("key$i", $db_file) ? "Y" : "N";
++        }
++        dba_close($db_file);
++    } else {
++        echo "Error creating database\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++5YYYYY
+diff --git a/ext/dba/tests/dba006.phpt b/ext/dba/tests/dba006.phpt
+new file mode 100644
+index 00000000..2e70c984
+--- /dev/null
++++ b/ext/dba/tests/dba006.phpt
+@@ -0,0 +1,43 @@
++--TEST--
++DBA FirstKey/NextKey with 2 deletes
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++    require_once(__DIR__ .'/test.inc');
++    echo "database handler: $handler\n";
++    if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++        dba_insert("key1", "Content String 1", $db_file);
++        dba_insert("key2", "Content String 2", $db_file);
++        dba_insert("key3", "Third Content String", $db_file);
++        dba_insert("key4", "Another Content String", $db_file);
++        dba_insert("key5", "The last content string", $db_file);
++        dba_delete("key3", $db_file);
++        dba_delete("key1", $db_file);
++        $a = dba_firstkey($db_file);
++        $i=0;
++        while($a) {
++            $a = dba_nextkey($db_file);
++            $i++;
++        }
++        echo $i;
++        for ($i=1; $i<6; $i++) {
++            echo dba_exists("key$i", $db_file) ? "Y" : "N";
++        }
++        dba_close($db_file);
++    } else {
++        echo "Error creating database\n";
++    }
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++3NYNYY
+diff --git a/ext/dba/tests/dba007.phpt b/ext/dba/tests/dba007.phpt
+index 507999de..04a6b353 100644
+--- a/ext/dba/tests/dba007.phpt
++++ b/ext/dba/tests/dba007.phpt
+@@ -8,8 +8,6 @@ dba
+     if (!function_exists('dba_list')) die('skip dba_list() not available');
+     die("info $HND handler used");
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+     require_once(__DIR__ .'/test.inc');
+diff --git a/ext/dba/tests/dba009.phpt b/ext/dba/tests/dba009.phpt
+index 1bcc6c68..71b9be3f 100644
+--- a/ext/dba/tests/dba009.phpt
++++ b/ext/dba/tests/dba009.phpt
+@@ -7,8 +7,6 @@ dba
+     require_once(__DIR__ .'/skipif.inc');
+     print("info $HND handler used");
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+     require_once(__DIR__ .'/test.inc');
+diff --git a/ext/dba/tests/dba010.phpt b/ext/dba/tests/dba010.phpt
+new file mode 100644
+index 00000000..e61f310d
+--- /dev/null
++++ b/ext/dba/tests/dba010.phpt
+@@ -0,0 +1,46 @@
++--TEST--
++DBA with array keys
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    require_once(__DIR__ .'/skipif.inc');
++    die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    dba_insert(array("", "name0") , "Content String 1", $db_file);
++    dba_insert(array("key1", "name1") , "Content String 1", $db_file);
++    dba_insert(array("key2","name2"), "Content String 2", $db_file);
++    dba_insert("[key3]name3", "Third Content String", $db_file);
++    dba_insert(array("key4","name4"), "Another Content String", $db_file);
++    dba_insert(array("key5","name5"), "The last content string", $db_file);
++    $a = dba_firstkey($db_file);
++    $i=0;
++    while($a) {
++        $a = dba_nextkey($db_file);
++        $i++;
++    }
++    echo $i;
++    echo dba_exists(array("","name0"), $db_file) ? "Y" : "N";
++    for ($i=1; $i<5; $i++) {
++        echo dba_exists("[key$i]name$i", $db_file) ? "Y" : "N";
++    }
++    echo dba_exists(array("key5","name5"), $db_file) ? "Y" : "N";
++    echo "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++6YYYYYY
+diff --git a/ext/dba/tests/dba011.phpt b/ext/dba/tests/dba011.phpt
+new file mode 100644
+index 00000000..2185edb9
+--- /dev/null
++++ b/ext/dba/tests/dba011.phpt
+@@ -0,0 +1,36 @@
++--TEST--
++DBA argument tests
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++var_dump(dba_open($db_file, 'n'));
++var_dump(dba_open($db_file, 'n', 'bogus'));
++var_dump(dba_open($db_file, 'q', $handler));
++var_dump(dba_open($db_file, 'nq', $handler));
++var_dump(dba_open($db_file, 'n', $handler, 2, 3, 4, 5, 6, 7, 8));
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: flatfile
++resource(%d) of type (dba)
++
++Warning: dba_open(%stest0.dbm,n): No such handler: bogus in %sdba011.php on line %d
++bool(false)
++
++Warning: dba_open(%stest0.dbm,q): Illegal DBA mode in %sdba011.php on line %d
++bool(false)
++
++Warning: dba_open(%stest0.dbm,nq): Illegal DBA mode in %sdba011.php on line %d
++bool(false)
++resource(%d) of type (dba)
+diff --git a/ext/dba/tests/dba012.phpt b/ext/dba/tests/dba012.phpt
+new file mode 100644
+index 00000000..00f997dd
+--- /dev/null
++++ b/ext/dba/tests/dba012.phpt
+@@ -0,0 +1,44 @@
++--TEST--
++DBA dba.default_handler tests
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "flatfile";
++require_once(__DIR__ .'/skipif.inc');
++?>
++--INI--
++dba.default_handler=flatfile
++--FILE--
++<?php
++$handler = "flatfile";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++echo "Test 1\n";
++
++ini_set('dba.default_handler', 'does_not_exist');
++
++var_dump(dba_open($db_filename, 'c'));
++
++echo "Test 2\n";
++
++ini_set('dba.default_handler', '');
++
++var_dump(dba_open($db_filename, 'n'));
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: flatfile
++Test 1
++
++Warning: ini_set(): No such handler: does_not_exist in %sdba012.php on line %d
++resource(%d) of type (dba)
++Test 2
++
++Warning: dba_open(%stest0.dbm,n): No default handler selected in %sdba012.php on line %d
++bool(false)
+diff --git a/ext/dba/tests/dba013.phpt b/ext/dba/tests/dba013.phpt
+new file mode 100644
+index 00000000..0d41341b
+--- /dev/null
++++ b/ext/dba/tests/dba013.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++DBA with array key with empty array
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    dba_insert(array(), "Content String 1", $db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++
++Fatal error: Uncaught Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name" in %s.php:%d
++Stack trace:
++#0 %sdba013.php(6): dba_insert(Array, '%s', Resource id #%d)
++#1 {main}
++  thrown in %sdba013.php on line 6
+diff --git a/ext/dba/tests/dba014.phpt b/ext/dba/tests/dba014.phpt
+new file mode 100644
+index 00000000..1ed6d061
+--- /dev/null
++++ b/ext/dba/tests/dba014.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++DBA with array key with array containing too many elements
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    dba_insert(array("a", "b", "c"), "Content String 2", $db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++
++Fatal error: Uncaught Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name" in %s.php:%d
++Stack trace:
++#0 %sdba014.php(6): dba_insert(Array, '%s', Resource id #%d)
++#1 {main}
++  thrown in %sdba014.php on line 6
+diff --git a/ext/dba/tests/dba015.phpt b/ext/dba/tests/dba015.phpt
+index 5712edce..f20c4588 100644
+--- a/ext/dba/tests/dba015.phpt
++++ b/ext/dba/tests/dba015.phpt
+@@ -8,8 +8,6 @@ $handler = "flatfile";
+ require_once(__DIR__ .'/skipif.inc');
+ die("info $HND handler used");
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+ 
+diff --git a/ext/dba/tests/dba016.phpt b/ext/dba/tests/dba016.phpt
+new file mode 100644
+index 00000000..4b0933a5
+--- /dev/null
++++ b/ext/dba/tests/dba016.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++DBA lock modifier error message test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "flatfile";
++require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++$handler = "flatfile";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++$db_file1 = dba_popen($db_filename, 'n-t', 'flatfile');
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: flatfile
++
++Warning: dba_popen(%stest0.dbm,n-t): You cannot combine modifiers - (no lock) and t (test lock) in %sdba016.php on line %d
+diff --git a/ext/dba/tests/dba_array_keys.phpt b/ext/dba/tests/dba_array_keys.phpt
+deleted file mode 100644
+index a9883dab..00000000
+--- a/ext/dba/tests/dba_array_keys.phpt
++++ /dev/null
+@@ -1,43 +0,0 @@
+---TEST--
+-DBA check behaviour of array keys
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_basic.db';
+-
+-$db = get_any_db($name);
+-
+-var_dump(dba_insert(['group', 'name'], 'Normal group', $db));
+-var_dump(dba_insert(['group', ''], 'Empty name', $db));
+-var_dump(dba_insert(['', 'name'], 'Empty group', $db));
+-var_dump(dba_insert(['', ''], 'Empty keys', $db));
+-var_dump(dba_fetch(['group', 'name'], $db));
+-var_dump(dba_fetch(['group', ''], $db));
+-var_dump(dba_fetch(['', 'name'], $db));
+-var_dump(dba_fetch(['', ''], $db));
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_basic.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-bool(true)
+-bool(true)
+-bool(true)
+-bool(true)
+-string(12) "Normal group"
+-string(10) "Empty name"
+-string(11) "Empty group"
+-string(10) "Empty keys"
+diff --git a/ext/dba/tests/dba_array_keys_errors.phpt b/ext/dba/tests/dba_array_keys_errors.phpt
+deleted file mode 100644
+index d80915c7..00000000
+--- a/ext/dba/tests/dba_array_keys_errors.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-DBA with invalid array key
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_errors.db';
+-
+-$db = get_any_db($name);
+-
+-try {
+-    dba_insert([], "Content String 1", $db);
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    dba_insert(["a", "b", "c"], "Content String 2", $db);
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-
+-/* Use an object */
+-$o = new stdClass();
+-try {
+-    var_dump(dba_insert([$o, 'obj'], 'Test', $db));
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    var_dump(dba_insert(['group', $o], 'Test', $db));
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_errors.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name"
+-Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name"
+-Error: Object of class stdClass could not be converted to string
+-Error: Object of class stdClass could not be converted to string
+diff --git a/ext/dba/tests/dba_array_keys_inifile.phpt b/ext/dba/tests/dba_array_keys_inifile.phpt
+deleted file mode 100644
+index 658b53b8..00000000
+--- a/ext/dba/tests/dba_array_keys_inifile.phpt
++++ /dev/null
+@@ -1,42 +0,0 @@
+---TEST--
+-DBA check behaviour of array keys (inifile version)
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('inifile');
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = __DIR__ . '/array_keys_basic.db';
+-
+-$db = dba_open($name, 'c', 'inifile');
+-
+-var_dump(dba_insert(['group', 'name'], 'Normal group', $db));
+-var_dump(dba_insert(['group', ''], 'Empty name', $db));
+-var_dump(dba_insert(['', 'name'], 'Empty group', $db));
+-var_dump(dba_insert(['', ''], 'Empty keys', $db));
+-var_dump(dba_fetch(['group', 'name'], $db));
+-var_dump(dba_fetch(['group', ''], $db));
+-var_dump(dba_fetch(['', 'name'], $db));
+-var_dump(dba_fetch(['', ''], $db));
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = __DIR__ . '/array_keys_basic.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-bool(true)
+-bool(true)
+-bool(true)
+-bool(true)
+-string(12) "Normal group"
+-string(0) ""
+-string(11) "Empty group"
+-bool(false)
+diff --git a/ext/dba/tests/dba_array_keys_var_non_string.phpt b/ext/dba/tests/dba_array_keys_var_non_string.phpt
+deleted file mode 100644
+index 1ba64ec4..00000000
+--- a/ext/dba/tests/dba_array_keys_var_non_string.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-DBA check behaviour of key as an array with non string elements
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_non_string.db';
+-
+-$db = get_any_db($name);
+-
+-$key = [5, 5.21];
+-
+-var_dump($key);
+-var_dump(dba_insert($key, 'Test', $db));
+-var_dump($key);
+-var_dump(dba_fetch($key, $db));
+-var_dump($key);
+-
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_non_string.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+-bool(true)
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+-string(4) "Test"
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+diff --git a/ext/dba/tests/dba_cdb.phpt b/ext/dba/tests/dba_cdb.phpt
+index 6b0c7c66..0cdbea3f 100644
+--- a/ext/dba/tests/dba_cdb.phpt
++++ b/ext/dba/tests/dba_cdb.phpt
+@@ -4,34 +4,25 @@ DBA CDB handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb');
++    $handler = 'cdb';
++    require_once(__DIR__ .'/skipif.inc');
++    die('info CDB does not support replace or delete');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_cdb.db';
+-
+-set_up_cdb_db_and_run($db_name);
+-
++    $handler = 'cdb';
++    require_once(__DIR__ .'/test.inc');
++    require_once(__DIR__ .'/dba_handler.inc');
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_cdb.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+-Key 1 exists? Y
+-Key 2 exists? Y
+-Key 3 exists? Y
+-Key 4 exists? Y
+-Key 5 exists? Y
+-array(8) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++database handler: cdb
++5YYYYY
++Content String 2
++array(5) {
+   ["key1"]=>
+   string(16) "Content String 1"
+   ["key2"]=>
+@@ -42,20 +33,11 @@ array(8) {
+   string(22) "Another Content String"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+ --NO-LOCK--
+-Key 1 exists? Y
+-Key 2 exists? Y
+-Key 3 exists? Y
+-Key 4 exists? Y
+-Key 5 exists? Y
+-array(8) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++5YYYYY
++Content String 2
++array(5) {
+   ["key1"]=>
+   string(16) "Content String 1"
+   ["key2"]=>
+@@ -66,6 +48,4 @@ array(8) {
+   string(22) "Another Content String"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+diff --git a/ext/dba/tests/dba_cdb_001.phpt b/ext/dba/tests/dba_cdb_001.phpt
+index 5aa5d615..6a143106 100644
+--- a/ext/dba/tests/dba_cdb_001.phpt
++++ b/ext/dba/tests/dba_cdb_001.phpt
+@@ -8,8 +8,6 @@ $handler = 'cdb';
+ require_once(__DIR__ .'/skipif.inc');
+ die('info CDB does not support replace or delete');
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+ 
+@@ -80,12 +78,12 @@ bool(true)
+ bool(true)
+ Test 1
+ 
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
++Warning: dba_open(%stest0.dbm,c): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
+ Failed to open DB
+ Test 2
+ 
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %sdba_cdb_001.php on line %d
++Warning: dba_insert(): You cannot perform a modification to a database without proper access in %sdba_cdb_001.php on line %d
+ Test 3
+ 
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
++Warning: dba_open(%stest0.dbm,w): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
+ Failed to open DB
+diff --git a/ext/dba/tests/dba_cdb_creation_matrix.phpt b/ext/dba/tests/dba_cdb_creation_matrix.phpt
+deleted file mode 100644
+index 36880911..00000000
+--- a/ext/dba/tests/dba_cdb_creation_matrix.phpt
++++ /dev/null
+@@ -1,195 +0,0 @@
+---TEST--
+-DBA CDB opening matrix of combination
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb');
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-
+-$handler = 'cdb';
+-run_creation_tests($handler);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$handler = 'cdb';
+-clean_creation_tests($handler);
+-?>
+---EXPECTF--
+-=== OPENING NON-EXISTING FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "rd":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r-":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+-=== OPENING EXISTING DB FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "rd":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r-":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+-=== OPENING EXISTING RANDOM FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "rd":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r-":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+diff --git a/ext/dba/tests/dba_cdb_make.phpt b/ext/dba/tests/dba_cdb_make.phpt
+index 447daf30..8063d079 100644
+--- a/ext/dba/tests/dba_cdb_make.phpt
++++ b/ext/dba/tests/dba_cdb_make.phpt
+@@ -4,15 +4,14 @@ DBA CDB_MAKE handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb_make');
++    $handler = 'cdb_make';
++    require_once(__DIR__ .'/skipif.inc');
++    die('info CDB_MAKE does not support reading');
+ ?>
+---CONFLICTS--
+-test.cdb
+ --FILE--
+ <?php
+     $handler = 'cdb_make';
+-    $db_file = 'recreate_testcdb.cdb';
++    require_once(__DIR__ .'/test.inc');
+     echo "database handler: $handler\n";
+     // print md5 checksum of test.cdb which is generated by cdb_make program
+     var_dump(md5_file(__DIR__.'/test.cdb'));
+@@ -35,9 +34,7 @@ test.cdb
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'recreate_testcdb.cdb';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+ database handler: cdb_make
+diff --git a/ext/dba/tests/dba_cdb_read.phpt b/ext/dba/tests/dba_cdb_read.phpt
+index 9d67e170..40a7dc91 100644
+--- a/ext/dba/tests/dba_cdb_read.phpt
++++ b/ext/dba/tests/dba_cdb_read.phpt
+@@ -4,11 +4,9 @@ DBA CDB handler test (read only)
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb_make');
++    $handler = 'cdb_make';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+---CONFLICTS--
+-test.cdb
+ --FILE--
+ <?php
+     echo "database handler: cdb\n";
+diff --git a/ext/dba/tests/dba_db1.phpt b/ext/dba/tests/dba_db1.phpt
+index 69ab820b..07f28e03 100644
+--- a/ext/dba/tests/dba_db1.phpt
++++ b/ext/dba/tests/dba_db1.phpt
+@@ -4,70 +4,47 @@ DBA DB1 handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db1');
++    $handler = 'db1';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db1.db';
+-
+-$handler = 'db1';
+-run_standard_tests($handler, $db_name);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db1.db';
+-cleanup_standard_db($db_name);
++    $handler = 'db1';
++    require_once __DIR__ .'/test.inc';
++    require_once __DIR__ .'/dba_handler.inc';
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: db1
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/dba/tests/dba_db2.phpt b/ext/dba/tests/dba_db2.phpt
+index 690ecbbd..792c745a 100644
+--- a/ext/dba/tests/dba_db2.phpt
++++ b/ext/dba/tests/dba_db2.phpt
+@@ -4,70 +4,47 @@ DBA DB2 handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db2');
++    $handler = 'db2';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db2.db';
+-
+-$handler = 'db2';
+-run_standard_tests($handler, $db_name);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db2.db';
+-cleanup_standard_db($db_name);
++    $handler = 'db2';
++    require_once __DIR__ .'/test.inc';
++    require_once __DIR__ .'/dba_handler.inc';
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: db2
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/dba/tests/dba_db3.phpt b/ext/dba/tests/dba_db3.phpt
+index bb262bcb..4f3e5472 100644
+--- a/ext/dba/tests/dba_db3.phpt
++++ b/ext/dba/tests/dba_db3.phpt
+@@ -4,70 +4,47 @@ DBA DB3 handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db3');
++    $handler = 'db3';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db3.db';
+-
+-$handler = 'db3';
+-run_standard_tests($handler, $db_name);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db3.db';
+-cleanup_standard_db($db_name);
++    $handler = 'db3';
++    require_once __DIR__ .'/test.inc';
++    require_once __DIR__ .'/dba_handler.inc';
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: db3
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/dba/tests/dba_db4_000.phpt b/ext/dba/tests/dba_db4_000.phpt
+index 5b97d68c..872a0fca 100644
+--- a/ext/dba/tests/dba_db4_000.phpt
++++ b/ext/dba/tests/dba_db4_000.phpt
+@@ -4,71 +4,51 @@ DBA DB4 handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
++$handler = 'db4';
++require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db4.db';
+-
+ $handler = 'db4';
+-set_up_db($handler, $db_name);
+-run_standard_tests($handler, $db_name);
+-
++require_once(__DIR__ .'/test.inc');
++require_once(__DIR__ .'/dba_handler.inc');
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db4.db';
+-cleanup_standard_db($db_name);
++require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: db4
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/dba/tests/dba_db4_001.phpt b/ext/dba/tests/dba_db4_001.phpt
+new file mode 100644
+index 00000000..f3cc54af
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_001.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation open("c") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_open($db_filename, "c", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_002.phpt b/ext/dba/tests/dba_db4_002.phpt
+new file mode 100644
+index 00000000..feeb85f7
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_002.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation open("n") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_open($db_filename, "n", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_003.phpt b/ext/dba/tests/dba_db4_003.phpt
+new file mode 100644
+index 00000000..e1f750af
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_003.phpt
+@@ -0,0 +1,46 @@
++--TEST--
++DBA DB4 File Creation open("c") with existing file
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_open($db_filename, "c", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++// Check the file still exists
++$s = file_get_contents($db_filename);
++echo "$s\n";
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++int(14)
++
++Warning: dba_open(%stest0.dbm,c): Driver initialization failed for handler: db4: Invalid argument in %sdba_db4_003.php on line %d
++Error creating %stest0.dbm
++Dummy contents
+diff --git a/ext/dba/tests/dba_db4_004.phpt b/ext/dba/tests/dba_db4_004.phpt
+new file mode 100644
+index 00000000..70c9e7d2
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_004.phpt
+@@ -0,0 +1,42 @@
++--TEST--
++DBA DB4 Truncate Existing File open("n")
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_open($db_filename, "n", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_insert("key1", "This is a test insert", $db_file);
++        echo dba_fetch("key1", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++int(14)
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_005.phpt b/ext/dba/tests/dba_db4_005.phpt
+new file mode 100644
+index 00000000..ae6653d9
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_005.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation popen("c") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_006.phpt b/ext/dba/tests/dba_db4_006.phpt
+new file mode 100644
+index 00000000..4da1ac4a
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_006.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation popen("n") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_popen($db_filename, "n", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_007.phpt b/ext/dba/tests/dba_db4_007.phpt
+new file mode 100644
+index 00000000..daa995ad
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_007.phpt
+@@ -0,0 +1,41 @@
++--TEST--
++DBA DB4 File Creation popen("c") with existing invalid file
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++int(14)
++
++Warning: dba_popen(%stest0.dbm,c): Driver initialization failed for handler: db4: Invalid argument in %sdba_db4_007.php on line %d
++Error creating %stest0.dbm
+diff --git a/ext/dba/tests/dba_db4_008.phpt b/ext/dba/tests/dba_db4_008.phpt
+new file mode 100644
+index 00000000..e10eb822
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_008.phpt
+@@ -0,0 +1,42 @@
++--TEST--
++DBA DB4 Truncate Existing File popen("n")
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_popen($db_filename, "n", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_insert("key1", "This is a test insert", $db_file);
++        echo dba_fetch("key1", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++int(14)
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_009.phpt b/ext/dba/tests/dba_db4_009.phpt
+index bc47c350..e4dd2954 100644
+--- a/ext/dba/tests/dba_db4_009.phpt
++++ b/ext/dba/tests/dba_db4_009.phpt
+@@ -4,32 +4,50 @@ DBA DB4 Multiple File Creation Test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
+ ?>
+ --FILE--
+ <?php
+ $handler = "db4";
++require_once(__DIR__ .'/test.inc');
+ echo "database handler: $handler\n";
+-$db_file1 = __DIR__.'/test1.dbm';
+-$db_file2 = __DIR__.'/test2.dbm';
+-$db_file1 = dba_open($db_file1, "n", $handler);
+-$db_file2 = dba_open($db_file2, "n", $handler);
++$db_file1 = $db_filename1 = __DIR__.'/test1.dbm';
++$db_file2 = $db_filename2 = __DIR__.'/test2.dbm';
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
++if (($db_file1=dba_open($db_file1, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
++if (($db_file2=dba_open($db_file2, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
+ var_dump(dba_list());
+-dba_close($db_file1);
+-dba_close($db_file2);
++dba_close($db_file);
+ 
++@unlink($db_filename1);
++@unlink($db_filename2);
+ ?>
+ --CLEAN--
+ <?php
+-$db_filename1 = __DIR__.'/test1.dbm';
+-$db_filename2 = __DIR__.'/test2.dbm';
+-@unlink($db_filename1);
+-@unlink($db_filename2);
++require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECTF--
+ database handler: db4
+-array(2) {
++database file created
++database file created
++database file created
++array(3) {
++  [%d]=>
++  string(%d) "%stest0.dbm"
+   [%d]=>
+   string(%d) "%stest1.dbm"
+   [%d]=>

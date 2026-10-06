@@ -1,0 +1,753 @@
+diff --git a/hw/net/ftgmac100.c b/hw/net/ftgmac100.c
+index 74b6c3d9a7..80f9cd56d5 100644
+--- a/hw/net/ftgmac100.c
++++ b/hw/net/ftgmac100.c
+@@ -56,6 +56,16 @@
+ #define FTGMAC100_PHYDATA         0x64
+ #define FTGMAC100_FCR             0x68
+ 
++/*
++ * FTGMAC100 registers high
++ *
++ * values below are offset by - FTGMAC100_REG_HIGH_OFFSET from datasheet
++ * because its memory region is start at FTGMAC100_REG_HIGH_OFFSET
++ */
++#define FTGMAC100_NPTXR_BADR_HIGH   (0x17C - FTGMAC100_REG_HIGH_OFFSET)
++#define FTGMAC100_HPTXR_BADR_HIGH   (0x184 - FTGMAC100_REG_HIGH_OFFSET)
++#define FTGMAC100_RXR_BADR_HIGH     (0x18C - FTGMAC100_REG_HIGH_OFFSET)
++
+ /*
+  * Interrupt status register & interrupt enable register
+  */
+@@ -165,6 +175,8 @@
+ #define FTGMAC100_TXDES1_TX2FIC          (1 << 30)
+ #define FTGMAC100_TXDES1_TXIC            (1 << 31)
+ 
++#define FTGMAC100_TXDES2_TXBUF_BADR_HI(x)   (((x) >> 16) & 0x7)
++
+ /*
+  * Receive descriptor
+  */
+@@ -198,13 +210,15 @@
+ #define FTGMAC100_RXDES1_UDP_CHKSUM_ERR  (1 << 26)
+ #define FTGMAC100_RXDES1_IP_CHKSUM_ERR   (1 << 27)
+ 
++#define FTGMAC100_RXDES2_RXBUF_BADR_HI(x)   (((x) >> 16) & 0x7)
++
+ /*
+  * Receive and transmit Buffer Descriptor
+  */
+ typedef struct {
+     uint32_t        des0;
+     uint32_t        des1;
+-    uint32_t        des2;        /* not used by HW */
++    uint32_t        des2;        /* used by HW 64 bits DMA */
+     uint32_t        des3;
+ } FTGMAC100Desc;
+ 
+@@ -238,7 +252,8 @@ typedef struct {
+  */
+ #define FTGMAC100_MAX_FRAME_SIZE    9220
+ 
+-/* Limits depending on the type of the frame
++/*
++ * Limits depending on the type of the frame
+  *
+  *   9216 for Jumbo frames (+ 4 for VLAN)
+  *   1518 for other frames (+ 4 for VLAN)
+@@ -514,12 +529,13 @@ out:
+     return frame_size;
+ }
+ 
+-static void ftgmac100_do_tx(FTGMAC100State *s, uint32_t tx_ring,
+-                            uint32_t tx_descriptor)
++static void ftgmac100_do_tx(FTGMAC100State *s, uint64_t tx_ring,
++                            uint64_t tx_descriptor)
+ {
+     int frame_size = 0;
+     uint8_t *ptr = s->frame;
+-    uint32_t addr = tx_descriptor;
++    uint64_t addr = tx_descriptor;
++    uint64_t buf_addr = 0;
+     uint32_t flags = 0;
+ 
+     while (1) {
+@@ -533,8 +549,10 @@ static void ftgmac100_do_tx(FTGMAC100State *s, uint32_t tx_ring,
+             break;
+         }
+ 
+-        /* record transmit flags as they are valid only on the first
+-         * segment */
++        /*
++         * record transmit flags as they are valid only on the first
++         * segment
++         */
+         if (bd.des0 & FTGMAC100_TXDES0_FTS) {
+             flags = bd.des1;
+         }
+@@ -556,7 +574,12 @@ static void ftgmac100_do_tx(FTGMAC100State *s, uint32_t tx_ring,
+             len =  sizeof(s->frame) - frame_size;
+         }
+ 
+-        if (dma_memory_read(&address_space_memory, bd.des3,
++        buf_addr = bd.des3;
++        if (s->dma64) {
++            buf_addr = deposit64(buf_addr, 32, 32,
++                                 FTGMAC100_TXDES2_TXBUF_BADR_HI(bd.des2));
++        }
++        if (dma_memory_read(&address_space_memory, buf_addr,
+                             ptr, len, MEMTXATTRS_UNSPECIFIED)) {
+             qemu_log_mask(LOG_GUEST_ERROR, "%s: failed to read packet @ 0x%x\n",
+                           __func__, bd.des3);
+@@ -639,7 +662,8 @@ static bool ftgmac100_can_receive(NetClientState *nc)
+  */
+ static uint32_t ftgmac100_rxpoll(FTGMAC100State *s)
+ {
+-    /* Polling times :
++    /*
++     * Polling times :
+      *
+      * Speed      TIME_SEL=0    TIME_SEL=1
+      *
+@@ -722,9 +746,9 @@ static uint64_t ftgmac100_read(void *opaque, hwaddr addr, unsigned size)
+     case FTGMAC100_MATH1:
+         return s->math[1];
+     case FTGMAC100_RXR_BADR:
+-        return s->rx_ring;
++        return extract64(s->rx_ring, 0, 32);
+     case FTGMAC100_NPTXR_BADR:
+-        return s->tx_ring;
++        return extract64(s->tx_ring, 0, 32);
+     case FTGMAC100_ITC:
+         return s->itc;
+     case FTGMAC100_DBLAC:
+@@ -795,9 +819,8 @@ static void ftgmac100_write(void *opaque, hwaddr addr,
+                           HWADDR_PRIx "\n", __func__, value);
+             return;
+         }
+-
+-        s->rx_ring = value;
+-        s->rx_descriptor = s->rx_ring;
++        s->rx_ring = deposit64(s->rx_ring, 0, 32, value);
++        s->rx_descriptor = deposit64(s->rx_descriptor, 0, 32, value);
+         break;
+ 
+     case FTGMAC100_RBSR: /* DMA buffer size */
+@@ -810,8 +833,8 @@ static void ftgmac100_write(void *opaque, hwaddr addr,
+                           HWADDR_PRIx "\n", __func__, value);
+             return;
+         }
+-        s->tx_ring = value;
+-        s->tx_descriptor = s->tx_ring;
++        s->tx_ring = deposit64(s->tx_ring, 0, 32, value);
++        s->tx_descriptor = deposit64(s->tx_descriptor, 0, 32, value);
+         break;
+ 
+     case FTGMAC100_NPTXPD: /* Trigger transmit */
+@@ -910,6 +933,60 @@ static void ftgmac100_write(void *opaque, hwaddr addr,
+     ftgmac100_update_irq(s);
+ }
+ 
++static uint64_t ftgmac100_high_read(void *opaque, hwaddr addr, unsigned size)
++{
++    FTGMAC100State *s = FTGMAC100(opaque);
++    uint64_t val = 0;
++
++    switch (addr) {
++    case FTGMAC100_NPTXR_BADR_HIGH:
++        val = extract64(s->tx_ring, 32, 32);
++        break;
++    case FTGMAC100_HPTXR_BADR_HIGH:
++        /* High Priority Transmit Ring Base High Address */
++        qemu_log_mask(LOG_UNIMP, "%s: read to unimplemented register 0x%"
++                      HWADDR_PRIx "\n", __func__, addr);
++        break;
++    case FTGMAC100_RXR_BADR_HIGH:
++        val = extract64(s->rx_ring, 32, 32);
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad address at offset 0x%"
++                      HWADDR_PRIx "\n", __func__, addr);
++        break;
++    }
++
++    return val;
++}
++
++static void ftgmac100_high_write(void *opaque, hwaddr addr,
++                          uint64_t value, unsigned size)
++{
++    FTGMAC100State *s = FTGMAC100(opaque);
++
++    switch (addr) {
++    case FTGMAC100_NPTXR_BADR_HIGH:
++        s->tx_ring = deposit64(s->tx_ring, 32, 32, value);
++        s->tx_descriptor = deposit64(s->tx_descriptor, 32, 32, value);
++        break;
++    case FTGMAC100_HPTXR_BADR_HIGH:
++        /* High Priority Transmit Ring Base High Address */
++        qemu_log_mask(LOG_UNIMP, "%s: write to unimplemented register 0x%"
++                      HWADDR_PRIx "\n", __func__, addr);
++        break;
++    case FTGMAC100_RXR_BADR_HIGH:
++        s->rx_ring = deposit64(s->rx_ring, 32, 32, value);
++        s->rx_descriptor = deposit64(s->rx_descriptor, 32, 32, value);
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad address at offset 0x%"
++                      HWADDR_PRIx "\n", __func__, addr);
++        break;
++    }
++
++    ftgmac100_update_irq(s);
++}
++
+ static int ftgmac100_filter(FTGMAC100State *s, const uint8_t *buf, size_t len)
+ {
+     unsigned mcast_idx;
+@@ -953,9 +1030,9 @@ static ssize_t ftgmac100_receive(NetClientState *nc, const uint8_t *buf,
+     FTGMAC100State *s = FTGMAC100(qemu_get_nic_opaque(nc));
+     FTGMAC100Desc bd;
+     uint32_t flags = 0;
+-    uint32_t addr;
++    uint64_t addr;
+     uint32_t crc;
+-    uint32_t buf_addr;
++    uint64_t buf_addr = 0;
+     uint8_t *crc_ptr;
+     uint32_t buf_len;
+     size_t size = len;
+@@ -1020,7 +1097,12 @@ static ssize_t ftgmac100_receive(NetClientState *nc, const uint8_t *buf,
+         if (size < 4) {
+             buf_len += size - 4;
+         }
++
+         buf_addr = bd.des3;
++        if (s->dma64) {
++            buf_addr = deposit64(buf_addr, 32, 32,
++                                 FTGMAC100_RXDES2_RXBUF_BADR_HI(bd.des2));
++        }
+         if (first && proto == ETH_P_VLAN && buf_len >= 18) {
+             bd.des1 = lduw_be_p(buf + 14) | FTGMAC100_RXDES1_VLANTAG_AVAIL;
+ 
+@@ -1074,6 +1156,14 @@ static const MemoryRegionOps ftgmac100_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++static const MemoryRegionOps ftgmac100_high_ops = {
++    .read = ftgmac100_high_read,
++    .write = ftgmac100_high_write,
++    .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++};
++
+ static void ftgmac100_cleanup(NetClientState *nc)
+ {
+     FTGMAC100State *s = FTGMAC100(qemu_get_nic_opaque(nc));
+@@ -1103,9 +1193,23 @@ static void ftgmac100_realize(DeviceState *dev, Error **errp)
+         s->rxdes0_edorr = FTGMAC100_RXDES0_EDORR;
+     }
+ 
+-    memory_region_init_io(&s->iomem, OBJECT(dev), &ftgmac100_ops, s,
+-                          TYPE_FTGMAC100, 0x2000);
+-    sysbus_init_mmio(sbd, &s->iomem);
++    memory_region_init(&s->iomem_container, OBJECT(s),
++                       TYPE_FTGMAC100 ".container", FTGMAC100_MEM_SIZE);
++    sysbus_init_mmio(sbd, &s->iomem_container);
++
++    memory_region_init_io(&s->iomem, OBJECT(s), &ftgmac100_ops, s,
++                          TYPE_FTGMAC100 ".regs", FTGMAC100_REG_MEM_SIZE);
++    memory_region_add_subregion(&s->iomem_container, 0x0, &s->iomem);
++
++    if (s->dma64) {
++        memory_region_init_io(&s->iomem_high, OBJECT(s), &ftgmac100_high_ops,
++                              s, TYPE_FTGMAC100 ".regs.high",
++                              FTGMAC100_REG_HIGH_MEM_SIZE);
++        memory_region_add_subregion(&s->iomem_container,
++                                    FTGMAC100_REG_HIGH_OFFSET,
++                                    &s->iomem_high);
++    }
++
+     sysbus_init_irq(sbd, &s->irq);
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+ 
+@@ -1117,18 +1221,14 @@ static void ftgmac100_realize(DeviceState *dev, Error **errp)
+ 
+ static const VMStateDescription vmstate_ftgmac100 = {
+     .name = TYPE_FTGMAC100,
+-    .version_id = 1,
+-    .minimum_version_id = 1,
++    .version_id = 2,
++    .minimum_version_id = 2,
+     .fields = (const VMStateField[]) {
+         VMSTATE_UINT32(irq_state, FTGMAC100State),
+         VMSTATE_UINT32(isr, FTGMAC100State),
+         VMSTATE_UINT32(ier, FTGMAC100State),
+         VMSTATE_UINT32(rx_enabled, FTGMAC100State),
+-        VMSTATE_UINT32(rx_ring, FTGMAC100State),
+         VMSTATE_UINT32(rbsr, FTGMAC100State),
+-        VMSTATE_UINT32(tx_ring, FTGMAC100State),
+-        VMSTATE_UINT32(rx_descriptor, FTGMAC100State),
+-        VMSTATE_UINT32(tx_descriptor, FTGMAC100State),
+         VMSTATE_UINT32_ARRAY(math, FTGMAC100State, 2),
+         VMSTATE_UINT32(itc, FTGMAC100State),
+         VMSTATE_UINT32(aptcr, FTGMAC100State),
+@@ -1147,6 +1247,10 @@ static const VMStateDescription vmstate_ftgmac100 = {
+         VMSTATE_UINT32(phy_int_mask, FTGMAC100State),
+         VMSTATE_UINT32(txdes0_edotr, FTGMAC100State),
+         VMSTATE_UINT32(rxdes0_edorr, FTGMAC100State),
++        VMSTATE_UINT64(rx_ring, FTGMAC100State),
++        VMSTATE_UINT64(tx_ring, FTGMAC100State),
++        VMSTATE_UINT64(rx_descriptor, FTGMAC100State),
++        VMSTATE_UINT64(tx_descriptor, FTGMAC100State),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+@@ -1154,6 +1258,7 @@ static const VMStateDescription vmstate_ftgmac100 = {
+ static Property ftgmac100_properties[] = {
+     DEFINE_PROP_BOOL("aspeed", FTGMAC100State, aspeed, false),
+     DEFINE_NIC_PROPERTIES(FTGMAC100State, conf),
++    DEFINE_PROP_BOOL("dma64", FTGMAC100State, dma64, false),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/net/spapr_llan.c b/hw/net/spapr_llan.c
+index ecb30b7c76..8af33d91b6 100644
+--- a/hw/net/spapr_llan.c
++++ b/hw/net/spapr_llan.c
+@@ -770,6 +770,12 @@ static target_ulong h_change_logical_lan_mac(PowerPCCPU *cpu,
+     SpaprVioVlan *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+     int i;
+ 
++    if (!dev) {
++        hcall_dprintf("H_CHANGE_LOGICAL_LAN_MAC called when "
++                      "no NIC is present\n");
++        return H_PARAMETER;
++    }
++
+     for (i = 0; i < ETH_ALEN; i++) {
+         dev->nicconf.macaddr.a[ETH_ALEN - i - 1] = macaddr & 0xff;
+         macaddr >>= 8;
+diff --git a/hw/nvme/nvme.h b/hw/nvme/nvme.h
+index bed8191bd5..781985754d 100644
+--- a/hw/nvme/nvme.h
++++ b/hw/nvme/nvme.h
+@@ -521,6 +521,7 @@ typedef struct NvmeParams {
+     uint32_t num_queues; /* deprecated since 5.1 */
+     uint32_t max_ioqpairs;
+     uint16_t msix_qsize;
++    uint16_t mqes;
+     uint32_t cmb_size_mb;
+     uint8_t  aerl;
+     uint32_t aer_max_queued;
+@@ -531,11 +532,11 @@ typedef struct NvmeParams {
+     bool     auto_transition_zones;
+     bool     legacy_cmb;
+     bool     ioeventfd;
+-    uint8_t  sriov_max_vfs;
++    uint16_t  sriov_max_vfs;
+     uint16_t sriov_vq_flexible;
+     uint16_t sriov_vi_flexible;
+-    uint8_t  sriov_max_vq_per_vf;
+-    uint8_t  sriov_max_vi_per_vf;
++    uint32_t  sriov_max_vq_per_vf;
++    uint32_t  sriov_max_vi_per_vf;
+     bool     msix_exclusive_bar;
+ } NvmeParams;
+ 
+@@ -612,7 +613,8 @@ typedef struct NvmeCtrl {
+     } features;
+ 
+     NvmePriCtrlCap  pri_ctrl_cap;
+-    NvmeSecCtrlList sec_ctrl_list;
++    uint32_t nr_sec_ctrls;
++    NvmeSecCtrlEntry *sec_ctrl_list;
+     struct {
+         uint16_t    vqrfap;
+         uint16_t    virfap;
+@@ -662,7 +664,7 @@ static inline NvmeSecCtrlEntry *nvme_sctrl(NvmeCtrl *n)
+     NvmeCtrl *pf = NVME(pcie_sriov_get_pf(pci_dev));
+ 
+     if (pci_is_vf(pci_dev)) {
+-        return &pf->sec_ctrl_list.sec[pcie_sriov_vf_number(pci_dev)];
++        return &pf->sec_ctrl_list[pcie_sriov_vf_number(pci_dev)];
+     }
+ 
+     return NULL;
+@@ -671,12 +673,12 @@ static inline NvmeSecCtrlEntry *nvme_sctrl(NvmeCtrl *n)
+ static inline NvmeSecCtrlEntry *nvme_sctrl_for_cntlid(NvmeCtrl *n,
+                                                       uint16_t cntlid)
+ {
+-    NvmeSecCtrlList *list = &n->sec_ctrl_list;
++    NvmeSecCtrlEntry *list = n->sec_ctrl_list;
+     uint8_t i;
+ 
+-    for (i = 0; i < list->numcntl; i++) {
+-        if (le16_to_cpu(list->sec[i].scid) == cntlid) {
+-            return &list->sec[i];
++    for (i = 0; i < n->nr_sec_ctrls; i++) {
++        if (le16_to_cpu(list[i].scid) == cntlid) {
++            return &list[i];
+         }
+     }
+ 
+diff --git a/hw/nvme/subsys.c b/hw/nvme/subsys.c
+index d30bb8bfd5..77deaf2c2c 100644
+--- a/hw/nvme/subsys.c
++++ b/hw/nvme/subsys.c
+@@ -17,13 +17,13 @@
+ static int nvme_subsys_reserve_cntlids(NvmeCtrl *n, int start, int num)
+ {
+     NvmeSubsystem *subsys = n->subsys;
+-    NvmeSecCtrlList *list = &n->sec_ctrl_list;
++    NvmeSecCtrlEntry *list = n->sec_ctrl_list;
+     NvmeSecCtrlEntry *sctrl;
+     int i, cnt = 0;
+ 
+     for (i = start; i < ARRAY_SIZE(subsys->ctrls) && cnt < num; i++) {
+         if (!subsys->ctrls[i]) {
+-            sctrl = &list->sec[cnt];
++            sctrl = &list[cnt];
+             sctrl->scid = cpu_to_le16(i);
+             subsys->ctrls[i] = SUBSYS_SLOT_RSVD;
+             cnt++;
+@@ -36,12 +36,12 @@ static int nvme_subsys_reserve_cntlids(NvmeCtrl *n, int start, int num)
+ static void nvme_subsys_unreserve_cntlids(NvmeCtrl *n)
+ {
+     NvmeSubsystem *subsys = n->subsys;
+-    NvmeSecCtrlList *list = &n->sec_ctrl_list;
++    NvmeSecCtrlEntry *list = n->sec_ctrl_list;
+     NvmeSecCtrlEntry *sctrl;
+     int i, cntlid;
+ 
+     for (i = 0; i < n->params.sriov_max_vfs; i++) {
+-        sctrl = &list->sec[i];
++        sctrl = &list[i];
+         cntlid = le16_to_cpu(sctrl->scid);
+ 
+         if (cntlid) {
+@@ -61,6 +61,8 @@ int nvme_subsys_register_ctrl(NvmeCtrl *n, Error **errp)
+     if (pci_is_vf(&n->parent_obj)) {
+         cntlid = le16_to_cpu(sctrl->scid);
+     } else {
++        n->sec_ctrl_list = g_new0(NvmeSecCtrlEntry, num_vfs);
++
+         for (cntlid = 0; cntlid < ARRAY_SIZE(subsys->ctrls); cntlid++) {
+             if (!subsys->ctrls[cntlid]) {
+                 break;
+diff --git a/hw/nvram/bcm2835_otp.c b/hw/nvram/bcm2835_otp.c
+new file mode 100644
+index 0000000000..c4aed28472
+--- /dev/null
++++ b/hw/nvram/bcm2835_otp.c
+@@ -0,0 +1,187 @@
++/*
++ * BCM2835 One-Time Programmable (OTP) Memory
++ *
++ * The OTP implementation is mostly a stub except for the OTP rows
++ * which are accessed directly by other peripherals such as the mailbox.
++ *
++ * The OTP registers are unimplemented due to lack of documentation.
++ *
++ * Copyright (c) 2024 Rayhan Faizel <rayhan.faizel@gmail.com>
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include "qemu/osdep.h"
++#include "qemu/log.h"
++#include "hw/nvram/bcm2835_otp.h"
++#include "migration/vmstate.h"
++
++/* OTP rows are 1-indexed */
++uint32_t bcm2835_otp_get_row(BCM2835OTPState *s, unsigned int row)
++{
++    assert(row <= BCM2835_OTP_ROW_COUNT && row >= 1);
++
++    return s->otp_rows[row - 1];
++}
++
++void bcm2835_otp_set_row(BCM2835OTPState *s, unsigned int row,
++                           uint32_t value)
++{
++    assert(row <= BCM2835_OTP_ROW_COUNT && row >= 1);
++
++    /* Real OTP rows work as e-fuses */
++    s->otp_rows[row - 1] |= value;
++}
++
++static uint64_t bcm2835_otp_read(void *opaque, hwaddr addr, unsigned size)
++{
++    switch (addr) {
++    case BCM2835_OTP_BOOTMODE_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_BOOTMODE_REG\n");
++        break;
++    case BCM2835_OTP_CONFIG_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CONFIG_REG\n");
++        break;
++    case BCM2835_OTP_CTRL_LO_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CTRL_LO_REG\n");
++        break;
++    case BCM2835_OTP_CTRL_HI_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CTRL_HI_REG\n");
++        break;
++    case BCM2835_OTP_STATUS_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_STATUS_REG\n");
++        break;
++    case BCM2835_OTP_BITSEL_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_BITSEL_REG\n");
++        break;
++    case BCM2835_OTP_DATA_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_DATA_REG\n");
++        break;
++    case BCM2835_OTP_ADDR_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_ADDR_REG\n");
++        break;
++    case BCM2835_OTP_WRITE_DATA_READ_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_WRITE_DATA_READ_REG\n");
++        break;
++    case BCM2835_OTP_INIT_STATUS_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_INIT_STATUS_REG\n");
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "%s: Bad offset 0x%" HWADDR_PRIx "\n", __func__, addr);
++    }
++
++    return 0;
++}
++
++static void bcm2835_otp_write(void *opaque, hwaddr addr,
++                              uint64_t value, unsigned int size)
++{
++    switch (addr) {
++    case BCM2835_OTP_BOOTMODE_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_BOOTMODE_REG\n");
++        break;
++    case BCM2835_OTP_CONFIG_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CONFIG_REG\n");
++        break;
++    case BCM2835_OTP_CTRL_LO_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CTRL_LO_REG\n");
++        break;
++    case BCM2835_OTP_CTRL_HI_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_CTRL_HI_REG\n");
++        break;
++    case BCM2835_OTP_STATUS_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_STATUS_REG\n");
++        break;
++    case BCM2835_OTP_BITSEL_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_BITSEL_REG\n");
++        break;
++    case BCM2835_OTP_DATA_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_DATA_REG\n");
++        break;
++    case BCM2835_OTP_ADDR_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_ADDR_REG\n");
++        break;
++    case BCM2835_OTP_WRITE_DATA_READ_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_WRITE_DATA_READ_REG\n");
++        break;
++    case BCM2835_OTP_INIT_STATUS_REG:
++        qemu_log_mask(LOG_UNIMP,
++                      "bcm2835_otp: BCM2835_OTP_INIT_STATUS_REG\n");
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "%s: Bad offset 0x%" HWADDR_PRIx "\n", __func__, addr);
++    }
++}
++
++static const MemoryRegionOps bcm2835_otp_ops = {
++    .read = bcm2835_otp_read,
++    .write = bcm2835_otp_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .impl = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++};
++
++static void bcm2835_otp_realize(DeviceState *dev, Error **errp)
++{
++    BCM2835OTPState *s = BCM2835_OTP(dev);
++    memory_region_init_io(&s->iomem, OBJECT(dev), &bcm2835_otp_ops, s,
++                          TYPE_BCM2835_OTP, 0x80);
++    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->iomem);
++
++    memset(s->otp_rows, 0x00, sizeof(s->otp_rows));
++}
++
++static const VMStateDescription vmstate_bcm2835_otp = {
++    .name = TYPE_BCM2835_OTP,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (const VMStateField[]) {
++        VMSTATE_UINT32_ARRAY(otp_rows, BCM2835OTPState, BCM2835_OTP_ROW_COUNT),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static void bcm2835_otp_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->realize = bcm2835_otp_realize;
++    dc->vmsd = &vmstate_bcm2835_otp;
++}
++
++static const TypeInfo bcm2835_otp_info = {
++    .name = TYPE_BCM2835_OTP,
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(BCM2835OTPState),
++    .class_init = bcm2835_otp_class_init,
++};
++
++static void bcm2835_otp_register_types(void)
++{
++    type_register_static(&bcm2835_otp_info);
++}
++
++type_init(bcm2835_otp_register_types)
+diff --git a/hw/nvram/meson.build b/hw/nvram/meson.build
+index 4996c72456..10f3639db6 100644
+--- a/hw/nvram/meson.build
++++ b/hw/nvram/meson.build
+@@ -1,5 +1,6 @@
+ system_ss.add(files('fw_cfg-interface.c'))
+ system_ss.add(files('fw_cfg.c'))
++system_ss.add(when: 'CONFIG_RASPI', if_true: files('bcm2835_otp.c'))
+ system_ss.add(when: 'CONFIG_CHRP_NVRAM', if_true: files('chrp_nvram.c'))
+ system_ss.add(when: 'CONFIG_DS1225Y', if_true: files('ds1225y.c'))
+ system_ss.add(when: 'CONFIG_NMC93XX_EEPROM', if_true: files('eeprom93xx.c'))
+diff --git a/hw/pci/pci.c b/hw/pci/pci.c
+index 68d30feb86..4c7be52951 100644
+--- a/hw/pci/pci.c
++++ b/hw/pci/pci.c
+@@ -70,7 +70,7 @@ static bool pcie_has_upstream_port(PCIDevice *dev);
+ static Property pci_props[] = {
+     DEFINE_PROP_PCI_DEVFN("addr", PCIDevice, devfn, -1),
+     DEFINE_PROP_STRING("romfile", PCIDevice, romfile),
+-    DEFINE_PROP_UINT32("romsize", PCIDevice, romsize, -1),
++    DEFINE_PROP_UINT32("romsize", PCIDevice, romsize, UINT32_MAX),
+     DEFINE_PROP_UINT32("rombar",  PCIDevice, rom_bar, 1),
+     DEFINE_PROP_BIT("multifunction", PCIDevice, cap_present,
+                     QEMU_PCI_CAP_MULTIFUNCTION_BITNR, false),
+@@ -733,10 +733,17 @@ static bool migrate_is_not_pcie(void *opaque, int version_id)
+     return !pci_is_express((PCIDevice *)opaque);
+ }
+ 
++static int pci_post_load(void *opaque, int version_id)
++{
++    pcie_sriov_pf_post_load(opaque);
++    return 0;
++}
++
+ const VMStateDescription vmstate_pci_device = {
+     .name = "PCIDevice",
+     .version_id = 2,
+     .minimum_version_id = 1,
++    .post_load = pci_post_load,
+     .fields = (const VMStateField[]) {
+         VMSTATE_INT32_POSITIVE_LE(version_id, PCIDevice),
+         VMSTATE_BUFFER_UNSAFE_INFO_TEST(config, PCIDevice,
+@@ -2066,7 +2073,7 @@ static void pci_qdev_realize(DeviceState *qdev, Error **errp)
+                                  g_cmp_uint32, NULL);
+     }
+ 
+-    if (pci_dev->romsize != -1 && !is_power_of_2(pci_dev->romsize)) {
++    if (pci_dev->romsize != UINT32_MAX && !is_power_of_2(pci_dev->romsize)) {
+         error_setg(errp, "ROM size %u is not a power of two", pci_dev->romsize);
+         return;
+     }
+@@ -2352,7 +2359,7 @@ static void pci_add_option_rom(PCIDevice *pdev, bool is_default_rom,
+         return;
+     }
+ 
+-    if (load_file || pdev->romsize == -1) {
++    if (load_file || pdev->romsize == UINT32_MAX) {
+         path = qemu_find_file(QEMU_FILE_TYPE_BIOS, pdev->romfile);
+         if (path == NULL) {
+             path = g_strdup(pdev->romfile);
+@@ -2371,7 +2378,7 @@ static void pci_add_option_rom(PCIDevice *pdev, bool is_default_rom,
+                        pdev->romfile);
+             return;
+         }
+-        if (pdev->romsize != -1) {
++        if (pdev->romsize != UINT_MAX) {
+             if (size > pdev->romsize) {
+                 error_setg(errp, "romfile \"%s\" (%u bytes) "
+                            "is too large for ROM size %u",
+@@ -2895,7 +2902,7 @@ void pci_set_enabled(PCIDevice *d, bool state)
+     memory_region_set_enabled(&d->bus_master_enable_region,
+                               (pci_get_word(d->config + PCI_COMMAND)
+                                & PCI_COMMAND_MASTER) && d->enabled);
+-    if (!d->enabled) {
++    if (d->qdev.realized) {
+         pci_device_reset(d);
+     }
+ }
+diff --git a/hw/pci/trace-events b/hw/pci/trace-events
+index 19643aa8c6..e98f575a9d 100644
+--- a/hw/pci/trace-events
++++ b/hw/pci/trace-events
+@@ -14,7 +14,7 @@ msix_write_config(char *name, bool enabled, bool masked) "dev %s enabled %d mask
+ 
+ # hw/pci/pcie_sriov.c
+ sriov_register_vfs(const char *name, int slot, int function, int num_vfs) "%s %02x:%x: creating %d vf devs"
+-sriov_unregister_vfs(const char *name, int slot, int function, int num_vfs) "%s %02x:%x: Unregistering %d vf devs"
++sriov_unregister_vfs(const char *name, int slot, int function) "%s %02x:%x: Unregistering vf devs"
+ sriov_config_write(const char *name, int slot, int fun, uint32_t offset, uint32_t val, uint32_t len) "%s %02x:%x: sriov offset 0x%x val 0x%x len %d"
+ 
+ # pcie.c
+diff --git a/hw/ppc/amigaone.c b/hw/ppc/amigaone.c
+index ddfa09457a..900f93c15e 100644
+--- a/hw/ppc/amigaone.c
++++ b/hw/ppc/amigaone.c
+@@ -153,8 +153,9 @@ static void amigaone_init(MachineState *machine)
+     object_property_add_alias(OBJECT(machine), "rtc-time",
+                               object_resolve_path_component(via, "rtc"),
+                               "date");
+-    qdev_connect_gpio_out(DEVICE(via), 0,
+-                          qdev_get_gpio_in(DEVICE(cpu), PPC6xx_INPUT_INT));
++    qdev_connect_gpio_out_named(DEVICE(via), "intr", 0,
++                                qdev_get_gpio_in(DEVICE(cpu),
++                                PPC6xx_INPUT_INT));
+     for (i = 0; i < PCI_NUM_PINS; i++) {
+         qdev_connect_gpio_out(dev, i, qdev_get_gpio_in_named(DEVICE(via),
+                                                              "pirq", i));
+diff --git a/hw/ppc/pegasos2.c b/hw/ppc/pegasos2.c
+index c1bd8dfa21..9b0a6b70ab 100644
+--- a/hw/ppc/pegasos2.c
++++ b/hw/ppc/pegasos2.c
+@@ -195,8 +195,8 @@ static void pegasos2_init(MachineState *machine)
+     object_property_add_alias(OBJECT(machine), "rtc-time",
+                               object_resolve_path_component(via, "rtc"),
+                               "date");
+-    qdev_connect_gpio_out(DEVICE(via), 0,
+-                          qdev_get_gpio_in_named(pm->mv, "gpp", 31));
++    qdev_connect_gpio_out_named(DEVICE(via), "intr", 0,
++                                qdev_get_gpio_in_named(pm->mv, "gpp", 31));
+ 
+     dev = PCI_DEVICE(object_resolve_path_component(via, "ide"));
+     pci_ide_create_devs(dev);

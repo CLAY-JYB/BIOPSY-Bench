@@ -1,0 +1,2550 @@
+From 8fcded9d Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0195] sync upstream changes
+
+---
+diff --git a/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir_uri.phpt b/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir_uri.phpt
+deleted file mode 100644
+index 7ec111dc..00000000
+--- a/ext/pdo_sqlite/tests/pdo_sqlite_open_basedir_uri.phpt
++++ /dev/null
+@@ -1,32 +0,0 @@
+---TEST--
+-PDO_sqlite: Testing URIs with open_basedir
+---EXTENSIONS--
+-pdo_sqlite
+---INI--
+-open_basedir="{TMP}"
+---FILE--
+-<?php
+-
+-// create in basedir
+-$filename = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pdo_sqlite_filename.db';
+-
+-new PDO('sqlite:file:' . $filename);
+-?>
+-
+---CLEAN--
+-<?php
+-$filenames = [
+-    sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pdo_sqlite_filename.db',
+-];
+-foreach ($filenames as $filename) {
+-    if (file_exists($filename)) {
+-        unlink($filename);
+-    }
+-}
+-?>
+---EXPECTF--
+-Fatal error: Uncaught PDOException: open_basedir prohibits opening %s in %s:%d
+-Stack trace:
+-%s
+-#1 {main}
+-  thrown in %s
+diff --git a/ext/pgsql/pgsql.c b/ext/pgsql/pgsql.c
+index a1dc8fc6..66f09382 100644
+--- a/ext/pgsql/pgsql.c
++++ b/ext/pgsql/pgsql.c
+@@ -39,6 +39,7 @@
+ #include "php_pgsql.h"
+ #include "php_globals.h"
+ #include "zend_exceptions.h"
++#include "pgsql_arginfo.h"
+ 
+ #ifdef HAVE_PGSQL
+ 
+@@ -60,10 +61,6 @@
+ #define PGSQL_MAX_LENGTH_OF_LONG   30
+ #define PGSQL_MAX_LENGTH_OF_DOUBLE 60
+ 
+-char pgsql_libpq_version[16];
+-
+-#include "pgsql_arginfo.h"
+-
+ #if ZEND_LONG_MAX < UINT_MAX
+ #define PGSQL_RETURN_OID(oid) do { \
+ 	if (oid > ZEND_LONG_MAX) { \
+@@ -435,6 +432,8 @@ static void php_libpq_version(char *buf, size_t len)
+ 
+ PHP_MINIT_FUNCTION(pgsql)
+ {
++	char buf[16];
++
+ 	REGISTER_INI_ENTRIES();
+ 
+ 	le_plink = zend_register_list_destructors_ex(NULL, _close_pgsql_plink, "pgsql link persistent", module_number);
+@@ -470,10 +469,108 @@ PHP_MINIT_FUNCTION(pgsql)
+ 	pgsql_lob_object_handlers.compare = zend_objects_not_comparable;
+ 
+ 	/* libpq version */
+-	php_libpq_version(pgsql_libpq_version, sizeof(pgsql_libpq_version));
+-
+-	register_pgsql_symbols(module_number);
+-
++	php_libpq_version(buf, sizeof(buf));
++	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION", buf, CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION_STR", buf, CONST_CS | CONST_PERSISTENT | CONST_DEPRECATED);
++	/* For connection option */
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECT_FORCE_NEW", PGSQL_CONNECT_FORCE_NEW, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECT_ASYNC", PGSQL_CONNECT_ASYNC, CONST_CS | CONST_PERSISTENT);
++	/* For pg_fetch_array() */
++	REGISTER_LONG_CONSTANT("PGSQL_ASSOC", PGSQL_ASSOC, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_NUM", PGSQL_NUM, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_BOTH", PGSQL_BOTH, CONST_CS | CONST_PERSISTENT);
++	/* For pg_last_notice() */
++	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_LAST", PGSQL_NOTICE_LAST, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_ALL", PGSQL_NOTICE_ALL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_CLEAR", PGSQL_NOTICE_CLEAR, CONST_CS | CONST_PERSISTENT);
++	/* For pg_connection_status() */
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_BAD", CONNECTION_BAD, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_OK", CONNECTION_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_STARTED", CONNECTION_STARTED, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_MADE", CONNECTION_MADE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_AWAITING_RESPONSE", CONNECTION_AWAITING_RESPONSE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_AUTH_OK", CONNECTION_AUTH_OK, CONST_CS | CONST_PERSISTENT);
++#ifdef CONNECTION_SSL_STARTUP
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_SSL_STARTUP", CONNECTION_SSL_STARTUP, CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_SETENV", CONNECTION_SETENV, CONST_CS | CONST_PERSISTENT);
++	/* For pg_connect_poll() */
++	REGISTER_LONG_CONSTANT("PGSQL_POLLING_FAILED", PGRES_POLLING_FAILED, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_POLLING_READING", PGRES_POLLING_READING, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_POLLING_WRITING", PGRES_POLLING_WRITING, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_POLLING_OK", PGRES_POLLING_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_POLLING_ACTIVE", PGRES_POLLING_ACTIVE, CONST_CS | CONST_PERSISTENT);
++	/* For pg_transaction_status() */
++	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_IDLE", PQTRANS_IDLE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_ACTIVE", PQTRANS_ACTIVE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_INTRANS", PQTRANS_INTRANS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_INERROR", PQTRANS_INERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_UNKNOWN", PQTRANS_UNKNOWN, CONST_CS | CONST_PERSISTENT);
++	/* For pg_set_error_verbosity() */
++	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_TERSE", PQERRORS_TERSE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_DEFAULT", PQERRORS_DEFAULT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_VERBOSE", PQERRORS_VERBOSE, CONST_CS | CONST_PERSISTENT);
++	/* For lo_seek() */
++	REGISTER_LONG_CONSTANT("PGSQL_SEEK_SET", SEEK_SET, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_SEEK_CUR", SEEK_CUR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_SEEK_END", SEEK_END, CONST_CS | CONST_PERSISTENT);
++	/* For pg_result_status() return value type */
++	REGISTER_LONG_CONSTANT("PGSQL_STATUS_LONG", PGSQL_STATUS_LONG, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_STATUS_STRING", PGSQL_STATUS_STRING, CONST_CS | CONST_PERSISTENT);
++	/* For pg_result_status() return value */
++	REGISTER_LONG_CONSTANT("PGSQL_EMPTY_QUERY", PGRES_EMPTY_QUERY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_COMMAND_OK", PGRES_COMMAND_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_TUPLES_OK", PGRES_TUPLES_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_COPY_OUT", PGRES_COPY_OUT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_COPY_IN", PGRES_COPY_IN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_BAD_RESPONSE", PGRES_BAD_RESPONSE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_NONFATAL_ERROR", PGRES_NONFATAL_ERROR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_FATAL_ERROR", PGRES_FATAL_ERROR, CONST_CS | CONST_PERSISTENT);
++	/* For pg_result_error_field() field codes */
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SEVERITY", PG_DIAG_SEVERITY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SQLSTATE", PG_DIAG_SQLSTATE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_PRIMARY", PG_DIAG_MESSAGE_PRIMARY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_DETAIL", PG_DIAG_MESSAGE_DETAIL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_HINT", PG_DIAG_MESSAGE_HINT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_STATEMENT_POSITION", PG_DIAG_STATEMENT_POSITION, CONST_CS | CONST_PERSISTENT);
++#ifdef PG_DIAG_INTERNAL_POSITION
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_INTERNAL_POSITION", PG_DIAG_INTERNAL_POSITION, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_INTERNAL_QUERY
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_INTERNAL_QUERY", PG_DIAG_INTERNAL_QUERY, CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_CONTEXT", PG_DIAG_CONTEXT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_FILE", PG_DIAG_SOURCE_FILE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_LINE", PG_DIAG_SOURCE_LINE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_FUNCTION", PG_DIAG_SOURCE_FUNCTION, CONST_CS | CONST_PERSISTENT);
++#ifdef PG_DIAG_SCHEMA_NAME
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SCHEMA_NAME", PG_DIAG_SCHEMA_NAME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_TABLE_NAME
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_TABLE_NAME", PG_DIAG_TABLE_NAME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_COLUMN_NAME
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_COLUMN_NAME", PG_DIAG_COLUMN_NAME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_DATATYPE_NAME
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_DATATYPE_NAME", PG_DIAG_DATATYPE_NAME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_CONSTRAINT_NAME
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_CONSTRAINT_NAME", PG_DIAG_CONSTRAINT_NAME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef PG_DIAG_SEVERITY_NONLOCALIZED
++	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SEVERITY_NONLOCALIZED", PG_DIAG_SEVERITY_NONLOCALIZED, CONST_CS | CONST_PERSISTENT);
++#endif
++	/* pg_convert options */
++	REGISTER_LONG_CONSTANT("PGSQL_CONV_IGNORE_DEFAULT", PGSQL_CONV_IGNORE_DEFAULT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONV_FORCE_NULL", PGSQL_CONV_FORCE_NULL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_CONV_IGNORE_NOT_NULL", PGSQL_CONV_IGNORE_NOT_NULL, CONST_CS | CONST_PERSISTENT);
++	/* pg_insert/update/delete/select options */
++	REGISTER_LONG_CONSTANT("PGSQL_DML_ESCAPE", PGSQL_DML_ESCAPE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DML_NO_CONV", PGSQL_DML_NO_CONV, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DML_EXEC", PGSQL_DML_EXEC, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DML_ASYNC", PGSQL_DML_ASYNC, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PGSQL_DML_STRING", PGSQL_DML_STRING, CONST_CS | CONST_PERSISTENT);
+ 	return SUCCESS;
+ }
+ 
+@@ -514,7 +611,8 @@ PHP_MINFO_FUNCTION(pgsql)
+ 
+ 	php_info_print_table_start();
+ 	php_info_print_table_header(2, "PostgreSQL Support", "enabled");
+-	php_info_print_table_row(2, "PostgreSQL (libpq) Version", pgsql_libpq_version);
++	php_libpq_version(buf, sizeof(buf));
++	php_info_print_table_row(2, "PostgreSQL (libpq) Version", buf);
+ #ifdef HAVE_PGSQL_WITH_MULTIBYTE_SUPPORT
+ 	php_info_print_table_row(2, "Multibyte character support", "enabled");
+ #else
+@@ -813,7 +911,9 @@ static void php_pgsql_get_link_info(INTERNAL_FUNCTION_PARAMETERS, int entry_type
+ 			break;
+ 		case PHP_PG_VERSION:
+ 			array_init(return_value);
+-			add_assoc_string(return_value, "client", pgsql_libpq_version);
++			char buf[16];
++			php_libpq_version(buf, sizeof(buf));
++			add_assoc_string(return_value, "client", buf);
+ 			add_assoc_long(return_value, "protocol", PQprotocolVersion(pgsql));
+ 			if (PQprotocolVersion(pgsql) >= 3) {
+ 				/* 8.0 or grater supports protorol version 3 */
+@@ -1437,7 +1537,7 @@ PHP_FUNCTION(pg_last_notice)
+ 			zend_argument_value_error(2, "must be one of PGSQL_NOTICE_LAST, PGSQL_NOTICE_ALL, or PGSQL_NOTICE_CLEAR");
+ 			RETURN_THROWS();
+ 	}
+-	ZEND_UNREACHABLE();
++	RETURN_FALSE;
+ }
+ 
+ static inline bool is_valid_oid_string(zend_string *oid, Oid *return_oid)
+diff --git a/ext/pgsql/pgsql.stub.php b/ext/pgsql/pgsql.stub.php
+index 2fb3f41b..cbe1bc87 100644
+--- a/ext/pgsql/pgsql.stub.php
++++ b/ext/pgsql/pgsql.stub.php
+@@ -2,416 +2,35 @@
+ 
+ /** @generate-class-entries */
+ 
+-namespace {
+-    /* libpq version */
+-
+-    /**
+-     * @var string
+-     * @cvalue pgsql_libpq_version
+-     */
+-    const PGSQL_LIBPQ_VERSION = UNKNOWN;
+-    /**
+-     * @var string
+-     * @cvalue pgsql_libpq_version
+-     * @deprecated
+-     */
+-    const PGSQL_LIBPQ_VERSION_STR = UNKNOWN;
+-
+-    /* For connection option */
+-
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_CONNECT_FORCE_NEW
+-     */
+-    const PGSQL_CONNECT_FORCE_NEW = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_CONNECT_ASYNC
+-     */
+-    const PGSQL_CONNECT_ASYNC = UNKNOWN;
+-
+-    /* For pg_fetch_array() */
+-
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_ASSOC
+-     */
+-    const PGSQL_ASSOC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_NUM
+-     */
+-    const PGSQL_NUM = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_BOTH
+-     */
+-    const PGSQL_BOTH = UNKNOWN;
+-
+-    /* For pg_last_notice() */
+-
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_NOTICE_LAST
+-     */
+-    const PGSQL_NOTICE_LAST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_NOTICE_ALL
+-     */
+-    const PGSQL_NOTICE_ALL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_NOTICE_CLEAR
+-     */
+-    const PGSQL_NOTICE_CLEAR = UNKNOWN;
+-
+-    /* For pg_connection_status() */
+-
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_BAD
+-     */
+-    const PGSQL_CONNECTION_BAD = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_OK
+-     */
+-    const PGSQL_CONNECTION_OK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_STARTED
+-     */
+-    const PGSQL_CONNECTION_STARTED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_MADE
+-     */
+-    const PGSQL_CONNECTION_MADE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_AWAITING_RESPONSE
+-     */
+-    const PGSQL_CONNECTION_AWAITING_RESPONSE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_AUTH_OK
+-     */
+-    const PGSQL_CONNECTION_AUTH_OK = UNKNOWN;
+-#ifdef CONNECTION_SSL_STARTUP
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_SSL_STARTUP
+-     */
+-    const PGSQL_CONNECTION_SSL_STARTUP = UNKNOWN;
+-#endif
+-    /**
+-     * @var int
+-     * @cvalue CONNECTION_SETENV
+-     */
+-    const PGSQL_CONNECTION_SETENV = UNKNOWN;
+-
+-    /* For pg_connect_poll() */
+-    /**
+-     * @var int
+-     * @cvalue PGRES_POLLING_FAILED
+-     */
+-    const PGSQL_POLLING_FAILED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_POLLING_READING
+-     */
+-    const PGSQL_POLLING_READING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_POLLING_WRITING
+-     */
+-    const PGSQL_POLLING_WRITING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_POLLING_OK
+-     */
+-    const PGSQL_POLLING_OK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_POLLING_ACTIVE
+-     */
+-    const PGSQL_POLLING_ACTIVE = UNKNOWN;
+-
+-    /* For pg_transaction_status() */
+-
+-    /**
+-     * @var int
+-     * @cvalue PQTRANS_IDLE
+-     */
+-    const PGSQL_TRANSACTION_IDLE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQTRANS_ACTIVE
+-     */
+-    const PGSQL_TRANSACTION_ACTIVE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQTRANS_INTRANS
+-     */
+-    const PGSQL_TRANSACTION_INTRANS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQTRANS_INERROR
+-     */
+-    const PGSQL_TRANSACTION_INERROR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQTRANS_UNKNOWN
+-     */
+-    const PGSQL_TRANSACTION_UNKNOWN = UNKNOWN;
+-
+-    /* For pg_set_error_verbosity() */
+-
+-    /**
+-     * @var int
+-     * @cvalue PQERRORS_TERSE
+-     */
+-    const PGSQL_ERRORS_TERSE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQERRORS_DEFAULT
+-     */
+-    const PGSQL_ERRORS_DEFAULT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PQERRORS_VERBOSE
+-     */
+-    const PGSQL_ERRORS_VERBOSE = UNKNOWN;
+-
+-    /* For lo_seek() */
+-
+-    /**
+-     * @var int
+-     * @cvalue SEEK_SET
+-     */
+-    const PGSQL_SEEK_SET = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SEEK_CUR
+-     */
+-    const PGSQL_SEEK_CUR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SEEK_END
+-     */
+-    const PGSQL_SEEK_END = UNKNOWN;
+-
+-    /* For pg_result_status() return value type */
+-
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_STATUS_LONG
+-     */
+-    const PGSQL_STATUS_LONG = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_STATUS_STRING
+-     */
+-    const PGSQL_STATUS_STRING = UNKNOWN;
+-
+-    /* For pg_result_status() return value */
++namespace PgSql {
+ 
+     /**
+-     * @var int
+-     * @cvalue PGRES_EMPTY_QUERY
+-     */
+-    const PGSQL_EMPTY_QUERY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_COMMAND_OK
+-     */
+-    const PGSQL_COMMAND_OK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_TUPLES_OK
+-     */
+-    const PGSQL_TUPLES_OK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_COPY_OUT
+-     */
+-    const PGSQL_COPY_OUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_COPY_IN
+-     */
+-    const PGSQL_COPY_IN = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_BAD_RESPONSE
+-     */
+-    const PGSQL_BAD_RESPONSE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_NONFATAL_ERROR
+-     */
+-    const PGSQL_NONFATAL_ERROR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGRES_FATAL_ERROR
++     * @strict-properties
++     * @not-serializable
+      */
+-    const PGSQL_FATAL_ERROR = UNKNOWN;
+-
+-    /* For pg_result_error_field() field codes */
++    final class Connection
++    {
++    }
+ 
+     /**
+-     * @var int
+-     * @cvalue PG_DIAG_SEVERITY
+-     */
+-    const PGSQL_DIAG_SEVERITY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SQLSTATE
+-     */
+-    const PGSQL_DIAG_SQLSTATE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_MESSAGE_PRIMARY
+-     */
+-    const PGSQL_DIAG_MESSAGE_PRIMARY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_MESSAGE_DETAIL
+-     */
+-    const PGSQL_DIAG_MESSAGE_DETAIL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_MESSAGE_HINT
+-     */
+-    const PGSQL_DIAG_MESSAGE_HINT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_STATEMENT_POSITION
+-     */
+-    const PGSQL_DIAG_STATEMENT_POSITION = UNKNOWN;
+-#ifdef PG_DIAG_INTERNAL_POSITION
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_INTERNAL_POSITION
+-     */
+-    const PGSQL_DIAG_INTERNAL_POSITION = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_INTERNAL_QUERY
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_INTERNAL_QUERY
+-     */
+-    const PGSQL_DIAG_INTERNAL_QUERY = UNKNOWN;
+-#endif
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_CONTEXT
+-     */
+-    const PGSQL_DIAG_CONTEXT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SOURCE_FILE
+-     */
+-    const PGSQL_DIAG_SOURCE_FILE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SOURCE_LINE
+-     */
+-    const PGSQL_DIAG_SOURCE_LINE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SOURCE_FUNCTION
+-     */
+-    const PGSQL_DIAG_SOURCE_FUNCTION = UNKNOWN;
+-#ifdef PG_DIAG_SCHEMA_NAME
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SCHEMA_NAME
+-     */
+-    const PGSQL_DIAG_SCHEMA_NAME = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_TABLE_NAME
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_TABLE_NAME
+-     */
+-    const PGSQL_DIAG_TABLE_NAME = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_COLUMN_NAME
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_COLUMN_NAME
+-     */
+-    const PGSQL_DIAG_COLUMN_NAME = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_DATATYPE_NAME
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_DATATYPE_NAME
+-     */
+-    const PGSQL_DIAG_DATATYPE_NAME = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_CONSTRAINT_NAME
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_CONSTRAINT_NAME
+-     */
+-    const PGSQL_DIAG_CONSTRAINT_NAME = UNKNOWN;
+-#endif
+-#ifdef PG_DIAG_SEVERITY_NONLOCALIZED
+-    /**
+-     * @var int
+-     * @cvalue PG_DIAG_SEVERITY_NONLOCALIZED
++     * @strict-properties
++     * @not-serializable
+      */
+-    const PGSQL_DIAG_SEVERITY_NONLOCALIZED = UNKNOWN;
+-#endif
+-
+-    /* pg_convert options */
++    final class Result
++    {
++    }
+ 
+     /**
+-     * @var int
+-     * @cvalue PGSQL_CONV_IGNORE_DEFAULT
+-     */
+-    const PGSQL_CONV_IGNORE_DEFAULT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_CONV_FORCE_NULL
+-     */
+-    const PGSQL_CONV_FORCE_NULL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_CONV_IGNORE_NOT_NULL
++     * @strict-properties
++     * @not-serializable
+      */
+-    const PGSQL_CONV_IGNORE_NOT_NULL = UNKNOWN;
++    final class Lob
++    {
++    }
+ 
+-    /* pg_insert/update/delete/select options */
++}
+ 
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_DML_ESCAPE
+-     */
+-    const PGSQL_DML_ESCAPE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_DML_NO_CONV
+-     */
+-    const PGSQL_DML_NO_CONV = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_DML_EXEC
+-     */
+-    const PGSQL_DML_EXEC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_DML_ASYNC
+-     */
+-    const PGSQL_DML_ASYNC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PGSQL_DML_STRING
+-     */
+-    const PGSQL_DML_STRING = UNKNOWN;
++namespace {
+ 
+     function pg_connect(string $connection_string, int $flags = 0): PgSql\Connection|false {}
+ 
+@@ -894,31 +513,5 @@ namespace {
+      * @refcount 1
+      */
+     function pg_select(PgSql\Connection $connection, string $table_name, array $conditions, int $flags = PGSQL_DML_EXEC, int $mode = PGSQL_ASSOC): array|string|false {}
+-}
+-
+-namespace PgSql {
+-    /**
+-     * @strict-properties
+-     * @not-serializable
+-     */
+-    final class Connection
+-    {
+-    }
+-
+-    /**
+-     * @strict-properties
+-     * @not-serializable
+-     */
+-    final class Result
+-    {
+-    }
+-
+-    /**
+-     * @strict-properties
+-     * @not-serializable
+-     */
+-    final class Lob
+-    {
+-    }
+ 
+ }
+diff --git a/ext/pgsql/pgsql_arginfo.h b/ext/pgsql/pgsql_arginfo.h
+index a9fea83d..d1dfcd1c 100644
+--- a/ext/pgsql/pgsql_arginfo.h
++++ b/ext/pgsql/pgsql_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 52d055086569456122f9d9a1264f7a3667127ea7 */
++ * Stub hash: 35f41dd74485f921feddc223085dea520f8d816e */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_pg_connect, 0, 1, PgSql\\Connection, MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, connection_string, IS_STRING, 0)
+@@ -674,98 +674,6 @@ static const zend_function_entry class_PgSql_Lob_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_pgsql_symbols(int module_number)
+-{
+-	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION", pgsql_libpq_version, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION_STR", pgsql_libpq_version, CONST_PERSISTENT | CONST_DEPRECATED);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECT_FORCE_NEW", PGSQL_CONNECT_FORCE_NEW, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECT_ASYNC", PGSQL_CONNECT_ASYNC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_ASSOC", PGSQL_ASSOC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_NUM", PGSQL_NUM, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_BOTH", PGSQL_BOTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_LAST", PGSQL_NOTICE_LAST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_ALL", PGSQL_NOTICE_ALL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_NOTICE_CLEAR", PGSQL_NOTICE_CLEAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_BAD", CONNECTION_BAD, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_OK", CONNECTION_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_STARTED", CONNECTION_STARTED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_MADE", CONNECTION_MADE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_AWAITING_RESPONSE", CONNECTION_AWAITING_RESPONSE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_AUTH_OK", CONNECTION_AUTH_OK, CONST_PERSISTENT);
+-#if defined(CONNECTION_SSL_STARTUP)
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_SSL_STARTUP", CONNECTION_SSL_STARTUP, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("PGSQL_CONNECTION_SETENV", CONNECTION_SETENV, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_POLLING_FAILED", PGRES_POLLING_FAILED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_POLLING_READING", PGRES_POLLING_READING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_POLLING_WRITING", PGRES_POLLING_WRITING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_POLLING_OK", PGRES_POLLING_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_POLLING_ACTIVE", PGRES_POLLING_ACTIVE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_IDLE", PQTRANS_IDLE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_ACTIVE", PQTRANS_ACTIVE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_INTRANS", PQTRANS_INTRANS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_INERROR", PQTRANS_INERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TRANSACTION_UNKNOWN", PQTRANS_UNKNOWN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_TERSE", PQERRORS_TERSE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_DEFAULT", PQERRORS_DEFAULT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_ERRORS_VERBOSE", PQERRORS_VERBOSE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_SEEK_SET", SEEK_SET, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_SEEK_CUR", SEEK_CUR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_SEEK_END", SEEK_END, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_STATUS_LONG", PGSQL_STATUS_LONG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_STATUS_STRING", PGSQL_STATUS_STRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_EMPTY_QUERY", PGRES_EMPTY_QUERY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_COMMAND_OK", PGRES_COMMAND_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_TUPLES_OK", PGRES_TUPLES_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_COPY_OUT", PGRES_COPY_OUT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_COPY_IN", PGRES_COPY_IN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_BAD_RESPONSE", PGRES_BAD_RESPONSE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_NONFATAL_ERROR", PGRES_NONFATAL_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_FATAL_ERROR", PGRES_FATAL_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SEVERITY", PG_DIAG_SEVERITY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SQLSTATE", PG_DIAG_SQLSTATE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_PRIMARY", PG_DIAG_MESSAGE_PRIMARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_DETAIL", PG_DIAG_MESSAGE_DETAIL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_MESSAGE_HINT", PG_DIAG_MESSAGE_HINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_STATEMENT_POSITION", PG_DIAG_STATEMENT_POSITION, CONST_PERSISTENT);
+-#if defined(PG_DIAG_INTERNAL_POSITION)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_INTERNAL_POSITION", PG_DIAG_INTERNAL_POSITION, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_INTERNAL_QUERY)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_INTERNAL_QUERY", PG_DIAG_INTERNAL_QUERY, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_CONTEXT", PG_DIAG_CONTEXT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_FILE", PG_DIAG_SOURCE_FILE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_LINE", PG_DIAG_SOURCE_LINE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SOURCE_FUNCTION", PG_DIAG_SOURCE_FUNCTION, CONST_PERSISTENT);
+-#if defined(PG_DIAG_SCHEMA_NAME)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SCHEMA_NAME", PG_DIAG_SCHEMA_NAME, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_TABLE_NAME)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_TABLE_NAME", PG_DIAG_TABLE_NAME, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_COLUMN_NAME)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_COLUMN_NAME", PG_DIAG_COLUMN_NAME, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_DATATYPE_NAME)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_DATATYPE_NAME", PG_DIAG_DATATYPE_NAME, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_CONSTRAINT_NAME)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_CONSTRAINT_NAME", PG_DIAG_CONSTRAINT_NAME, CONST_PERSISTENT);
+-#endif
+-#if defined(PG_DIAG_SEVERITY_NONLOCALIZED)
+-	REGISTER_LONG_CONSTANT("PGSQL_DIAG_SEVERITY_NONLOCALIZED", PG_DIAG_SEVERITY_NONLOCALIZED, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("PGSQL_CONV_IGNORE_DEFAULT", PGSQL_CONV_IGNORE_DEFAULT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONV_FORCE_NULL", PGSQL_CONV_FORCE_NULL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_CONV_IGNORE_NOT_NULL", PGSQL_CONV_IGNORE_NOT_NULL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DML_ESCAPE", PGSQL_DML_ESCAPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DML_NO_CONV", PGSQL_DML_NO_CONV, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DML_EXEC", PGSQL_DML_EXEC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DML_ASYNC", PGSQL_DML_ASYNC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PGSQL_DML_STRING", PGSQL_DML_STRING, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_PgSql_Connection(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/pgsql/tests/80_bug14383.phpt b/ext/pgsql/tests/80_bug14383.phpt
+index f17af830..c9848e30 100644
+--- a/ext/pgsql/tests/80_bug14383.phpt
++++ b/ext/pgsql/tests/80_bug14383.phpt
+@@ -5,8 +5,7 @@ dba
+ pgsql
+ --SKIPIF--
+ <?php
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-check_skip_any();
++require_once(__DIR__.'/../../dba/tests/skipif.inc');
+ require_once('skipif.inc');
+ ?>
+ --FILE--
+@@ -19,65 +18,46 @@ if (!$dbh) {
+ }
+ pg_close($dbh);
+ 
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-$name = 'bug14383.db';
++require_once(__DIR__.'/../../dba/tests/test.inc');
++require_once(__DIR__.'/../../dba/tests/dba_handler.inc');
+ 
+-$handler = get_any_handler($name);
+-run_standard_tests($handler, $name);
+ ?>
+ --CLEAN--
+ <?php
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-$name = 'bug14383.db';
+-cleanup_standard_db($name);
++require_once(__DIR__.'/../../dba/tests/clean.inc');
+ ?>
+ --EXPECTF--
+-Using handler: "%s"
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: %s
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write:%sallowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/pgsql/tests/80_bug36625.phpt b/ext/pgsql/tests/80_bug36625.phpt
+index 75d3637b..f905a999 100644
+--- a/ext/pgsql/tests/80_bug36625.phpt
++++ b/ext/pgsql/tests/80_bug36625.phpt
+@@ -39,11 +39,16 @@ array_walk($trace, 'search_trace_file');
+ var_dump($found > 0);
+ var_dump(file_exists($tracefile));
+ 
++@unlink($tracefile);
++
+ ?>
+ --CLEAN--
+ <?php
++
+ $tracefile = __DIR__ . '/trace.tmp';
++
+ unlink($tracefile);
++
+ ?>
+ --EXPECTF--
+ bool(false)
+diff --git a/ext/pgsql/tests/README.md b/ext/pgsql/tests/README.md
+index b649e4f2..ecc2919e 100644
+--- a/ext/pgsql/tests/README.md
++++ b/ext/pgsql/tests/README.md
+@@ -15,4 +15,4 @@ as the same user running the tests you ensure that the user is granted access to
+ the database.
+ 
+ If you find problems in PostgreSQL extension, please report a
+-[bug](https://github.com/php/php-src/issues).
++[bug](https://bugs.php.net).
+diff --git a/ext/pgsql/tests/config.inc b/ext/pgsql/tests/config.inc
+index 66ba4810..fbe58588 100644
+--- a/ext/pgsql/tests/config.inc
++++ b/ext/pgsql/tests/config.inc
+@@ -16,8 +16,8 @@ $view_name   = "php_pgsql_viewtest";
+ $view_def    = "CREATE VIEW {$view_name} AS SELECT * FROM {$table_name};";
+ 
+ // Test table
+-$table_def    = "CREATE TABLE {$table_name} (num int, str text, bin bytea);";
+-$table_def_92 = "CREATE TABLE {$table_name_92} (textary text[],  jsn json);";
++$table_def    = "CREATE TABLE ${table_name} (num int, str text, bin bytea);";
++$table_def_92 = "CREATE TABLE ${table_name_92} (textary text[],  jsn json);";
+ $field_name = "num";             // For pg_field_num()
+ 
+ ?>
+diff --git a/ext/phar/phar.1.in b/ext/phar/phar.1.in
+index ac314fe9..323e77b0 100644
+--- a/ext/phar/phar.1.in
++++ b/ext/phar/phar.1.in
+@@ -1,4 +1,4 @@
+-.TH PHAR 1 "2022" "The PHP Group" "User Commands"
++.TH PHAR 1 "2021" "The PHP Group" "User Commands"
+ .SH NAME
+ phar, phar.phar \- PHAR (PHP archive) command line tool
+ .SH SYNOPSIS
+@@ -497,7 +497,7 @@ You can view the list of known bugs or report any new bug you
+ found at:
+ .PD 0
+ .P
+-.B https://github.com/php/php-src/issues
++.B http://bugs.php.net
+ .PD 1
+ .SH AUTHORS
+ The PHP Group: Thies C. Arntzen, Stig Bakken, Andi Gutmans, Rasmus Lerdorf, Sam Ruby, Sascha Schumann, Zeev Suraski, Jim Winstead, Andrei Zmievski.
+diff --git a/ext/phar/phar.c b/ext/phar/phar.c
+index f60b0d6a..b45586d1 100644
+--- a/ext/phar/phar.c
++++ b/ext/phar/phar.c
+@@ -2024,7 +2024,7 @@ woohoo:
+ 		} else {
+ 			zend_string *str_key;
+ 
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&PHAR_G(phar_fname_map), str_key, pphar) {
++			ZEND_HASH_FOREACH_STR_KEY_PTR(&PHAR_G(phar_fname_map), str_key, pphar) {
+ 				if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
+ 					continue;
+ 				}
+@@ -2037,7 +2037,7 @@ woohoo:
+ 			} ZEND_HASH_FOREACH_END();
+ 
+ 			if (PHAR_G(manifest_cached)) {
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&cached_phars, str_key, pphar) {
++				ZEND_HASH_FOREACH_STR_KEY_PTR(&cached_phars, str_key, pphar) {
+ 					if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
+ 						continue;
+ 					}
+@@ -2540,6 +2540,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ {
+ 	char halt_stub[] = "__HALT_COMPILER();";
+ 	zend_string *newstub;
++	char *tmp;
+ 	phar_entry_info *entry, *newentry;
+ 	size_t halt_offset;
+ 	int restore_alias_len, global_flags = 0, closeoldfile;
+@@ -2643,7 +2644,9 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 		} else {
+ 			free_user_stub = 0;
+ 		}
+-		if ((pos = php_stristr(user_stub, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++		tmp = estrndup(user_stub, len);
++		if ((pos = php_stristr(tmp, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++			efree(tmp);
+ 			if (closeoldfile) {
+ 				php_stream_close(oldfile);
+ 			}
+@@ -2656,6 +2659,8 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 			}
+ 			return EOF;
+ 		}
++		pos = user_stub + (pos - tmp);
++		efree(tmp);
+ 		len = pos - user_stub + 18;
+ 		if ((size_t)len != php_stream_write(newfile, user_stub, len)
+ 		||			  5 != php_stream_write(newfile, " ?>\r\n", 5)) {
+@@ -2727,7 +2732,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 	}
+ 	new_manifest_count = 0;
+ 	offset = 0;
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->cfp) {
+ 			/* did we forget to get rid of cfp last time? */
+ 			php_stream_close(entry->cfp);
+@@ -2959,7 +2964,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 	manifest_ftell = php_stream_tell(newfile);
+ 
+ 	/* now write the manifest */
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		const zend_string *metadata_str;
+ 		if (entry->is_deleted || entry->is_mounted) {
+ 			/* remove this from the new phar if deleted, ignore if mounted */
+@@ -3043,7 +3048,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 
+ 	/* now copy the actual file data to the new phar */
+ 	offset = php_stream_tell(newfile);
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->is_deleted || entry->is_dir || entry->is_mounted) {
+ 			continue;
+ 		}
+@@ -3255,7 +3260,7 @@ cleanup:
+ 	if (shared_cfp != NULL) {
+ 		php_stream_close(shared_cfp);
+ 	}
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->cfp) {
+ 			entry->cfp = NULL;
+ 			entry->header_offset = 0;
+@@ -3508,7 +3513,7 @@ void phar_request_initialize(void) /* {{{ */
+ 			phar_archive_data *pphar;
+ 			phar_entry_fp *stuff = (phar_entry_fp *) ecalloc(zend_hash_num_elements(&cached_phars), sizeof(phar_entry_fp));
+ 
+-			ZEND_HASH_MAP_FOREACH_PTR(&cached_phars, pphar) {
++			ZEND_HASH_FOREACH_PTR(&cached_phars, pphar) {
+ 				stuff[pphar->phar_pos].manifest = (phar_entry_fp_info *) ecalloc( zend_hash_num_elements(&(pphar->manifest)), sizeof(phar_entry_fp_info));
+ 			} ZEND_HASH_FOREACH_END();
+ 
+diff --git a/ext/phar/phar/clicommand.inc b/ext/phar/phar/clicommand.inc
+index 0b84bd60..7527e1c4 100644
+--- a/ext/phar/phar/clicommand.inc
++++ b/ext/phar/phar/clicommand.inc
+@@ -30,9 +30,9 @@ abstract class CLICommand
+         $this->typs = self::getArgTyps($this);
+ 
+         if ($argc < 2) {
+-            self::error("No command given, check {$argv[0]} help\n");
++            self::error("No command given, check ${argv[0]} help\n");
+         } elseif (!isset($this->cmds[$argv[1]]['run'])) {
+-            self::error("Unknown command '{$argv[1]}', check {$argv[0]} help\n");
++            self::error("Unknown command '${argv[1]}', check ${argv[0]} help\n");
+         } else {
+             $command = $argv[1];
+         }
+@@ -46,12 +46,12 @@ abstract class CLICommand
+                     if (strlen($argv[$i]) == 2 && isset($this->args[$argv[$i][1]])) {
+                         $arg = $argv[$i][1];
+                         if (++$i >= $argc) {
+-                            self::error("Missing argument to parameter '$arg' of command '$command', check {$argv[0]} help\n");
++                            self::error("Missing argument to parameter '$arg' of command '$command', check ${argv[0]} help\n");
+                         } else {
+                             $this->args[$arg]['val'] = $this->checkArgTyp($arg, $i, $argc, $argv);
+                         }
+                     }  else {
+-                        self::error("Unknown parameter '{$argv[$i]}' to command $command, check {$argv[0]} help\n");
++                        self::error("Unknown parameter '${argv[$i]}' to command $command, check ${argv[0]} help\n");
+                     }
+                 } else {
+                     break;
+@@ -61,7 +61,7 @@ abstract class CLICommand
+             if (isset($this->args[''])) {
+                 if ($i >= $argc) {
+                     if (isset($this->args['']['require']) && $this->args['']['require']) {
+-                        self::error("Missing default trailing arguments to command $command, check {$argv[0]} help\n");
++                        self::error("Missing default trailing arguments to command $command, check ${argv[0]} help\n");
+                     }
+                 } else {
+                     $this->args['']['val'] = array();
+@@ -70,12 +70,12 @@ abstract class CLICommand
+                     }
+                 }
+             } else if ($i < $argc) {
+-                self::error("Unexpected default arguments to command $command, check {$argv[0]} help\n");
++                self::error("Unexpected default arguments to command $command, check ${argv[0]} help\n");
+             }
+ 
+             foreach($this->args as $arg => $inf) {
+                 if (strlen($arg) && !isset($inf['val']) && isset($inf['required']) && $inf['required']) {
+-                    $missing .=  "Missing parameter '-$arg' to command $command, check {$argv[0]} help\n";
++                    $missing .=  "Missing parameter '-$arg' to command $command, check ${argv[0]} help\n";
+                 }
+             }
+ 
+@@ -265,7 +265,7 @@ abstract class CLICommand
+                 $sp3 = $this->cli_get_SP3($l, $ls, $inf);
+                 $l3  = strlen($sp3);
+                 foreach($conf['select'] as $opt => $what) {
+-                    $inf .= $this->cli_wordwrap($sp2 . "  " . sprintf("%-{$ls}s  ", $opt) . $what, $l3, $sp3) . "\n";
++                    $inf .= $this->cli_wordwrap($sp2 . "  " . sprintf("%-${ls}s  ", $opt) . $what, $l3, $sp3) . "\n";
+                 }
+             }
+         }
+diff --git a/ext/phar/phar/pharcommand.inc b/ext/phar/phar/pharcommand.inc
+index fdc43654..1b1eeca5 100644
+--- a/ext/phar/phar/pharcommand.inc
++++ b/ext/phar/phar/pharcommand.inc
+@@ -1598,7 +1598,7 @@ class PharCommand extends CLICommand
+             if (is_bool($v)) {
+                 $v = $v ? 'enabled' : 'disabled';
+             }
+-            printf("%-{$klen}s  %s\n", $k.':', $v);
++            printf("%-${klen}s  %s\n", $k.':', $v);
+         }
+     }
+     // }}}
+diff --git a/ext/phar/phar_object.c b/ext/phar/phar_object.c
+index 8cd13e72..f329c3b0 100644
+--- a/ext/phar/phar_object.c
++++ b/ext/phar/phar_object.c
+@@ -1448,10 +1448,9 @@ static int phar_build(zend_object_iterator *iter, void *puser) /* {{{ */
+ 				}
+ 
+ 				switch (intern->type) {
+-					case SPL_FS_DIR: {
+-						zend_string *test_str = spl_filesystem_object_get_path(intern);
+-						fname_len = spprintf(&fname, 0, "%s%c%s", ZSTR_VAL(test_str), DEFAULT_SLASH, intern->u.dir.entry.d_name);
+-						zend_string_release_ex(test_str, /* persistent */ false);
++					case SPL_FS_DIR:
++						test = spl_filesystem_object_get_path(intern, NULL);
++						fname_len = spprintf(&fname, 0, "%s%c%s", test, DEFAULT_SLASH, intern->u.dir.entry.d_name);
+ 						if (php_stream_stat_path(fname, &ssb) == 0 && S_ISDIR(ssb.sb.st_mode)) {
+ 							/* ignore directories */
+ 							efree(fname);
+@@ -1471,7 +1470,6 @@ static int phar_build(zend_object_iterator *iter, void *puser) /* {{{ */
+ 
+ 						save = fname;
+ 						goto phar_spl_fileinfo;
+-					}
+ 					case SPL_FS_INFO:
+ 					case SPL_FS_FILE:
+ 						fname = expand_filepath(ZSTR_VAL(intern->file_name), NULL);
+@@ -2252,7 +2250,7 @@ static zend_object *phar_convert_to_other(phar_archive_data *source, int convert
+ 	phar_metadata_tracker_copy(&phar->metadata_tracker, &source->metadata_tracker, phar->is_persistent);
+ 
+ 	/* first copy each file's uncompressed contents to a temporary file and set per-file flags */
+-	ZEND_HASH_MAP_FOREACH_PTR(&source->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&source->manifest, entry) {
+ 
+ 		newentry = *entry;
+ 
+@@ -4271,13 +4269,13 @@ static int extract_helper(phar_archive_data *archive, zend_string *search, char
+ 
+ 	if (!search) {
+ 		/* nothing to match -- extract all files */
+-		ZEND_HASH_MAP_FOREACH_PTR(&archive->manifest, entry) {
++		ZEND_HASH_FOREACH_PTR(&archive->manifest, entry) {
+ 			if (FAILURE == phar_extract_file(overwrite, entry, pathto, pathto_len, error)) return -1;
+ 			extracted++;
+ 		} ZEND_HASH_FOREACH_END();
+ 	} else if ('/' == ZSTR_VAL(search)[ZSTR_LEN(search) - 1]) {
+ 		/* ends in "/" -- extract all entries having that prefix */
+-		ZEND_HASH_MAP_FOREACH_PTR(&archive->manifest, entry) {
++		ZEND_HASH_FOREACH_PTR(&archive->manifest, entry) {
+ 			if (0 != strncmp(ZSTR_VAL(search), entry->filename, ZSTR_LEN(search))) continue;
+ 			if (FAILURE == phar_extract_file(overwrite, entry, pathto, pathto_len, error)) return -1;
+ 			extracted++;
+@@ -5055,6 +5053,9 @@ PHP_METHOD(PharFileInfo, decompress)
+ 
+ /* {{{ phar methods */
+ 
++#define REGISTER_PHAR_CLASS_CONST_LONG(class_name, const_name, value) \
++	zend_declare_class_constant_long(class_name, const_name, sizeof(const_name)-1, (zend_long)value);
++
+ void phar_object_init(void) /* {{{ */
+ {
+ 	phar_ce_PharException = register_class_PharException(zend_ce_exception);
+@@ -5064,5 +5065,22 @@ void phar_object_init(void) /* {{{ */
+ 	phar_ce_data = register_class_PharData(spl_ce_RecursiveDirectoryIterator, zend_ce_countable, zend_ce_arrayaccess);
+ 
+ 	phar_ce_entry = register_class_PharFileInfo(spl_ce_SplFileInfo);
++
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "BZ2", PHAR_ENT_COMPRESSED_BZ2)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "GZ", PHAR_ENT_COMPRESSED_GZ)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "NONE", PHAR_ENT_COMPRESSED_NONE)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHAR", PHAR_FORMAT_PHAR)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "TAR", PHAR_FORMAT_TAR)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "ZIP", PHAR_FORMAT_ZIP)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "COMPRESSED", PHAR_ENT_COMPRESSION_MASK)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHP", PHAR_MIME_PHP)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHPS", PHAR_MIME_PHPS)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "MD5", PHAR_SIG_MD5)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL", PHAR_SIG_OPENSSL)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL_SHA256", PHAR_SIG_OPENSSL_SHA256)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL_SHA512", PHAR_SIG_OPENSSL_SHA512)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA1", PHAR_SIG_SHA1)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA256", PHAR_SIG_SHA256)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA512", PHAR_SIG_SHA512)
+ }
+ /* }}} */
+diff --git a/ext/phar/phar_object.stub.php b/ext/phar/phar_object.stub.php
+index 3004a1ee..bfff7f66 100644
+--- a/ext/phar/phar_object.stub.php
++++ b/ext/phar/phar_object.stub.php
+@@ -8,87 +8,6 @@ class PharException extends Exception
+ 
+ class Phar extends RecursiveDirectoryIterator implements Countable, ArrayAccess
+ {
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_BZ2
+-     */
+-    const BZ2 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_GZ
+-     */
+-    const GZ = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_NONE
+-     */
+-    const NONE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_PHAR
+-     */
+-    const PHAR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_TAR
+-     */
+-    const TAR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_ZIP
+-     */
+-    const ZIP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSION_MASK
+-     */
+-    const COMPRESSED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_MIME_PHP
+-     */
+-    const PHP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_MIME_PHPS
+-     */
+-    const PHPS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_MD5
+-     */
+-    const MD5 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL
+-     */
+-    const OPENSSL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL_SHA256
+-     */
+-    const OPENSSL_SHA256 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL_SHA512
+-     */
+-    const OPENSSL_SHA512 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA1
+-     */
+-    const SHA1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA256
+-     */
+-    const SHA256 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA512
+-     */
+-    const SHA512 = UNKNOWN;
+-
+     public function __construct(string $filename, int $flags = FilesystemIterator::SKIP_DOTS|FilesystemIterator::UNIX_PATHS, ?string $alias = null) {}
+ 
+     public function __destruct() {}
+diff --git a/ext/phar/phar_object_arginfo.h b/ext/phar/phar_object_arginfo.h
+index 17d96a94..0ae18a16 100644
+--- a/ext/phar/phar_object_arginfo.h
++++ b/ext/phar/phar_object_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 799b653b10dbdfa58747e41715700cfd5300fa4f */
++ * Stub hash: cce88c2e27bd0b0fc7f68defdb0556b053e7dc81 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Phar___construct, 0, 0, 1)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+@@ -622,102 +622,6 @@ static zend_class_entry *register_class_Phar(zend_class_entry *class_entry_Recur
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_RecursiveDirectoryIterator);
+ 	zend_class_implements(class_entry, 2, class_entry_Countable, class_entry_ArrayAccess);
+ 
+-	zval const_BZ2_value;
+-	ZVAL_LONG(&const_BZ2_value, PHAR_ENT_COMPRESSED_BZ2);
+-	zend_string *const_BZ2_name = zend_string_init_interned("BZ2", sizeof("BZ2") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_BZ2_name, &const_BZ2_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_BZ2_name);
+-
+-	zval const_GZ_value;
+-	ZVAL_LONG(&const_GZ_value, PHAR_ENT_COMPRESSED_GZ);
+-	zend_string *const_GZ_name = zend_string_init_interned("GZ", sizeof("GZ") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_GZ_name, &const_GZ_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_GZ_name);
+-
+-	zval const_NONE_value;
+-	ZVAL_LONG(&const_NONE_value, PHAR_ENT_COMPRESSED_NONE);
+-	zend_string *const_NONE_name = zend_string_init_interned("NONE", sizeof("NONE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NONE_name, &const_NONE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NONE_name);
+-
+-	zval const_PHAR_value;
+-	ZVAL_LONG(&const_PHAR_value, PHAR_FORMAT_PHAR);
+-	zend_string *const_PHAR_name = zend_string_init_interned("PHAR", sizeof("PHAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHAR_name, &const_PHAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHAR_name);
+-
+-	zval const_TAR_value;
+-	ZVAL_LONG(&const_TAR_value, PHAR_FORMAT_TAR);
+-	zend_string *const_TAR_name = zend_string_init_interned("TAR", sizeof("TAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_TAR_name, &const_TAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_TAR_name);
+-
+-	zval const_ZIP_value;
+-	ZVAL_LONG(&const_ZIP_value, PHAR_FORMAT_ZIP);
+-	zend_string *const_ZIP_name = zend_string_init_interned("ZIP", sizeof("ZIP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ZIP_name, &const_ZIP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ZIP_name);
+-
+-	zval const_COMPRESSED_value;
+-	ZVAL_LONG(&const_COMPRESSED_value, PHAR_ENT_COMPRESSION_MASK);
+-	zend_string *const_COMPRESSED_name = zend_string_init_interned("COMPRESSED", sizeof("COMPRESSED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_COMPRESSED_name, &const_COMPRESSED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_COMPRESSED_name);
+-
+-	zval const_PHP_value;
+-	ZVAL_LONG(&const_PHP_value, PHAR_MIME_PHP);
+-	zend_string *const_PHP_name = zend_string_init_interned("PHP", sizeof("PHP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHP_name, &const_PHP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHP_name);
+-
+-	zval const_PHPS_value;
+-	ZVAL_LONG(&const_PHPS_value, PHAR_MIME_PHPS);
+-	zend_string *const_PHPS_name = zend_string_init_interned("PHPS", sizeof("PHPS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHPS_name, &const_PHPS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHPS_name);
+-
+-	zval const_MD5_value;
+-	ZVAL_LONG(&const_MD5_value, PHAR_SIG_MD5);
+-	zend_string *const_MD5_name = zend_string_init_interned("MD5", sizeof("MD5") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_MD5_name, &const_MD5_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_MD5_name);
+-
+-	zval const_OPENSSL_value;
+-	ZVAL_LONG(&const_OPENSSL_value, PHAR_SIG_OPENSSL);
+-	zend_string *const_OPENSSL_name = zend_string_init_interned("OPENSSL", sizeof("OPENSSL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_name, &const_OPENSSL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_name);
+-
+-	zval const_OPENSSL_SHA256_value;
+-	ZVAL_LONG(&const_OPENSSL_SHA256_value, PHAR_SIG_OPENSSL_SHA256);
+-	zend_string *const_OPENSSL_SHA256_name = zend_string_init_interned("OPENSSL_SHA256", sizeof("OPENSSL_SHA256") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_SHA256_name, &const_OPENSSL_SHA256_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_SHA256_name);
+-
+-	zval const_OPENSSL_SHA512_value;
+-	ZVAL_LONG(&const_OPENSSL_SHA512_value, PHAR_SIG_OPENSSL_SHA512);
+-	zend_string *const_OPENSSL_SHA512_name = zend_string_init_interned("OPENSSL_SHA512", sizeof("OPENSSL_SHA512") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_SHA512_name, &const_OPENSSL_SHA512_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_SHA512_name);
+-
+-	zval const_SHA1_value;
+-	ZVAL_LONG(&const_SHA1_value, PHAR_SIG_SHA1);
+-	zend_string *const_SHA1_name = zend_string_init_interned("SHA1", sizeof("SHA1") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA1_name, &const_SHA1_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA1_name);
+-
+-	zval const_SHA256_value;
+-	ZVAL_LONG(&const_SHA256_value, PHAR_SIG_SHA256);
+-	zend_string *const_SHA256_name = zend_string_init_interned("SHA256", sizeof("SHA256") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA256_name, &const_SHA256_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA256_name);
+-
+-	zval const_SHA512_value;
+-	ZVAL_LONG(&const_SHA512_value, PHAR_SIG_SHA512);
+-	zend_string *const_SHA512_name = zend_string_init_interned("SHA512", sizeof("SHA512") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA512_name, &const_SHA512_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA512_name);
+-
+ 	return class_entry;
+ }
+ 
+diff --git a/ext/phar/stream.c b/ext/phar/stream.c
+index b45b6623..745c3b42 100644
+--- a/ext/phar/stream.c
++++ b/ext/phar/stream.c
+@@ -613,7 +613,7 @@ static int phar_wrapper_stat(php_stream_wrapper *wrapper, const char *url, int f
+ 	if (HT_IS_INITIALIZED(&phar->mounted_dirs) && zend_hash_num_elements(&phar->mounted_dirs)) {
+ 		zend_string *str_key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
++		ZEND_HASH_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
+ 			if (ZSTR_LEN(str_key) >= internal_file_len || strncmp(ZSTR_VAL(str_key), internal_file, ZSTR_LEN(str_key))) {
+ 				continue;
+ 			} else {
+@@ -883,7 +883,7 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		uint32_t from_len = ZSTR_LEN(resource_from->path) - 1;
+ 		uint32_t to_len = ZSTR_LEN(resource_to->path) - 1;
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->manifest, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->manifest, b) {
+ 			str_key = b->key;
+ 			entry = Z_PTR(b->val);
+ 			if (!entry->is_deleted &&
+@@ -910,9 +910,10 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		} ZEND_HASH_FOREACH_END();
+ 		zend_hash_rehash(&phar->manifest);
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->virtual_dirs, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->virtual_dirs, b) {
+ 			str_key = b->key;
+-			if (zend_string_starts_with_cstr(str_key, ZSTR_VAL(resource_from->path)+1, from_len) &&
++			if (ZSTR_LEN(str_key) >= from_len &&
++				memcmp(ZSTR_VAL(str_key), ZSTR_VAL(resource_from->path)+1, from_len) == 0 &&
+ 				(ZSTR_LEN(str_key) == from_len || IS_SLASH(ZSTR_VAL(str_key)[from_len]))) {
+ 
+ 				new_str_key = zend_string_alloc(ZSTR_LEN(str_key) + to_len - from_len, 0);
+@@ -927,9 +928,10 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		} ZEND_HASH_FOREACH_END();
+ 		zend_hash_rehash(&phar->virtual_dirs);
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->mounted_dirs, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->mounted_dirs, b) {
+ 			str_key = b->key;
+-			if (zend_string_starts_with_cstr(str_key, ZSTR_VAL(resource_from->path)+1, from_len) &&
++			if (ZSTR_LEN(str_key) >= from_len &&
++				memcmp(ZSTR_VAL(str_key), ZSTR_VAL(resource_from->path)+1, from_len) == 0 &&
+ 				(ZSTR_LEN(str_key) == from_len || IS_SLASH(ZSTR_VAL(str_key)[from_len]))) {
+ 
+ 				new_str_key = zend_string_alloc(ZSTR_LEN(str_key) + to_len - from_len, 0);
+diff --git a/ext/phar/tar.c b/ext/phar/tar.c
+index 60e248c7..80a17d69 100644
+--- a/ext/phar/tar.c
++++ b/ext/phar/tar.c
+@@ -498,7 +498,7 @@ bail:
+ 
+ 		entry.link = NULL;
+ 		/* link field is null-terminated unless it has 100 non-null chars.
+-		 * Thus we cannot use strlen. */
++		 * Thus we can not use strlen. */
+ 		linkname_len = strnlen(hdr->linkname, 100);
+ 		if (entry.tar_type == TAR_LINK) {
+ 			if (!zend_hash_str_exists(&myphar->manifest, hdr->linkname, linkname_len)) {
+@@ -968,7 +968,7 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 	int closeoldfile, free_user_stub;
+ 	size_t signature_length;
+ 	struct _phar_pass_tar_info pass;
+-	char *buf, *signature, sigbuf[8];
++	char *buf, *signature, *tmp, sigbuf[8];
+ 	char halt_stub[] = "__HALT_COMPILER();";
+ 
+ 	entry.flags = PHAR_ENT_PERM_DEF_FILE;
+@@ -1064,7 +1064,9 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 			free_user_stub = 0;
+ 		}
+ 
+-		if ((pos = php_stristr(user_stub, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++		tmp = estrndup(user_stub, len);
++		if ((pos = php_stristr(tmp, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++			efree(tmp);
+ 			if (error) {
+ 				spprintf(error, 0, "illegal stub for tar-based phar \"%s\"", phar->fname);
+ 			}
+@@ -1073,6 +1075,8 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 			}
+ 			return EOF;
+ 		}
++		pos = user_stub + (pos - tmp);
++		efree(tmp);
+ 
+ 		len = pos - user_stub + 18;
+ 		entry.fp = php_stream_fopen_tmpfile();
+diff --git a/ext/phar/tests/bug65414.phpt b/ext/phar/tests/bug65414.phpt
+index d3ff7794..abbdf49b 100644
+--- a/ext/phar/tests/bug65414.phpt
++++ b/ext/phar/tests/bug65414.phpt
+@@ -24,6 +24,10 @@ foreach ($bads as $bad) {
+ }
+ echo 'done' . PHP_EOL;
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/bug65414.phar');
++?>
+ --EXPECT--
+ .phar/injected-1.txt:Cannot create any files in magic ".phar" directory
+ /.phar/injected-2.txt:Cannot create any files in magic ".phar" directory
+diff --git a/ext/phar/tests/bug66960.phpt b/ext/phar/tests/bug66960.phpt
+index d17acc5f..aab765b5 100644
+--- a/ext/phar/tests/bug66960.phpt
++++ b/ext/phar/tests/bug66960.phpt
+@@ -14,6 +14,11 @@ var_dump(file_exists("phar://$file/". str_repeat('a', PHP_MAXPATHLEN)));
+ var_dump(file_exists("phar://$file/". str_repeat('a', PHP_MAXPATHLEN+1)));
+ echo 'done';
+ ?>
++--CLEAN--
++<?php
++$file = __DIR__ . DIRECTORY_SEPARATOR . 'bug66960.phar';
++unlink($file);
++?>
+ --EXPECT--
+ bool(false)
+ bool(false)
+diff --git a/ext/phar/tests/create_new_phar_b.phpt b/ext/phar/tests/create_new_phar_b.phpt
+index fb106153..810da1f7 100644
+--- a/ext/phar/tests/create_new_phar_b.phpt
++++ b/ext/phar/tests/create_new_phar_b.phpt
+@@ -12,6 +12,9 @@ file_put_contents('phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.pha
+     'brand new!');
+ include 'phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.php/a.php';
+ ?>
++
++--CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
+ --EXPECTF--
+ Warning: file_put_contents(phar://%screate_new_phar_b.phar.php/a.php): Failed to open stream: phar error: write operations disabled by the php.ini setting phar.readonly in %screate_new_phar_b.php on line %d
+ 
+diff --git a/ext/phar/tests/invalid_alias.phpt b/ext/phar/tests/invalid_alias.phpt
+index 231dd9fd..fa44af3c 100644
+--- a/ext/phar/tests/invalid_alias.phpt
++++ b/ext/phar/tests/invalid_alias.phpt
+@@ -32,6 +32,10 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
++?>
+ --EXPECTF--
+ Invalid alias "hi/" specified for phar "%sinvalid_alias.phar"
+ Invalid alias "hi\l" specified for phar "%sinvalid_alias.phar"
+diff --git a/ext/phar/tests/invalid_setstubalias.phpt b/ext/phar/tests/invalid_setstubalias.phpt
+index bcbcb266..9b711bd2 100644
+--- a/ext/phar/tests/invalid_setstubalias.phpt
++++ b/ext/phar/tests/invalid_setstubalias.phpt
+@@ -32,6 +32,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ 
++?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip');
+ ?>
+ --EXPECTF--
+ Cannot set stub ".phar/stub.php" directly in phar "%sinvalid_setstubalias.phar.tar", use setStub
+diff --git a/ext/phar/tests/phar_buildfromdirectory1.phpt b/ext/phar/tests/phar_buildfromdirectory1.phpt
+index 9ab1fb92..f7ee620b 100644
+--- a/ext/phar/tests/phar_buildfromdirectory1.phpt
++++ b/ext/phar/tests/phar_buildfromdirectory1.phpt
+@@ -16,6 +16,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromdirectory1.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ %s(24) "UnexpectedValueException"
+ Cannot write to archive - write operations restricted by INI setting
+diff --git a/ext/phar/tests/phar_buildfromdirectory2-win.phpt b/ext/phar/tests/phar_buildfromdirectory2-win.phpt
+index 19a5ae8b..eaaf5b53 100644
+--- a/ext/phar/tests/phar_buildfromdirectory2-win.phpt
++++ b/ext/phar/tests/phar_buildfromdirectory2-win.phpt
+@@ -19,6 +19,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromdirectory2.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ %s(24) "UnexpectedValueException"
+ RecursiveDirectoryIterator::__construct(1): %s (code: 2)
+diff --git a/ext/phar/tests/phar_buildfromdirectory2.phpt b/ext/phar/tests/phar_buildfromdirectory2.phpt
+index c8285875..9de4edd8 100644
+--- a/ext/phar/tests/phar_buildfromdirectory2.phpt
++++ b/ext/phar/tests/phar_buildfromdirectory2.phpt
+@@ -19,6 +19,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromdirectory2.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ %s(24) "UnexpectedValueException"
+ RecursiveDirectoryIterator::__construct(1): Failed to open directory: No such file or directory
+diff --git a/ext/phar/tests/phar_buildfromdirectory6.phpt b/ext/phar/tests/phar_buildfromdirectory6.phpt
+index a652a899..131247a8 100644
+--- a/ext/phar/tests/phar_buildfromdirectory6.phpt
++++ b/ext/phar/tests/phar_buildfromdirectory6.phpt
+@@ -26,6 +26,7 @@ var_dump(file_exists(__DIR__ . '/buildfromdirectory6.phar'));
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/buildfromdirectory6.phar');
+ foreach(range(1, 4) as $i) {
+     unlink(__DIR__ . "/testdir6/file$i.txt");
+ }
+diff --git a/ext/phar/tests/phar_buildfromiterator1.phpt b/ext/phar/tests/phar_buildfromiterator1.phpt
+index 23daf212..b8b6ee9b 100644
+--- a/ext/phar/tests/phar_buildfromiterator1.phpt
++++ b/ext/phar/tests/phar_buildfromiterator1.phpt
+@@ -17,6 +17,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator1.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ %s(24) "UnexpectedValueException"
+ Cannot write out phar archive, phar is read-only
+diff --git a/ext/phar/tests/phar_buildfromiterator5.phpt b/ext/phar/tests/phar_buildfromiterator5.phpt
+index 1e937fe4..147fb268 100644
+--- a/ext/phar/tests/phar_buildfromiterator5.phpt
++++ b/ext/phar/tests/phar_buildfromiterator5.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator5.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/phar_buildfromiterator6.phpt b/ext/phar/tests/phar_buildfromiterator6.phpt
+index 4e4f09f7..59a5b6ef 100644
+--- a/ext/phar/tests/phar_buildfromiterator6.phpt
++++ b/ext/phar/tests/phar_buildfromiterator6.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator6.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/phar_buildfromiterator7.phpt b/ext/phar/tests/phar_buildfromiterator7.phpt
+index 646bcdac..94a192c3 100644
+--- a/ext/phar/tests/phar_buildfromiterator7.phpt
++++ b/ext/phar/tests/phar_buildfromiterator7.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator7.phar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/phar_convert_again.phpt b/ext/phar/tests/phar_convert_again.phpt
+index 008d28ad..d65e5df2 100644
+--- a/ext/phar/tests/phar_convert_again.phpt
++++ b/ext/phar/tests/phar_convert_again.phpt
+@@ -155,8 +155,11 @@ echo $e->getMessage() . "\n";
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.zip');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar.gz');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar.bz2');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.tbz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.phar');
+diff --git a/ext/phar/tests/phar_convert_repeated.phpt b/ext/phar/tests/phar_convert_repeated.phpt
+index 8f8b6361..b2c7cecd 100644
+--- a/ext/phar/tests/phar_convert_repeated.phpt
++++ b/ext/phar/tests/phar_convert_repeated.phpt
+@@ -94,6 +94,8 @@ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.2.phar.zip');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.2.2.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.2.2.3.phar.zip');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.3.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.3.phar');
+ ?>
+ --EXPECTF--
+ =================== new Phar() =======================
+diff --git a/ext/phar/tests/phar_convert_repeated_b.phpt b/ext/phar/tests/phar_convert_repeated_b.phpt
+index 8adb5812..26589d84 100644
+--- a/ext/phar/tests/phar_convert_repeated_b.phpt
++++ b/ext/phar/tests/phar_convert_repeated_b.phpt
+@@ -77,10 +77,15 @@ try {
+ ?>
+ --CLEAN--
+ <?php
++echo __DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz' . "\n";
++
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.1.2.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.zip');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.1.zip');
++
+ ?>
+ --EXPECT--
+ =================== new PharData() ==================
+diff --git a/ext/phar/tests/phar_convert_tar2.phpt b/ext/phar/tests/phar_convert_tar2.phpt
+index 8028d774..10e1bd22 100644
+--- a/ext/phar/tests/phar_convert_tar2.phpt
++++ b/ext/phar/tests/phar_convert_tar2.phpt
+@@ -44,6 +44,7 @@ var_dump($phar->getStub());
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.gz');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+diff --git a/ext/phar/tests/phar_convert_tar3.phpt b/ext/phar/tests/phar_convert_tar3.phpt
+index 090782f3..8a693cf6 100644
+--- a/ext/phar/tests/phar_convert_tar3.phpt
++++ b/ext/phar/tests/phar_convert_tar3.phpt
+@@ -11,7 +11,7 @@ phar.readonly=0
+ 
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.php';
+ $pname = 'phar://' . $fname;
+-$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar.bz2';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar';
+ $fname3 = __DIR__ . '/' . basename(__FILE__, '.php') . '.2.phar.tar';
+ $stub = '<?php echo "first stub\n"; __HALT_COMPILER(); ?>';
+ $file = $stub;
+@@ -33,7 +33,7 @@ var_dump($phar->isFileFormat(Phar::TAR));
+ var_dump($phar->isCompressed());
+ var_dump($phar->getStub());
+ 
+-copy($fname2, $fname3);
++copy($fname2 . '.bz2', $fname3);
+ 
+ $phar = new Phar($fname3);
+ var_dump($phar->isFileFormat(Phar::TAR));
+@@ -45,7 +45,9 @@ var_dump($phar->getStub());
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.bz2');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ bool(false)
+diff --git a/ext/phar/tests/phar_extract.phpt b/ext/phar/tests/phar_extract.phpt
+index 7d50a3be..9f5faa8d 100644
+--- a/ext/phar/tests/phar_extract.phpt
++++ b/ext/phar/tests/phar_extract.phpt
+@@ -105,27 +105,30 @@ try {
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/oops');
+-rmdir(__DIR__ . '/oops1');
+-unlink(__DIR__ . '/tempmanifest1.phar.php');
++@rmdir(__DIR__ . '/whatever');
++@unlink(__DIR__ . '/oops');
++@rmdir(__DIR__ . '/oops1');
++@unlink(__DIR__ . '/tempmanifest1.phar.php');
+ $e = __DIR__ . '/extract/';
+-unlink($e . 'file1.txt');
+-unlink($e . 'file2.txt');
+-unlink($e . 'subdir/ectory/file.txt');
+-rmdir($e . 'subdir/ectory');
+-rmdir($e . 'subdir');
+-rmdir($e . 'one');
+-rmdir($e);
++@unlink($e . 'file1.txt');
++@unlink($e . 'file2.txt');
++@unlink($e . 'subdir/ectory/file.txt');
++@rmdir($e . 'subdir/ectory');
++@rmdir($e . 'subdir');
++@rmdir($e . 'one/level');
++@rmdir($e . 'one');
++@rmdir($e);
+ $e = __DIR__ . '/extract1/';
+-unlink($e . 'file1.txt');
+-unlink($e . 'subdir/ectory/file.txt');
+-rmdir($e . 'subdir/ectory');
+-rmdir($e . 'subdir');
+-rmdir($e);
++@unlink($e . 'file1.txt');
++@unlink($e . 'subdir/ectory/file.txt');
++@rmdir($e . 'subdir/ectory');
++@rmdir($e . 'subdir');
++@rmdir($e);
+ $e = __DIR__ . '/extract1-2/';
+-unlink($e . 'file2.txt');
+-rmdir($e . 'one');
+-rmdir($e);
++@unlink($e . 'file2.txt');
++@rmdir($e . 'one/level');
++@rmdir($e . 'one');
++@rmdir($e);
+ ?>
+ --EXPECTF--
+ %sextract%cfile1.txt
+diff --git a/ext/phar/tests/phar_gobyebye-win32.phpt b/ext/phar/tests/phar_gobyebye-win32.phpt
+index 7baa0c61..39dcdbe9 100644
+--- a/ext/phar/tests/phar_gobyebye-win32.phpt
++++ b/ext/phar/tests/phar_gobyebye-win32.phpt
+@@ -26,10 +26,8 @@ opendir("foo/hi");
+ include $pname . '/foo/hi';
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php'); ?>
+ --EXPECTF--
+ Warning: readfile(foo/hi): Failed to open stream: No such file or directory in phar://%sphar_gobyebye-win32.phar.php/foo/hi on line %d
+ 
+diff --git a/ext/phar/tests/phar_gobyebye.phpt b/ext/phar/tests/phar_gobyebye.phpt
+index 4db6e0d9..7ad8e18c 100644
+--- a/ext/phar/tests/phar_gobyebye.phpt
++++ b/ext/phar/tests/phar_gobyebye.phpt
+@@ -27,10 +27,8 @@ opendir("foo/hi");
+ include $pname . '/foo/hi';
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php'); ?>
+ --EXPECTF--
+ Warning: readfile(foo/hi): Failed to open stream: No such file or directory in phar://%sphar_gobyebye.phar.php/foo/hi on line %d
+ 
+diff --git a/ext/phar/tests/phar_oo_compressallbz2.phpt b/ext/phar/tests/phar_oo_compressallbz2.phpt
+index 16f8f22a..7a0fbfc7 100644
+--- a/ext/phar/tests/phar_oo_compressallbz2.phpt
++++ b/ext/phar/tests/phar_oo_compressallbz2.phpt
+@@ -43,6 +43,7 @@ var_dump($phar['b']->isCompressed(Phar::BZ2));
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+ --EXPECT--
+diff --git a/ext/phar/tests/phar_oo_compressallgz.phpt b/ext/phar/tests/phar_oo_compressallgz.phpt
+index c0b8ea9d..d6d75da6 100644
+--- a/ext/phar/tests/phar_oo_compressallgz.phpt
++++ b/ext/phar/tests/phar_oo_compressallgz.phpt
+@@ -47,6 +47,7 @@ echo $e->getMessage() . "\n";
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+ --EXPECT--
+diff --git a/ext/phar/tests/phar_oo_getmodified.phpt b/ext/phar/tests/phar_oo_getmodified.phpt
+index 64bc109f..27d4928d 100644
+--- a/ext/phar/tests/phar_oo_getmodified.phpt
++++ b/ext/phar/tests/phar_oo_getmodified.phpt
+@@ -26,6 +26,7 @@ var_dump($phar->getModified());
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+ --EXPECT--
+diff --git a/ext/phar/tests/phar_oo_nosig.phpt b/ext/phar/tests/phar_oo_nosig.phpt
+index 68b0ae18..ff30c0a3 100644
+--- a/ext/phar/tests/phar_oo_nosig.phpt
++++ b/ext/phar/tests/phar_oo_nosig.phpt
+@@ -14,7 +14,8 @@ var_dump($phar->getSignature());
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/files/phar_oo_nosig.phar.php');
++unlink(__DIR__ . '/files/phar_oo_test.phar.php');
++__halt_compiler();
+ ?>
+ --EXPECT--
+ bool(false)
+diff --git a/ext/phar/tests/phar_oo_uncompressall.phpt b/ext/phar/tests/phar_oo_uncompressall.phpt
+index d39f0308..ec680a6e 100644
+--- a/ext/phar/tests/phar_oo_uncompressall.phpt
++++ b/ext/phar/tests/phar_oo_uncompressall.phpt
+@@ -51,6 +51,7 @@ var_dump($phar['a']->isCompressed());
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+ --EXPECT--
+diff --git a/ext/phar/tests/phar_setalias.phpt b/ext/phar/tests/phar_setalias.phpt
+index bd52e680..e140aae3 100644
+--- a/ext/phar/tests/phar_setalias.phpt
++++ b/ext/phar/tests/phar_setalias.phpt
+@@ -26,6 +26,8 @@ echo $phar->getAlias() . "\n";
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phartmp.php');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ hio
+diff --git a/ext/phar/tests/phar_setalias2.phpt b/ext/phar/tests/phar_setalias2.phpt
+index 7944af83..d248873f 100644
+--- a/ext/phar/tests/phar_setalias2.phpt
++++ b/ext/phar/tests/phar_setalias2.phpt
+@@ -38,6 +38,9 @@ try {
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phartmp.php');
++unlink(__DIR__ . '/notphar.phar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ hio
+diff --git a/ext/phar/tests/phpinfo_004.phpt b/ext/phar/tests/phpinfo_004.phpt
+index b893c573..dab8bbba 100644
+--- a/ext/phar/tests/phpinfo_004.phpt
++++ b/ext/phar/tests/phpinfo_004.phpt
+@@ -25,7 +25,7 @@ phpinfo(INFO_MODULES);
+ ===DONE===
+ --EXPECTF--
+ %a
+-<h2><a name="module_phar" href="#module_phar">Phar</a></h2>
++<h2><a name="module_phar">Phar</a></h2>
+ <table>
+ <tr class="h"><th>Phar: PHP Archive support</th><th>enabled</th></tr>
+ <tr><td class="e">Phar API version </td><td class="v">1.1.1 </td></tr>
+@@ -47,7 +47,7 @@ Phar based on pear/PHP_Archive, original concept by Davey Shafik.<br />Phar full
+ <tr><td class="e">phar.require_hash</td><td class="v">Off</td><td class="v">Off</td></tr>
+ </table>
+ %a
+-<h2><a name="module_phar" href="#module_phar">Phar</a></h2>
++<h2><a name="module_phar">Phar</a></h2>
+ <table>
+ <tr class="h"><th>Phar: PHP Archive support</th><th>enabled</th></tr>
+ <tr><td class="e">Phar API version </td><td class="v">1.1.1 </td></tr>
+diff --git a/ext/phar/tests/stat2_5.3.phpt b/ext/phar/tests/stat2_5.3.phpt
+index 0696d351..0dae17d8 100644
+--- a/ext/phar/tests/stat2_5.3.phpt
++++ b/ext/phar/tests/stat2_5.3.phpt
+@@ -33,10 +33,8 @@ __HALT_COMPILER();');
+ include $fname3;
+ ?>
+ --CLEAN--
+-<?php
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar'); ?>
+ --EXPECT--
+ bool(true)
+ is_link
+diff --git a/ext/phar/tests/tar/bignames_overflow.phpt b/ext/phar/tests/tar/bignames_overflow.phpt
+index 411c25a3..d992bbeb 100644
+--- a/ext/phar/tests/tar/bignames_overflow.phpt
++++ b/ext/phar/tests/tar/bignames_overflow.phpt
+@@ -7,6 +7,7 @@ phar.require_hash=0
+ --FILE--
+ <?php
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.tar';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.2.tar';
+ $pname = 'phar://' . $fname;
+ 
+ include __DIR__ . '/files/make.dangerous.tar.php.inc';
+@@ -28,6 +29,7 @@ echo $p1[str_repeat('a', 155) . '/' . str_repeat('a', 100)]->getContent() . "\n"
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.tar');
+ ?>
+ --EXPECT--
+ a
+diff --git a/ext/phar/tests/tar/create_new_phar_b.phpt b/ext/phar/tests/tar/create_new_phar_b.phpt
+index 7ec06f42..4b61403f 100644
+--- a/ext/phar/tests/tar/create_new_phar_b.phpt
++++ b/ext/phar/tests/tar/create_new_phar_b.phpt
+@@ -12,6 +12,9 @@ file_put_contents('phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.pha
+     'brand new!');
+ include 'phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar/a.php';
+ ?>
++
++--CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar'); ?>
+ --EXPECTF--
+ Warning: file_put_contents(phar://%screate_new_phar_b.phar.tar/a.php): Failed to open stream: phar error: write operations disabled by the php.ini setting phar.readonly in %screate_new_phar_b.php on line %d
+ 
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator4.phpt b/ext/phar/tests/tar/phar_buildfromiterator4.phpt
+index 8fa55768..36ea9cac 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator4.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator4.phpt
+@@ -35,15 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator4.phar.tar');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
+-var_dump($phar->isFileFormat(Phar::TAR));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.tar');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
++    var_dump($phar->isFileFormat(Phar::TAR));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator4.phar.tar');
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator5.phpt b/ext/phar/tests/tar/phar_buildfromiterator5.phpt
+index 27d9dc32..bcfbc071 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator5.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator5.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator6.phpt b/ext/phar/tests/tar/phar_buildfromiterator6.phpt
+index 91820369..addacc26 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator6.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator6.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator7.phpt b/ext/phar/tests/tar/phar_buildfromiterator7.phpt
+index 297b40b5..6eee2392 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator7.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator7.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator8.phpt b/ext/phar/tests/tar/phar_buildfromiterator8.phpt
+index 146eceb5..0a857e42 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator8.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator8.phpt
+@@ -6,16 +6,22 @@ phar
+ phar.readonly=0
+ --FILE--
+ <?php
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator8.phar.tar');
+-$a = $phar->buildFromIterator(new RegexIterator(new DirectoryIterator('.'), '/^frontcontroller\d{0,2}\.phar\.phpt\\z|^\.\\z|^\.\.\\z/'), __DIR__ . DIRECTORY_SEPARATOR);
+-asort($a);
+-var_dump($a);
+-var_dump($phar->isFileFormat(Phar::TAR));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.tar');
++    $a = $phar->buildFromIterator(new RegexIterator(new DirectoryIterator('.'), '/^frontcontroller\d{0,2}\.phar\.phpt\\z|^\.\\z|^\.\.\\z/'), __DIR__ . DIRECTORY_SEPARATOR);
++    asort($a);
++    var_dump($a);
++    var_dump($phar->isFileFormat(Phar::TAR));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator8.phar.tar');
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ array(21) {
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator9.phpt b/ext/phar/tests/tar/phar_buildfromiterator9.phpt
+index 483762db..d67997af 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator9.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator9.phpt
+@@ -35,15 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator9.phar.tar');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => $a = fopen(basename(__FILE__, 'php') . 'phpt', 'r')))));
+-fclose($a);
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.tar');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => $a = fopen(basename(__FILE__, 'php') . 'phpt', 'r')))));
++    fclose($a);
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator9.phar.tar');
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/tar/phar_convert_phar.phpt b/ext/phar/tests/tar/phar_convert_phar.phpt
+index c25ed7c5..61ec4e11 100644
+--- a/ext/phar/tests/tar/phar_convert_phar.phpt
++++ b/ext/phar/tests/tar/phar_convert_phar.phpt
+@@ -39,6 +39,7 @@ var_dump(strlen($phar->getStub()));
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.3.phar');
+ __HALT_COMPILER();
+diff --git a/ext/phar/tests/tar/phar_convert_phar2.phpt b/ext/phar/tests/tar/phar_convert_phar2.phpt
+index 5a003a6d..92d41196 100644
+--- a/ext/phar/tests/tar/phar_convert_phar2.phpt
++++ b/ext/phar/tests/tar/phar_convert_phar2.phpt
+@@ -42,6 +42,7 @@ var_dump(strlen($phar->getStub()));
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.phar');
+ __HALT_COMPILER();
+ ?>
+diff --git a/ext/phar/tests/tar/phar_convert_phar3.phpt b/ext/phar/tests/tar/phar_convert_phar3.phpt
+index c0acae36..bca4e3d3 100644
+--- a/ext/phar/tests/tar/phar_convert_phar3.phpt
++++ b/ext/phar/tests/tar/phar_convert_phar3.phpt
+@@ -43,6 +43,8 @@ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.bz2');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.bz2');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ bool(false)
+diff --git a/ext/phar/tests/tar/phar_convert_phar4.phpt b/ext/phar/tests/tar/phar_convert_phar4.phpt
+index 60468541..0b61a181 100644
+--- a/ext/phar/tests/tar/phar_convert_phar4.phpt
++++ b/ext/phar/tests/tar/phar_convert_phar4.phpt
+@@ -48,6 +48,8 @@ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.gz');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ bool(false)
+diff --git a/ext/phar/tests/tar/phar_setalias.phpt b/ext/phar/tests/tar/phar_setalias.phpt
+index dd8be1ac..6d1047e5 100644
+--- a/ext/phar/tests/tar/phar_setalias.phpt
++++ b/ext/phar/tests/tar/phar_setalias.phpt
+@@ -9,7 +9,7 @@ phar.readonly=0
+ <?php
+ 
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar';
+-$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.copy.phar.tar';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '2.phar.tar';
+ 
+ $phar = new Phar($fname);
+ $phar->setStub('<?php echo "first stub\n"; __HALT_COMPILER(); ?>');
+@@ -40,7 +40,8 @@ echo $a->getAlias() . "\n";
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.copy.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phartmp.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ hio
+diff --git a/ext/phar/tests/tar/phar_setalias2.phpt b/ext/phar/tests/tar/phar_setalias2.phpt
+index 31df9ae5..54aa99b9 100644
+--- a/ext/phar/tests/tar/phar_setalias2.phpt
++++ b/ext/phar/tests/tar/phar_setalias2.phpt
+@@ -42,6 +42,8 @@ try {
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phartmp.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ hio
+diff --git a/ext/phar/tests/tar/truncated.phpt b/ext/phar/tests/tar/truncated.phpt
+index 95ed3c1c..183c2148 100644
+--- a/ext/phar/tests/tar/truncated.phpt
++++ b/ext/phar/tests/tar/truncated.phpt
+@@ -10,6 +10,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ 
++?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ ?>
+ --EXPECTF--
+ phar error: "%strunc.tar" is a corrupted tar file (truncated)
+diff --git a/ext/phar/tests/test_unset.phpt b/ext/phar/tests/test_unset.phpt
+index 8aa422cb..5f593dd4 100644
+--- a/ext/phar/tests/test_unset.phpt
++++ b/ext/phar/tests/test_unset.phpt
+@@ -32,6 +32,7 @@ var_dump(file_exists($fname));
+ 
+ ?>
+ --CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
+ <?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.php'); ?>
+ --EXPECTF--
+ NULL
+diff --git a/ext/phar/tests/zip/all.phpt b/ext/phar/tests/zip/all.phpt
+index 937bfbd0..440d59b0 100644
+--- a/ext/phar/tests/zip/all.phpt
++++ b/ext/phar/tests/zip/all.phpt
+@@ -41,10 +41,8 @@ var_dump($phar->getMetadata());
+ var_dump($phar['a']->getMetadata());
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.zip.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.zip.php'); ?>
+ --EXPECT--
+ bool(false)
+ bool(false)
+diff --git a/ext/phar/tests/zip/create_new_phar_b.phpt b/ext/phar/tests/zip/create_new_phar_b.phpt
+index 0f4e239f..cf70abfd 100644
+--- a/ext/phar/tests/zip/create_new_phar_b.phpt
++++ b/ext/phar/tests/zip/create_new_phar_b.phpt
+@@ -12,6 +12,9 @@ file_put_contents('phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.pha
+     'brand new!');
+ include 'phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.zip/a.php';
+ ?>
++
++--CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip'); ?>
+ --EXPECTF--
+ Warning: file_put_contents(phar://%screate_new_phar_b.phar.zip/a.php): Failed to open stream: phar error: write operations disabled by the php.ini setting phar.readonly in %screate_new_phar_b.php on line %d
+ 
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator4.phpt b/ext/phar/tests/zip/phar_buildfromiterator4.phpt
+index 8c109675..6d44e2f8 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator4.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator4.phpt
+@@ -35,14 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator4.phar.zip');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
+-var_dump($phar->isFileFormat(Phar::ZIP));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.zip');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
++    var_dump($phar->isFileFormat(Phar::ZIP));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator4.phar.zip');
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator5.phpt b/ext/phar/tests/zip/phar_buildfromiterator5.phpt
+index fb34f090..dafd6ced 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator5.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator5.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator6.phpt b/ext/phar/tests/zip/phar_buildfromiterator6.phpt
+index 9d9140bc..491fada9 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator6.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator6.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator7.phpt b/ext/phar/tests/zip/phar_buildfromiterator7.phpt
+index f62be404..4129c6b2 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator7.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator7.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator8.phpt b/ext/phar/tests/zip/phar_buildfromiterator8.phpt
+index 99e8f631..d0e2150d 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator8.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator8.phpt
+@@ -6,16 +6,22 @@ phar
+ phar.readonly=0
+ --FILE--
+ <?php
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator8.phar.zip');
+-$a = $phar->buildFromIterator(new RegexIterator(new DirectoryIterator('.'), '/^frontcontroller\d{0,2}\.phar\.phpt\\z|^\.\\z|^\.\.\\z/'), __DIR__ . DIRECTORY_SEPARATOR);
+-asort($a);
+-var_dump($a);
+-var_dump($phar->isFileFormat(Phar::ZIP));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.zip');
++    $a = $phar->buildFromIterator(new RegexIterator(new DirectoryIterator('.'), '/^frontcontroller\d{0,2}\.phar\.phpt\\z|^\.\\z|^\.\.\\z/'), __DIR__ . DIRECTORY_SEPARATOR);
++    asort($a);
++    var_dump($a);
++    var_dump($phar->isFileFormat(Phar::ZIP));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator8.phar.zip');
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ array(21) {
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator9.phpt b/ext/phar/tests/zip/phar_buildfromiterator9.phpt
+index 9f527d21..9d290a73 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator9.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator9.phpt
+@@ -35,14 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator9.phar');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => $a = fopen(basename(__FILE__, 'php') . 'phpt', 'r')))));
+-fclose($a);
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => $a = fopen(basename(__FILE__, 'php') . 'phpt', 'r')))));
++    fclose($a);
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator9.phar');
++unlink(__DIR__ . '/buildfromiterator.phar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/zip/phar_setalias.phpt b/ext/phar/tests/zip/phar_setalias.phpt
+index dc324ea6..46922279 100644
+--- a/ext/phar/tests/zip/phar_setalias.phpt
++++ b/ext/phar/tests/zip/phar_setalias.phpt
+@@ -11,8 +11,8 @@ phar.readonly=0
+ <?php
+ 
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.zip';
+-$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.2.phar.zip';
+-$fname3 = __DIR__ . '/' . basename(__FILE__, '.php') . '.3.phar.zip';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '2.phar.zip';
++$fname3 = __DIR__ . '/' . basename(__FILE__, '.php') . '3.phar.zip';
+ 
+ $phar = new Phar($fname);
+ $phar->setStub('<?php echo "first stub\n"; __HALT_COMPILER(); ?>');
+@@ -49,8 +49,9 @@ echo $p3->getAlias(), "\n";
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.zip');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.3.phar.zip');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '2.phar.zip');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '3.phar.zip');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ hio
+diff --git a/ext/phar/util.c b/ext/phar/util.c
+index 003d579b..753c8d31 100644
+--- a/ext/phar/util.c
++++ b/ext/phar/util.c
+@@ -1290,7 +1290,7 @@ phar_entry_info *phar_get_entry_info_dir(phar_archive_data *phar, char *path, si
+ 	if (HT_IS_INITIALIZED(&phar->mounted_dirs) && zend_hash_num_elements(&phar->mounted_dirs)) {
+ 		zend_string *str_key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
++		ZEND_HASH_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
+ 			if (ZSTR_LEN(str_key) >= path_len || strncmp(ZSTR_VAL(str_key), path, ZSTR_LEN(str_key))) {
+ 				continue;
+ 			} else {
+@@ -2067,7 +2067,7 @@ static void phar_copy_cached_phar(phar_archive_data **pphar) /* {{{ */
+ 	*pphar = phar;
+ 
+ 	/* now, scan the list of persistent Phar objects referencing this phar and update the pointers */
+-	ZEND_HASH_MAP_FOREACH_PTR(&PHAR_G(phar_persist_map), objphar) {
++	ZEND_HASH_FOREACH_PTR(&PHAR_G(phar_persist_map), objphar) {
+ 		if (objphar->archive->fname_len == phar->fname_len && !memcmp(objphar->archive->fname, phar->fname, phar->fname_len)) {
+ 			objphar->archive = phar;
+ 		}
+
+-- 
+2.43.0

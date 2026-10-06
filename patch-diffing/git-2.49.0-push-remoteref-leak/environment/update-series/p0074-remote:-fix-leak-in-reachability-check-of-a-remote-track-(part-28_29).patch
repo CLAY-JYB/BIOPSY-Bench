@@ -1,0 +1,41 @@
+From 13717994 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0074] remote: fix leak in reachability check of a remote-track (part 28/29)
+
+---
+diff --git a/remote.c b/remote.c
+index 8d666c16..539e5cea 100644
+--- a/remote.c
++++ b/remote.c
+@@ -2800,16 +2840,26 @@ struct remote_state *remote_state_new(void)
+ 
+ void remote_state_clear(struct remote_state *remote_state)
+ {
++	struct hashmap_iter iter;
++	struct branch *b;
+ 	int i;
+ 
+ 	for (i = 0; i < remote_state->remotes_nr; i++)
+ 		remote_clear(remote_state->remotes[i]);
+ 	FREE_AND_NULL(remote_state->remotes);
++	FREE_AND_NULL(remote_state->pushremote_name);
+ 	remote_state->remotes_alloc = 0;
+ 	remote_state->remotes_nr = 0;
+ 
++	rewrites_release(&remote_state->rewrites);
++	rewrites_release(&remote_state->rewrites_push);
++
+ 	hashmap_clear_and_free(&remote_state->remotes_hash, struct remote, ent);
+-	hashmap_clear_and_free(&remote_state->branches_hash, struct remote, ent);
++	hashmap_for_each_entry(&remote_state->branches_hash, &iter, b, ent) {
++		branch_release(b);
++		free(b);
++	}
++	hashmap_clear(&remote_state->branches_hash);
+ }
+ 
+ /*
+
+-- 
+2.43.0

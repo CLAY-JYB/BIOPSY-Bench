@@ -1,0 +1,163 @@
+diff --git a/builtin/bundle.c b/builtin/bundle.c
+index 86d0ed70..b858552e 100644
+--- a/builtin/bundle.c
++++ b/builtin/bundle.c
+@@ -221,7 +221,9 @@ static int cmd_bundle_unbundle(int argc, const char **argv, const char *prefix)
+ 			 &extra_index_pack_args, 0) ||
+ 		list_bundle_refs(&header, argc, argv);
+ 	bundle_header_release(&header);
++
+ cleanup:
++	strvec_clear(&extra_index_pack_args);
+ 	free(bundle_file);
+ 	return ret;
+ }
+diff --git a/builtin/check-mailmap.c b/builtin/check-mailmap.c
+index b8a05b8e..2334b572 100644
+--- a/builtin/check-mailmap.c
++++ b/builtin/check-mailmap.c
+@@ -9,6 +9,7 @@
+ #include "write-or-die.h"
+ 
+ static int use_stdin;
++static const char *mailmap_file, *mailmap_blob;
+ static const char * const check_mailmap_usage[] = {
+ N_("git check-mailmap [<options>] <contact>..."),
+ NULL
+@@ -16,6 +17,8 @@ NULL
+ 
+ static const struct option check_mailmap_options[] = {
+ 	OPT_BOOL(0, "stdin", &use_stdin, N_("also read contacts from stdin")),
++	OPT_FILENAME(0, "mailmap-file", &mailmap_file, N_("read additional mailmap entries from file")),
++	OPT_STRING(0, "mailmap-blob", &mailmap_blob, N_("blob"), N_("read additional mailmap entries from blob")),
+ 	OPT_END()
+ };
+ 
+@@ -25,13 +28,17 @@ static void check_mailmap(struct string_list *mailmap, const char *contact)
+ 	size_t namelen, maillen;
+ 	struct ident_split ident;
+ 
+-	if (split_ident_line(&ident, contact, strlen(contact)))
+-		die(_("unable to parse contact: %s"), contact);
+-
+-	name = ident.name_begin;
+-	namelen = ident.name_end - ident.name_begin;
+-	mail = ident.mail_begin;
+-	maillen = ident.mail_end - ident.mail_begin;
++	if (!split_ident_line(&ident, contact, strlen(contact))) {
++		name = ident.name_begin;
++		namelen = ident.name_end - ident.name_begin;
++		mail = ident.mail_begin;
++		maillen = ident.mail_end - ident.mail_begin;
++	} else {
++		name = NULL;
++		namelen = 0;
++		mail = contact;
++		maillen = strlen(contact);
++	}
+ 
+ 	map_user(mailmap, &mail, &maillen, &name, &namelen);
+ 
+@@ -52,6 +59,10 @@ int cmd_check_mailmap(int argc, const char **argv, const char *prefix)
+ 		die(_("no contacts specified"));
+ 
+ 	read_mailmap(&mailmap);
++	if (mailmap_blob)
++		read_mailmap_blob(&mailmap, mailmap_blob);
++	if (mailmap_file)
++		read_mailmap_file(&mailmap, mailmap_file, 0);
+ 
+ 	for (i = 0; i < argc; ++i)
+ 		check_mailmap(&mailmap, argv[i]);
+diff --git a/builtin/config.c b/builtin/config.c
+index e00d9835..95c8a009 100644
+--- a/builtin/config.c
++++ b/builtin/config.c
+@@ -17,7 +17,7 @@
+ 
+ static const char *const builtin_config_usage[] = {
+ 	N_("git config list [<file-option>] [<display-option>] [--includes]"),
+-	N_("git config get [<file-option>] [<display-option>] [--includes] [--all] [--regexp=<regexp>] [--value=<value>] [--fixed-value] [--default=<default>] <name>"),
++	N_("git config get [<file-option>] [<display-option>] [--includes] [--all] [--regexp] [--value=<value>] [--fixed-value] [--default=<default>] <name>"),
+ 	N_("git config set [<file-option>] [--type=<type>] [--all] [--value=<value>] [--fixed-value] <name> <value>"),
+ 	N_("git config unset [<file-option>] [--all] [--value=<value>] [--fixed-value] <name> <value>"),
+ 	N_("git config rename-section [<file-option>] <old-name> <new-name>"),
+diff --git a/builtin/diff-index.c b/builtin/diff-index.c
+index 3e05260a..685b6028 100644
+--- a/builtin/diff-index.c
++++ b/builtin/diff-index.c
+@@ -25,6 +25,10 @@ int cmd_diff_index(int argc, const char **argv, const char *prefix)
+ 		usage(diff_cache_usage);
+ 
+ 	git_config(git_diff_basic_config, NULL); /* no "diff" UI options */
++
++	prepare_repo_settings(the_repository);
++	the_repository->settings.command_requires_full_index = 0;
++
+ 	repo_init_revisions(the_repository, &rev, prefix);
+ 	rev.abbrev = 0;
+ 	prefix = precompose_argv_prefix(argc, argv, prefix);
+diff --git a/builtin/fetch-pack.c b/builtin/fetch-pack.c
+index af329e8d..fe404d13 100644
+--- a/builtin/fetch-pack.c
++++ b/builtin/fetch-pack.c
+@@ -46,7 +46,7 @@ static void add_sought_entry(struct ref ***sought, int *nr, int *alloc,
+ int cmd_fetch_pack(int argc, const char **argv, const char *prefix UNUSED)
+ {
+ 	int i, ret;
+-	struct ref *ref = NULL;
++	struct ref *fetched_refs = NULL, *remote_refs = NULL;
+ 	const char *dest = NULL;
+ 	struct ref **sought = NULL;
+ 	int nr_sought = 0, alloc_sought = 0;
+@@ -228,19 +228,20 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix UNUSED)
+ 	version = discover_version(&reader);
+ 	switch (version) {
+ 	case protocol_v2:
+-		get_remote_refs(fd[1], &reader, &ref, 0, NULL, NULL,
++		get_remote_refs(fd[1], &reader, &remote_refs, 0, NULL, NULL,
+ 				args.stateless_rpc);
+ 		break;
+ 	case protocol_v1:
+ 	case protocol_v0:
+-		get_remote_heads(&reader, &ref, 0, NULL, &shallow);
++		get_remote_heads(&reader, &remote_refs, 0, NULL, &shallow);
+ 		break;
+ 	case protocol_unknown_version:
+ 		BUG("unknown protocol version");
+ 	}
+ 
+-	ref = fetch_pack(&args, fd, ref, sought, nr_sought,
++	fetched_refs = fetch_pack(&args, fd, remote_refs, sought, nr_sought,
+ 			 &shallow, pack_lockfiles_ptr, version);
++
+ 	if (pack_lockfiles.nr) {
+ 		int i;
+ 
+@@ -260,7 +261,7 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix UNUSED)
+ 	if (finish_connect(conn))
+ 		return 1;
+ 
+-	ret = !ref;
++	ret = !fetched_refs;
+ 
+ 	/*
+ 	 * If the heads to pull were given, we should have consumed
+@@ -270,11 +271,14 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix UNUSED)
+ 	 */
+ 	ret |= report_unmatched_refs(sought, nr_sought);
+ 
+-	while (ref) {
++	for (struct ref *ref = fetched_refs; ref; ref = ref->next)
+ 		printf("%s %s\n",
+ 		       oid_to_hex(&ref->old_oid), ref->name);
+-		ref = ref->next;
+-	}
+ 
++	for (size_t i = 0; i < nr_sought; i++)
++		free_one_ref(sought[i]);
++	free(sought);
++	free_refs(fetched_refs);
++	free_refs(remote_refs);
+ 	return ret;
+ }

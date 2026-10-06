@@ -1,0 +1,3991 @@
+From acb23ef5 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0494] Fix bug #67440: append_node of a DOMDocumentFragment does not reconcil
+
+---
+diff --git a/sapi/cli/tests/php_cli_server_013.phpt b/sapi/cli/tests/php_cli_server_013.phpt
+index 11e3fdf0..8042219a 100644
+--- a/sapi/cli/tests/php_cli_server_013.phpt
++++ b/sapi/cli/tests/php_cli_server_013.phpt
+@@ -58,60 +58,6 @@ HEAD /main/foo/bar HTTP/1.1
+ Host: {$host}
+ 
+ 
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-DELETE / HTTP/1.1
+-Host: {$host}
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-PUT / HTTP/1.1
+-Host: {$host}
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-PATCH / HTTP/1.1
+-Host: {$host}
+-
+-
+ HEADER
+ )) {
+     while (!feof($fp)) {
+@@ -148,34 +94,5 @@ Connection: close
+ Content-Type: text/html; charset=UTF-8
+ Content-Length: %d
+ 
+-
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
++<!doctype html><html><head><title>404 Not Found</title><style>AAA</style>
++</head><body><h1>Not Found</h1><p>The requested resource <code class="url">/main/foo/bar</code> was not found on this server.</p></body></html>
+diff --git a/sapi/cli/tests/php_cli_server_022.phpt b/sapi/cli/tests/php_cli_server_022.phpt
+deleted file mode 100644
+index 763a2036..00000000
+--- a/sapi/cli/tests/php_cli_server_022.phpt
++++ /dev/null
+@@ -1,45 +0,0 @@
+---TEST--
+-Check PHP file body is executed
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-include "php_cli_server.inc";
+-php_cli_server_start(<<<'PHP'
+-header('Bar-Foo: Foo');
+-echo "Hello world\n";
+-var_dump(true);
+-PHP
+-);
+-
+-$host = PHP_CLI_SERVER_HOSTNAME;
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-GET / HTTP/1.1
+-Host: {$host}
+-Foo-Bar: Bar
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        echo fgets($fp);
+-    }
+-}
+-
+-fclose($fp);
+-?>
+---EXPECTF--
+-HTTP/1.1 200 OK
+-Host: %s
+-Date: %s
+-Connection: close
+-X-Powered-By: %s
+-Bar-Foo: Foo
+-Content-type: text/html; charset=UTF-8
+-
+-Hello world
+-bool(true)
+diff --git a/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt b/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
+index 69ffb52d..09030c90 100644
+--- a/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
++++ b/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
+@@ -55,13 +55,13 @@ if ($is_child) {
+ 
+     $status = proc_get_status($proc);
+     if ($status["running"]) {
+-        echo "Child $child_pid didn't exit after {$max}us\n";
++        echo "Child $child_pid didn't exit after ${max}us\n";
+ 		foreach ($pipes as $pipe) {
+ 			fclose($pipe);
+ 		}
+ 		proc_terminate($proc);
+     } else {
+-        echo "Child $child_pid exit with status ", $status["exitcode"], " after {$total}us\n";
++        echo "Child $child_pid exit with status ", $status["exitcode"], " after ${total}us\n";
+     }
+ }
+ 
+diff --git a/sapi/embed/php_embed.c b/sapi/embed/php_embed.c
+index 4b94bd98..1679246a 100644
+--- a/sapi/embed/php_embed.c
++++ b/sapi/embed/php_embed.c
+@@ -119,7 +119,10 @@ static void php_embed_register_variables(zval *track_vars_array)
+ /* Module initialization (MINIT) */
+ static int php_embed_startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, NULL);
++	if (php_module_startup(sapi_module, NULL, 0) == FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ EMBED_SAPI_API sapi_module_struct php_embed_module = {
+diff --git a/sapi/fpm/config.m4 b/sapi/fpm/config.m4
+index da09511a..09c3ae08 100644
+--- a/sapi/fpm/config.m4
++++ b/sapi/fpm/config.m4
+@@ -25,30 +25,6 @@ AC_DEFUN([AC_FPM_PRCTL],
+   ])
+ ])
+ 
+-AC_DEFUN([AC_FPM_PROCCTL],
+-[
+-  AC_MSG_CHECKING([for procctl])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/procctl.h>]], [[procctl(0, 0, 0, 0);]])], [
+-    AC_DEFINE([HAVE_PROCCTL], 1, [do we have procctl?])
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-])
+-
+-AC_DEFUN([AC_FPM_SETPFLAGS],
+-[
+-  AC_MSG_CHECKING([for setpflags])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <priv.h>]], [[setpflags(0, 0);]])], [
+-    AC_DEFINE([HAVE_SETPFLAGS], 1, [do we have setpflags?])
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-])
+-
+ AC_DEFUN([AC_FPM_CLOCK],
+ [
+   have_clock_gettime=no
+@@ -343,19 +319,6 @@ AC_DEFUN([AC_FPM_LQ],
+     AC_DEFINE([HAVE_LQ_TCP_INFO], 1, [do we have TCP_INFO?])
+   fi
+ 
+-  AC_MSG_CHECKING([for TCP_CONNECTION_INFO])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <netinet/tcp.h>]], [[struct tcp_connection_info ti; int x = TCP_CONNECTION_INFO;]])], [
+-    have_lq=tcp_connection_info
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-
+-  if test "$have_lq" = "tcp_connection_info"; then
+-    AC_DEFINE([HAVE_LQ_TCP_CONNECTION_INFO], 1, [do we have TCP_CONNECTION_INFO?])
+-  fi
+-
+   if test "$have_lq" = "no" ; then
+     AC_MSG_CHECKING([for SO_LISTENQLEN])
+ 
+@@ -531,8 +494,6 @@ if test "$PHP_FPM" != "no"; then
+ 
+   AC_FPM_STDLIBS
+   AC_FPM_PRCTL
+-  AC_FPM_PROCCTL
+-  AC_FPM_SETPFLAGS
+   AC_FPM_CLOCK
+   AC_FPM_TRACE
+   AC_FPM_BUILTIN_ATOMIC
+@@ -576,12 +537,6 @@ if test "$PHP_FPM" != "no"; then
+     [no],
+     [no])
+ 
+-  PHP_ARG_WITH([fpm-selinux],,
+-    [AS_HELP_STRING([--with-fpm-selinux],
+-      [Support SELinux policy library])],
+-    [no],
+-    [no])
+-
+   if test "$PHP_FPM_SYSTEMD" != "no" ; then
+     PKG_CHECK_MODULES([SYSTEMD], [libsystemd >= 209])
+ 
+@@ -663,14 +618,6 @@ if test "$PHP_FPM" != "no"; then
+     ])
+   fi
+ 
+-  if test "x$PHP_FPM_SELINUX" != "xno" ; then
+-    AC_CHECK_HEADERS([selinux/selinux.h])
+-    AC_CHECK_LIB(selinux, security_setenforce, [
+-      PHP_ADD_LIBRARY(selinux)
+-      AC_DEFINE(HAVE_SELINUX, 1, [ SElinux available ])
+-    ],[])
+-  fi
+-
+   PHP_SUBST_OLD(php_fpm_systemd)
+   AC_DEFINE_UNQUOTED(PHP_FPM_SYSTEMD, "$php_fpm_systemd", [fpm systemd service type])
+ 
+diff --git a/sapi/fpm/fpm/fpm_arrays.h b/sapi/fpm/fpm/fpm_arrays.h
+index 9cdd1e95..82c7cbc0 100644
+--- a/sapi/fpm/fpm/fpm_arrays.h
++++ b/sapi/fpm/fpm/fpm_arrays.h
+@@ -6,8 +6,6 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-#include "php.h"
+-
+ struct fpm_array_s {
+ 	void *data;
+ 	size_t sz;
+@@ -86,7 +84,7 @@ static inline void *fpm_array_push(struct fpm_array_s *a) /* {{{ */
+ 
+ 	if (a->used == a->allocated) {
+ 		size_t new_allocated = a->allocated ? a->allocated * 2 : 20;
+-		void *new_ptr = safe_perealloc(a->data, a->sz, new_allocated, 0, true);
++		void *new_ptr = realloc(a->data, a->sz * new_allocated);
+ 
+ 		if (!new_ptr) {
+ 			return 0;
+diff --git a/sapi/fpm/fpm/fpm_atomic.h b/sapi/fpm/fpm/fpm_atomic.h
+index e3926e70..0584cef5 100644
+--- a/sapi/fpm/fpm/fpm_atomic.h
++++ b/sapi/fpm/fpm/fpm_atomic.h
+@@ -133,7 +133,7 @@ static inline atomic_uint_t atomic_cmp_set(atomic_t *lock, atomic_uint_t old, at
+ 
+ #else
+ 
+-#error Unsupported processor. Please open a bug report (https://github.com/php/php-src/issues).
++#error Unsupported processor. Please open a bug report (bugs.php.net).
+ 
+ #endif
+ 
+diff --git a/sapi/fpm/fpm/fpm_conf.c b/sapi/fpm/fpm/fpm_conf.c
+index ef9b35a9..cc7102ea 100644
+--- a/sapi/fpm/fpm/fpm_conf.c
++++ b/sapi/fpm/fpm/fpm_conf.c
+@@ -34,7 +34,6 @@
+ #include "fpm_status.h"
+ #include "fpm_log.h"
+ #include "fpm_events.h"
+-#include "fpm_unix.h"
+ #include "zlog.h"
+ #ifdef HAVE_SYSTEMD
+ #include "fpm_systemd.h"
+@@ -126,9 +125,6 @@ static struct ini_value_parser_s ini_fpm_pool_options[] = {
+ 	{ "listen.group",              &fpm_conf_set_string,      WPO(listen_group) },
+ 	{ "listen.mode",               &fpm_conf_set_string,      WPO(listen_mode) },
+ 	{ "listen.allowed_clients",    &fpm_conf_set_string,      WPO(listen_allowed_clients) },
+-#ifdef SO_SETFIB
+-	{ "listen.setfib",             &fpm_conf_set_integer,     WPO(listen_setfib) },
+-#endif
+ 	{ "process.priority",          &fpm_conf_set_integer,     WPO(process_priority) },
+ 	{ "process.dumpable",          &fpm_conf_set_boolean,     WPO(process_dumpable) },
+ 	{ "pm",                        &fpm_conf_set_pm,          WPO(pm) },
+@@ -561,13 +557,11 @@ static char *fpm_conf_set_array(zval *key, zval *value, void **config, int conve
+ 	}
+ 
+ 	memset(kv, 0, sizeof(*kv));
+-	if (key) {
+-		kv->key = strdup(Z_STRVAL_P(key));
++	kv->key = strdup(Z_STRVAL_P(key));
+ 
+-		if (!kv->key) {
+-			free(kv);
+-			return "fpm_conf_set_array: strdup(key) failed";
+-		}
++	if (!kv->key) {
++		free(kv);
++		return "fpm_conf_set_array: strdup(key) failed";
+ 	}
+ 
+ 	if (convert_to_bool) {
+@@ -624,9 +618,6 @@ static void *fpm_worker_pool_config_alloc(void)
+ 	wp->config->process_dumpable = 0;
+ 	wp->config->clear_env = 1;
+ 	wp->config->decorate_workers_output = 1;
+-#ifdef SO_SETFIB
+-	wp->config->listen_setfib = -1;
+-#endif
+ 
+ 	if (!fpm_worker_all_pools) {
+ 		fpm_worker_all_pools = wp;
+@@ -671,11 +662,6 @@ int fpm_worker_pool_config_free(struct fpm_worker_pool_config_s *wpc) /* {{{ */
+ 	free(wpc->apparmor_hat);
+ #endif
+ 
+-	for (kv = wpc->access_suppress_paths; kv; kv = kv_next) {
+-		kv_next = kv->next;
+-		free(kv->value);
+-		free(kv);
+-	}
+ 	for (kv = wpc->php_values; kv; kv = kv_next) {
+ 		kv_next = kv->next;
+ 		free(kv->key);
+@@ -1511,24 +1497,11 @@ static void fpm_conf_ini_parser_array(zval *name, zval *key, zval *value, void *
+ 	char *err = NULL;
+ 	void *config;
+ 
+-	if (zend_string_equals_literal(Z_STR_P(name), "access.suppress_path")) {
+-		if (!(*Z_STRVAL_P(key) == '\0')) {
+-			zlog(ZLOG_ERROR, "[%s:%d] Keys provided to field 'access.suppress_path' are ignored", ini_filename, ini_lineno);
+-			*error = 1;
+-		}
+-		if (!(*Z_STRVAL_P(value)) || (*Z_STRVAL_P(value) != '/')) {
+-			zlog(ZLOG_ERROR, "[%s:%d] Values provided to field 'access.suppress_path' must begin with '/'", ini_filename, ini_lineno);
+-			*error = 1;
+-		}
+-		if (*error) {
+-			return;
+-		}
+-	} else if (!*Z_STRVAL_P(key)) {
+-		zlog(ZLOG_ERROR, "[%s:%d] You must provide a key for field '%s'", ini_filename, ini_lineno, Z_STRVAL_P(name));
++	if (!Z_STRVAL_P(key) || !Z_STRVAL_P(value) || !*Z_STRVAL_P(key)) {
++		zlog(ZLOG_ERROR, "[%s:%d] Misspelled  array ?", ini_filename, ini_lineno);
+ 		*error = 1;
+ 		return;
+ 	}
+-
+ 	if (!current_wp || !current_wp->config) {
+ 		zlog(ZLOG_ERROR, "[%s:%d] Array are not allowed in the global section", ini_filename, ini_lineno);
+ 		*error = 1;
+@@ -1560,10 +1533,6 @@ static void fpm_conf_ini_parser_array(zval *name, zval *key, zval *value, void *
+ 		config = (char *)current_wp->config + WPO(php_admin_values);
+ 		err = fpm_conf_set_array(key, value, &config, 1);
+ 
+-	} else if (zend_string_equals_literal(Z_STR_P(name), "access.suppress_path")) {
+-		config = (char *)current_wp->config + WPO(access_suppress_paths);
+-		err = fpm_conf_set_array(NULL, value, &config, 0);
+-
+ 	} else {
+ 		zlog(ZLOG_ERROR, "[%s:%d] unknown directive '%s'", ini_filename, ini_lineno, Z_STRVAL_P(name));
+ 		*error = 1;
+@@ -1749,9 +1718,6 @@ static void fpm_conf_dump(void)
+ 		zlog(ZLOG_NOTICE, "\tlisten.group = %s",               STR2STR(wp->config->listen_group));
+ 		zlog(ZLOG_NOTICE, "\tlisten.mode = %s",                STR2STR(wp->config->listen_mode));
+ 		zlog(ZLOG_NOTICE, "\tlisten.allowed_clients = %s",     STR2STR(wp->config->listen_allowed_clients));
+-#ifdef SO_SETFIB
+-		zlog(ZLOG_NOTICE, "\tlisten.setfib = %d",              wp->config->listen_setfib);
+-#endif
+ 		if (wp->config->process_priority == 64) {
+ 			zlog(ZLOG_NOTICE, "\tprocess.priority = undefined");
+ 		} else {
+@@ -1772,9 +1738,6 @@ static void fpm_conf_dump(void)
+ 		zlog(ZLOG_NOTICE, "\tping.response = %s",              STR2STR(wp->config->ping_response));
+ 		zlog(ZLOG_NOTICE, "\taccess.log = %s",                 STR2STR(wp->config->access_log));
+ 		zlog(ZLOG_NOTICE, "\taccess.format = %s",              STR2STR(wp->config->access_format));
+-		for (kv = wp->config->access_suppress_paths; kv; kv = kv->next) {
+-			zlog(ZLOG_NOTICE, "\taccess.suppress_path[] = %s", kv->value);
+-		}
+ 		zlog(ZLOG_NOTICE, "\tslowlog = %s",                    STR2STR(wp->config->slowlog));
+ 		zlog(ZLOG_NOTICE, "\trequest_slowlog_timeout = %ds",   wp->config->request_slowlog_timeout);
+ 		zlog(ZLOG_NOTICE, "\trequest_slowlog_trace_depth = %d", wp->config->request_slowlog_trace_depth);
+@@ -1855,12 +1818,6 @@ int fpm_conf_init_main(int test_conf, int force_daemon) /* {{{ */
+ 	}
+ 
+ 	if (test_conf) {
+-		for (struct fpm_worker_pool_s *wp = fpm_worker_all_pools; wp; wp = wp->next) {
+-			if (!fpm_unix_test_config(wp)) {
+-				return -1;
+-			}
+-		}
+-
+ 		if (test_conf > 1) {
+ 			fpm_conf_dump();
+ 		}
+diff --git a/sapi/fpm/fpm/fpm_conf.h b/sapi/fpm/fpm/fpm_conf.h
+index 5b354a9b..4c0addc2 100644
+--- a/sapi/fpm/fpm/fpm_conf.h
++++ b/sapi/fpm/fpm/fpm_conf.h
+@@ -79,7 +79,6 @@ struct fpm_worker_pool_config_s {
+ 	char *ping_response;
+ 	char *access_log;
+ 	char *access_format;
+-	struct key_value_s *access_suppress_paths;
+ 	char *slowlog;
+ 	int request_slowlog_timeout;
+ 	int request_slowlog_trace_depth;
+@@ -104,9 +103,6 @@ struct fpm_worker_pool_config_s {
+ 	char *listen_acl_users;
+ 	char *listen_acl_groups;
+ #endif
+-#ifdef SO_SETFIB
+-	int listen_setfib;
+-#endif
+ };
+ 
+ struct ini_value_parser_s {
+diff --git a/sapi/fpm/fpm/fpm_config.h b/sapi/fpm/fpm/fpm_config.h
+index d34f686a..548202fe 100644
+--- a/sapi/fpm/fpm/fpm_config.h
++++ b/sapi/fpm/fpm/fpm_config.h
+@@ -70,7 +70,7 @@
+ # define HAVE_FPM_TRACE 0
+ #endif
+ 
+-#if defined(HAVE_LQ_TCP_INFO) || defined(HAVE_LQ_TCP_CONNECTION_INFO) || defined(HAVE_LQ_SO_LISTENQ)
++#if defined(HAVE_LQ_TCP_INFO) || defined(HAVE_LQ_SO_LISTENQ)
+ # define HAVE_FPM_LQ 1
+ #else
+ # define HAVE_FPM_LQ 0
+diff --git a/sapi/fpm/fpm/fpm_log.c b/sapi/fpm/fpm/fpm_log.c
+index bb66c081..d90d98b5 100644
+--- a/sapi/fpm/fpm/fpm_log.c
++++ b/sapi/fpm/fpm/fpm_log.c
+@@ -27,9 +27,6 @@
+ 
+ static char *fpm_log_format = NULL;
+ static int fpm_log_fd = -1;
+-static struct key_value_s *fpm_access_suppress_paths = NULL;
+-
+-static int fpm_access_log_suppress(struct fpm_scoreboard_proc_s *proc);
+ 
+ int fpm_log_open(int reopen) /* {{{ */
+ {
+@@ -82,17 +79,6 @@ int fpm_log_init_child(struct fpm_worker_pool_s *wp)  /* {{{ */
+ 		}
+ 	}
+ 
+-	for (struct key_value_s *kv = wp->config->access_suppress_paths; kv; kv = kv->next) {
+-		struct key_value_s *kvcopy = calloc(1, sizeof(*kvcopy));
+-		if (kvcopy == NULL) {
+-			zlog(ZLOG_ERROR, "unable to allocate memory while opening the access log");
+-			return -1;
+-		}
+-		kvcopy->value = strdup(kv->value);
+-		kvcopy->next = fpm_access_suppress_paths;
+-		fpm_access_suppress_paths = kvcopy;
+-	}
+-
+ 	if (fpm_log_fd == -1) {
+ 		fpm_log_fd = wp->log_fd;
+ 	}
+@@ -150,10 +136,6 @@ int fpm_log_write(char *log_format) /* {{{ */
+ 		}
+ 		proc = *proc_p;
+ 		fpm_scoreboard_proc_release(proc_p);
+-
+-		if (UNEXPECTED(fpm_access_log_suppress(&proc))) {
+-			return -1;
+-		}
+ 	}
+ 
+ 	token = 0;
+@@ -492,38 +474,3 @@ int fpm_log_write(char *log_format) /* {{{ */
+ 	return 0;
+ }
+ /* }}} */
+-
+-static int fpm_access_log_suppress(struct fpm_scoreboard_proc_s *proc)
+-{
+-	// Never suppress when query string is passed
+-	if (proc->query_string[0] != '\0') {
+-		return 0;
+-	}
+-
+-	// Never suppress if request method is not GET or HEAD
+-	if (
+-		strcmp(proc->request_method, "GET") != 0
+-		&& strcmp(proc->request_method, "HEAD") != 0
+-	) {
+-		return 0;
+-	}
+-
+-	// Never suppress when response code does not indicate success
+-	if (SG(sapi_headers).http_response_code < 200 || SG(sapi_headers).http_response_code > 299) {
+-		return 0;
+-	}
+-
+-	// Never suppress when a body has been sent
+-	if (SG(request_info).content_length > 0) {
+-		return 0;
+-	}
+-
+-	// Suppress when request URI is an exact match for one of our entries
+-	for (struct key_value_s *kv = fpm_access_suppress_paths; kv; kv = kv->next) {
+-		if (kv->value && strcmp(kv->value, proc->request_uri) == 0) {
+-			return 1;
+-		}
+-	}
+-
+-	return 0;
+-}
+\ No newline at end of file
+diff --git a/sapi/fpm/fpm/fpm_main.c b/sapi/fpm/fpm/fpm_main.c
+index b3ae2f69..b91bb8d0 100644
+--- a/sapi/fpm/fpm/fpm_main.c
++++ b/sapi/fpm/fpm/fpm_main.c
+@@ -22,7 +22,6 @@
+ #include "php.h"
+ #include "php_globals.h"
+ #include "php_variables.h"
+-#include "php_ini_builder.h"
+ #include "zend_modules.h"
+ #include "php.h"
+ #include "zend_ini_scanner.h"
+@@ -149,7 +148,6 @@ typedef struct _php_cgi_globals_struct {
+ 	bool force_redirect;
+ 	bool discard_path;
+ 	bool fcgi_logging;
+-	bool fcgi_logging_request_started;
+ 	char *redirect_status_env;
+ 	HashTable user_config_cache;
+ 	char *error_header;
+@@ -202,7 +200,7 @@ static void print_modules(void) /* {{{ */
+ 	zend_hash_init(&sorted_registry, 50, NULL, NULL, 1);
+ 	zend_hash_copy(&sorted_registry, &module_registry, NULL);
+ 	zend_hash_sort(&sorted_registry, module_name_cmp, 0);
+-	ZEND_HASH_MAP_FOREACH_PTR(&sorted_registry, module) {
++	ZEND_HASH_FOREACH_PTR(&sorted_registry, module) {
+ 		php_printf("%s\n", module->name);
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_hash_destroy(&sorted_registry);
+@@ -599,16 +597,11 @@ void sapi_cgi_log_fastcgi(int level, char *message, size_t len)
+ 	 * - logging is enabled (fastcgi.logging in php.ini)
+ 	 * - we are currently dealing with a request
+ 	 * - the message is not empty
++	 * - the fcgi_write did not fail
+ 	 */
+-	if (CGIG(fcgi_logging) && request && message && len > 0) {
+-		if (CGIG(fcgi_logging_request_started)) {
+-			fcgi_write(request, FCGI_STDERR, "; ", 2);
+-		} else {
+-			CGIG(fcgi_logging_request_started) = true;
+-		}
+-		if (fcgi_write(request, FCGI_STDERR, message, len) < 0) {
+-			php_handle_aborted_connection();
+-		}
++	if (CGIG(fcgi_logging) && request && message && len > 0
++			&& fcgi_write(request, FCGI_STDERR, message, len) < 0) {
++		php_handle_aborted_connection();
+ 	}
+ }
+ /* }}} */
+@@ -773,7 +766,10 @@ static int sapi_cgi_deactivate(void) /* {{{ */
+ 
+ static int php_cgi_startup(sapi_module_struct *sapi_module) /* {{{ */
+ {
+-	return php_module_startup(sapi_module, &cgi_module_entry);
++	if (php_module_startup(sapi_module, &cgi_module_entry, 1) == FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ /* }}} */
+ 
+@@ -1429,7 +1425,6 @@ static void php_cgi_globals_ctor(php_cgi_globals_struct *php_cgi_globals)
+ 	php_cgi_globals->fix_pathinfo = 1;
+ 	php_cgi_globals->discard_path = 0;
+ 	php_cgi_globals->fcgi_logging = 1;
+-	php_cgi_globals->fcgi_logging_request_started = false;
+ 	zend_hash_init(&php_cgi_globals->user_config_cache, 0, NULL, user_config_cache_entry_dtor, 1);
+ 	php_cgi_globals->error_header = NULL;
+ 	php_cgi_globals->fpm_config = NULL;
+@@ -1542,7 +1537,7 @@ int main(int argc, char *argv[])
+ 	/* temporary locals */
+ 	int orig_optind = php_optind;
+ 	char *orig_optarg = php_optarg;
+-	struct php_ini_builder ini_builder;
++	int ini_entries_len = 0;
+ 	/* end of temporary locals */
+ 
+ 	int max_requests = 0;
+@@ -1591,8 +1586,6 @@ int main(int argc, char *argv[])
+ 
+ 	fcgi_init();
+ 
+-	php_ini_builder_init(&ini_builder);
+-
+ 	while ((c = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
+ 		switch (c) {
+ 			case 'c':
+@@ -1606,12 +1599,37 @@ int main(int argc, char *argv[])
+ 				cgi_sapi_module.php_ini_ignore = 1;
+ 				break;
+ 
+-			case 'd':
++			case 'd': {
+ 				/* define ini entries on command line */
+-				php_ini_builder_define(&ini_builder, php_optarg);
+-				/* main can terminate without finishing or deiniting the ini builder, call finish each iteration to avoid leaking the buffer */
+-				cgi_sapi_module.ini_entries = php_ini_builder_finish(&ini_builder);
++				int len = strlen(php_optarg);
++				char *val;
++
++				if ((val = strchr(php_optarg, '='))) {
++					val++;
++					if (!isalnum(*val) && *val != '"' && *val != '\'' && *val != '\0') {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\"\"\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, (val - php_optarg));
++						ini_entries_len += (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"", 1);
++						ini_entries_len++;
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, val, len - (val - php_optarg));
++						ini_entries_len += len - (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"\n\0", sizeof("\"\n\0"));
++						ini_entries_len += sizeof("\n\0\"") - 2;
++					} else {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "\n\0", sizeof("\n\0"));
++						ini_entries_len += len + sizeof("\n\0") - 2;
++					}
++				} else {
++					cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("=1\n\0"));
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "=1\n\0", sizeof("=1\n\0"));
++					ini_entries_len += len + sizeof("=1\n\0") - 2;
++				}
+ 				break;
++			}
+ 
+ 			case 'y':
+ 				fpm_config = php_optarg;
+@@ -1704,8 +1722,6 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
+ 
+-	cgi_sapi_module.ini_entries = php_ini_builder_finish(&ini_builder);
+-
+ 	if (php_information) {
+ 		cgi_sapi_module.phpinfo_as_text = 1;
+ 		cgi_sapi_module.startup(&cgi_sapi_module);
+@@ -1849,7 +1865,6 @@ consult the installation file that came with this distribution, or visit \n\
+ 			char *primary_script = NULL;
+ 			request_body_fd = -1;
+ 			SG(server_context) = (void *) request;
+-			CGIG(fcgi_logging_request_started) = false;
+ 			init_request_info();
+ 
+ 			fpm_request_info();
+@@ -1971,7 +1986,9 @@ fastcgi_request_done:
+ 		if (cgi_sapi_module.php_ini_path_override) {
+ 			free(cgi_sapi_module.php_ini_path_override);
+ 		}
+-		php_ini_builder_deinit(&ini_builder);
++		if (cgi_sapi_module.ini_entries) {
++			free(cgi_sapi_module.ini_entries);
++		}
+ 	} zend_catch {
+ 		exit_status = FPM_EXIT_SOFTWARE;
+ 	} zend_end_try();
+diff --git a/sapi/fpm/fpm/fpm_request.c b/sapi/fpm/fpm/fpm_request.c
+index 0eb75884..8d3e2b2d 100644
+--- a/sapi/fpm/fpm/fpm_request.c
++++ b/sapi/fpm/fpm/fpm_request.c
+@@ -225,7 +225,7 @@ void fpm_request_check_timed_out(struct fpm_child_s *child, struct timeval *now,
+ 
+ 	proc_p = fpm_scoreboard_proc_acquire(child->wp->scoreboard, child->scoreboard_i, 1);
+ 	if (!proc_p) {
+-		zlog(ZLOG_NOTICE, "failed to acquire scoreboard");
++		zlog(ZLOG_WARNING, "failed to acquire scoreboard");
+ 		return;
+ 	}
+ 
+diff --git a/sapi/fpm/fpm/fpm_sockets.c b/sapi/fpm/fpm/fpm_sockets.c
+index 66488b9b..453c8400 100644
+--- a/sapi/fpm/fpm/fpm_sockets.c
++++ b/sapi/fpm/fpm/fpm_sockets.c
+@@ -39,10 +39,6 @@ static struct fpm_array_s sockets_list;
+ 
+ enum { FPM_GET_USE_SOCKET = 1, FPM_STORE_SOCKET = 2, FPM_STORE_USE_SOCKET = 3 };
+ 
+-#ifdef SO_SETFIB
+-static int routemax = -1;
+-#endif
+-
+ static inline void fpm_sockets_get_env_name(char *envname, unsigned idx) /* {{{ */
+ {
+ 	if (!idx) {
+@@ -254,20 +250,6 @@ static int fpm_sockets_new_listening_socket(struct fpm_worker_pool_s *wp, struct
+ 		return -1;
+ 	}
+ 
+-#ifdef SO_SETFIB
+-	if (-1 < wp->config->listen_setfib) {
+-		if (routemax < wp->config->listen_setfib) {
+-			zlog(ZLOG_ERROR, "Invalid routing table id %d, max is %d", wp->config->listen_setfib, routemax);
+-			close(sock);
+-			return -1;
+-		}
+-
+-		if (0 > setsockopt(sock, SOL_SOCKET, SO_SETFIB, &wp->config->listen_setfib, sizeof(wp->config->listen_setfib))) {
+-			zlog(ZLOG_WARNING, "failed to change socket SO_SETFIB attribute");
+-		}
+-	}
+-#endif
+-
+ 	return sock;
+ }
+ /* }}} */
+@@ -360,7 +342,7 @@ static int fpm_socket_af_inet_listening_socket(struct fpm_worker_pool_s *wp) /*
+ 		port_str = dup_address;
+ 	}
+ 
+-	if (port < 1 || port > 65535) {
++	if (port == 0) {
+ 		zlog(ZLOG_ERROR, "invalid port value '%s'", port_str);
+ 		free(dup_address);
+ 		return -1;
+@@ -404,20 +386,6 @@ static int fpm_socket_af_unix_listening_socket(struct fpm_worker_pool_s *wp) /*
+ }
+ /* }}} */
+ 
+-#ifdef SO_SETFIB
+-static zend_result fpm_socket_setfib_init(void)
+-{
+-	/* potentially up to 65536 but needs to check the actual cap beforehand */
+-	size_t len = sizeof(routemax);
+-	if (sysctlbyname("net.fibs", &routemax, &len, NULL, 0) < 0) {
+-		zlog(ZLOG_ERROR, "failed to get max routing table");
+-		return FAILURE;
+-	}
+-
+-	return SUCCESS;
+-}
+-#endif
+-
+ int fpm_sockets_init_main(void)
+ {
+ 	unsigned i, lq_len;
+@@ -431,12 +399,6 @@ int fpm_sockets_init_main(void)
+ 		return -1;
+ 	}
+ 
+-#ifdef SO_SETFIB
+-	if (fpm_socket_setfib_init() == FAILURE) {
+-		return -1;
+-	}
+-#endif
+-
+ 	/* import inherited sockets */
+ 	for (i = 0; i < FPM_ENV_SOCKET_SET_MAX; i++) {
+ 		fpm_sockets_get_env_name(envname, i);
+@@ -569,30 +531,6 @@ int fpm_socket_get_listening_queue(int sock, unsigned *cur_lq, unsigned *max_lq)
+ 	return 0;
+ }
+ 
+-#elif defined(HAVE_LQ_TCP_CONNECTION_INFO)
+-
+-#include <netinet/tcp.h>
+-
+-int fpm_socket_get_listening_queue(int sock, unsigned *cur_lq, unsigned *max_lq)
+-{
+-	struct tcp_connection_info info;
+-	socklen_t len = sizeof(info);
+-
+-	if (0 > getsockopt(sock, IPPROTO_TCP, TCP_CONNECTION_INFO, &info, &len)) {
+-		zlog(ZLOG_SYSERROR, "failed to retrieve TCP_CONNECTION_INFO for socket");
+-		return -1;
+-	}
+-
+-	if (cur_lq) {
+-		*cur_lq = info.tcpi_tfo_syn_data_acked;
+-	}
+-
+-	if (max_lq) {
+-		*max_lq = 0;
+-	}
+-
+-	return 0;
+-}
+ #endif
+ 
+ #ifdef HAVE_LQ_SO_LISTENQ
+diff --git a/sapi/fpm/fpm/fpm_sockets.h b/sapi/fpm/fpm/fpm_sockets.h
+index 94d903ca..1e31b84d 100644
+--- a/sapi/fpm/fpm/fpm_sockets.h
++++ b/sapi/fpm/fpm/fpm_sockets.h
+@@ -5,9 +5,6 @@
+ 
+ #include <sys/types.h>
+ #include <sys/socket.h>
+-#if defined(__FreeBSD__)
+-#include <sys/sysctl.h>
+-#endif
+ #include <sys/un.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+@@ -15,9 +12,9 @@
+ #include "fpm_worker_pool.h"
+ 
+ /*
+-  On Linux, FreeBSD, OpenBSD and macOS, backlog negative values are truncated to SOMAXCONN
++  On FreeBSD and OpenBSD, backlog negative values are truncated to SOMAXCONN
+ */
+-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__linux__) || defined(__APPLE__)
++#if defined(__FreeBSD__) || defined(__OpenBSD__)
+ #define FPM_BACKLOG_DEFAULT -1
+ #else
+ #define FPM_BACKLOG_DEFAULT 511
+diff --git a/sapi/fpm/fpm/fpm_stdio.c b/sapi/fpm/fpm/fpm_stdio.c
+index c796f171..8f71e8cb 100644
+--- a/sapi/fpm/fpm/fpm_stdio.c
++++ b/sapi/fpm/fpm/fpm_stdio.c
+@@ -269,7 +269,7 @@ stdio_read:
+ 			zlog_stream_finish(log_stream);
+ 		}
+ 		if (read_fail < 0) {
+-			zlog(ZLOG_SYSERROR, "unable to read what child %d said into %s", (int) child->pid, is_stdout ? "stdout" : "stderr");
++			zlog(ZLOG_SYSERROR, "unable to read what child say");
+ 		}
+ 
+ 		fpm_event_del(event);
+diff --git a/sapi/fpm/fpm/fpm_trace_pread.c b/sapi/fpm/fpm/fpm_trace_pread.c
+index 8bf42234..22b476f7 100644
+--- a/sapi/fpm/fpm/fpm_trace_pread.c
++++ b/sapi/fpm/fpm/fpm_trace_pread.c
+@@ -1,8 +1,6 @@
+ 	/* (c) 2007,2008 Andrei Nigmatulin */
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #define _FILE_OFFSET_BITS 64
+ 
+ #include "fpm_config.h"
+diff --git a/sapi/fpm/fpm/fpm_unix.c b/sapi/fpm/fpm/fpm_unix.c
+index d10a6f32..ed5b6629 100644
+--- a/sapi/fpm/fpm/fpm_unix.c
++++ b/sapi/fpm/fpm/fpm_unix.c
+@@ -15,14 +15,6 @@
+ #include <sys/prctl.h>
+ #endif
+ 
+-#ifdef HAVE_PROCCTL
+-#include <sys/procctl.h>
+-#endif
+-
+-#ifdef HAVE_SETPFLAGS
+-#include <priv.h>
+-#endif
+-
+ #ifdef HAVE_APPARMOR
+ #include <sys/apparmor.h>
+ #endif
+@@ -31,10 +23,6 @@
+ #include <sys/acl.h>
+ #endif
+ 
+-#ifdef HAVE_SELINUX
+-#include <selinux/selinux.h>
+-#endif
+-
+ #include "fpm.h"
+ #include "fpm_conf.h"
+ #include "fpm_cleanup.h"
+@@ -46,55 +34,6 @@
+ 
+ size_t fpm_pagesize;
+ 
+-
+-static inline bool fpm_unix_is_id(const char* name)
+-{
+-	return strlen(name) == strspn(name, "0123456789");
+-}
+-
+-static struct passwd *fpm_unix_get_passwd(struct fpm_worker_pool_s *wp, const char *name, int flags)
+-{
+-	struct passwd *pwd = getpwnam(name);
+-	if (!pwd) {
+-		zlog(flags, "[pool %s] cannot get uid for user '%s'", wp->config->name, name);
+-		return NULL;
+-	}
+-
+-	return pwd;
+-}
+-
+-static inline bool fpm_unix_check_passwd(struct fpm_worker_pool_s *wp, const char *name, int flags)
+-{
+-	return !name || fpm_unix_is_id(name) || fpm_unix_get_passwd(wp, name, flags);
+-}
+-
+-static struct group *fpm_unix_get_group(struct fpm_worker_pool_s *wp, const char *name, int flags)
+-{
+-	struct group *group = getgrnam(name);
+-	if (!group) {
+-		zlog(flags, "[pool %s] cannot get gid for group '%s'", wp->config->name, name);
+-		return NULL;
+-	}
+-
+-	return group;
+-}
+-
+-static inline bool fpm_unix_check_group(struct fpm_worker_pool_s *wp, const char *name, int flags)
+-{
+-	return !name || fpm_unix_is_id(name) || fpm_unix_get_group(wp, name, flags);
+-}
+-
+-bool fpm_unix_test_config(struct fpm_worker_pool_s *wp)
+-{
+-	struct fpm_worker_pool_config_s *config = wp->config;
+-	return (
+-		fpm_unix_check_passwd(wp, config->user, ZLOG_ERROR) &&
+-		fpm_unix_check_group(wp, config->group, ZLOG_ERROR) &&
+-		fpm_unix_check_passwd(wp, config->listen_owner, ZLOG_SYSERROR) &&
+-		fpm_unix_check_group(wp, config->listen_group, ZLOG_SYSERROR)
+-	);
+-}
+-
+ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp) /* {{{ */
+ {
+ 	struct fpm_worker_pool_config_s *c = wp->config;
+@@ -154,10 +93,11 @@ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp) /* {{{ */
+ 				if ((end = strchr(p, ','))) {
+ 					*end++ = 0;
+ 				}
+-				pwd = fpm_unix_get_passwd(wp, p, ZLOG_SYSERROR);
++				pwd = getpwnam(p);
+ 				if (pwd) {
+ 					zlog(ZLOG_DEBUG, "[pool %s] user '%s' have uid=%d", wp->config->name, p, pwd->pw_uid);
+ 				} else {
++					zlog(ZLOG_SYSERROR, "[pool %s] cannot get uid for user '%s'", wp->config->name, p);
+ 					acl_free(acl);
+ 					efree(tmp);
+ 					return -1;
+@@ -186,10 +126,11 @@ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp) /* {{{ */
+ 				if ((end = strchr(p, ','))) {
+ 					*end++ = 0;
+ 				}
+-				grp = fpm_unix_get_group(wp, p, ZLOG_SYSERROR);
++				grp = getgrnam(p);
+ 				if (grp) {
+ 					zlog(ZLOG_DEBUG, "[pool %s] group '%s' have gid=%d", wp->config->name, p, grp->gr_gid);
+ 				} else {
++					zlog(ZLOG_SYSERROR, "[pool %s] cannot get gid for group '%s'", wp->config->name, p);
+ 					acl_free(acl);
+ 					efree(tmp);
+ 					return -1;
+@@ -222,13 +163,14 @@ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp) /* {{{ */
+ #endif
+ 
+ 	if (c->listen_owner && *c->listen_owner) {
+-		if (fpm_unix_is_id(c->listen_owner)) {
++		if (strlen(c->listen_owner) == strspn(c->listen_owner, "0123456789")) {
+ 			wp->socket_uid = strtoul(c->listen_owner, 0, 10);
+ 		} else {
+ 			struct passwd *pwd;
+ 
+-			pwd = fpm_unix_get_passwd(wp, c->listen_owner, ZLOG_SYSERROR);
++			pwd = getpwnam(c->listen_owner);
+ 			if (!pwd) {
++				zlog(ZLOG_SYSERROR, "[pool %s] cannot get uid for user '%s'", wp->config->name, c->listen_owner);
+ 				return -1;
+ 			}
+ 
+@@ -238,13 +180,14 @@ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp) /* {{{ */
+ 	}
+ 
+ 	if (c->listen_group && *c->listen_group) {
+-		if (fpm_unix_is_id(c->listen_group)) {
++		if (strlen(c->listen_group) == strspn(c->listen_group, "0123456789")) {
+ 			wp->socket_gid = strtoul(c->listen_group, 0, 10);
+ 		} else {
+ 			struct group *grp;
+ 
+-			grp = fpm_unix_get_group(wp, c->listen_group, ZLOG_SYSERROR);
++			grp = getgrnam(c->listen_group);
+ 			if (!grp) {
++				zlog(ZLOG_SYSERROR, "[pool %s] cannot get gid for group '%s'", wp->config->name, c->listen_group);
+ 				return -1;
+ 			}
+ 			wp->socket_gid = grp->gr_gid;
+@@ -324,18 +267,14 @@ static int fpm_unix_conf_wp(struct fpm_worker_pool_s *wp) /* {{{ */
+ 
+ 	if (is_root) {
+ 		if (wp->config->user && *wp->config->user) {
+-			if (fpm_unix_is_id(wp->config->user)) {
++			if (strlen(wp->config->user) == strspn(wp->config->user, "0123456789")) {
+ 				wp->set_uid = strtoul(wp->config->user, 0, 10);
+-				pwd = getpwuid(wp->set_uid);
+-				if (pwd) {
+-					wp->set_gid = pwd->pw_gid;
+-					wp->set_user = strdup(pwd->pw_name);
+-				}
+ 			} else {
+ 				struct passwd *pwd;
+ 
+-				pwd = fpm_unix_get_passwd(wp, wp->config->user, ZLOG_ERROR);
++				pwd = getpwnam(wp->config->user);
+ 				if (!pwd) {
++					zlog(ZLOG_ERROR, "[pool %s] cannot get uid for user '%s'", wp->config->name, wp->config->user);
+ 					return -1;
+ 				}
+ 
+@@ -348,13 +287,14 @@ static int fpm_unix_conf_wp(struct fpm_worker_pool_s *wp) /* {{{ */
+ 		}
+ 
+ 		if (wp->config->group && *wp->config->group) {
+-			if (fpm_unix_is_id(wp->config->group)) {
++			if (strlen(wp->config->group) == strspn(wp->config->group, "0123456789")) {
+ 				wp->set_gid = strtoul(wp->config->group, 0, 10);
+ 			} else {
+ 				struct group *grp;
+ 
+-				grp = fpm_unix_get_group(wp, wp->config->group, ZLOG_ERROR);
++				grp = getgrnam(wp->config->group);
+ 				if (!grp) {
++					zlog(ZLOG_ERROR, "[pool %s] cannot get gid for group '%s'", wp->config->name, wp->config->group);
+ 					return -1;
+ 				}
+ 				wp->set_gid = grp->gr_gid;
+@@ -452,7 +392,7 @@ int fpm_unix_init_child(struct fpm_worker_pool_s *wp) /* {{{ */
+ 			}
+ 		}
+ 		if (wp->set_uid) {
+-			if (0 > initgroups(wp->set_user ? wp->set_user : wp->config->user, wp->set_gid)) {
++			if (0 > initgroups(wp->config->user, wp->set_gid)) {
+ 				zlog(ZLOG_SYSERROR, "[pool %s] failed to initgroups(%s, %d)", wp->config->name, wp->config->user, wp->set_gid);
+ 				return -1;
+ 			}
+@@ -464,30 +404,8 @@ int fpm_unix_init_child(struct fpm_worker_pool_s *wp) /* {{{ */
+ 	}
+ 
+ #ifdef HAVE_PRCTL
+-	if (wp->config->process_dumpable) {
+-		int dumpable = 1;
+-#ifdef HAVE_SELINUX
+-		if (security_get_boolean_active("deny_ptrace") == 1) {
+-			zlog(ZLOG_SYSERROR, "[pool %s] ptrace is denied", wp->config->name);
+-			dumpable = 0;
+-		}
+-#endif
+-		if (dumpable && 0 > prctl(PR_SET_DUMPABLE, 1, 0, 0, 0)) {
+-			zlog(ZLOG_SYSERROR, "[pool %s] failed to prctl(PR_SET_DUMPABLE)", wp->config->name);
+-		}
+-	}
+-#endif
+-
+-#ifdef HAVE_PROCCTL
+-	int dumpable = PROC_TRACE_CTL_ENABLE;
+-	if (wp->config->process_dumpable && -1 == procctl(P_PID, getpid(), PROC_TRACE_CTL, &dumpable)) {
+-		zlog(ZLOG_SYSERROR, "[pool %s] failed to procctl(PROC_TRACE_CTL)", wp->config->name);
+-	}
+-#endif
+-
+-#ifdef HAVE_SETPFLAGS
+-	if (wp->config->process_dumpable && 0 > setpflags(__PROC_PROTECT, 0)) {
+-		zlog(ZLOG_SYSERROR, "[pool %s] failed to setpflags(__PROC_PROTECT)", wp->config->name);
++	if (wp->config->process_dumpable && 0 > prctl(PR_SET_DUMPABLE, 1, 0, 0, 0)) {
++		zlog(ZLOG_SYSERROR, "[pool %s] failed to prctl(PR_SET_DUMPABLE)", wp->config->name);
+ 	}
+ #endif
+ 
+diff --git a/sapi/fpm/fpm/fpm_unix.h b/sapi/fpm/fpm/fpm_unix.h
+index 6fc9e5e8..0bb22687 100644
+--- a/sapi/fpm/fpm/fpm_unix.h
++++ b/sapi/fpm/fpm/fpm_unix.h
+@@ -5,8 +5,6 @@
+ 
+ #include "fpm_worker_pool.h"
+ 
+-bool fpm_unix_test_config(struct fpm_worker_pool_s *wp);
+-
+ int fpm_unix_resolve_socket_permissions(struct fpm_worker_pool_s *wp);
+ int fpm_unix_set_socket_permissions(struct fpm_worker_pool_s *wp, const char *path);
+ int fpm_unix_free_socket_permissions(struct fpm_worker_pool_s *wp);
+diff --git a/sapi/fpm/fpm/fpm_worker_pool.c b/sapi/fpm/fpm/fpm_worker_pool.c
+index 6016b586..974238de 100644
+--- a/sapi/fpm/fpm/fpm_worker_pool.c
++++ b/sapi/fpm/fpm/fpm_worker_pool.c
+@@ -34,9 +34,6 @@ void fpm_worker_pool_free(struct fpm_worker_pool_s *wp) /* {{{ */
+ 	if (wp->user) {
+ 		free(wp->user);
+ 	}
+-	if (wp->set_user) {
+-		free(wp->set_user);
+-	}
+ 	if (wp->home) {
+ 		free(wp->home);
+ 	}
+diff --git a/sapi/fpm/fpm/fpm_worker_pool.h b/sapi/fpm/fpm/fpm_worker_pool.h
+index efb8640c..809f53a0 100644
+--- a/sapi/fpm/fpm/fpm_worker_pool.h
++++ b/sapi/fpm/fpm/fpm_worker_pool.h
+@@ -24,7 +24,6 @@ struct fpm_worker_pool_s {
+ 	enum fpm_address_domain listen_address_domain;
+ 	int listening_socket;
+ 	int set_uid, set_gid;								/* config uid and gid */
+-	char *set_user;										/* config user name */
+ 	int socket_uid, socket_gid, socket_mode;
+ 
+ 	/* runtime */
+diff --git a/sapi/fpm/fpm/zlog.c b/sapi/fpm/fpm/zlog.c
+index e5e49f83..95f98e6a 100644
+--- a/sapi/fpm/fpm/zlog.c
++++ b/sapi/fpm/fpm/zlog.c
+@@ -286,8 +286,14 @@ static zlog_bool zlog_stream_buf_alloc_ex(struct zlog_stream *stream, size_t nee
+ {
+ 	char *buf;
+ 	size_t size = stream->buf.size ?: stream->buf_init_size;
+-	size = MIN(zlog_limit, MAX((stream->buf.data ? (size << 1) : size), needed));
+-	buf = realloc(stream->buf.data, size);
++
++	if (stream->buf.data) {
++		size = MIN(zlog_limit, MAX(size * 2, needed));
++		buf = realloc(stream->buf.data, size);
++	} else {
++		size = MIN(zlog_limit, MAX(size, needed));
++		buf = malloc(size);
++	}
+ 
+ 	if (buf == NULL) {
+ 		return 0;
+diff --git a/sapi/fpm/php-fpm.8.in b/sapi/fpm/php-fpm.8.in
+index b972a2bd..905946e7 100644
+--- a/sapi/fpm/php-fpm.8.in
++++ b/sapi/fpm/php-fpm.8.in
+@@ -1,4 +1,4 @@
+-.TH PHP-FPM 8 "2022" "The PHP Group" "Scripting Language"
++.TH PHP-FPM 8 "2021" "The PHP Group" "Scripting Language"
+ .SH NAME
+ .TP 15
+ php-fpm \- PHP FastCGI Process Manager 'PHP-FPM'
+@@ -77,8 +77,6 @@ Show compiled in modules
+ .PD 1
+ .B \-v
+ Version number
+-.TP
+-.PD 0
+ .B \-\-prefix \fIpath\fP
+ .TP
+ .PD 1
+@@ -197,7 +195,7 @@ You can view the list of known bugs or report any new bug you
+ found at:
+ .PD 0
+ .P
+-.B https://github.com/php/php-src/issues
++.B http://bugs.php.net
+ .PD 1
+ .SH AUTHORS
+ PHP-FPM SAPI was written by Andrei Nigmatulin. The mailing-lists are highload-php-en (English) and highload-php-ru (Russian).
+diff --git a/sapi/fpm/tests/bug68591-conf-test-group.phpt b/sapi/fpm/tests/bug68591-conf-test-group.phpt
+deleted file mode 100644
+index d496d054..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-group.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test group existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-user = root
+-group = aaaaaa
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECT--
+-ERROR: [pool unconfined] cannot get gid for group 'aaaaaa'
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt b/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt
+deleted file mode 100644
+index 71ca71ad..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test listen group existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-listen.group = aaaaaa
+-user = root
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECTF--
+-ERROR: [pool unconfined] cannot get gid for group 'aaaaaa': %s
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt b/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt
+deleted file mode 100644
+index c6108bcd..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test listen owner existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-listen.owner = aaaaaa
+-user = root
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECTF--
+-ERROR: [pool unconfined] cannot get uid for user 'aaaaaa': %s
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug68591-conf-test-user.phpt b/sapi/fpm/tests/bug68591-conf-test-user.phpt
+deleted file mode 100644
+index 5627151f..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-user.phpt
++++ /dev/null
+@@ -1,38 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test user existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-user = aaaaaa
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECT--
+-ERROR: [pool unconfined] cannot get uid for user 'aaaaaa'
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt b/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt
+deleted file mode 100644
+index c4c7adf3..00000000
+--- a/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-FPM: bug77106 - Missing new lines in FCGI error stream
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR}}
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 1
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-php_admin_flag[log_errors] = 1
+-EOT;
+-
+-$code = <<<EOT
+-<?php
+-echo \$a;
+-echo \$a;
+-EOT;
+-
+-$tester = new FPM\Tester($cfg, $code);
+-$tester->start();
+-$tester->expectLogStartNotices();
+-$tester->request()->expectErrorPattern(
+-    '/Undefined variable \$a in .+ on line \d+; PHP message: PHP Warning:/'
+-);
+-$tester->terminate();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug80669-uid-user-groups.phpt b/sapi/fpm/tests/bug80669-uid-user-groups.phpt
+deleted file mode 100644
+index 9a694730..00000000
+--- a/sapi/fpm/tests/bug80669-uid-user-groups.phpt
++++ /dev/null
+@@ -1,52 +0,0 @@
+---TEST--
+-FPM: Process user setting ignored when FPM is not running as root
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-FPM\Tester::skipIfNotRoot();
+-FPM\Tester::skipIfUserDoesNotExist('www-data');
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$pw = posix_getpwnam('www-data');
+-$uid = $pw['uid'];
+-$gid = $pw['gid'];
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR}}
+-user = $uid
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 1
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$code = <<<EOT
+-<?php
+-echo posix_getgid();
+-EOT;
+-
+-$tester = new FPM\Tester($cfg, $code);
+-$tester->start();
+-$tester->expectLogStartNotices();
+-$tester->request()->expectBody((string) $gid);
+-$tester->terminate();
+-$tester->expectLogTerminatingNotices();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-php-value-key.phpt b/sapi/fpm/tests/config-array-validation-php-value-key.phpt
+deleted file mode 100644
+index 53daec70..00000000
+--- a/sapi/fpm/tests/config-array-validation-php-value-key.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - php_value array must be passed a key
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-php_value[] = E_ALL
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] You must provide a key for field 'php_value'");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt
+deleted file mode 100644
+index 68ef0c32..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path doesn't accept key with forward slash
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[/] = test
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Keys provided to field 'access.suppress_path' are ignored");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt
+deleted file mode 100644
+index 5b7a141a..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path doesn't allow key
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[pingpath] = /ping
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Keys provided to field 'access.suppress_path' are ignored");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt
+deleted file mode 100644
+index 400c3621..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path begins with forward slash
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[] = needs / to start with a slash
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Values provided to field 'access.suppress_path' must begin with '\/'");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array.phpt b/sapi/fpm/tests/config-array.phpt
+deleted file mode 100644
+index 8d97afca..00000000
+--- a/sapi/fpm/tests/config-array.phpt
++++ /dev/null
+@@ -1,48 +0,0 @@
+---TEST--
+-FPM: Set arrays in configuration
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[] = /ping
+-access.suppress_path[] = /health_check.php
+-pm = static
+-pm.max_children = 5
+-php_value[error_reporting] = E_ALL
+-php_value[date.timezone] = Europe/London
+-php_admin_value[disable_functions] = eval
+-php_flag[display_errors] = On
+-php_admin_flag[log_errors] = 1
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogConfigOptions([
+-    'access.suppress_path[] = /ping',
+-    'access.suppress_path[] = /health_check.php',
+-    'php_value[error_reporting] = 32767',
+-    'php_value[date.timezone] = Europe/London',
+-    'php_value[display_errors] = 1',
+-    'php_admin_value[disable_functions] = eval',
+-    'php_admin_value[log_errors] = 1',
+-]);
+-
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/gh12232-php-value-extension.phpt b/sapi/fpm/tests/gh12232-php-value-extension.phpt
+new file mode 100644
+index 00000000..207bd7a6
+--- /dev/null
++++ b/sapi/fpm/tests/gh12232-php-value-extension.phpt
+@@ -0,0 +1,51 @@
++--TEST--
++FPM: gh12232 - loading shared ext in FPM config
++--SKIPIF--
++<?php
++include "skipif.inc";
++FPM\Tester::skipIfSharedExtensionNotFound('dl_test');
++?>
++--FILE--
++<?php
++
++require_once "tester.inc";
++
++$cfg = <<<EOT
++[global]
++error_log = {{FILE:LOG}}
++[unconfined]
++listen = {{ADDR}}
++pm = static
++pm.max_children = 1
++pm.status_path = /status
++catch_workers_output = yes
++php_admin_value[extension] = dl_test
++EOT;
++
++$code = <<<EOT
++<?php
++var_dump(extension_loaded('dl_test'));
++var_dump(ini_get('dl_test.string'));
++ini_set('dl_test.string', 'test');
++var_dump(ini_get('dl_test.string'));
++EOT;
++
++$tester = new FPM\Tester($cfg, $code);
++$tester->start();
++$tester->expectLogStartNotices();
++$tester->request()->expectBody(['bool(true)', 'string(5) "hello"', 'string(4) "test"']);
++$tester->request()->expectBody(['bool(true)', 'string(5) "hello"', 'string(4) "test"']);
++$tester->terminate();
++$tester->expectLogTerminatingNotices();
++$tester->close();
++
++?>
++Done
++--EXPECT--
++Done
++--CLEAN--
++<?php
++require_once "tester.inc";
++FPM\Tester::clean();
++?>
++<?php
+diff --git a/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-custom.phpt b/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-custom.phpt
+index efb41c90..d5c4c4d4 100644
+--- a/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-custom.phpt
++++ b/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-custom.phpt
+@@ -46,7 +46,7 @@ $tester->close();
+ 
+ ?>
+ --EXPECT--
+-Warning: PHP Request Startup: Multipart body parts limit exceeded 10. To increase the limit change max_multipart_body_parts in php.ini. in Unknown on line 0
++Warning: Unknown: Multipart body parts limit exceeded 10. To increase the limit change max_multipart_body_parts in php.ini. in Unknown on line 0
+ int(10)
+ --CLEAN--
+ <?php
+diff --git a/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-default.phpt b/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-default.phpt
+index 2cb7612e..c7e02937 100644
+--- a/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-default.phpt
++++ b/sapi/fpm/tests/ghsa-54hq-v5wp-fqgv-max-body-parts-default.phpt
+@@ -45,9 +45,9 @@ $tester->close();
+ 
+ ?>
+ --EXPECT--
+-Warning: PHP Request Startup: Input variables exceeded 20. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
++Warning: Unknown: Input variables exceeded 20. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Multipart body parts limit exceeded 25. To increase the limit change max_multipart_body_parts in php.ini. in Unknown on line 0
++Warning: Unknown: Multipart body parts limit exceeded 25. To increase the limit change max_multipart_body_parts in php.ini. in Unknown on line 0
+ int(20)
+ --CLEAN--
+ <?php
+diff --git a/sapi/fpm/tests/log-invalid-port.phpt b/sapi/fpm/tests/log-invalid-port.phpt
+deleted file mode 100644
+index 36170037..00000000
+--- a/sapi/fpm/tests/log-invalid-port.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-FPM: test invalid port value
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = 127.0.0.1:69002
+-pm = dynamic
+-pm.max_children = 1
+-pm.start_servers = 1
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 1
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start();
+-$tester->expectLogError("invalid port value '69002'");
+-$tester->terminate();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/log-suppress-output-request-body.phpt b/sapi/fpm/tests/log-suppress-output-request-body.phpt
+deleted file mode 100644
+index c878b40f..00000000
+--- a/sapi/fpm/tests/log-suppress-output-request-body.phpt
++++ /dev/null
+@@ -1,107 +0,0 @@
+---TEST--
+-FPM: Test URIs are not excluded from access log when there is a request body
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$testScript = <<<EOT
+-<?php
+-echo strlen(file_get_contents('php://input'));
+-EOT;
+-
+-$body = str_repeat('a', 100);
+-
+-// Add health checks to ignore list
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG:ERR}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.log = {{FILE:LOG:ACC}}
+-access.format = "'%m %r%Q%q' %s"
+-access.suppress_path[] = /ping
+-access.suppress_path[] = /request-1
+-access.suppress_path[] = /request-2
+-access.suppress_path[] = /request-3
+-access.suppress_path[] = /request-4
+-access.suppress_path[] = /request-5
+-access.suppress_path[] = /request-6
+-slowlog = {{FILE:LOG:SLOW}}
+-request_slowlog_timeout = 1
+-ping.path = /ping
+-ping.response = pong
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg, $testScript);
+-$tester->start();
+-$tester->expectLogStartNotices();
+-$tester->expectSuppressableAccessLogEntries(false);
+-$tester->ping();
+-
+-// Should not suppress POST with no body
+-$tester->request(
+-    uri: '/request-1',
+-    headers: ['REQUEST_METHOD' => 'POST']
+-)->expectBody('0');
+-$tester->expectAccessLog("'POST /request-1' 200", suppressable: false);
+-
+-// Should not suppress POST with body
+-$tester->request(
+-    uri: '/request-2',
+-    stdin: $body
+-)->expectBody('100');
+-$tester->expectAccessLog("'POST /request-2' 200", suppressable: false);
+-
+-// Should not suppress GET with body
+-$tester->request(
+-    uri: '/request-3',
+-    headers: ['REQUEST_METHOD' => 'GET'],
+-    stdin: $body
+-)->expectBody('100');
+-$tester->expectAccessLog("'GET /request-3' 200", suppressable: false);
+-
+-// Should suppress GET with no body
+-$tester->request(
+-    uri: '/request-4'
+-)->expectBody('0');
+-$tester->expectAccessLog("'GET /request-4' 200", suppressable: true);
+-
+-// Should not suppress GET with no body but incorrect content length
+-$tester->request(
+-    uri: '/request-5',
+-    headers: ['REQUEST_METHOD' => 'GET', 'CONTENT_LENGTH' => 100]
+-)->expectBody('0');
+-$tester->expectAccessLog("'GET /request-5' 200", suppressable: false);
+-
+-// Should suppress GET with body but 0 content length (no stdin readable)
+-$tester->request(
+-    uri: '/request-6',
+-    headers: ['REQUEST_METHOD' => 'GET', 'CONTENT_LENGTH' => 0],
+-    stdin: $body
+-)->expectBody('0');
+-$tester->expectAccessLog("'GET /request-6' 200", suppressable: true);
+-
+-$tester->terminate();
+-$tester->expectLogTerminatingNotices();
+-$tester->close();
+-$tester->expectNoFile(FPM\Tester::FILE_EXT_PID);
+-$tester->checkAccessLog();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/log-suppress-output.phpt b/sapi/fpm/tests/log-suppress-output.phpt
+deleted file mode 100644
+index 5a5e7bb9..00000000
+--- a/sapi/fpm/tests/log-suppress-output.phpt
++++ /dev/null
+@@ -1,126 +0,0 @@
+---TEST--
+-FPM: Test excluding URIs from access log
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-function doTestCalls(FPM\Tester &$tester, bool $expectSuppressableEntries)
+-{
+-    $tester->expectSuppressableAccessLogEntries($expectSuppressableEntries);
+-
+-    $tester->ping();
+-    $tester->expectAccessLog("'GET /ping' 200", suppressable: true);
+-
+-    $tester->request()->expectBody('OK');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php' 200", suppressable: true);
+-
+-    $tester->ping();
+-    $tester->expectAccessLog("'GET /ping' 200", suppressable: true);
+-
+-    $tester->request()->expectBody('OK');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php' 200", suppressable: true);
+-
+-    $tester->ping();
+-    $tester->expectAccessLog("'GET /ping' 200", suppressable: true);
+-
+-    $tester->request(query: 'test=output')->expectBody('output');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php?test=output' 200", suppressable: false);
+-
+-    $tester->ping();
+-    $tester->expectAccessLog("'GET /ping' 200", suppressable: true);
+-
+-    $tester->request()->expectBody('OK');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php' 200", suppressable: true);
+-
+-    $tester->request(query: 'test=output', uri: '/ping')->expectBody('pong', 'text/plain');
+-    $tester->expectAccessLog("'GET /ping?test=output' 200", suppressable: false);
+-
+-    $tester->request(headers: ['X_ERROR' => 1])->expectBody('Not OK');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php' 500", suppressable: false);
+-
+-    $tester->request()->expectBody('OK');
+-    $tester->expectAccessLog("'GET /log-suppress-output.src.php' 200", suppressable: true);
+-
+-    $tester->request(query: 'test=output', uri: '/ping')->expectBody('pong', 'text/plain');
+-    $tester->expectAccessLog("'GET /ping?test=output' 200", suppressable: false);
+-
+-    $tester->ping();
+-    $tester->expectAccessLog("'GET /ping' 200", suppressable: true);
+-}
+-
+-$src = <<<EOT
+-<?php
+-if (isset(\$_SERVER['X_ERROR'])) {
+-    echo "Not OK";
+-    http_response_code(500);
+-    exit;
+-}
+-echo \$_REQUEST['test'] ?? "OK";
+-EOT;
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{RFILE:LOG:ERR}}
+-pid = {{RFILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.log = {{RFILE:LOG:ACC}}
+-access.format = "'%m %r%Q%q' %s"
+-slowlog = {{RFILE:LOG:SLOW}}
+-request_slowlog_timeout = 1
+-ping.path = /ping
+-ping.response = pong
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$prefix = __DIR__;
+-$tester = new FPM\Tester($cfg, $src);
+-$tester->start(['--prefix', $prefix]);
+-$tester->expectLogStartNotices();
+-doTestCalls($tester, expectSuppressableEntries: true);
+-// Add source file and ping to ignore list
+-$cfg = <<<EOT
+-[global]
+-error_log = {{RFILE:LOG:ERR}}
+-pid = {{RFILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.log = {{RFILE:LOG:ACC}}
+-access.format = "'%m %r%Q%q' %s"
+-access.suppress_path[] = /ping
+-access.suppress_path[] = /log-suppress-output.src.php
+-slowlog = {{RFILE:LOG:SLOW}}
+-request_slowlog_timeout = 1
+-ping.path = /ping
+-ping.response = pong
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-$tester->reload($cfg);
+-$tester->expectLogReloadingNotices();
+-doTestCalls($tester, expectSuppressableEntries: false);
+-$tester->terminate();
+-$tester->expectLogTerminatingNotices();
+-$tester->close();
+-$tester->expectNoFile(FPM\Tester::FILE_EXT_PID, $prefix);
+-$tester->checkAccessLog();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/logtool.inc b/sapi/fpm/tests/logtool.inc
+index fc2043b8..64a58ec7 100644
+--- a/sapi/fpm/tests/logtool.inc
++++ b/sapi/fpm/tests/logtool.inc
+@@ -513,11 +513,7 @@ class LogTool
+         }
+         $this->trace("Matching EXPECTED: $expectedMessage");
+ 
+-        // Allow expected message to contain %s and %s for any string or number as in run-tests.php
+-        $expectRe = str_replace('%s', '[^\r\n]+', $expectedMessage);
+-        $expectRe = str_replace('%d', '\d+', $expectRe);
+-
+-        $pattern = sprintf('/^(?:%s )?%s: %s(%s)$/', self::P_TIME, $type, self::P_DEBUG, $expectRe);
++        $pattern = sprintf('/^(?:%s )?%s: %s(%s)$/', self::P_TIME, $type, self::P_DEBUG, $expectedMessage);
+         $this->trace("PATTERN: $pattern");
+ 
+         return function ($line) use ($expectedMessage, $pattern, $type, $ignoreErrorFor) {
+diff --git a/sapi/fpm/tests/pm-max-spawn-rate-config.phpt b/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
+index 999c1d74..8b5f6b4e 100644
+--- a/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
++++ b/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
+@@ -24,8 +24,8 @@ pm.max_spawn_rate = 64
+ EOT;
+ 
+ $tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogConfigOptions(['pm.max_spawn_rate = 64']);
++$tester->start(['-t', '-t']);
++$tester->expectLogConfigOptions(['pm.max_spawn_rate' => 64]);
+ $tester->close();
+ 
+ ?>
+diff --git a/sapi/fpm/tests/response.inc b/sapi/fpm/tests/response.inc
+index cd5e19d7..5fff8d35 100644
+--- a/sapi/fpm/tests/response.inc
++++ b/sapi/fpm/tests/response.inc
+@@ -41,11 +41,6 @@ class Response
+      */
+     private $expectInvalid;
+ 
+-    /**
+-     * @var bool
+-     */
+-    private bool $debugOutputted = false;
+-
+     /**
+      * @param string|array|null $data
+      * @param bool              $expectInvalid
+@@ -76,11 +71,11 @@ class Response
+             $body = implode("\n", $body);
+         }
+ 
+-        if ( ! $this->checkIfValid()) {
+-            $this->error('Response is invalid');
+-        } elseif ( ! $this->checkDefaultHeaders($contentType)) {
+-            $this->error('Response default headers not found');
+-        } elseif ($body !== $this->rawBody) {
++        if (
++            $this->checkIfValid() &&
++            $this->checkDefaultHeaders($contentType) &&
++            $body !== $this->rawBody
++        ) {
+             if ($multiLine) {
+                 $this->error(
+                     "==> The expected body:\n$body\n" .
+@@ -170,26 +165,6 @@ class Response
+         return $this;
+     }
+ 
+-    /**
+-     * Expect error pattern in the response.
+-     *
+-     * @param string $errorMessagePattern Expected error message RegExp patter.
+-     *
+-     * @return Response
+-     */
+-    public function expectErrorPattern(string $errorMessagePattern): Response
+-    {
+-        $errorData = $this->getErrorData();
+-        if (preg_match($errorMessagePattern, $errorData) === 0) {
+-            $this->error(
+-                "The expected error pattern $errorMessagePattern does not match the returned error '$errorData'"
+-            );
+-            $this->debugOutput();
+-        }
+-
+-        return $this;
+-    }
+-
+     /**
+      * Expect response status.
+      *
+@@ -208,7 +183,6 @@ class Response
+             $statusMessage = $status === null ? "expected not to be set": "expected to be $status";
+             $this->error("Status is $statusMessage but the actual value is {$headers['status']}");
+         }
+-
+         return $this;
+     }
+ 
+@@ -278,8 +252,6 @@ class Response
+         echo "----------------- ERR -----------------\n";
+         echo $this->data['err_response'] . "\n";
+         echo "---------------------------------------\n\n";
+-
+-        $this->debugOutputted = true;
+     }
+ 
+     /**
+@@ -424,11 +396,8 @@ class Response
+      *
+      * @return bool
+      */
+-    private function error(string $message): bool
++    private function error($message): bool
+     {
+-        if ( ! $this->debugOutputted) {
+-            $this->debugOutput();
+-        }
+         echo "ERROR: $message\n";
+ 
+         return false;
+diff --git a/sapi/fpm/tests/setsofib.phpt b/sapi/fpm/tests/setsofib.phpt
+deleted file mode 100644
+index ba6502e1..00000000
+--- a/sapi/fpm/tests/setsofib.phpt
++++ /dev/null
+@@ -1,44 +0,0 @@
+---TEST--
+-FPM: listen.setfib`
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-
+-if (!str_contains(PHP_OS, 'FreeBSD')) {
+-    die('skipped supported only on FreeBSD');
+-}
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[setfib]
+-listen = {{ADDR}}
+-listen.setfib = 68000
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start();
+-$tester->expectLogError('Invalid routing table id 68000, max is 1');
+-$tester->terminate();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/tester.inc b/sapi/fpm/tests/tester.inc
+index a3f40ed9..fd341dd0 100644
+--- a/sapi/fpm/tests/tester.inc
++++ b/sapi/fpm/tests/tester.inc
+@@ -131,16 +131,6 @@ class Tester
+      */
+     private ?Response $response;
+ 
+-    /**
+-     * @var string[]
+-     */
+-    private $expectedAccessLogs;
+-
+-    /**
+-     * @var bool
+-     */
+-    private $expectSuppressableAccessLogEntries;
+-
+     /**
+      * Clean all the created files up
+      *
+@@ -269,11 +259,10 @@ class Tester
+     static public function skipIfConfigFails(string $configTemplate)
+     {
+         $tester     = new self($configTemplate, '', [], self::getCallerFileName());
+-        $testResult = $tester->testConfig(true);
++        $testResult = $tester->testConfig();
+         if ($testResult !== null) {
+             self::clean(2);
+-            $message = $testResult[0] ?? 'Config failed';
+-            die("skip $message");
++            die("skip $testResult");
+         }
+     }
+ 
+@@ -305,7 +294,7 @@ class Tester
+      */
+     static public function skipIfNotRoot()
+     {
+-        if (exec('whoami') !== 'root') {
++        if (getmyuid() != 0) {
+             die('skip not running as root');
+         }
+     }
+@@ -315,7 +304,7 @@ class Tester
+      */
+     static public function skipIfRoot()
+     {
+-        if (exec('whoami') === 'root') {
++        if (getmyuid() == 0) {
+             die('skip running as root');
+         }
+     }
+@@ -331,13 +320,13 @@ class Tester
+     }
+ 
+     /**
+-     * Skip if posix extension not loaded.
++     * Skip if shared extension is not available in extension directory.
+      */
+-    static public function skipIfUserDoesNotExist($userName)
++    static public function skipIfSharedExtensionNotFound($extensionName)
+     {
+-        self::skipIfPosixNotLoaded();
+-        if (posix_getpwnam($userName) === false) {
+-            die("skip user $userName does not exist");
++        $soPath = ini_get('extension_dir') . '/' . $extensionName . '.so';
++        if ( ! file_exists($soPath)) {
++            die("skip $extensionName extension not present in extension_dir");
+         }
+     }
+ 
+@@ -379,26 +368,17 @@ class Tester
+     /**
+      * Test configuration file.
+      *
+-     * @return null|array
++     * @return null|string
+      * @throws \Exception
+      */
+-    public function testConfig($silent = false)
++    public function testConfig()
+     {
+         $configFile = $this->createConfig();
+-        $cmd        = self::findExecutable() . ' -tt -y ' . $configFile . ' 2>&1';
++        $cmd        = self::findExecutable() . ' -t -y ' . $configFile . ' 2>&1';
+         $this->trace('Testing config using command', $cmd, true);
+         exec($cmd, $output, $code);
+         if ($code) {
+-            $messages = [];
+-            foreach ($output as $outputLine) {
+-                $message    = preg_replace("/\[.+?\]/", "", $outputLine, 1);
+-                $messages[] = $message;
+-                if ( ! $silent) {
+-                    $this->error($message, null, false);
+-                }
+-            }
+-
+-            return $messages;
++            return preg_replace("/\[.+?\]/", "", $output[0]);
+         }
+ 
+         return null;
+@@ -1319,7 +1299,6 @@ class Tester
+             return $filePath;
+         }
+         file_put_contents($filePath, $content);
+-
+         $this->trace('Created file: ' . $filePath, $content, isFile: true);
+ 
+         return $filePath;
+@@ -1360,15 +1339,14 @@ class Tester
+     /**
+      * Display error.
+      *
+-     * @param string          $msg       Error message.
+-     * @param \Exception|null $exception If there is an exception, log its message
+-     * @param bool            $prefix    Whether to prefix the error message
++     * @param string          $msg
++     * @param \Exception|null $exception
+      *
+      * @return false
+      */
+-    private function error(string $msg, \Exception $exception = null, bool $prefix = true): bool
++    private function error($msg, \Exception $exception = null): bool
+     {
+-        $this->error = $prefix ? 'ERROR: ' . $msg : ltrim($msg);
++        $this->error = 'ERROR: ' . $msg;
+         if ($exception) {
+             $this->error .= '; EXCEPTION: ' . $exception->getMessage();
+         }
+@@ -1868,23 +1846,13 @@ class Tester
+      */
+     public function expectLogConfigOptions(array $options)
+     {
+-        foreach ($options as $value) {
+-            $confValue = str_replace(
+-                ']',
+-                '\]',
+-                str_replace(
+-                    '[',
+-                    '\[',
+-                    str_replace('/', '\/', $value)
+-                )
+-            );
+-            $this->expectLogNotice("\s+$confValue", checkAllLogs: true);
++        foreach ($options as $name => $value) {
++            $this->expectLogNotice("\s+$name\s=\s$value", checkAllLogs: true);
+         }
+ 
+         return true;
+     }
+ 
+-
+     /**
+      * Print content of access log.
+      */
+@@ -1897,70 +1865,6 @@ class Tester
+     }
+ 
+     /**
+-     * Return content of access log.
+-     *
+-     * @return string|false
+-     */
+-    public function getAccessLog()
+-    {
+-        $accessLog = $this->getFile('acc.log');
+-        if (is_file($accessLog)) {
+-            return file_get_contents($accessLog);
+-        }
+-        return false;
+-    }
+-
+-    /**
+-     * Expect a single access log line.
+-     *
+-     * @param string $LogLine
+-     * @param bool $suppressable see expectSuppressableAccessLogEntries
+-     */
+-    public function expectAccessLog(
+-        string $logLine,
+-        bool $suppressable = false
+-    ) {
+-        if (!$suppressable || $this->expectSuppressableAccessLogEntries) {
+-            $this->expectedAccessLogs[] = $logLine;
+-        }
+-    }
+-
+-    /**
+-     * Checks that all access log entries previously listed as expected by
+-     * calling "expectAccessLog" are in the access log.
+-     */
+-    public function checkAccessLog()
+-    {
+-        if (isset($this->expectedAccessLogs)) {
+-            $expectedAccessLog = implode("\n", $this->expectedAccessLogs) . "\n";
+-        } else {
+-            $this->error("Called checkAccessLog but did not previous call expectAccessLog");
+-        }
+-        if ($accessLog = $this->getAccessLog()) {
+-            if ($expectedAccessLog !== $accessLog) {
+-                $this->error(sprintf(
+-                    "Access log was not as expected.\nEXPECTED:\n%s\n\nACTUAL:\n%s",
+-                    $expectedAccessLog,
+-                    $accessLog
+-                ));
+-            }
+-        } else {
+-            $this->error("Called checkAccessLog but access log does not exist");
+-        }
+-    }
+-
+-    /**
+-     * Flags whether the access log check should expect to see suppressable
+-     * log entries, i.e. the URL is not in access.suppress_path[] config
+-     *
+-     * @param bool
+-     */
+-    public function expectSuppressableAccessLogEntries(bool $expectSuppressableAccessLogEntries)
+-    {
+-        $this->expectSuppressableAccessLogEntries = $expectSuppressableAccessLogEntries;
+-    }
+-
+-    /*
+      * Read all log entries.
+      *
+      * @param string      $type    The log type
+diff --git a/sapi/fpm/www.conf.in b/sapi/fpm/www.conf.in
+index 37ac8a19..4b8eb7ca 100644
+--- a/sapi/fpm/www.conf.in
++++ b/sapi/fpm/www.conf.in
+@@ -41,7 +41,7 @@ group = @php_fpm_group@
+ listen = 127.0.0.1:9000
+ 
+ ; Set listen(2) backlog.
+-; Default Value: 511 (-1 on Linux, FreeBSD and OpenBSD)
++; Default Value: 511 (-1 on FreeBSD and OpenBSD)
+ ;listen.backlog = 511
+ 
+ ; Set permissions for unix socket, if one is used. In Linux, read/write
+@@ -68,10 +68,6 @@ listen = 127.0.0.1:9000
+ ; Default Value: any
+ ;listen.allowed_clients = 127.0.0.1
+ 
+-; Set the associated the route table (FIB). FreeBSD only
+-; Default Value: -1
+-;listen.setfib = 1
+-
+ ; Specify the nice(2) priority to apply to the pool processes (only if set)
+ ; The value can vary from -19 (highest priority) to 20 (lower priority)
+ ; Note: - It will only work if the FPM master process is launched as root
+@@ -80,8 +76,7 @@ listen = 127.0.0.1:9000
+ ; Default Value: no set
+ ; process.priority = -19
+ 
+-; Set the process dumpable flag (PR_SET_DUMPABLE prctl for Linux or
+-; PROC_TRACE_CTL procctl for FreeBSD) even if the process user
++; Set the process dumpable flag (PR_SET_DUMPABLE prctl) even if the process user
+ ; or group is different than the master process user. It allows to create process
+ ; core dump and ptrace the process for the pool user.
+ ; Default Value: no
+@@ -353,22 +348,6 @@ pm.max_spare_servers = 3
+ ; Default: "%R - %u %t \"%m %r\" %s"
+ ;access.format = "%R - %u %t \"%m %r%Q%q\" %s %f %{milli}d %{kilo}M %C%%"
+ 
+-; A list of request_uri values which should be filtered from the access log.
+-;
+-; As a security precuation, this setting will be ignored if:
+-;     - the request method is not GET or HEAD; or
+-;     - there is a request body; or
+-;     - there are query parameters; or
+-;     - the response code is outwith the successful range of 200 to 299
+-;
+-; Note: The paths are matched against the output of the access.format tag "%r".
+-;       On common configurations, this may look more like SCRIPT_NAME than the
+-;       expected pre-rewrite URI.
+-;
+-; Default Value: not set
+-;access.suppress_path[] = /ping
+-;access.suppress_path[] = /health_check.php
+-
+ ; The log file for slow requests
+ ; Default Value: not set
+ ; Note: slowlog is mandatory if request_slowlog_timeout is set
+diff --git a/sapi/fuzzer/Makefile.frag b/sapi/fuzzer/Makefile.frag
+index 8a456ca6..50feac3a 100644
+--- a/sapi/fuzzer/Makefile.frag
++++ b/sapi/fuzzer/Makefile.frag
+@@ -8,12 +8,6 @@ $(SAPI_FUZZER_PATH)/php-fuzz-parser: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_F
+ $(SAPI_FUZZER_PATH)/php-fuzz-execute: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_EXECUTE_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_EXECUTE_OBJS) -o $@
+ 
+-$(SAPI_FUZZER_PATH)/php-fuzz-function-jit: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_FUNCTION_JIT_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_FUNCTION_JIT_OBJS) -o $@
+-
+-$(SAPI_FUZZER_PATH)/php-fuzz-tracing-jit: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_TRACING_JIT_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_TRACING_JIT_OBJS) -o $@
+-
+ $(SAPI_FUZZER_PATH)/php-fuzz-unserialize: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_UNSERIALIZE_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_UNSERIALIZE_OBJS) -o $@
+ 
+@@ -28,6 +22,3 @@ $(SAPI_FUZZER_PATH)/php-fuzz-exif: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZ
+ 
+ $(SAPI_FUZZER_PATH)/php-fuzz-mbstring: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_MBSTRING_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_MBSTRING_OBJS) -o $@
+-
+-$(SAPI_FUZZER_PATH)/php-fuzz-mbregex: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_MBREGEX_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_MBREGEX_OBJS) -o $@
+diff --git a/sapi/fuzzer/README.md b/sapi/fuzzer/README.md
+index ee2d0ee4..f79baa6c 100644
+--- a/sapi/fuzzer/README.md
++++ b/sapi/fuzzer/README.md
+@@ -1,7 +1,7 @@
+ Fuzzing SAPI for PHP
+ --------------------
+ 
+-The following `./configure` options can be used to enable the fuzzing SAPI, as well as all available fuzzers. If you don't build the exif/json/mbstring extensions, fuzzers for these extensions will not be built.
++The following `./configure` options can be used to enable the fuzzing SAPI, as well as all availablefuzzers. If you don't build the exif/json/mbstring extensions, fuzzers for these extensions will not be built.
+ 
+ ```sh
+ CC=clang CXX=clang++ \
+@@ -10,15 +10,12 @@ CC=clang CXX=clang++ \
+     --enable-fuzzer \
+     --with-pic \
+     --enable-debug-assertions \
+-    --enable-address-sanitizer \
+     --enable-exif \
+     --enable-mbstring
+ ```
+ 
+ The `--with-pic` option is required to avoid a linking failure. The `--enable-debug-assertions` option can be used to enable debug assertions despite the use of a release build.
+ 
+-You can combine fuzzing with `--enable-address-sanitizer`, `--enable-undefined-sanitizer` or `--enable-memory-sanitizer`. The first two options can also be used together.
+-
+ You will need a recent version of clang that supports the `-fsanitize=fuzzer-no-link` option.
+ 
+ When running `make` it creates these binaries in `sapi/fuzzer/`:
+@@ -28,11 +25,8 @@ When running `make` it creates these binaries in `sapi/fuzzer/`:
+ * `php-fuzz-unserializehash`: Fuzzing unserialize() for HashContext objects
+ * `php-fuzz-json`: Fuzzing JSON parser (requires --enable-json)
+ * `php-fuzz-exif`: Fuzzing `exif_read_data()` function (requires --enable-exif)
+-* `php-fuzz-mbstring`: Fuzzing `mb_convert_encoding()` (requires `--enable-mbstring`)
+-* `php-fuzz-mbregex`: Fuzzing `mb_ereg[i]()` (requires --enable-mbstring)
++* `php-fuzz-mbstring`: Fuzzing `mb_ereg[i]()` (requires --enable-mbstring)
+ * `php-fuzz-execute`: Fuzzing the executor
+-* `php-fuzz-function-jit`: Fuzzing the function JIT (requires --enable-opcache)
+-* `php-fuzz-tracing-jit`: Fuzzing the tracing JIT (requires --enable-opcache)
+ 
+ Some fuzzers have a seed corpus in `sapi/fuzzer/corpus`. You can use it as follows:
+ 
+@@ -66,21 +60,7 @@ sapi/fuzzer/php-fuzz-parser -merge=1 ./my-parser-corpus sapi/fuzzer/corpus/parse
+ sapi/fuzzer/php-fuzz-parser -only_ascii=1 ./my-parser-corpus
+ ```
+ 
+-For the execute, function-jit and tracing-jit fuzzers, a corpus may be generated from any set of test files:
+-
+-```sh
+-sapi/cli/php sapi/fuzzer/generate_execute_corpus.php ./execute-corpus Zend/tests ext/opcache/tests/jit
+-sapi/fuzzer/php-fuzzer-function-jit ./execute-corpus
+-```
+-
+-For the mbstring fuzzer, a dictionary of encodings should be generated first:
+-
+-```sh
+-sapi/cli/php sapi/fuzzer/generate_mbstring_dict.php
+-sapi/fuzzer/php-fuzz-mbstring -dict=$PWD/sapi/fuzzer/dict/mbstring ./my-mbstring-corpus
+-```
+-
+-For the mbregex fuzzer, you may want to build the libonig dependency with instrumentation. At this time, libonig is not clean under ubsan, so only the fuzzer and address sanitizers may be used.
++For the mbstring fuzzer, you may want to build the libonig dependency with instrumentation. At this time, libonig is not clean under ubsan, so only the fuzzer and address sanitizers may be used.
+ 
+ ```sh
+ git clone https://github.com/kkos/oniguruma.git
+diff --git a/sapi/fuzzer/config.m4 b/sapi/fuzzer/config.m4
+index aac06d18..92327fc1 100644
+--- a/sapi/fuzzer/config.m4
++++ b/sapi/fuzzer/config.m4
+@@ -6,6 +6,12 @@ PHP_ARG_ENABLE([fuzzer],,
+   [no],
+   [no])
+ 
++PHP_ARG_ENABLE([fuzzer-msan],,
++  [AS_HELP_STRING([--enable-fuzzer-msan],
++    [Enable msan instead of asan/ubsan when fuzzing])],
++  [no],
++  [no])
++
+ dnl For newer clang versions see https://llvm.org/docs/LibFuzzer.html#fuzzer-usage
+ dnl for relevant flags.
+ 
+@@ -33,6 +39,22 @@ if test "$PHP_FUZZER" != "no"; then
+     AX_CHECK_COMPILE_FLAG([-fsanitize=fuzzer-no-link], [
+       CFLAGS="$CFLAGS -fsanitize=fuzzer-no-link"
+       CXXFLAGS="$CXXFLAGS -fsanitize=fuzzer-no-link"
++
++      if test "$PHP_FUZZER_MSAN" = "yes"; then
++        CFLAGS="$CFLAGS -fsanitize=memory -fsanitize-memory-track-origins"
++        CXXFLAGS="$CXXFLAGS -fsanitize=memory -fsanitize-memory-track-origins"
++      else
++        CFLAGS="$CFLAGS -fsanitize=address"
++        CXXFLAGS="$CXXFLAGS -fsanitize=address"
++
++        dnl Don't include -fundefined in CXXFLAGS, because that would also require linking
++        dnl with a C++ compiler.
++        dnl Disable object-size sanitizer, because it is incompatible with our zend_function
++        dnl union, and this can't be easily fixed.
++        dnl We need to specify -fno-sanitize-recover=undefined here, otherwise ubsan warnings
++        dnl will not be considered failures by the fuzzer.
++        CFLAGS="$CFLAGS -fsanitize=undefined -fno-sanitize=object-size -fno-sanitize-recover=undefined"
++      fi
+     ],[
+       AC_MSG_ERROR(Compiler doesn't support -fsanitize=fuzzer-no-link)
+     ])
+@@ -54,8 +76,6 @@ if test "$PHP_FUZZER" != "no"; then
+ 
+   PHP_FUZZER_TARGET([parser], PHP_FUZZER_PARSER_OBJS)
+   PHP_FUZZER_TARGET([execute], PHP_FUZZER_EXECUTE_OBJS)
+-  PHP_FUZZER_TARGET([function-jit], PHP_FUZZER_FUNCTION_JIT_OBJS)
+-  PHP_FUZZER_TARGET([tracing-jit], PHP_FUZZER_TRACING_JIT_OBJS)
+   PHP_FUZZER_TARGET([unserialize], PHP_FUZZER_UNSERIALIZE_OBJS)
+   PHP_FUZZER_TARGET([unserializehash], PHP_FUZZER_UNSERIALIZEHASH_OBJS)
+   PHP_FUZZER_TARGET([json], PHP_FUZZER_JSON_OBJS)
+@@ -65,9 +85,6 @@ if test "$PHP_FUZZER" != "no"; then
+   fi
+   if test -n "$enable_mbstring" && test "$enable_mbstring" != "no"; then
+     PHP_FUZZER_TARGET([mbstring], PHP_FUZZER_MBSTRING_OBJS)
+-    if test -n "$enable_mbregex" && test "$enable_mbregex" != "no"; then
+-      PHP_FUZZER_TARGET([mbregex], PHP_FUZZER_MBREGEX_OBJS)
+-    fi
+   fi
+ 
+   PHP_SUBST(PHP_FUZZER_BINARIES)
+diff --git a/sapi/fuzzer/fuzzer-execute-common.h b/sapi/fuzzer/fuzzer-execute-common.h
+deleted file mode 100644
+index 3ecd27d3..00000000
+--- a/sapi/fuzzer/fuzzer-execute-common.h
++++ /dev/null
+@@ -1,166 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include <main/php.h>
+-
+-#if defined(__FreeBSD__)
+-# include <sys/sysctl.h>
+-#endif
+-
+-#include "fuzzer.h"
+-#include "fuzzer-sapi.h"
+-#include "zend_exceptions.h"
+-
+-#define FILE_NAME "/tmp/fuzzer.php"
+-#define MAX_STEPS 1000
+-#define MAX_SIZE (8 * 1024)
+-static uint32_t steps_left;
+-static bool bailed_out = false;
+-
+-/* Because the fuzzer is always compiled with clang,
+- * we can assume that we don't use global registers / hybrid VM. */
+-typedef int (ZEND_FASTCALL *opcode_handler_t)(zend_execute_data *);
+-
+-static zend_always_inline void fuzzer_bailout(void) {
+-	bailed_out = true;
+-	zend_bailout();
+-}
+-
+-static zend_always_inline void fuzzer_step(void) {
+-	if (--steps_left == 0) {
+-		/* Reset steps before bailing out, so code running after bailout (e.g. in
+-		 * destructors) will get another MAX_STEPS, rather than UINT32_MAX steps. */
+-		steps_left = MAX_STEPS;
+-		fuzzer_bailout();
+-	}
+-}
+-
+-static void (*orig_execute_ex)(zend_execute_data *execute_data);
+-
+-static void fuzzer_execute_ex(zend_execute_data *execute_data) {
+-	while (1) {
+-		int ret;
+-		fuzzer_step();
+-		if ((ret = ((opcode_handler_t) EX(opline)->handler)(execute_data)) != 0) {
+-			if (ret > 0) {
+-				execute_data = EG(current_execute_data);
+-			} else {
+-				return;
+-			}
+-		}
+-	}
+-}
+-
+-static zend_op_array *(*orig_compile_string)(
+-		zend_string *source_string, const char *filename, zend_compile_position position);
+-
+-static zend_op_array *fuzzer_compile_string(
+-		zend_string *str, const char *filename, zend_compile_position position) {
+-	if (ZSTR_LEN(str) > MAX_SIZE) {
+-		/* Avoid compiling huge inputs via eval(). */
+-		fuzzer_bailout();
+-	}
+-
+-	return orig_compile_string(str, filename, position);
+-}
+-
+-static void (*orig_execute_internal)(zend_execute_data *execute_data, zval *return_value);
+-
+-static void fuzzer_execute_internal(zend_execute_data *execute_data, zval *return_value) {
+-	fuzzer_step();
+-
+-	uint32_t num_args = ZEND_CALL_NUM_ARGS(execute_data);
+-	for (uint32_t i = 0; i < num_args; i++) {
+-		/* Some internal functions like preg_replace() may be slow on large inputs.
+-		 * Limit the maximum size of string inputs. */
+-		zval *arg = ZEND_CALL_VAR_NUM(execute_data, i);
+-		if (Z_TYPE_P(arg) == IS_STRING && Z_STRLEN_P(arg) > MAX_SIZE) {
+-			fuzzer_bailout();
+-		}
+-	}
+-
+-	orig_execute_internal(execute_data, return_value);
+-}
+-
+-static void fuzzer_init_php_for_execute(const char *extra_ini) {
+-	/* Compilation will often trigger fatal errors.
+-	 * Use tracked allocation mode to avoid leaks in that case. */
+-	putenv("USE_TRACKED_ALLOC=1");
+-
+-	/* Just like other SAPIs, ignore SIGPIPEs. */
+-	signal(SIGPIPE, SIG_IGN);
+-
+-	fuzzer_init_php(extra_ini);
+-
+-	orig_execute_ex = zend_execute_ex;
+-	zend_execute_ex = fuzzer_execute_ex;
+-	orig_execute_internal = zend_execute_internal ? zend_execute_internal : execute_internal;
+-	zend_execute_internal = fuzzer_execute_internal;
+-	orig_compile_string = zend_compile_string;
+-	zend_compile_string = fuzzer_compile_string;
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED static void create_file(void) {
+-	/* For opcache_invalidate() to work, the dummy file name used for fuzzing needs to
+-	 * actually exist. */
+-	FILE *f = fopen(FILE_NAME, "w");
+-	fclose(f);
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED static void opcache_invalidate(void) {
+-	steps_left = MAX_STEPS;
+-	zend_exception_save();
+-	zval retval, func, args[2];
+-	ZVAL_STRING(&func, "opcache_invalidate");
+-	ZVAL_STRING(&args[0], FILE_NAME);
+-	ZVAL_TRUE(&args[1]);
+-	call_user_function(CG(function_table), NULL, &func, &retval, 2, args);
+-	ZEND_ASSERT(Z_TYPE(retval) == IS_TRUE);
+-	zval_ptr_dtor(&args[0]);
+-	zval_ptr_dtor(&retval);
+-	zval_ptr_dtor(&func);
+-	zend_exception_restore();
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED char *get_opcache_path(void) {
+-	/* Try relative to cwd. */
+-	char *p = realpath("modules/opcache.so", NULL);
+-	if (p) {
+-		return p;
+-	}
+-
+-	/* Try relative to binary location. */
+-	char path[MAXPATHLEN];
+-#if defined(__FreeBSD__)
+-	size_t pathlen = sizeof(path);
+-	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+-	if (sysctl(mib, 4, path, &pathlen, NULL, 0) < 0) {
+-#else
+-	if (readlink("/proc/self/exe", path, sizeof(path)) < 0) {
+-#endif
+-		ZEND_ASSERT(0 && "Failed to get binary path");
+-		return NULL;
+-	}
+-
+-	/* Get basename. */
+-	char *last_sep = strrchr(path, '/');
+-	if (last_sep) {
+-		*last_sep = '\0';
+-	}
+-
+-	strlcat(path, "/modules/opcache.so", sizeof(path));
+-	return realpath(path, NULL);
+-}
+diff --git a/sapi/fuzzer/fuzzer-execute.c b/sapi/fuzzer/fuzzer-execute.c
+index aa456a17..abc5ebff 100644
+--- a/sapi/fuzzer/fuzzer-execute.c
++++ b/sapi/fuzzer/fuzzer-execute.c
+@@ -14,7 +14,70 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-#include "fuzzer-execute-common.h"
++#include <main/php.h>
++
++#include "fuzzer.h"
++#include "fuzzer-sapi.h"
++
++#define MAX_STEPS 1000
++#define MAX_SIZE (8 * 1024)
++static uint32_t steps_left;
++
++/* Because the fuzzer is always compiled with clang,
++ * we can assume that we don't use global registers / hybrid VM. */
++typedef int (ZEND_FASTCALL *opcode_handler_t)(zend_execute_data *);
++
++static zend_always_inline void fuzzer_step(void) {
++	if (--steps_left == 0) {
++		/* Reset steps before bailing out, so code running after bailout (e.g. in
++		 * destructors) will get another MAX_STEPS, rather than UINT32_MAX steps. */
++		steps_left = MAX_STEPS;
++		zend_bailout();
++	}
++}
++
++static void fuzzer_execute_ex(zend_execute_data *execute_data) {
++	while (1) {
++		int ret;
++		fuzzer_step();
++		if ((ret = ((opcode_handler_t) EX(opline)->handler)(execute_data)) != 0) {
++			if (ret > 0) {
++				execute_data = EG(current_execute_data);
++			} else {
++				return;
++			}
++		}
++	}
++}
++
++static zend_op_array *(*orig_compile_string)(zend_string *source_string, const char *filename);
++
++static zend_op_array *fuzzer_compile_string(zend_string *str, const char *filename) {
++	if (ZSTR_LEN(str) > MAX_SIZE) {
++		/* Avoid compiling huge inputs via eval(). */
++		zend_bailout();
++	}
++
++	return orig_compile_string(str, filename);
++}
++
++static void (*orig_execute_internal)(zend_execute_data *execute_data, zval *return_value);
++
++static void fuzzer_execute_internal(zend_execute_data *execute_data, zval *return_value) {
++	fuzzer_step();
++
++	uint32_t num_args = ZEND_CALL_NUM_ARGS(execute_data);
++	for (uint32_t i = 0; i < num_args; i++) {
++		/* Some internal functions like preg_replace() may be slow on large inputs.
++		 * Limit the maximum size of string inputs. */
++		zval *arg = ZEND_CALL_VAR_NUM(execute_data, i);
++		if (Z_TYPE_P(arg) == IS_STRING && Z_STRLEN_P(arg) > MAX_SIZE) {
++			zend_bailout();
++		}
++	}
++
++	orig_execute_internal(execute_data, return_value);
++}
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ 	if (Size > MAX_SIZE) {
+@@ -24,13 +87,27 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ 	}
+ 
+ 	steps_left = MAX_STEPS;
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, /* before_shutdown */ NULL);
++	fuzzer_do_request_from_buffer("/fuzzer.php", (const char *) Data, Size, /* execute */ 1);
+ 
+ 	return 0;
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php_for_execute(NULL);
++	/* Compilation will often trigger fatal errors.
++	 * Use tracked allocation mode to avoid leaks in that case. */
++	putenv("USE_TRACKED_ALLOC=1");
++
++	/* Just like other SAPIs, ignore SIGPIPEs. */
++	signal(SIGPIPE, SIG_IGN);
++
++	fuzzer_init_php();
++
++	zend_execute_ex = fuzzer_execute_ex;
++	orig_execute_internal = zend_execute_internal ? zend_execute_internal : execute_internal;
++	zend_execute_internal = fuzzer_execute_internal;
++	orig_compile_string = zend_compile_string;
++	zend_compile_string = fuzzer_compile_string;
++
++	/* fuzzer_shutdown_php(); */
+ 	return 0;
+ }
+diff --git a/sapi/fuzzer/fuzzer-exif.c b/sapi/fuzzer/fuzzer-exif.c
+index cb16bb90..8cf1ce06 100644
+--- a/sapi/fuzzer/fuzzer-exif.c
++++ b/sapi/fuzzer/fuzzer-exif.c
+@@ -64,7 +64,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-function-jit.c b/sapi/fuzzer/fuzzer-function-jit.c
+deleted file mode 100644
+index c637bcfa..00000000
+--- a/sapi/fuzzer/fuzzer-function-jit.c
++++ /dev/null
+@@ -1,68 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include "fuzzer-execute-common.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > MAX_SIZE) {
+-		/* Large inputs have a large impact on fuzzer performance,
+-		 * but are unlikely to be necessary to reach new codepaths. */
+-		return 0;
+-	}
+-
+-	zend_string *jit_option = zend_string_init("opcache.jit", sizeof("opcache.jit") - 1, 1);
+-
+-	/* First run without JIT to determine whether we bail out. We should not run JITed code if
+-	 * we bail out here, as the JIT code may loop infinitely. */
+-	steps_left = MAX_STEPS;
+-	bailed_out = false;
+-	zend_alter_ini_entry_chars(
+-		jit_option, "off", sizeof("off")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-
+-	if (!bailed_out) {
+-		steps_left = MAX_STEPS;
+-		zend_alter_ini_entry_chars(jit_option,
+-			"function", sizeof("function")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-		zend_execute_ex = orig_execute_ex;
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-		zend_execute_ex = fuzzer_execute_ex;
+-	}
+-
+-	zend_string_release(jit_option);
+-
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	char *opcache_path = get_opcache_path();
+-	assert(opcache_path && "Failed to determine opcache path");
+-
+-	char ini_buf[512];
+-	snprintf(ini_buf, sizeof(ini_buf),
+-		"zend_extension=%s\n"
+-		"opcache.validate_timestamps=0\n"
+-		"opcache.file_update_protection=0\n"
+-		"opcache.jit_buffer_size=256M",
+-		opcache_path);
+-	free(opcache_path);
+-
+-	create_file();
+-	fuzzer_init_php_for_execute(ini_buf);
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-json.c b/sapi/fuzzer/fuzzer-json.c
+index 4335598b..a154bc3b 100644
+--- a/sapi/fuzzer/fuzzer-json.c
++++ b/sapi/fuzzer/fuzzer-json.c
+@@ -55,7 +55,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-mbregex.c b/sapi/fuzzer/fuzzer-mbregex.c
+deleted file mode 100644
+index 970a7b5b..00000000
+--- a/sapi/fuzzer/fuzzer-mbregex.c
++++ /dev/null
+@@ -1,78 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Stanislav Malyshev <stas@php.net>                           |
+-   +----------------------------------------------------------------------+
+- */
+-
+-
+-#include "fuzzer.h"
+-
+-#include "Zend/zend.h"
+-#include "main/php_config.h"
+-#include "main/php_main.h"
+-#include "oniguruma.h"
+-
+-#include <stdio.h>
+-#include <stdint.h>
+-#include <stdlib.h>
+-
+-#include "fuzzer-sapi.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-#ifdef HAVE_MBREGEX
+-	char *args[2];
+-	char *data = malloc(Size+1);
+-	memcpy(data, Data, Size);
+-	data[Size] = '\0';
+-
+-	if (fuzzer_request_startup() == FAILURE) {
+-		return 0;
+-	}
+-
+-	fuzzer_setup_dummy_frame();
+-
+-	args[0] = data;
+-	args[1] = "test123";
+-	fuzzer_call_php_func("mb_ereg", 2, args);
+-
+-	args[0] = data;
+-	args[1] = "test123";
+-	fuzzer_call_php_func("mb_eregi", 2, args);
+-
+-	args[0] = data;
+-	args[1] = data;
+-	fuzzer_call_php_func("mb_ereg", 2, args);
+-
+-	args[0] = data;
+-	args[1] = data;
+-	fuzzer_call_php_func("mb_eregi", 2, args);
+-
+-	fuzzer_request_shutdown();
+-
+-	free(data);
+-#else
+-	fprintf(stderr, "\n\nERROR:\nPHP built without mbstring, recompile with --enable-mbstring to use this fuzzer\n");
+-	exit(1);
+-#endif
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
+-
+-	/* The default parse depth limit allows stack overflows under asan. */
+-	onig_set_parse_depth_limit(512);
+-
+-	/* fuzzer_shutdown_php(); */
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-mbstring.c b/sapi/fuzzer/fuzzer-mbstring.c
+index 61014b23..142552a3 100644
+--- a/sapi/fuzzer/fuzzer-mbstring.c
++++ b/sapi/fuzzer/fuzzer-mbstring.c
+@@ -15,52 +15,64 @@
+  */
+ 
+ 
+-#include "zend.h"
+ #include "fuzzer.h"
++
++#include "Zend/zend.h"
++#include "main/php_config.h"
++#include "main/php_main.h"
++#include "oniguruma.h"
++
++#include <stdio.h>
++#include <stdint.h>
++#include <stdlib.h>
++
+ #include "fuzzer-sapi.h"
+-#include "ext/mbstring/mbstring.h"
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	const uint8_t *Comma1 = memchr(Data, ',', Size);
+-	if (!Comma1) {
+-		return 0;
+-	}
+-
+-	size_t ToEncodingNameLen = Comma1 - Data;
+-	char *ToEncodingName = estrndup((char *) Data, ToEncodingNameLen);
+-	Data = Comma1 + 1;
+-	Size -= ToEncodingNameLen + 1;
++#ifdef HAVE_MBREGEX
++	char *args[2];
++	char *data = malloc(Size+1);
++	memcpy(data, Data, Size);
++	data[Size] = '\0';
+ 
+-	const uint8_t *Comma2 = memchr(Data, ',', Size);
+-	if (!Comma2) {
+-		efree(ToEncodingName);
++	if (fuzzer_request_startup() == FAILURE) {
+ 		return 0;
+ 	}
+ 
+-	size_t FromEncodingNameLen = Comma2 - Data;
+-	char *FromEncodingName = estrndup((char *) Data, FromEncodingNameLen);
+-	Data = Comma2 + 1;
+-	Size -= FromEncodingNameLen + 1;
++	fuzzer_setup_dummy_frame();
+ 
+-	const mbfl_encoding *ToEncoding = mbfl_name2encoding(ToEncodingName);
+-	const mbfl_encoding *FromEncoding = mbfl_name2encoding(FromEncodingName);
++	args[0] = data;
++	args[1] = "test123";
++	fuzzer_call_php_func("mb_ereg", 2, args);
+ 
+-	if (!ToEncoding || !FromEncoding || fuzzer_request_startup() == FAILURE) {
+-		efree(ToEncodingName);
+-		efree(FromEncodingName);
+-		return 0;
+-	}
++	args[0] = data;
++	args[1] = "test123";
++	fuzzer_call_php_func("mb_eregi", 2, args);
++
++	args[0] = data;
++	args[1] = data;
++	fuzzer_call_php_func("mb_ereg", 2, args);
+ 
+-	zend_string *Result = php_mb_convert_encoding_ex((char *) Data, Size, ToEncoding, FromEncoding);
+-	zend_string_release(Result);
+-	efree(ToEncodingName);
+-	efree(FromEncodingName);
++	args[0] = data;
++	args[1] = data;
++	fuzzer_call_php_func("mb_eregi", 2, args);
+ 
+ 	fuzzer_request_shutdown();
++
++	free(data);
++#else
++	fprintf(stderr, "\n\nERROR:\nPHP built without mbstring, recompile with --enable-mbstring to use this fuzzer\n");
++	exit(1);
++#endif
+ 	return 0;
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
++
++	/* The default parse depth limit allows stack overflows under asan. */
++	onig_set_parse_depth_limit(512);
++
++	/* fuzzer_shutdown_php(); */
+ 	return 0;
+ }
+diff --git a/sapi/fuzzer/fuzzer-parser.c b/sapi/fuzzer/fuzzer-parser.c
+index 28030d95..61cedcfc 100644
+--- a/sapi/fuzzer/fuzzer-parser.c
++++ b/sapi/fuzzer/fuzzer-parser.c
+@@ -26,14 +26,13 @@
+ #include "fuzzer-sapi.h"
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > 6 * 1024) {
+-		/* Large inputs have a large impact on fuzzer performance and may cause stack overflows,
++	if (Size > 32 * 1024) {
++		/* Large inputs have a large impact on fuzzer performance,
+ 		 * but are unlikely to be necessary to reach new codepaths. */
+ 		return 0;
+ 	}
+ 
+-	fuzzer_do_request_from_buffer(
+-		"fuzzer.php", (const char *) Data, Size, /* execute */ 0, /* before_shutdown */ NULL);
++	fuzzer_do_request_from_buffer("fuzzer.php", (const char *) Data, Size, /* execute */ 0);
+ 
+ 	return 0;
+ }
+@@ -43,7 +42,7 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+ 	 * Use tracked allocation mode to avoid leaks in that case. */
+ 	putenv("USE_TRACKED_ALLOC=1");
+ 
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-sapi.c b/sapi/fuzzer/fuzzer-sapi.c
+index 3a79e273..95c2b1ce 100644
+--- a/sapi/fuzzer/fuzzer-sapi.c
++++ b/sapi/fuzzer/fuzzer-sapi.c
+@@ -47,7 +47,7 @@ const char HARDCODED_INI[] =
+ 	"open_basedir=/tmp\n"
+ 	"disable_functions=dl,mail,mb_send_mail"
+ 	",shell_exec,exec,system,proc_open,popen,passthru,pcntl_exec"
+-	",chdir,chgrp,chmod,chown,copy,file_put_contents,lchgrp,lchown,link,mkdir"
++	",chgrp,chmod,chown,copy,file_put_contents,lchgrp,lchown,link,mkdir"
+ 	",move_uploaded_file,rename,rmdir,symlink,tempname,touch,unlink,fopen"
+ 	/* Networking code likes to wait and wait. */
+ 	",fsockopen,pfsockopen"
+@@ -62,7 +62,10 @@ const char HARDCODED_INI[] =
+ 
+ static int startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, NULL);
++	if (php_module_startup(sapi_module, NULL, 0)==FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ static size_t ub_write(const char *str, size_t str_length)
+@@ -128,7 +131,7 @@ static sapi_module_struct fuzzer_module = {
+ 	STANDARD_SAPI_MODULE_PROPERTIES
+ };
+ 
+-int fuzzer_init_php(const char *extra_ini)
++int fuzzer_init_php()
+ {
+ #ifdef __SANITIZE_ADDRESS__
+ 	/* We're going to leak all the memory allocated during startup,
+@@ -139,20 +142,8 @@ int fuzzer_init_php(const char *extra_ini)
+ 	sapi_startup(&fuzzer_module);
+ 	fuzzer_module.phpinfo_as_text = 1;
+ 
+-	size_t ini_len = sizeof(HARDCODED_INI);
+-	size_t extra_ini_len = extra_ini ? strlen(extra_ini) : 0;
+-	if (extra_ini) {
+-		ini_len += extra_ini_len + 1;
+-	}
+-	char *p = fuzzer_module.ini_entries = malloc(ini_len + 1);
+-	memcpy(p, HARDCODED_INI, sizeof(HARDCODED_INI) - 1);
+-	p += sizeof(HARDCODED_INI) - 1;
+-	if (extra_ini) {
+-		*p++ = '\n';
+-		memcpy(p, extra_ini, extra_ini_len);
+-		p += extra_ini_len;
+-	}
+-	*p = '\0';
++	fuzzer_module.ini_entries = malloc(sizeof(HARDCODED_INI));
++	memcpy(fuzzer_module.ini_entries, HARDCODED_INI, sizeof(HARDCODED_INI));
+ 
+ 	/*
+ 	 * TODO: we might want to test both Zend and malloc MM, but testing with malloc
+@@ -239,8 +230,7 @@ int fuzzer_shutdown_php(void)
+ }
+ 
+ int fuzzer_do_request_from_buffer(
+-		char *filename, const char *data, size_t data_len, bool execute,
+-		void (*before_shutdown)(void))
++		char *filename, const char *data, size_t data_len, bool execute)
+ {
+ 	int retval = FAILURE; /* failure by default */
+ 
+@@ -263,8 +253,6 @@ int fuzzer_do_request_from_buffer(
+ 		file_handle.primary_script = 1;
+ 		file_handle.buf = estrndup(data, data_len);
+ 		file_handle.len = data_len;
+-		/* Avoid ZEND_HANDLE_FILENAME for opcache. */
+-		file_handle.type = ZEND_HANDLE_STREAM;
+ 
+ 		zend_op_array *op_array = zend_compile_file(&file_handle, ZEND_REQUIRE);
+ 		zend_destroy_file_handle(&file_handle);
+@@ -279,9 +267,6 @@ int fuzzer_do_request_from_buffer(
+ 	} zend_end_try();
+ 
+ 	CG(compiled_filename) = NULL; /* ??? */
+-	if (before_shutdown) {
+-		before_shutdown();
+-	}
+ 	fuzzer_request_shutdown();
+ 
+ 	return (retval == SUCCESS) ? SUCCESS : FAILURE;
+diff --git a/sapi/fuzzer/fuzzer-sapi.h b/sapi/fuzzer/fuzzer-sapi.h
+index 4ee2cb3f..076a5714 100644
+--- a/sapi/fuzzer/fuzzer-sapi.h
++++ b/sapi/fuzzer/fuzzer-sapi.h
+@@ -15,12 +15,11 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-int fuzzer_init_php(const char *extra_ini);
++int fuzzer_init_php(void);
+ int fuzzer_request_startup(void);
+ void fuzzer_request_shutdown(void);
+ void fuzzer_setup_dummy_frame(void);
+ void fuzzer_call_php_func(const char *func_name, int nargs, char **params);
+ void fuzzer_call_php_func_zval(const char *func_name, int nargs, zval *args);
+ int fuzzer_do_request_from_buffer(
+-		char *filename, const char *data, size_t data_len, bool execute,
+-		void (*before_shutdown)(void));
++		char *filename, const char *data, size_t data_len, bool execute);
+diff --git a/sapi/fuzzer/fuzzer-tracing-jit.c b/sapi/fuzzer/fuzzer-tracing-jit.c
+deleted file mode 100644
+index 585bf553..00000000
+--- a/sapi/fuzzer/fuzzer-tracing-jit.c
++++ /dev/null
+@@ -1,77 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include "fuzzer-execute-common.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > MAX_SIZE) {
+-		/* Large inputs have a large impact on fuzzer performance,
+-		 * but are unlikely to be necessary to reach new codepaths. */
+-		return 0;
+-	}
+-
+-	zend_string *jit_option = zend_string_init("opcache.jit", sizeof("opcache.jit") - 1, 1);
+-
+-	/* First run without JIT to determine whether we bail out. We should not run JITed code if
+-	 * we bail out here, as the JIT code may loop infinitely. */
+-	steps_left = MAX_STEPS;
+-	bailed_out = false;
+-	zend_alter_ini_entry_chars(
+-		jit_option, "off", sizeof("off")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-
+-	if (!bailed_out) {
+-		steps_left = MAX_STEPS;
+-		zend_alter_ini_entry_chars(jit_option,
+-			"tracing", sizeof("tracing")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-		zend_execute_ex = orig_execute_ex;
+-		/* Trace & compile */
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, NULL);
+-		/* Execute trace */
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-		zend_execute_ex = fuzzer_execute_ex;
+-	}
+-
+-	zend_string_release(jit_option);
+-
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	char *opcache_path = get_opcache_path();
+-	assert(opcache_path && "Failed to determine opcache path");
+-
+-	char ini_buf[512];
+-	snprintf(ini_buf, sizeof(ini_buf),
+-		"zend_extension=%s\n"
+-		"opcache.validate_timestamps=0\n"
+-		"opcache.file_update_protection=0\n"
+-		"opcache.jit_buffer_size=256M\n"
+-		"opcache.jit_hot_func=1\n"
+-		"opcache.jit_hot_loop=1\n"
+-		"opcache.jit_hot_return=1\n"
+-		"opcache.jit_hot_side_exit=1\n"
+-		"opcache.jit_max_root_traces=32768",
+-		opcache_path);
+-	free(opcache_path);
+-
+-	create_file();
+-	fuzzer_init_php_for_execute(ini_buf);
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-unserialize.c b/sapi/fuzzer/fuzzer-unserialize.c
+index ff26e5b1..efae256a 100644
+--- a/sapi/fuzzer/fuzzer-unserialize.c
++++ b/sapi/fuzzer/fuzzer-unserialize.c
+@@ -60,7 +60,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-unserializehash.c b/sapi/fuzzer/fuzzer-unserializehash.c
+index 5d29eb5f..0f7d81a3 100644
+--- a/sapi/fuzzer/fuzzer-unserializehash.c
++++ b/sapi/fuzzer/fuzzer-unserializehash.c
+@@ -75,7 +75,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t FullSize) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/generate_all.php b/sapi/fuzzer/generate_all.php
+index 5794bdac..589781b0 100644
+--- a/sapi/fuzzer/generate_all.php
++++ b/sapi/fuzzer/generate_all.php
+@@ -1,21 +1,5 @@
+ <?php
+ require __DIR__ . '/generate_unserialize_dict.php';
+-require __DIR__ . '/generate_mbstring_dict.php';
+ require __DIR__ . '/generate_unserializehash_corpus.php';
+ require __DIR__ . '/generate_parser_corpus.php';
+-
+-require __DIR__ . '/generate_corpus_util.php';
+-
+-$baseDir = __DIR__ . '/../..';
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/execute',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/reflection"]
+-);
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/function-jit',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/opcache/tests/jit"]
+-);
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/tracing-jit',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/opcache/tests/jit"]
+-);
++require __DIR__ . '/generate_execute_corpus.php';
+diff --git a/sapi/fuzzer/generate_corpus_util.php b/sapi/fuzzer/generate_corpus_util.php
+deleted file mode 100644
+index 29d152a1..00000000
+--- a/sapi/fuzzer/generate_corpus_util.php
++++ /dev/null
+@@ -1,25 +0,0 @@
+-<?php
+-
+-function generate_corpus_from_phpt(string $corpusDir, array $testDirs, int $maxLen = 8 * 1024) {
+-    @mkdir($corpusDir);
+-    foreach ($testDirs as $testDir) {
+-        $it = new RecursiveIteratorIterator(
+-            new RecursiveDirectoryIterator($testDir),
+-            RecursiveIteratorIterator::LEAVES_ONLY
+-        );
+-
+-        foreach ($it as $file) {
+-            if (!preg_match('/\.phpt$/', $file)) continue;
+-            $fullCode = file_get_contents($file);
+-            if (!preg_match('/--FILE--\R(.*?)\R--([_A-Z]+)--/s', $fullCode, $matches)) continue;
+-            $code = $matches[1];
+-            if (strlen($code) > $maxLen) continue;
+-
+-            $outFile = str_replace($testDir, '', $file);
+-            $outFile = str_replace('/', '_', $outFile);
+-            if (!preg_match('/SKIP_SLOW_TESTS|SKIP_PERF_SENSITIVE|USE_ZEND_ALLOC/', $fullCode)) {
+-                file_put_contents($corpusDir . '/' . $outFile, $code);
+-            }
+-        }
+-    }
+-}
+diff --git a/sapi/fuzzer/generate_execute_corpus.php b/sapi/fuzzer/generate_execute_corpus.php
+index 8ed922df..e7e72f5b 100644
+--- a/sapi/fuzzer/generate_execute_corpus.php
++++ b/sapi/fuzzer/generate_execute_corpus.php
+@@ -1,7 +1,5 @@
+ <?php
+ 
+-require __DIR__ . '/generate_corpus_util.php';
+-
+ if ($argc >= 2) {
+     $corpusDir = $argv[1];
+ } else {
+@@ -14,4 +12,26 @@ if ($argc >= 3) {
+     $testDirs = ["$baseDir/Zend/tests", "$baseDir/ext/reflection"];
+ }
+ 
+-generate_corpus_from_phpt($corpusDir, $testDirs);
++$maxLen = 8 * 1024;
++@mkdir($corpusDir);
++
++foreach ($testDirs as $testDir) {
++    $it = new RecursiveIteratorIterator(
++        new RecursiveDirectoryIterator($testDir),
++        RecursiveIteratorIterator::LEAVES_ONLY
++    );
++
++    foreach ($it as $file) {
++        if (!preg_match('/\.phpt$/', $file)) continue;
++        $fullCode = file_get_contents($file);
++        if (!preg_match('/--FILE--\R(.*?)\R--([_A-Z]+)--/s', $fullCode, $matches)) continue;
++        $code = $matches[1];
++        if (strlen($code) > $maxLen) continue;
++
++        $outFile = str_replace($testDir, '', $file);
++        $outFile = str_replace('/', '_', $outFile);
++        if (!preg_match('/SKIP_SLOW_TESTS|SKIP_PERF_SENSITIVE|USE_ZEND_ALLOC/', $fullCode)) {
++            file_put_contents($corpusDir . '/' . $outFile, $code);
++        }
++    }
++}
+diff --git a/sapi/fuzzer/generate_mbstring_dict.php b/sapi/fuzzer/generate_mbstring_dict.php
+deleted file mode 100644
+index 520d8679..00000000
+--- a/sapi/fuzzer/generate_mbstring_dict.php
++++ /dev/null
+@@ -1,12 +0,0 @@
+-<?php
+-
+-if (!extension_loaded('mbstring')) {
+-    echo "Skipping mbstring dictionary generation\n";
+-    return;
+-}
+-
+-$dict = "";
+-foreach (mb_list_encodings() as $encoding) {
+-    $dict .= "\"" . $encoding . ",\"\n";
+-}
+-file_put_contents(__DIR__ . "/dict/mbstring", $dict);
+diff --git a/sapi/fuzzer/generate_parser_corpus.php b/sapi/fuzzer/generate_parser_corpus.php
+index 036ca42e..699c1219 100644
+--- a/sapi/fuzzer/generate_parser_corpus.php
++++ b/sapi/fuzzer/generate_parser_corpus.php
+@@ -9,7 +9,7 @@ $it = new RecursiveIteratorIterator(
+ $corpusDir = __DIR__ . '/corpus/parser';
+ @mkdir($corpusDir);
+ 
+-$maxLen = 6 * 1024;
++$maxLen = 32 * 1024;
+ foreach ($it as $file) {
+     if (!preg_match('/\.phpt$/', $file)) continue;
+     $code = file_get_contents($file);
+diff --git a/sapi/fuzzer/generate_unserialize_dict.php b/sapi/fuzzer/generate_unserialize_dict.php
+index 9ea53ed8..cf270788 100644
+--- a/sapi/fuzzer/generate_unserialize_dict.php
++++ b/sapi/fuzzer/generate_unserialize_dict.php
+@@ -3,7 +3,7 @@
+ $dict = "";
+ foreach (get_declared_classes() as $class) {
+     $len = strlen($class);
+-    $dict .= "\"$len:\\\"" . addslashes($class) . "\\\"\"\n";
++    $dict .= "\"$len:\\\"$class\\\"\"\n";
+ }
+ 
+ file_put_contents(__DIR__ . "/dict/unserialize", $dict);
+diff --git a/sapi/litespeed/lsapi_main.c b/sapi/litespeed/lsapi_main.c
+index 79fae635..2b3d83ad 100644
+--- a/sapi/litespeed/lsapi_main.c
++++ b/sapi/litespeed/lsapi_main.c
+@@ -97,7 +97,7 @@ static void init_sapi_from_env(sapi_module_struct *sapi_module)
+ /* {{{ php_lsapi_startup */
+ static int php_lsapi_startup(sapi_module_struct *sapi_module)
+ {
+-    if (php_module_startup(sapi_module, NULL)==FAILURE) {
++    if (php_module_startup(sapi_module, NULL, 0)==FAILURE) {
+         return FAILURE;
+     }
+     argv0 = sapi_module->executable_location;
+@@ -537,9 +537,9 @@ static void log_message (const char *fmt, ...)
+ #define DEBUG_MESSAGE(fmt, ...)
+ #endif
+ 
+-static int lsapi_activate_user_ini(void);
++static int lsapi_activate_user_ini();
+ 
+-static int sapi_lsapi_activate(void)
++static int sapi_lsapi_activate()
+ {
+     char *path, *server_name;
+     size_t path_len, server_name_len;
+@@ -677,9 +677,10 @@ static int do_clean_shutdown = 1;
+ static int clean_onexit = 1;
+ 
+ 
+-static void lsapi_clean_shutdown(void)
++static void lsapi_clean_shutdown()
+ {
+     struct sigaction act;
++    int sa_rc;
+     struct itimerval tmv;
+ #if PHP_MAJOR_VERSION >= 7
+     zend_string * key;
+@@ -688,14 +689,15 @@ static void lsapi_clean_shutdown(void)
+     sigemptyset(&act.sa_mask);
+     act.sa_flags = 0;
+     act.sa_handler = lsapi_sigsegv;
+-    (void)sigaction(SIGINT,  &act, NULL);
+-    (void)sigaction(SIGQUIT, &act, NULL);
+-    (void)sigaction(SIGILL,  &act, NULL);
+-    (void)sigaction(SIGABRT, &act, NULL);
+-    (void)sigaction(SIGBUS,  &act, NULL);
+-    (void)sigaction(SIGSEGV, &act, NULL);
+-    (void)sigaction(SIGTERM, &act, NULL);
+-    (void)sigaction(SIGPROF, &act, NULL);
++    sa_rc = sigaction(SIGINT,  &act, NULL);
++    sa_rc = sigaction(SIGQUIT, &act, NULL);
++    sa_rc = sigaction(SIGILL,  &act, NULL);
++    sa_rc = sigaction(SIGABRT, &act, NULL);
++    sa_rc = sigaction(SIGBUS,  &act, NULL);
++    sa_rc = sigaction(SIGSEGV, &act, NULL);
++    sa_rc = sigaction(SIGTERM, &act, NULL);
++
++    sa_rc = sigaction(SIGPROF, &act, NULL);
+     memset(&tmv, 0, sizeof(struct itimerval));
+     tmv.it_value.tv_sec = 0;
+     tmv.it_value.tv_usec = 100000;
+@@ -736,9 +738,11 @@ static void lsapi_atexit(void)
+     }
+ }
+ 
++
+ static int lsapi_module_main(int show_source)
+ {
+     struct sigaction act;
++    int sa_rc;
+     if (php_request_startup() == FAILURE ) {
+         return -1;
+     }
+@@ -747,13 +751,13 @@ static int lsapi_module_main(int show_source)
+         sigemptyset(&act.sa_mask);
+         act.sa_flags = SA_NODEFER;
+         act.sa_handler = lsapi_sigterm;
+-        (void)sigaction( SIGINT, &act, NULL);
+-        (void)sigaction( SIGQUIT, &act, NULL);
+-        (void)sigaction( SIGILL, &act, NULL);
+-        (void)sigaction( SIGABRT, &act, NULL);
+-        (void)sigaction( SIGBUS, &act, NULL);
+-        (void)sigaction( SIGSEGV, &act, NULL);
+-        (void)sigaction( SIGTERM, &act, NULL);
++        sa_rc = sigaction( SIGINT, &act, NULL);
++        sa_rc = sigaction( SIGQUIT, &act, NULL);
++        sa_rc = sigaction( SIGILL, &act, NULL);
++        sa_rc = sigaction( SIGABRT, &act, NULL);
++        sa_rc = sigaction( SIGBUS, &act, NULL);
++        sa_rc = sigaction( SIGSEGV, &act, NULL);
++        sa_rc = sigaction( SIGTERM, &act, NULL);
+ 
+         clean_onexit = 0;
+     }
+@@ -830,7 +834,7 @@ static void user_config_cache_entry_dtor(zval *el)
+     free(entry);
+ }
+ 
+-static void user_config_cache_init(void)
++static void user_config_cache_init()
+ {
+     zend_hash_init(&user_config_cache, 0, NULL, user_config_cache_entry_dtor, 1);
+ }
+@@ -1097,7 +1101,7 @@ static int lsapi_activate_user_ini( void )
+ }
+ 
+ 
+-static void override_ini(void)
++static void override_ini()
+ {
+ 
+     LSAPI_ForeachSpecialEnv( alter_ini, NULL );
+@@ -1514,7 +1518,7 @@ int main( int argc, char * argv[] )
+ 
+     lsapi_sapi_module.ini_defaults = sapi_lsapi_ini_defaults;
+ 
+-    if (php_module_startup(&lsapi_sapi_module, &litespeed_module_entry) == FAILURE) {
++    if (php_module_startup(&lsapi_sapi_module, &litespeed_module_entry, 1) == FAILURE) {
+ #ifdef ZTS
+         tsrm_shutdown();
+ #endif
+@@ -1598,8 +1602,14 @@ int main( int argc, char * argv[] )
+     return ret;
+ }
+ 
++
+ /*   LiteSpeed PHP module starts here */
+ 
++PHP_FUNCTION(litespeed_request_headers);
++PHP_FUNCTION(litespeed_response_headers);
++PHP_FUNCTION(apache_get_modules);
++PHP_FUNCTION(litespeed_finish_request);
++
+ PHP_MINFO_FUNCTION(litespeed);
+ 
+ static PHP_MINIT_FUNCTION(litespeed)
+diff --git a/sapi/litespeed/lsapilib.c b/sapi/litespeed/lsapilib.c
+index 055677c7..09cd2e6b 100644
+--- a/sapi/litespeed/lsapilib.c
++++ b/sapi/litespeed/lsapilib.c
+@@ -921,7 +921,6 @@ static int LSAPI_perror_r( LSAPI_Request * pReq, const char * pErr1, const char
+ }
+ 
+ 
+-#if defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+ static int lsapi_lve_error( LSAPI_Request * pReq )
+ {
+     static const char * headers[] =
+@@ -945,8 +944,10 @@ static int lsapi_lve_error( LSAPI_Request * pReq )
+     return 0;
+ }
+ 
++
+ static int lsapi_enterLVE( LSAPI_Request * pReq, uid_t uid )
+ {
++#if defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+     if ( s_lve && uid ) //root user should not do that
+     {
+         uint32_t cookie;
+@@ -960,13 +961,16 @@ static int lsapi_enterLVE( LSAPI_Request * pReq, uid_t uid )
+             return -1;
+         }
+     }
++#endif
+ 
+     return 0;
+ }
+ 
++
+ static int lsapi_jailLVE( LSAPI_Request * pReq, uid_t uid, struct passwd * pw )
+ {
+     int ret = 0;
++#if defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+     char  error_msg[1024] = "";
+     ret = (*fp_lve_jail)( pw, error_msg );
+     if ( ret < 0 )
+@@ -976,10 +980,12 @@ static int lsapi_jailLVE( LSAPI_Request * pReq, uid_t uid, struct passwd * pw )
+         LSAPI_perror_r( pReq, "LSAPI: jail() failure.", NULL );
+         return -1;
+     }
++#endif
+     return ret;
+ }
+ 
+ 
++#if defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+ static int lsapi_initLVE(void)
+ {
+     const char * pEnv;
+@@ -1359,6 +1365,30 @@ static inline int lsapi_notify_pid( int fd )
+     return 0;
+ }
+ 
++
++static char s_conn_key_packet[16];
++static inline int init_conn_key( int fd )
++{
++    struct lsapi_packet_header * pHeader = (struct lsapi_packet_header *)s_conn_key_packet;
++    struct timeval tv;
++    int i;
++    gettimeofday( &tv, NULL );
++    srand( (tv.tv_sec % 0x1000 + tv.tv_usec) ^ rand() );
++    for( i = 8; i < 16; ++i )
++    {
++        s_conn_key_packet[i]=(int) (256.0*rand()/(RAND_MAX+1.0));
++    }
++    lsapi_buildPacketHeader( pHeader, LSAPI_REQ_RECEIVED,
++                        8 + LSAPI_PACKET_HEADER_LEN );
++    if ( write( fd, s_conn_key_packet, LSAPI_PACKET_HEADER_LEN+8 )
++                < LSAPI_PACKET_HEADER_LEN+8 )
++        return -1;
++    return 0;
++
++
++}
++
++
+ static int readReq( LSAPI_Request * pReq )
+ {
+     int len;
+@@ -3129,11 +3159,11 @@ static void lsapi_check_child_status( long tmCur )
+ //}
+ 
+ 
+-void set_skip_write(void)
++void set_skip_write()
+ {   s_skip_write = 1;   }
+ 
+ 
+-int is_enough_free_mem(void)
++int is_enough_free_mem()
+ {
+ #if defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+     //minimum 1GB or 10% available free memory
+@@ -3801,7 +3831,7 @@ void LSAPI_No_Check_ppid(void)
+ }
+ 
+ 
+-int LSAPI_Get_ppid(void)
++int LSAPI_Get_ppid()
+ {
+     return(s_ppid);
+ }
+diff --git a/sapi/litespeed/lscriu.c b/sapi/litespeed/lscriu.c
+index 2854fefe..94d13e7e 100644
+--- a/sapi/litespeed/lscriu.c
++++ b/sapi/litespeed/lscriu.c
+@@ -95,8 +95,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ static int s_initial_start_reqs = 0;
+ static int s_requests_count = 0;
+ static int s_restored = 0;
+-static int (*s_lscapi_dump_me)(void) = NULL;
+-static int (*s_lscapi_prepare_me)(void) = NULL;
++static int (*s_lscapi_dump_me)() = NULL;
++static int (*s_lscapi_prepare_me)() = NULL;
+ static int s_native = 0;
+ static int s_tried_checkpoint = 0;
+ static int s_criu_debug = 0;
+@@ -118,7 +118,7 @@ typedef void (*sighandler_t)(int);
+ 
+ void lsapi_perror( const char * pMessage, int err_no );
+ void LSAPI_reset_server_state( void );
+-int LSAPI_Get_ppid(void);
++int LSAPI_Get_ppid();
+ 
+ #ifdef LSAPILIB_DEBUG_CRIU
+ #define lscriu_dbg(...) \
+@@ -541,7 +541,7 @@ static void LSCRIU_try_checkpoint(int *forked_pid)
+ }
+ 
+ 
+-static int init_native_env(void)
++static int init_native_env()
+ {
+     char *pchFd;
+     pchFd = getenv("LSAPI_CRIU_SYNC_FD");
+diff --git a/sapi/phpdbg/config.m4 b/sapi/phpdbg/config.m4
+index ac95cf3c..2f9a5e4a 100644
+--- a/sapi/phpdbg/config.m4
++++ b/sapi/phpdbg/config.m4
+@@ -45,36 +45,6 @@ if test "$BUILD_PHPDBG" = "" && test "$PHP_PHPDBG" != "no"; then
+     AC_MSG_RESULT([disabled])
+   fi
+ 
+-  AC_CACHE_CHECK([for userfaultfd faulting on write-protected memory support], ac_cv_phpdbg_userfaultfd_writefault, AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+-    #include <linux/userfaultfd.h>
+-    #ifndef UFFDIO_WRITEPROTECT_MODE_WP
+-    # error userfaults on write-protected memory not supported
+-    #endif
+-  ]])], [ac_cv_phpdbg_userfaultfd_writefault=yes], [ac_cv_phpdbg_userfaultfd_writefault=no]))
+-  if test "$ac_cv_phpdbg_userfaultfd_writefault" = "yes"; then
+-    if test "$enable_zts" != "yes"; then
+-      CFLAGS_SAVE="$CFLAGS"
+-      LIBS_SAVE="$LIBS"
+-
+-      PTHREADS_CHECK
+-      AC_MSG_CHECKING([working pthreads]);
+-
+-      if test "$pthreads_working" = "yes"; then
+-      	AC_MSG_RESULT([$ac_cv_pthreads_cflags -l$ac_cv_pthreads_lib]);
+-      	PHP_PHPDBG_CFLAGS="$PHP_PHPDBG_CFLAGS $ac_cv_pthreads_cflags"
+-      	PHPDBG_EXTRA_LIBS="$PHPDBG_EXTRA_LIBS -l$ac_cv_pthreads_lib"
+-      	AC_DEFINE(HAVE_USERFAULTFD_WRITEFAULT, 1, [Whether faulting on write-protected memory support can be compiled for userfaultfd])
+-      else
+-        AC_MSG_WARN([pthreads not available])
+-      fi
+-
+-      CFLAGS="$CFLAGS_SAVE"
+-      LIBS="$LIBS_SAVE"
+-    else
+-      AC_DEFINE(HAVE_USERFAULTFD_WRITEFAULT, 1, [Whether faulting on write-protected memory support can be compiled for userfaultfd])
+-    fi
+-  fi
+-
+   PHP_SUBST(PHP_PHPDBG_CFLAGS)
+   PHP_SUBST(PHP_PHPDBG_FILES)
+   PHP_SUBST(PHPDBG_EXTRA_LIBS)
+diff --git a/sapi/phpdbg/phpdbg.1.in b/sapi/phpdbg/phpdbg.1.in
+index cf43a57b..29f83240 100644
+--- a/sapi/phpdbg/phpdbg.1.in
++++ b/sapi/phpdbg/phpdbg.1.in
+@@ -1,4 +1,4 @@
+-.TH @program_prefix@phpdbg 1 "2022" "The PHP Group" "Scripting Language"
++.TH @program_prefix@phpdbg 1 "2021" "The PHP Group" "Scripting Language"
+ .SH NAME
+ @program_prefix@phpdbg \- The interactive PHP debugger
+ .SH SYNOPSIS
+@@ -105,7 +105,7 @@ You can view the list of known bugs or report any new bug you
+ found at
+ .PD 0
+ .P
+-.B https://github.com/php/php-src/issues
++.B http://bugs.php.net/
+ .PD 1
+ .SH AUTHORS
+ Written by Felipe Pena, Joe Watkins and Bob Weinand, formatted by Ondřej Surý for Debian project.
+
+-- 
+2.43.0

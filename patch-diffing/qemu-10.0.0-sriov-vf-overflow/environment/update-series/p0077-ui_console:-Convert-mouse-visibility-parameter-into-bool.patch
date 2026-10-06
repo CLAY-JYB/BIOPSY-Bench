@@ -1,0 +1,355 @@
+From da783bff Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0077] ui/console: Convert mouse visibility parameter into bool
+
+---
+diff --git a/ui/sdl2.c b/ui/sdl2.c
+index 0a0eb5a42d..98ed974371 100644
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -49,7 +49,7 @@ static int gui_grab_code = KMOD_LALT | KMOD_LCTRL;
+ static SDL_Cursor *sdl_cursor_normal;
+ static SDL_Cursor *sdl_cursor_hidden;
+ static int absolute_enabled;
+-static int guest_cursor;
++static bool guest_cursor;
+ static int guest_x, guest_y;
+ static SDL_Cursor *guest_sprite;
+ static Notifier mouse_mode_notifier;
+@@ -729,7 +729,7 @@ void sdl2_poll_events(struct sdl2_console *scon)
+ }
+ 
+ static void sdl_mouse_warp(DisplayChangeListener *dcl,
+-                           int x, int y, int on)
++                           int x, int y, bool on)
+ {
+     struct sdl2_console *scon = container_of(dcl, struct sdl2_console, dcl);
+ 
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index 8a8472d029..c794ae0649 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -254,7 +254,7 @@ static void qemu_spice_create_update(SimpleSpiceDisplay *ssd)
+ static SimpleSpiceCursor*
+ qemu_spice_create_cursor_update(SimpleSpiceDisplay *ssd,
+                                 QEMUCursor *c,
+-                                int on)
++                                bool on)
+ {
+     size_t size = c ? c->width * c->height * 4 : 0;
+     SimpleSpiceCursor *update;
+@@ -448,7 +448,8 @@ void qemu_spice_display_switch(SimpleSpiceDisplay *ssd,
+     qemu_mutex_lock(&ssd->lock);
+     if (ssd->cursor) {
+         g_free(ssd->ptr_define);
+-        ssd->ptr_define = qemu_spice_create_cursor_update(ssd, ssd->cursor, 0);
++        ssd->ptr_define =
++            qemu_spice_create_cursor_update(ssd, ssd->cursor, false);
+     }
+     qemu_mutex_unlock(&ssd->lock);
+ }
+@@ -476,7 +477,7 @@ void qemu_spice_cursor_refresh_bh(void *opaque)
+         ssd->mouse_x = -1;
+         ssd->mouse_y = -1;
+         qemu_mutex_unlock(&ssd->lock);
+-        dpy_mouse_set(ssd->dcl.con, x, y, 1);
++        dpy_mouse_set(ssd->dcl.con, x, y, true);
+     } else {
+         qemu_mutex_unlock(&ssd->lock);
+     }
+@@ -747,7 +748,7 @@ static void display_refresh(DisplayChangeListener *dcl)
+ }
+ 
+ static void display_mouse_set(DisplayChangeListener *dcl,
+-                              int x, int y, int on)
++                              int x, int y, bool on)
+ {
+     SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
+ 
+@@ -774,7 +775,7 @@ static void display_mouse_define(DisplayChangeListener *dcl,
+     g_free(ssd->ptr_move);
+     ssd->ptr_move = NULL;
+     g_free(ssd->ptr_define);
+-    ssd->ptr_define = qemu_spice_create_cursor_update(ssd, c, 0);
++    ssd->ptr_define = qemu_spice_create_cursor_update(ssd, c, false);
+     qemu_mutex_unlock(&ssd->lock);
+     qemu_spice_wakeup(ssd);
+ }
+diff --git a/ui/vnc.c b/ui/vnc.c
+index dd530f04e5..dae5d51210 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -981,7 +981,7 @@ int vnc_send_framebuffer_update(VncState *vs, int x, int y, int w, int h)
+ }
+ 
+ static void vnc_mouse_set(DisplayChangeListener *dcl,
+-                          int x, int y, int visible)
++                          int x, int y, bool visible)
+ {
+     /* can we ask the client(s) to move the pointer ??? */
+ }
+diff --git a/util/cpuinfo-aarch64.c b/util/cpuinfo-aarch64.c
+index 4c8a005715..8ca775a14b 100644
+--- a/util/cpuinfo-aarch64.c
++++ b/util/cpuinfo-aarch64.c
+@@ -20,6 +20,12 @@
+ #ifdef CONFIG_DARWIN
+ # include <sys/sysctl.h>
+ #endif
++#ifdef __OpenBSD__
++# include <machine/armreg.h>
++# include <machine/cpu.h>
++# include <sys/types.h>
++# include <sys/sysctl.h>
++#endif
+ 
+ unsigned cpuinfo;
+ 
+@@ -72,6 +78,36 @@ unsigned __attribute__((constructor)) cpuinfo_init(void)
+     info |= sysctl_for_bool("hw.optional.arm.FEAT_PMULL") * CPUINFO_PMULL;
+     info |= sysctl_for_bool("hw.optional.arm.FEAT_BTI") * CPUINFO_BTI;
+ #endif
++#ifdef __OpenBSD__
++    int mib[2];
++    uint64_t isar0;
++    uint64_t pfr1;
++    size_t len;
++
++    mib[0] = CTL_MACHDEP;
++    mib[1] = CPU_ID_AA64ISAR0;
++    len = sizeof(isar0);
++    if (sysctl(mib, 2, &isar0, &len, NULL, 0) != -1) {
++        if (ID_AA64ISAR0_ATOMIC(isar0) >= ID_AA64ISAR0_ATOMIC_IMPL) {
++            info |= CPUINFO_LSE;
++        }
++        if (ID_AA64ISAR0_AES(isar0) >= ID_AA64ISAR0_AES_BASE) {
++            info |= CPUINFO_AES;
++        }
++        if (ID_AA64ISAR0_AES(isar0) >= ID_AA64ISAR0_AES_PMULL) {
++            info |= CPUINFO_PMULL;
++        }
++    }
++
++    mib[0] = CTL_MACHDEP;
++    mib[1] = CPU_ID_AA64PFR1;
++    len = sizeof(pfr1);
++    if (sysctl(mib, 2, &pfr1, &len, NULL, 0) != -1) {
++        if (ID_AA64PFR1_BT(pfr1) >= ID_AA64PFR1_BT_IMPL) {
++            info |= CPUINFO_BTI;
++        }
++    }
++#endif
+ 
+     cpuinfo = info;
+     return info;
+diff --git a/util/cpuinfo-ppc.c b/util/cpuinfo-ppc.c
+index b2d8893a06..1304f9aa80 100644
+--- a/util/cpuinfo-ppc.c
++++ b/util/cpuinfo-ppc.c
+@@ -6,11 +6,20 @@
+ #include "qemu/osdep.h"
+ #include "host/cpuinfo.h"
+ 
+-#include <asm/cputable.h>
+-#ifdef CONFIG_GETAUXVAL
+-# include <sys/auxv.h>
+-#else
+-# include "elf.h"
++#ifdef CONFIG_LINUX
++# include <asm/cputable.h>
++# ifdef CONFIG_GETAUXVAL
++#  include <sys/auxv.h>
++# else
++#  include "elf.h"
++# endif
++#endif
++#ifdef __FreeBSD__
++# include <machine/cpu.h>
++# ifndef PPC_FEATURE2_ARCH_3_1
++#  define PPC_FEATURE2_ARCH_3_1   0
++# endif
++# define PPC_FEATURE2_VEC_CRYPTO  PPC_FEATURE2_HAS_VEC_CRYPTO
+ #endif
+ 
+ unsigned cpuinfo;
+@@ -19,16 +28,17 @@ unsigned cpuinfo;
+ unsigned __attribute__((constructor)) cpuinfo_init(void)
+ {
+     unsigned info = cpuinfo;
+-    unsigned long hwcap, hwcap2;
+ 
+     if (info) {
+         return info;
+     }
+ 
+-    hwcap = qemu_getauxval(AT_HWCAP);
+-    hwcap2 = qemu_getauxval(AT_HWCAP2);
+     info = CPUINFO_ALWAYS;
+ 
++#if defined(CONFIG_LINUX) || defined(__FreeBSD__)
++    unsigned long hwcap = qemu_getauxval(AT_HWCAP);
++    unsigned long hwcap2 = qemu_getauxval(AT_HWCAP2);
++
+     /* Version numbers are monotonic, and so imply all lower versions. */
+     if (hwcap2 & PPC_FEATURE2_ARCH_3_1) {
+         info |= CPUINFO_V3_1 | CPUINFO_V3_0 | CPUINFO_V2_07 | CPUINFO_V2_06;
+@@ -58,6 +68,7 @@ unsigned __attribute__((constructor)) cpuinfo_init(void)
+             }
+         }
+     }
++#endif
+ 
+     cpuinfo = info;
+     return info;
+diff --git a/util/cpuinfo-riscv.c b/util/cpuinfo-riscv.c
+new file mode 100644
+index 0000000000..497ce12680
+--- /dev/null
++++ b/util/cpuinfo-riscv.c
+@@ -0,0 +1,118 @@
++/*
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ * Host specific cpu identification for RISC-V.
++ */
++
++#include "qemu/osdep.h"
++#include "host/cpuinfo.h"
++
++#ifdef CONFIG_ASM_HWPROBE_H
++#include <asm/hwprobe.h>
++#include <sys/syscall.h>
++#endif
++
++unsigned cpuinfo;
++static volatile sig_atomic_t got_sigill;
++
++static void sigill_handler(int signo, siginfo_t *si, void *data)
++{
++    /* Skip the faulty instruction */
++    ucontext_t *uc = (ucontext_t *)data;
++
++#ifdef __linux__
++    uc->uc_mcontext.__gregs[REG_PC] += 4;
++#elif defined(__OpenBSD__)
++    uc->sc_sepc += 4;
++#else
++# error Unsupported OS
++#endif
++
++    got_sigill = 1;
++}
++
++/* Called both as constructor and (possibly) via other constructors. */
++unsigned __attribute__((constructor)) cpuinfo_init(void)
++{
++    unsigned left = CPUINFO_ZBA | CPUINFO_ZBB | CPUINFO_ZICOND;
++    unsigned info = cpuinfo;
++
++    if (info) {
++        return info;
++    }
++
++    /* Test for compile-time settings. */
++#if defined(__riscv_arch_test) && defined(__riscv_zba)
++    info |= CPUINFO_ZBA;
++#endif
++#if defined(__riscv_arch_test) && defined(__riscv_zbb)
++    info |= CPUINFO_ZBB;
++#endif
++#if defined(__riscv_arch_test) && defined(__riscv_zicond)
++    info |= CPUINFO_ZICOND;
++#endif
++    left &= ~info;
++
++#ifdef CONFIG_ASM_HWPROBE_H
++    if (left) {
++        /*
++         * TODO: glibc 2.40 will introduce <sys/hwprobe.h>, which
++         * provides __riscv_hwprobe and __riscv_hwprobe_one,
++         * which is a slightly cleaner interface.
++         */
++        struct riscv_hwprobe pair = { .key = RISCV_HWPROBE_KEY_IMA_EXT_0 };
++        if (syscall(__NR_riscv_hwprobe, &pair, 1, 0, NULL, 0) == 0
++            && pair.key >= 0) {
++            info |= pair.value & RISCV_HWPROBE_EXT_ZBA ? CPUINFO_ZBA : 0;
++            info |= pair.value & RISCV_HWPROBE_EXT_ZBB ? CPUINFO_ZBB : 0;
++            left &= ~(CPUINFO_ZBA | CPUINFO_ZBB);
++#ifdef RISCV_HWPROBE_EXT_ZICOND
++            info |= pair.value & RISCV_HWPROBE_EXT_ZICOND ? CPUINFO_ZICOND : 0;
++            left &= ~CPUINFO_ZICOND;
++#endif
++        }
++    }
++#endif /* CONFIG_ASM_HWPROBE_H */
++
++    if (left) {
++        struct sigaction sa_old, sa_new;
++
++        memset(&sa_new, 0, sizeof(sa_new));
++        sa_new.sa_flags = SA_SIGINFO;
++        sa_new.sa_sigaction = sigill_handler;
++        sigaction(SIGILL, &sa_new, &sa_old);
++
++        if (left & CPUINFO_ZBA) {
++            /* Probe for Zba: add.uw zero,zero,zero. */
++            got_sigill = 0;
++            asm volatile(".insn r 0x3b, 0, 0x04, zero, zero, zero"
++                         : : : "memory");
++            info |= got_sigill ? 0 : CPUINFO_ZBA;
++            left &= ~CPUINFO_ZBA;
++        }
++
++        if (left & CPUINFO_ZBB) {
++            /* Probe for Zbb: andn zero,zero,zero. */
++            got_sigill = 0;
++            asm volatile(".insn r 0x33, 7, 0x20, zero, zero, zero"
++                         : : : "memory");
++            info |= got_sigill ? 0 : CPUINFO_ZBB;
++            left &= ~CPUINFO_ZBB;
++        }
++
++        if (left & CPUINFO_ZICOND) {
++            /* Probe for Zicond: czero.eqz zero,zero,zero. */
++            got_sigill = 0;
++            asm volatile(".insn r 0x33, 5, 0x07, zero, zero, zero"
++                         : : : "memory");
++            info |= got_sigill ? 0 : CPUINFO_ZICOND;
++            left &= ~CPUINFO_ZICOND;
++        }
++
++        sigaction(SIGILL, &sa_old, NULL);
++        assert(left == 0);
++    }
++
++    info |= CPUINFO_ALWAYS;
++    cpuinfo = info;
++    return info;
++}
+diff --git a/util/meson.build b/util/meson.build
+index 72b505df11..5d8bef9891 100644
+--- a/util/meson.build
++++ b/util/meson.build
+@@ -127,4 +127,6 @@ elif cpu == 'loongarch64'
+   util_ss.add(files('cpuinfo-loongarch.c'))
+ elif cpu in ['ppc', 'ppc64']
+   util_ss.add(files('cpuinfo-ppc.c'))
++elif cpu in ['riscv32', 'riscv64']
++  util_ss.add(files('cpuinfo-riscv.c'))
+ endif
+diff --git a/util/oslib-posix.c b/util/oslib-posix.c
+index e76441695b..b090fe0eed 100644
+--- a/util/oslib-posix.c
++++ b/util/oslib-posix.c
+@@ -263,7 +263,7 @@ int qemu_socketpair(int domain, int type, int protocol, int sv[2])
+         return ret;
+     }
+ #endif
+-    ret = socketpair(domain, type, protocol, sv);;
++    ret = socketpair(domain, type, protocol, sv);
+     if (ret == 0) {
+         qemu_set_cloexec(sv[0]);
+         qemu_set_cloexec(sv[1]);
+
+-- 
+2.43.0

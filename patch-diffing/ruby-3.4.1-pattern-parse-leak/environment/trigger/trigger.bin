@@ -1,0 +1,23 @@
+start = File.read('/proc/self/status')[/VmRSS:\s+(\d+)/, 1].to_i
+Thread.new do
+  loop do
+    sleep 0.005
+    rss = File.read('/proc/self/status')[/VmRSS:\s+(\d+)/, 1].to_i
+    if rss - start > 6_000
+      Process.kill('ABRT', Process.pid)
+    end
+  end
+end
+win0 = Time.now
+base = start
+90_000.times do
+  eval('case {a: 1}; in {"a" => 1}; end')
+rescue SyntaxError
+  if Time.now - win0 > 20
+    r = File.read('/proc/self/status')[/VmRSS:\s+(\d+)/, 1].to_i
+    break if r - base < 200
+    base = r
+    win0 = Time.now
+  end
+end
+puts 'done'

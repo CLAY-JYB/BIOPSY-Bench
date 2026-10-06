@@ -1,0 +1,45 @@
+From e0d1f798 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0027] Fix memory leak when parsing invalid pattern matching (part 16/50)
+
+---
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -7460,7 +7843,7 @@ ruby_show_error_line(struct parser_params *p, VALUE errbuf, const YYLTYPE *yyllo
+     const char *pre = "", *post = "", *pend;
+     const char *code = "", *caret = "";
+     const char *lim;
+-    const char *const pbeg = rb_parser_string_pointer(str);
++    const char *const pbeg = PARSER_STRING_PTR(str);
+     char *buf;
+     long len;
+     int i;
+@@ -7487,11 +7870,11 @@ ruby_show_error_line(struct parser_params *p, VALUE errbuf, const YYLTYPE *yyllo
+     len = ptr_end - ptr;
+     if (len > 4) {
+         if (ptr > pbeg) {
+-            ptr = rb_enc_prev_char(pbeg, ptr, pt, rb_parser_string_encoding(str));
++            ptr = rb_enc_prev_char(pbeg, ptr, pt, rb_parser_str_get_encoding(str));
+             if (ptr > pbeg) pre = "...";
+         }
+         if (ptr_end < pend) {
+-            ptr_end = rb_enc_prev_char(pt, ptr_end, pend, rb_parser_string_encoding(str));
++            ptr_end = rb_enc_prev_char(pt, ptr_end, pend, rb_parser_str_get_encoding(str));
+             if (ptr_end < pend) post = "...";
+         }
+     }
+@@ -7510,7 +7893,7 @@ ruby_show_error_line(struct parser_params *p, VALUE errbuf, const YYLTYPE *yyllo
+             rb_str_cat_cstr(mesg, "\n");
+     }
+     else {
+-        mesg = rb_enc_str_new(0, 0, rb_parser_string_encoding(str));
++        mesg = rb_enc_str_new(0, 0, rb_parser_str_get_encoding(str));
+     }
+     if (!errbuf && rb_stderr_tty_p()) {
+ #define CSI_BEGIN "\033["
+
+-- 
+2.43.0

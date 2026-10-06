@@ -1,0 +1,517 @@
+diff --git a/vm.c b/vm.c
+index e275aa5be..bef90c027 100644
+--- a/vm.c
++++ b/vm.c
+@@ -514,6 +514,8 @@ jit_exec_exception(rb_execution_context_t *ec)
+ # define jit_exec_exception(ec) Qundef
+ #endif
+ 
++static void add_opt_method_entry(const rb_method_entry_t *me);
++
+ #include "vm_insnhelper.c"
+ 
+ #include "vm_exec.c"
+@@ -2104,6 +2106,8 @@ vm_redefinition_check_method_type(const rb_method_entry_t *me)
+         return FALSE;
+     }
+ 
++    if (METHOD_ENTRY_BASIC(me)) return TRUE;
++
+     const rb_method_definition_t *def = me->def;
+     switch (def->type) {
+       case VM_METHOD_TYPE_CFUNC:
+@@ -2154,27 +2158,44 @@ rb_vm_check_redefinition_by_prepend(VALUE klass)
+ }
+ 
+ static void
+-add_opt_method(VALUE klass, ID mid, VALUE bop)
++add_opt_method_entry_bop(const rb_method_entry_t *me, ID mid, enum ruby_basic_operators bop)
++{
++    st_insert(vm_opt_method_def_table, (st_data_t)me->def, (st_data_t)bop);
++    st_insert(vm_opt_mid_table, (st_data_t)mid, (st_data_t)Qtrue);
++}
++
++static void
++add_opt_method(VALUE klass, ID mid, enum ruby_basic_operators bop)
+ {
+     const rb_method_entry_t *me = rb_method_entry_at(klass, mid);
+ 
+     if (me && vm_redefinition_check_method_type(me)) {
+-        st_insert(vm_opt_method_def_table, (st_data_t)me->def, (st_data_t)bop);
+-        st_insert(vm_opt_mid_table, (st_data_t)mid, (st_data_t)Qtrue);
++        add_opt_method_entry_bop(me, mid, bop);
+     }
+     else {
+         rb_bug("undefined optimized method: %s", rb_id2name(mid));
+     }
+ }
+ 
++static enum ruby_basic_operators vm_redefinition_bop_for_id(ID mid);
++
++static void
++add_opt_method_entry(const rb_method_entry_t *me)
++{
++    if (me && vm_redefinition_check_method_type(me)) {
++        ID mid = me->called_id;
++        enum ruby_basic_operators bop = vm_redefinition_bop_for_id(mid);
++        if ((int)bop >= 0) {
++            add_opt_method_entry_bop(me, mid, bop);
++        }
++    }
++}
++
+ static void
+ vm_init_redefined_flag(void)
+ {
+     ID mid;
+-    VALUE bop;
+-
+-    vm_opt_method_def_table = st_init_numtable();
+-    vm_opt_mid_table = st_init_numtable();
++    enum ruby_basic_operators bop;
+ 
+ #define OP(mid_, bop_) (mid = id##mid_, bop = BOP_##bop_, ruby_vm_redefined_flag[bop] = 0)
+ #define C(k) add_opt_method(rb_c##k, mid, bop)
+@@ -2213,6 +2234,46 @@ vm_init_redefined_flag(void)
+ #undef OP
+ }
+ 
++static enum ruby_basic_operators
++vm_redefinition_bop_for_id(ID mid)
++{
++    switch (mid) {
++#define OP(mid_, bop_) case id##mid_: return BOP_##bop_
++    OP(PLUS, PLUS);
++    OP(MINUS, MINUS);
++    OP(MULT, MULT);
++    OP(DIV, DIV);
++    OP(MOD, MOD);
++    OP(Eq, EQ);
++    OP(Eqq, EQQ);
++    OP(LT, LT);
++    OP(LE, LE);
++    OP(GT, GT);
++    OP(GE, GE);
++    OP(LTLT, LTLT);
++    OP(AREF, AREF);
++    OP(ASET, ASET);
++    OP(Length, LENGTH);
++    OP(Size, SIZE);
++    OP(EmptyP, EMPTY_P);
++    OP(Succ, SUCC);
++    OP(EqTilde, MATCH);
++    OP(Freeze, FREEZE);
++    OP(UMinus, UMINUS);
++    OP(Max, MAX);
++    OP(Min, MIN);
++    OP(Hash, HASH);
++    OP(Call, CALL);
++    OP(And, AND);
++    OP(Or, OR);
++    OP(NilP, NIL_P);
++    OP(Cmp, CMP);
++    OP(Default, DEFAULT);
++#undef OP
++    }
++    return -1;
++}
++
+ /* for vm development */
+ 
+ #if VMDEBUG
+@@ -4213,6 +4274,9 @@ Init_BareVM(void)
+     rb_native_mutex_initialize(&vm->ractor.sync.lock);
+     rb_native_cond_initialize(&vm->ractor.sync.terminate_cond);
+ 
++    vm_opt_method_def_table = st_init_numtable();
++    vm_opt_mid_table = st_init_numtable();
++
+ #ifdef RUBY_THREAD_WIN32_H
+     rb_native_cond_initialize(&vm->ractor.sync.barrier_cond);
+ #endif
+diff --git a/vm_args.c b/vm_args.c
+index aa8c2ec29..a9c391f27 100644
+--- a/vm_args.c
++++ b/vm_args.c
+@@ -396,11 +396,90 @@ args_setup_kw_parameters(rb_execution_context_t *const ec, const rb_iseq_t *cons
+     locals[key_num] = unspecified_bits_value;
+ }
+ 
++static void
++args_setup_kw_parameters_from_kwsplat(rb_execution_context_t *const ec, const rb_iseq_t *const iseq,
++                         VALUE keyword_hash, VALUE *const locals)
++{
++    const ID *acceptable_keywords = ISEQ_BODY(iseq)->param.keyword->table;
++    const int req_key_num = ISEQ_BODY(iseq)->param.keyword->required_num;
++    const int key_num = ISEQ_BODY(iseq)->param.keyword->num;
++    const VALUE * const default_values = ISEQ_BODY(iseq)->param.keyword->default_values;
++    VALUE missing = 0;
++    int i, di;
++    int unspecified_bits = 0;
++    VALUE unspecified_bits_value = Qnil;
++
++    for (i=0; i<req_key_num; i++) {
++        VALUE key = ID2SYM(acceptable_keywords[i]);
++        VALUE deleted_value = rb_hash_delete_entry(keyword_hash, key);
++        if (!UNDEF_P(deleted_value)) {
++            locals[i] = deleted_value;
++        }
++        else {
++            if (!missing) missing = rb_ary_hidden_new(1);
++            rb_ary_push(missing, key);
++        }
++    }
++
++    if (missing) argument_kw_error(ec, iseq, "missing", missing);
++
++    for (di=0; i<key_num; i++, di++) {
++        VALUE key = ID2SYM(acceptable_keywords[i]);
++        VALUE deleted_value = rb_hash_delete_entry(keyword_hash, key);
++        if (!UNDEF_P(deleted_value)) {
++            locals[i] = deleted_value;
++        }
++        else {
++            if (UNDEF_P(default_values[di])) {
++                locals[i] = Qnil;
++
++                if (LIKELY(i < KW_SPECIFIED_BITS_MAX)) {
++                    unspecified_bits |= 0x01 << di;
++                }
++                else {
++                    if (NIL_P(unspecified_bits_value)) {
++                        /* fixnum -> hash */
++                        int j;
++                        unspecified_bits_value = rb_hash_new();
++
++                        for (j=0; j<KW_SPECIFIED_BITS_MAX; j++) {
++                            if (unspecified_bits & (0x01 << j)) {
++                                rb_hash_aset(unspecified_bits_value, INT2FIX(j), Qtrue);
++                            }
++                        }
++                    }
++                    rb_hash_aset(unspecified_bits_value, INT2FIX(di), Qtrue);
++                }
++            }
++            else {
++                locals[i] = default_values[di];
++            }
++        }
++    }
++
++    if (ISEQ_BODY(iseq)->param.flags.has_kwrest) {
++        const int rest_hash_index = key_num + 1;
++        locals[rest_hash_index] = keyword_hash;
++    }
++    else {
++        if (!RHASH_EMPTY_P(keyword_hash)) {
++            argument_kw_error(ec, iseq, "unknown", rb_hash_keys(keyword_hash));
++        }
++    }
++
++    if (NIL_P(unspecified_bits_value)) {
++        unspecified_bits_value = INT2FIX(unspecified_bits);
++    }
++    locals[key_num] = unspecified_bits_value;
++}
++
+ static inline void
+-args_setup_kw_rest_parameter(VALUE keyword_hash, VALUE *locals, int kw_flag)
++args_setup_kw_rest_parameter(VALUE keyword_hash, VALUE *locals, int kw_flag, bool anon_kwrest)
+ {
+     if (NIL_P(keyword_hash)) {
+-        keyword_hash = rb_hash_new();
++        if (!anon_kwrest) {
++            keyword_hash = rb_hash_new();
++        }
+     }
+     else if (!(kw_flag & VM_CALL_KW_SPLAT_MUT)) {
+         keyword_hash = rb_hash_dup(keyword_hash);
+@@ -415,22 +494,6 @@ args_setup_block_parameter(const rb_execution_context_t *ec, struct rb_calling_i
+     *locals = rb_vm_bh_to_procval(ec, block_handler);
+ }
+ 
+-struct fill_values_arg {
+-    VALUE *keys;
+-    VALUE *vals;
+-    int argc;
+-};
+-
+-static int
+-fill_keys_values(st_data_t key, st_data_t val, st_data_t ptr)
+-{
+-    struct fill_values_arg *arg = (struct fill_values_arg *)ptr;
+-    int i = arg->argc++;
+-    arg->keys[i] = (VALUE)key;
+-    arg->vals[i] = (VALUE)val;
+-    return ST_CONTINUE;
+-}
+-
+ static inline int
+ ignore_keyword_hash_p(VALUE keyword_hash, const rb_iseq_t * const iseq, unsigned int * kw_flag, VALUE * converted_keyword_hash)
+ {
+@@ -746,15 +809,8 @@ setup_parameters_complex(rb_execution_context_t * const ec, const rb_iseq_t * co
+             args_setup_kw_parameters(ec, iseq, args->kw_argv, kw_arg->keyword_len, kw_arg->keywords, klocals);
+         }
+         else if (!NIL_P(keyword_hash)) {
+-            int kw_len = rb_long2int(RHASH_SIZE(keyword_hash));
+-            struct fill_values_arg arg;
+-            /* copy kw_argv */
+-            arg.keys = args->kw_argv = ALLOCA_N(VALUE, kw_len * 2);
+-            arg.vals = arg.keys + kw_len;
+-            arg.argc = 0;
+-            rb_hash_foreach(keyword_hash, fill_keys_values, (VALUE)&arg);
+-            VM_ASSERT(arg.argc == kw_len);
+-            args_setup_kw_parameters(ec, iseq, arg.vals, kw_len, arg.keys, klocals);
++            keyword_hash = check_kwrestarg(keyword_hash, &kw_flag);
++            args_setup_kw_parameters_from_kwsplat(ec, iseq, keyword_hash, klocals);
+         }
+         else {
+             VM_ASSERT(args_argc(args) == 0);
+@@ -762,7 +818,8 @@ setup_parameters_complex(rb_execution_context_t * const ec, const rb_iseq_t * co
+         }
+     }
+     else if (ISEQ_BODY(iseq)->param.flags.has_kwrest) {
+-        args_setup_kw_rest_parameter(keyword_hash, locals + ISEQ_BODY(iseq)->param.keyword->rest_start, kw_flag);
++        args_setup_kw_rest_parameter(keyword_hash, locals + ISEQ_BODY(iseq)->param.keyword->rest_start,
++            kw_flag, ISEQ_BODY(iseq)->param.flags.anon_kwrest);
+     }
+     else if (!NIL_P(keyword_hash) && RHASH_SIZE(keyword_hash) > 0 && arg_setup_type == arg_setup_method) {
+         argument_kw_error(ec, iseq, "unknown", rb_hash_keys(keyword_hash));
+diff --git a/vm_core.h b/vm_core.h
+index c1508736b..448e17ba5 100644
+--- a/vm_core.h
++++ b/vm_core.h
+@@ -56,12 +56,12 @@
+ #define RVALUE_SIZE (sizeof(struct RBasic) + sizeof(VALUE[RBIMPL_RVALUE_EMBED_LEN_MAX]))
+ 
+ #if VM_CHECK_MODE > 0
+-#define VM_ASSERT(expr) RUBY_ASSERT_MESG_WHEN(VM_CHECK_MODE > 0, expr, #expr)
++#define VM_ASSERT(/*expr, */...) RUBY_ASSERT_WHEN(VM_CHECK_MODE > 0, __VA_ARGS__)
+ #define VM_UNREACHABLE(func) rb_bug(#func ": unreachable")
+ #define RUBY_ASSERT_CRITICAL_SECTION
+ #define RUBY_DEBUG_THREAD_SCHEDULE() rb_thread_schedule()
+ #else
+-#define VM_ASSERT(expr) ((void)0)
++#define VM_ASSERT(/*expr, */...) ((void)0)
+ #define VM_UNREACHABLE(func) UNREACHABLE
+ #define RUBY_DEBUG_THREAD_SCHEDULE()
+ #endif
+diff --git a/vm_eval.c b/vm_eval.c
+index 3322cf845..105373126 100644
+--- a/vm_eval.c
++++ b/vm_eval.c
+@@ -1643,7 +1643,7 @@ get_eval_default_path(void)
+ }
+ 
+ static const rb_iseq_t *
+-eval_make_iseq(VALUE src, VALUE fname, int line, const rb_binding_t *bind,
++eval_make_iseq(VALUE src, VALUE fname, int line,
+                const struct rb_block *base_block)
+ {
+     const VALUE parser = rb_parser_new();
+@@ -1724,7 +1724,7 @@ eval_string_with_cref(VALUE self, VALUE src, rb_cref_t *cref, VALUE file, int li
+     block.as.captured.code.iseq = cfp->iseq;
+     block.type = block_type_iseq;
+ 
+-    iseq = eval_make_iseq(src, file, line, NULL, &block);
++    iseq = eval_make_iseq(src, file, line, &block);
+     if (!iseq) {
+         rb_exc_raise(ec->errinfo);
+     }
+@@ -1745,7 +1745,7 @@ eval_string_with_scope(VALUE scope, VALUE src, VALUE file, int line)
+ {
+     rb_execution_context_t *ec = GET_EC();
+     rb_binding_t *bind = Check_TypedStruct(scope, &ruby_binding_data_type);
+-    const rb_iseq_t *iseq = eval_make_iseq(src, file, line, bind, &bind->block);
++    const rb_iseq_t *iseq = eval_make_iseq(src, file, line, &bind->block);
+     if (!iseq) {
+         rb_exc_raise(ec->errinfo);
+     }
+diff --git a/vm_insnhelper.c b/vm_insnhelper.c
+index ac2830025..aef71970f 100644
+--- a/vm_insnhelper.c
++++ b/vm_insnhelper.c
+@@ -2032,7 +2032,7 @@ vm_ccs_verify(struct rb_class_cc_entries *ccs, ID mid, VALUE klass)
+ }
+ #endif
+ 
+-static const rb_callable_method_entry_t *check_overloaded_cme(const rb_callable_method_entry_t *cme, const struct rb_callinfo * const ci);
++const rb_callable_method_entry_t *rb_check_overloaded_cme(const rb_callable_method_entry_t *cme, const struct rb_callinfo * const ci);
+ 
+ static const struct rb_callcache *
+ vm_search_cc(const VALUE klass, const struct rb_callinfo * const ci)
+@@ -2118,7 +2118,7 @@ vm_search_cc(const VALUE klass, const struct rb_callinfo * const ci)
+         }
+     }
+ 
+-    cme = check_overloaded_cme(cme, ci);
++    cme = rb_check_overloaded_cme(cme, ci);
+ 
+     const struct rb_callcache *cc = vm_cc_new(klass, cme, vm_call_general, cc_type_normal);
+     vm_ccs_push(klass, ccs, ci, cc);
+@@ -6556,22 +6556,6 @@ vm_trace_hook(rb_execution_context_t *ec, rb_control_frame_t *reg_cfp, const VAL
+     }
+ }
+ 
+-// Return true if given cc has cfunc which is NOT handled by opt_send_without_block.
+-bool
+-rb_vm_opt_cfunc_p(CALL_CACHE cc, int insn)
+-{
+-    switch (insn) {
+-      case BIN(opt_eq):
+-        return check_cfunc(vm_cc_cme(cc), rb_obj_equal);
+-      case BIN(opt_nil_p):
+-        return check_cfunc(vm_cc_cme(cc), rb_false);
+-      case BIN(opt_not):
+-        return check_cfunc(vm_cc_cme(cc), rb_obj_not);
+-      default:
+-        return false;
+-    }
+-}
+-
+ #define VM_TRACE_HOOK(target_event, val) do { \
+     if ((pc_events & (target_event)) & enabled_flags) { \
+         vm_trace_hook(ec, reg_cfp, pc, pc_events, (target_event), global_hooks, local_hooks_ptr, (val)); \
+diff --git a/vm_method.c b/vm_method.c
+index 1f14d82bc..9d33a4e69 100644
+--- a/vm_method.c
++++ b/vm_method.c
+@@ -118,7 +118,7 @@ rb_vm_mtbl_dump(const char *msg, VALUE klass, ID target_mid)
+ static inline void
+ vm_cme_invalidate(rb_callable_method_entry_t *cme)
+ {
+-    VM_ASSERT(IMEMO_TYPE_P(cme, imemo_ment));
++    VM_ASSERT(IMEMO_TYPE_P(cme, imemo_ment), "cme: %d", imemo_type((VALUE)cme));
+     VM_ASSERT(callable_method_entry_p(cme));
+     METHOD_ENTRY_INVALIDATED_SET(cme);
+     RB_DEBUG_COUNTER_INC(cc_cme_invalidate);
+@@ -522,6 +522,8 @@ rb_method_definition_set(const rb_method_entry_t *me, rb_method_definition_t *de
+     rb_method_definition_release(me->def);
+     *(rb_method_definition_t **)&me->def = method_definition_addref(def, METHOD_ENTRY_COMPLEMENTED(me));
+ 
++    if (!ruby_running) add_opt_method_entry(me);
++
+     if (opts != NULL) {
+         switch (def->type) {
+           case VM_METHOD_TYPE_ISEQ:
+@@ -1063,8 +1065,8 @@ get_overloaded_cme(const rb_callable_method_entry_t *cme)
+     }
+ }
+ 
+-static const rb_callable_method_entry_t *
+-check_overloaded_cme(const rb_callable_method_entry_t *cme, const struct rb_callinfo * const ci)
++const rb_callable_method_entry_t *
++rb_check_overloaded_cme(const rb_callable_method_entry_t *cme, const struct rb_callinfo * const ci)
+ {
+     if (UNLIKELY(cme->def->iseq_overload) &&
+         (vm_ci_flag(ci) & (VM_CALL_ARGS_SIMPLE)) &&
+diff --git a/weakmap.c b/weakmap.c
+index 155312f1d..4bf265432 100644
+--- a/weakmap.c
++++ b/weakmap.c
+@@ -39,7 +39,7 @@ wmap_live_p(VALUE obj)
+ static void
+ wmap_free_entry(VALUE *key, VALUE *val)
+ {
+-    assert(key + 1 == val);
++    RUBY_ASSERT(key + 1 == val);
+ 
+     /* We only need to free key because val is allocated beside key on in the
+      * same malloc call. */
+@@ -418,7 +418,7 @@ wmap_aset_replace(st_data_t *key, st_data_t *val, st_data_t new_key_ptr, int exi
+     VALUE new_val = *(((VALUE *)new_key_ptr) + 1);
+ 
+     if (existing) {
+-        assert(*(VALUE *)*key == new_key);
++        RUBY_ASSERT(*(VALUE *)*key == new_key);
+     }
+     else {
+         VALUE *pair = xmalloc(sizeof(VALUE) * 2);
+@@ -462,7 +462,7 @@ wmap_aset(VALUE self, VALUE key, VALUE val)
+ static VALUE
+ wmap_lookup(VALUE self, VALUE key)
+ {
+-    assert(wmap_live_p(key));
++    RUBY_ASSERT(wmap_live_p(key));
+ 
+     struct weakmap *w;
+     TypedData_Get_Struct(self, struct weakmap, &weakmap_type, w);
+@@ -681,7 +681,7 @@ wkmap_compact_table_i(st_data_t key, st_data_t val_obj, st_data_t _data, int _er
+ static int
+ wkmap_compact_table_replace(st_data_t *key_ptr, st_data_t *val_ptr, st_data_t _data, int existing)
+ {
+-    assert(existing);
++    RUBY_ASSERT(existing);
+ 
+     *(VALUE *)*key_ptr = rb_gc_location(*(VALUE *)*key_ptr);
+     *val_ptr = (st_data_t)rb_gc_location((VALUE)*val_ptr);
+@@ -729,7 +729,7 @@ static st_index_t
+ wkmap_hash(st_data_t n)
+ {
+     VALUE obj = *(VALUE *)n;
+-    assert(wmap_live_p(obj));
++    RUBY_ASSERT(wmap_live_p(obj));
+ 
+     return rb_any_hash(obj);
+ }
+diff --git a/win32/Makefile.sub b/win32/Makefile.sub
+index 3d4bbc87e..dba112259 100644
+--- a/win32/Makefile.sub
++++ b/win32/Makefile.sub
+@@ -330,8 +330,7 @@ COROUTINE_SRC = $(COROUTINE_OBJ:.obj=.asm)
+ COROUTINE_OBJ = coroutine/win32/Context.obj
+ COROUTINE_SRC = $(COROUTINE_OBJ:.obj=.asm)
+ !else
+-COROUTINE_OBJ = coroutine/copy/Context.obj
+-COROUTINE_SRC = $(COROUTINE_OBJ:.obj=.c)
++!error copy coroutine has been replaced with pthread implementation at 42130a64f02294dc8025af3a51bda518c67ab33d
+ !endif
+ COROUTINE_H = $(COROUTINE_OBJ:.obj=.h)
+ 
+@@ -681,7 +680,7 @@ $(CONFIG_H): $(MKFILES) $(srcdir)/win32/Makefile.sub $(win_srcdir)/Makefile.sub
+ #define _INTEGRAL_MAX_BITS 64
+ #endif
+ #define SIZEOF_OFF_T 8
+-!if "$(ARCH)" == "x64"
++!if "$(TARGET_OS)" == "mswin64"
+ #define SIZEOF_VOIDP 8
+ !else
+ #define SIZEOF_VOIDP 4
+@@ -703,7 +702,7 @@ $(CONFIG_H): $(MKFILES) $(srcdir)/win32/Makefile.sub $(win_srcdir)/Makefile.sub
+ #define NUM2CLOCKID(v) NUM2INT(v)
+ #define SIZEOF_CLOCK_T 4
+ #define SIZEOF_RLIM_T 0
+-!if "$(ARCH)" == "x64"
++!if "$(TARGET_OS)" == "mswin64"
+ #define SIZEOF_SIZE_T 8
+ #define SIZEOF_PTRDIFF_T 8
+ #define SIZEOF_INTPTR_T 8
+@@ -760,6 +759,7 @@ $(CONFIG_H): $(MKFILES) $(srcdir)/win32/Makefile.sub $(win_srcdir)/Makefile.sub
+ #define HAVE_STRUCT_TIMESPEC
+ !endif
+ !if $(MSC_VER) >= 1600
++#define HAVE_INTTYPES_H 1
+ #define HAVE_STDINT_H 1
+ !else
+ #define int8_t signed char
+@@ -802,7 +802,7 @@ $(CONFIG_H): $(MKFILES) $(srcdir)/win32/Makefile.sub $(win_srcdir)/Makefile.sub
+ #define HAVE_INTPTR_T 1
+ #define HAVE_UINTPTR_T 1
+ #define HAVE_SSIZE_T 1
+-!if "$(ARCH)" == "x64"
++!if "$(TARGET_OS)" == "mswin64"
+ #define ssize_t __int64
+ #define PRI_PTR_PREFIX "I64"
+ !else
+diff --git a/win32/setup.mak b/win32/setup.mak
+index c0074bf96..d4178127b 100644
+--- a/win32/setup.mak
++++ b/win32/setup.mak
+@@ -129,6 +129,7 @@ vs2022-fp-bug:
+ /* compile with -O2 */
+ #include <math.h>
+ #include <float.h>
++#include <stdio.h>
+ 
+ #define value_finite(d) 'f'
+ #define value_infinity() 'i'

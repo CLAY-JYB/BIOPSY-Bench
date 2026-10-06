@@ -1,0 +1,108 @@
+diff --git a/grep.c b/grep.c
+index 2f8b9553..e5761426 100644
+--- a/grep.c
++++ b/grep.c
+@@ -245,7 +245,7 @@ static int is_fixed(const char *s, size_t len)
+ #ifdef USE_LIBPCRE2
+ #define GREP_PCRE2_DEBUG_MALLOC 0
+ 
+-static void *pcre2_malloc(PCRE2_SIZE size, MAYBE_UNUSED void *memory_data)
++static void *pcre2_malloc(PCRE2_SIZE size, void *memory_data UNUSED)
+ {
+ 	void *pointer = malloc(size);
+ #if GREP_PCRE2_DEBUG_MALLOC
+@@ -255,7 +255,7 @@ static void *pcre2_malloc(PCRE2_SIZE size, MAYBE_UNUSED void *memory_data)
+ 	return pointer;
+ }
+ 
+-static void pcre2_free(void *pointer, MAYBE_UNUSED void *memory_data)
++static void pcre2_free(void *pointer, void *memory_data UNUSED)
+ {
+ #if GREP_PCRE2_DEBUG_MALLOC
+ 	static int count = 1;
+diff --git a/imap-send.c b/imap-send.c
+index b2eb3d2d..2dd42807 100644
+--- a/imap-send.c
++++ b/imap-send.c
+@@ -192,7 +192,7 @@ static void socket_perror(const char *func, struct imap_socket *sock, int ret)
+ 
+ #ifdef NO_OPENSSL
+ static int ssl_socket_connect(struct imap_socket *sock UNUSED,
+-			      const struct imap_server_conf *cfg,
++			      const struct imap_server_conf *cfg UNUSED,
+ 			      int use_tls_only UNUSED)
+ {
+ 	fprintf(stderr, "SSL requested but SSL support not compiled in\n");
+diff --git a/mailinfo.c b/mailinfo.c
+index 95228531..ce1455f9 100644
+--- a/mailinfo.c
++++ b/mailinfo.c
+@@ -1292,8 +1292,21 @@ void clear_mailinfo(struct mailinfo *mi)
+ 	strbuf_release(&mi->inbody_header_accum);
+ 	free(mi->message_id);
+ 
+-	strbuf_list_free(mi->p_hdr_data);
+-	strbuf_list_free(mi->s_hdr_data);
++	for (size_t i = 0; header[i]; i++) {
++		if (!mi->p_hdr_data[i])
++			continue;
++		strbuf_release(mi->p_hdr_data[i]);
++		free(mi->p_hdr_data[i]);
++	}
++	free(mi->p_hdr_data);
++
++	for (size_t i = 0; header[i]; i++) {
++		if (!mi->s_hdr_data[i])
++			continue;
++		strbuf_release(mi->s_hdr_data[i]);
++		free(mi->s_hdr_data[i]);
++	}
++	free(mi->s_hdr_data);
+ 
+ 	while (mi->content < mi->content_top) {
+ 		free(*(mi->content_top));
+diff --git a/mailmap.c b/mailmap.c
+index 2acf97f3..9f9fa319 100644
+--- a/mailmap.c
++++ b/mailmap.c
+@@ -142,11 +142,8 @@ static void read_mailmap_line(struct string_list *map, char *buffer)
+ 		add_mapping(map, name1, email1, name2, email2);
+ }
+ 
+-/* Flags for read_mailmap_file() */
+-#define MAILMAP_NOFOLLOW (1<<0)
+-
+-static int read_mailmap_file(struct string_list *map, const char *filename,
+-			     unsigned flags)
++int read_mailmap_file(struct string_list *map, const char *filename,
++		      unsigned flags)
+ {
+ 	char buffer[1024];
+ 	FILE *f;
+@@ -186,7 +183,7 @@ static void read_mailmap_string(struct string_list *map, char *buf)
+ 	}
+ }
+ 
+-static int read_mailmap_blob(struct string_list *map, const char *name)
++int read_mailmap_blob(struct string_list *map, const char *name)
+ {
+ 	struct object_id oid;
+ 	char *buf;
+diff --git a/mailmap.h b/mailmap.h
+index cbda9bc5..908365e1 100644
+--- a/mailmap.h
++++ b/mailmap.h
+@@ -6,6 +6,13 @@ struct string_list;
+ extern char *git_mailmap_file;
+ extern char *git_mailmap_blob;
+ 
++/* Flags for read_mailmap_file() */
++#define MAILMAP_NOFOLLOW (1<<0)
++
++int read_mailmap_file(struct string_list *map, const char *filename,
++		      unsigned flags);
++int read_mailmap_blob(struct string_list *map, const char *name);
++
+ int read_mailmap(struct string_list *map);
+ void clear_mailmap(struct string_list *map);
+ 

@@ -1,0 +1,561 @@
+From 1ebfea19 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0018] [ruby/irb] Fix SourceFinder's constant evaluation issue (https://githu
+
+---
+diff --git a/lib/irb/source_finder.rb b/lib/irb/source_finder.rb
+index ad9ee2102..8b7fd538b 100644
+--- a/lib/irb/source_finder.rb
++++ b/lib/irb/source_finder.rb
+@@ -4,12 +4,63 @@ require_relative "ruby-lex"
+ 
+ module IRB
+   class SourceFinder
+-    Source = Struct.new(
+-      :file,       # @param [String] - file name
+-      :first_line, # @param [String] - first line
+-      :last_line,  # @param [String] - last line
+-      keyword_init: true,
+-    )
++    class EvaluationError < StandardError; end
++
++    class Source
++      attr_reader :file, :line
++      def initialize(file, line, ast_source = nil)
++        @file = file
++        @line = line
++        @ast_source = ast_source
++      end
++
++      def file_exist?
++        File.exist?(@file)
++      end
++
++      def binary_file?
++        # If the line is zero, it means that the target's source is probably in a binary file.
++        @line.zero?
++      end
++
++      def file_content
++        @file_content ||= File.read(@file)
++      end
++
++      def colorized_content
++        if !binary_file? && file_exist?
++          end_line = find_end
++          # To correctly colorize, we need to colorize full content and extract the relevant lines.
++          colored = IRB::Color.colorize_code(file_content)
++          colored.lines[@line - 1...end_line].join
++        elsif @ast_source
++          IRB::Color.colorize_code(@ast_source)
++        end
++      end
++
++      private
++
++      def find_end
++        lex = RubyLex.new
++        code = file_content
++        lines = code.lines[(@line - 1)..-1]
++        tokens = RubyLex.ripper_lex_without_warning(lines.join)
++        prev_tokens = []
++
++        # chunk with line number
++        tokens.chunk { |tok| tok.pos[0] }.each do |lnum, chunk|
++          code = lines[0..lnum].join
++          prev_tokens.concat chunk
++          continue = lex.should_continue?(prev_tokens)
++          syntax = lex.check_code_syntax(code, local_variables: [])
++          if !continue && syntax == :valid
++            return @line + lnum
++          end
++        end
++        @line
++      end
++    end
++
+     private_constant :Source
+ 
+     def initialize(irb_context)
+@@ -17,50 +68,39 @@ module IRB
+     end
+ 
+     def find_source(signature, super_level = 0)
+-      context_binding = @irb_context.workspace.binding
+       case signature
+       when /\A(::)?[A-Z]\w*(::[A-Z]\w*)*\z/ # Const::Name
+-        eval(signature, context_binding) # trigger autoload
+-        base = context_binding.receiver.yield_self { |r| r.is_a?(Module) ? r : Object }
++        eval_receiver_or_owner(signature) # trigger autoload
++        base = @irb_context.workspace.binding.receiver.yield_self { |r| r.is_a?(Module) ? r : Object }
+         file, line = base.const_source_location(signature)
+       when /\A(?<owner>[A-Z]\w*(::[A-Z]\w*)*)#(?<method>[^ :.]+)\z/ # Class#method
+-        owner = eval(Regexp.last_match[:owner], context_binding)
++        owner = eval_receiver_or_owner(Regexp.last_match[:owner])
+         method = Regexp.last_match[:method]
+         return unless owner.respond_to?(:instance_method)
+-        file, line = method_target(owner, super_level, method, "owner")
++        method = method_target(owner, super_level, method, "owner")
++        file, line = method&.source_location
+       when /\A((?<receiver>.+)(\.|::))?(?<method>[^ :.]+)\z/ # method, receiver.method, receiver::method
+-        receiver = eval(Regexp.last_match[:receiver] || 'self', context_binding)
++        receiver = eval_receiver_or_owner(Regexp.last_match[:receiver] || 'self')
+         method = Regexp.last_match[:method]
+         return unless receiver.respond_to?(method, true)
+-        file, line = method_target(receiver, super_level, method, "receiver")
++        method = method_target(receiver, super_level, method, "receiver")
++        file, line = method&.source_location
+       end
+-      # If the line is zero, it means that the target's source is probably in a binary file, which we should ignore.
+-      if file && line && !line.zero? && File.exist?(file)
+-        Source.new(file: file, first_line: line, last_line: find_end(file, line))
++      return unless file && line
++
++      if File.exist?(file)
++        Source.new(file, line)
++      elsif method
++        # Method defined with eval, probably in IRB session
++        source = RubyVM::AbstractSyntaxTree.of(method)&.source rescue nil
++        Source.new(file, line, source)
+       end
++    rescue EvaluationError
++      nil
+     end
+ 
+     private
+ 
+-    def find_end(file, first_line)
+-      lex = RubyLex.new
+-      lines = File.read(file).lines[(first_line - 1)..-1]
+-      tokens = RubyLex.ripper_lex_without_warning(lines.join)
+-      prev_tokens = []
+-
+-      # chunk with line number
+-      tokens.chunk { |tok| tok.pos[0] }.each do |lnum, chunk|
+-        code = lines[0..lnum].join
+-        prev_tokens.concat chunk
+-        continue = lex.should_continue?(prev_tokens)
+-        syntax = lex.check_code_syntax(code, local_variables: [])
+-        if !continue && syntax == :valid
+-          return first_line + lnum
+-        end
+-      end
+-      first_line
+-    end
+-
+     def method_target(owner_receiver, super_level, method, type)
+       case type
+       when "owner"
+@@ -71,9 +111,16 @@ module IRB
+       super_level.times do |s|
+         target_method = target_method.super_method if target_method
+       end
+-      target_method.nil? ? nil : target_method.source_location
++      target_method
+     rescue NameError
+       nil
+     end
++
++    def eval_receiver_or_owner(code)
++      context_binding = @irb_context.workspace.binding
++      eval(code, context_binding)
++    rescue NameError
++      raise EvaluationError
++    end
+   end
+ end
+diff --git a/lib/irb/workspace.rb b/lib/irb/workspace.rb
+index 2bf3d5e0f..aaf2f335e 100644
+--- a/lib/irb/workspace.rb
++++ b/lib/irb/workspace.rb
+@@ -90,11 +90,11 @@ EOF
+         IRB.conf[:__MAIN__] = @main
+         @main.singleton_class.class_eval do
+           private
+-          define_method(:exit) do |*a, &b|
+-            # Do nothing, will be overridden
+-          end
+           define_method(:binding, Kernel.instance_method(:binding))
+           define_method(:local_variables, Kernel.instance_method(:local_variables))
++          # Define empty method to avoid delegator warning, will be overridden.
++          define_method(:exit) {|*a, &b| }
++          define_method(:exit!) {|*a, &b| }
+         end
+         @binding = eval("IRB.conf[:__MAIN__].instance_eval('binding', __FILE__, __LINE__)", @binding, *@binding.source_location)
+       end
+diff --git a/lib/mkmf.rb b/lib/mkmf.rb
+index c8f307473..f59c19c55 100644
+--- a/lib/mkmf.rb
++++ b/lib/mkmf.rb
+@@ -399,6 +399,11 @@ MESSAGE
+       env, *commands = commands if Hash === commands.first
+       envs.merge!(env) if env
+     end
++
++    # disable ASAN leak reporting - conftest programs almost always don't bother
++    # to free their memory.
++    envs['ASAN_OPTIONS'] = "detect_leaks=0" unless ENV.key?('ASAN_OPTIONS')
++
+     return envs, expand[commands]
+   end
+ 
+diff --git a/lib/optparse.rb b/lib/optparse.rb
+index ace57952f..438a09fbf 100644
+--- a/lib/optparse.rb
++++ b/lib/optparse.rb
+@@ -8,7 +8,6 @@
+ # See OptionParser for documentation.
+ #
+ 
+-
+ #--
+ # == Developer Documentation (not for RDoc output)
+ #
+@@ -425,6 +424,7 @@
+ # If you have any questions, file a ticket at http://bugs.ruby-lang.org.
+ #
+ class OptionParser
++  # The version string
+   OptionParser::Version = "0.4.0"
+ 
+   # :stopdoc:
+@@ -438,6 +438,8 @@ class OptionParser
+   # and resolved against a list of acceptable values.
+   #
+   module Completion
++    # :nodoc:
++
+     def self.regexp(key, icase)
+       Regexp.new('\A' + Regexp.quote(key).gsub(/\w+\b/, '\&\w*'), icase)
+     end
+@@ -510,6 +512,8 @@ class OptionParser
+   # RequiredArgument, etc.
+   #
+   class Switch
++    # :nodoc:
++
+     attr_reader :pattern, :conv, :short, :long, :arg, :desc, :block
+ 
+     #
+@@ -697,6 +701,11 @@ class OptionParser
+       q.object_group(self) {pretty_print_contents(q)}
+     end
+ 
++    def omitted_argument(val)   # :nodoc:
++      val.pop if val.size == 3 and val.last.nil?
++      val
++    end
++
+     #
+     # Switch that takes no arguments.
+     #
+@@ -710,10 +719,10 @@ class OptionParser
+         conv_arg(arg)
+       end
+ 
+-      def self.incompatible_argument_styles(*)
++      def self.incompatible_argument_styles(*) # :nodoc:
+       end
+ 
+-      def self.pattern
++      def self.pattern          # :nodoc:
+         Object
+       end
+ 
+@@ -755,7 +764,7 @@ class OptionParser
+         if arg
+           conv_arg(*parse_arg(arg, &error))
+         else
+-          conv_arg(arg)
++          omitted_argument conv_arg(arg)
+         end
+       end
+ 
+@@ -774,13 +783,14 @@ class OptionParser
+       #
+       def parse(arg, argv, &error)
+         if !(val = arg) and (argv.empty? or /\A-./ =~ (val = argv[0]))
+-          return nil, block, nil
++          return nil, block
+         end
+         opt = (val = parse_arg(val, &error))[1]
+         val = conv_arg(*val)
+         if opt and !arg
+           argv.shift
+         else
++          omitted_argument val
+           val[0] = nil
+         end
+         val
+@@ -798,6 +808,8 @@ class OptionParser
+   # matching pattern and converter pair. Also provides summary feature.
+   #
+   class List
++    # :nodoc:
++
+     # Map from acceptable argument types to pattern and converter pairs.
+     attr_reader :atype
+ 
+@@ -1033,7 +1045,7 @@ XXX
+     to << "#compdef #{name}\n"
+     to << COMPSYS_HEADER
+     visit(:compsys, {}, {}) {|o, d|
+-      to << %Q[  "#{o}[#{d.gsub(/[\"\[\]]/, '\\\\\&')}]" \\\n]
++      to << %Q[  "#{o}[#{d.gsub(/[\\\"\[\]]/, '\\\\\&')}]" \\\n]
+     }
+     to << "  '*:file:_files' && return 0\n"
+   end
+@@ -1179,6 +1191,11 @@ XXX
+   end
+ 
+   @stack = [DefaultList]
++  #
++  # Returns the global top option list.
++  #
++  # Do not use directly.
++  #
+   def self.top() DefaultList end
+ 
+   #
+@@ -1291,10 +1308,24 @@ XXX
+     end
+   end
+ 
++  #
++  # Shows warning message with the program name
++  #
++  # +mesg+:: Message, defaulted to +$!+.
++  #
++  # See Kernel#warn.
++  #
+   def warn(mesg = $!)
+     super("#{program_name}: #{mesg}")
+   end
+ 
++  #
++  # Shows message with the program name then aborts.
++  #
++  # +mesg+:: Message, defaulted to +$!+.
++  #
++  # See Kernel#abort.
++  #
+   def abort(mesg = $!)
+     super("#{program_name}: #{mesg}")
+   end
+@@ -1648,19 +1679,24 @@ XXX
+           opt, rest = $1, $2
+           opt.tr!('_', '-')
+           begin
+-            sw, = complete(:long, opt, true)
+-            if require_exact && !sw.long.include?(arg)
+-              throw :terminate, arg unless raise_unknown
+-              raise InvalidOption, arg
++            if require_exact
++              sw, = search(:long, opt)
++            else
++              sw, = complete(:long, opt, true)
+             end
+           rescue ParseError
+             throw :terminate, arg unless raise_unknown
+             raise $!.set_option(arg, true)
++          else
++            unless sw
++              throw :terminate, arg unless raise_unknown
++              raise InvalidOption, arg
++            end
+           end
+           begin
+-            opt, cb, val = sw.parse(rest, argv) {|*exc| raise(*exc)}
+-            val = cb.call(val) if cb
+-            setter.call(sw.switch_name, val) if setter
++            opt, cb, *val = sw.parse(rest, argv) {|*exc| raise(*exc)}
++            val = callback!(cb, 1, *val) if cb
++            callback!(setter, 2, sw.switch_name, *val) if setter
+           rescue ParseError
+             raise $!.set_option(arg, rest)
+           end
+@@ -1690,7 +1726,7 @@ XXX
+             raise $!.set_option(arg, true)
+           end
+           begin
+-            opt, cb, val = sw.parse(val, argv) {|*exc| raise(*exc) if eq}
++            opt, cb, *val = sw.parse(val, argv) {|*exc| raise(*exc) if eq}
+           rescue ParseError
+             raise $!.set_option(arg, arg.length > 2)
+           else
+@@ -1698,8 +1734,8 @@ XXX
+           end
+           begin
+             argv.unshift(opt) if opt and (!rest or (opt = opt.sub(/\A-*/, '-')) != '-')
+-            val = cb.call(val) if cb
+-            setter.call(sw.switch_name, val) if setter
++            val = callback!(cb, 1, *val) if cb
++            callback!(setter, 2, sw.switch_name, *val) if setter
+           rescue ParseError
+             raise $!.set_option(arg, arg.length > 2)
+           end
+@@ -1725,6 +1761,17 @@ XXX
+   end
+   private :parse_in_order
+ 
++  # Calls callback with _val_.
++  def callback!(cb, max_arity, *args) # :nodoc:
++    if (size = args.size) < max_arity and cb.to_proc.lambda?
++      (arity = cb.arity) < 0 and arity = (1-arity)
++      arity = max_arity if arity > max_arity
++      args[arity - 1] = nil if arity > size
++    end
++    cb.call(*args)
++  end
++  private :callback!
++
+   #
+   # Parses command line arguments +argv+ in permutation mode and returns
+   # list of non-option arguments. When optional +into+ keyword
+@@ -2320,7 +2367,8 @@ XXX
+       super
+       obj.instance_eval {@optparse = nil}
+     end
+-    def initialize(*args)
++
++    def initialize(*args)       # :nodoc:
+       super
+       @optparse = nil
+     end
+diff --git a/lib/optparse/ac.rb b/lib/optparse/ac.rb
+index 0953725e4..23fc740d1 100644
+--- a/lib/optparse/ac.rb
++++ b/lib/optparse/ac.rb
+@@ -1,7 +1,11 @@
+ # frozen_string_literal: false
+ require_relative '../optparse'
+ 
++#
++# autoconf-like options.
++#
+ class OptionParser::AC < OptionParser
++  # :stopdoc:
+   private
+ 
+   def _check_ac_args(name, block)
+@@ -14,6 +18,7 @@ class OptionParser::AC < OptionParser
+   end
+ 
+   ARG_CONV = proc {|val| val.nil? ? true : val}
++  private_constant :ARG_CONV
+ 
+   def _ac_arg_enable(prefix, name, help_string, block)
+     _check_ac_args(name, block)
+@@ -29,16 +34,27 @@ class OptionParser::AC < OptionParser
+     enable
+   end
+ 
++  # :startdoc:
++
+   public
+ 
++  # Define <tt>--enable</tt> / <tt>--disable</tt> style option
++  #
++  # Appears as <tt>--enable-<i>name</i></tt> in help message.
+   def ac_arg_enable(name, help_string, &block)
+     _ac_arg_enable("enable", name, help_string, block)
+   end
+ 
++  # Define <tt>--enable</tt> / <tt>--disable</tt> style option
++  #
++  # Appears as <tt>--disable-<i>name</i></tt> in help message.
+   def ac_arg_disable(name, help_string, &block)
+     _ac_arg_enable("disable", name, help_string, block)
+   end
+ 
++  # Define <tt>--with</tt> / <tt>--without</tt> style option
++  #
++  # Appears as <tt>--with-<i>name</i></tt> in help message.
+   def ac_arg_with(name, help_string, &block)
+     _check_ac_args(name, block)
+ 
+diff --git a/lib/optparse/kwargs.rb b/lib/optparse/kwargs.rb
+index 992aca467..59a2f6154 100644
+--- a/lib/optparse/kwargs.rb
++++ b/lib/optparse/kwargs.rb
+@@ -7,12 +7,17 @@ class OptionParser
+   #
+   # :include: ../../doc/optparse/creates_option.rdoc
+   #
+-  def define_by_keywords(options, meth, **opts)
+-    meth.parameters.each do |type, name|
++  # Defines options which set in to _options_ for keyword parameters
++  # of _method_.
++  #
++  # Parameters for each keywords are given as elements of _params_.
++  #
++  def define_by_keywords(options, method, **params)
++    method.parameters.each do |type, name|
+       case type
+       when :key, :keyreq
+         op, cl = *(type == :key ? %w"[ ]" : ["", ""])
+-        define("--#{name}=#{op}#{name.upcase}#{cl}", *opts[name]) do |o|
++        define("--#{name}=#{op}#{name.upcase}#{cl}", *params[name]) do |o|
+           options[name] = o
+         end
+       end
+diff --git a/lib/optparse/version.rb b/lib/optparse/version.rb
+index b869d8fe5..b5ed69514 100644
+--- a/lib/optparse/version.rb
++++ b/lib/optparse/version.rb
+@@ -2,6 +2,11 @@
+ # OptionParser internal utility
+ 
+ class << OptionParser
++  #
++  # Shows version string in packages if Version is defined.
++  #
++  # +pkgs+:: package list
++  #
+   def show_version(*pkgs)
+     progname = ARGV.options.program_name
+     result = false
+@@ -47,6 +52,8 @@ class << OptionParser
+     result
+   end
+ 
++  # :stopdoc:
++
+   def each_const(path, base = ::Object)
+     path.split(/::|\//).inject(base) do |klass, name|
+       raise NameError, path unless Module === klass
+@@ -68,4 +75,6 @@ class << OptionParser
+       end
+     end
+   end
++
++  # :startdoc:
+ end
+diff --git a/lib/prism.rb b/lib/prism.rb
+index 5d78b42c4..8a2e7a610 100644
+--- a/lib/prism.rb
++++ b/lib/prism.rb
+@@ -22,7 +22,6 @@ module Prism
+   autoload :LexRipper, "prism/lex_compat"
+   autoload :MutationCompiler, "prism/mutation_compiler"
+   autoload :NodeInspector, "prism/node_inspector"
+-  autoload :RipperCompat, "prism/ripper_compat"
+   autoload :Pack, "prism/pack"
+   autoload :Pattern, "prism/pattern"
+   autoload :Serialize, "prism/serialize"
+diff --git a/lib/prism/lex_compat.rb b/lib/prism/lex_compat.rb
+index 0cc63cd94..c11903423 100644
+--- a/lib/prism/lex_compat.rb
++++ b/lib/prism/lex_compat.rb
+@@ -1,6 +1,7 @@
+ # frozen_string_literal: true
+ 
+ require "delegate"
++require "ripper"
+ 
+ module Prism
+   # This class is responsible for lexing the source using prism and then
+
+-- 
+2.43.0

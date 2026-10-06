@@ -1,0 +1,3809 @@
+diff --git a/ext/date/tests/bug53437_var0.phpt b/ext/date/tests/bug53437_var0.phpt
+deleted file mode 100644
+index 9ae257a6..00000000
+--- a/ext/date/tests/bug53437_var0.phpt
++++ /dev/null
+@@ -1,136 +0,0 @@
+---TEST--
+-Bug #53437 (Crash when using unserialized DatePeriod instance), variation 0
+---FILE--
+-<?php
+-$dp = new DatePeriod(new DateTime('2010-01-01 UTC'), new DateInterval('P1D'), 2);
+-
+-echo "Original:\r\n";
+-foreach($dp as $dt) {
+-        echo $dt->format('Y-m-d H:i:s')."\r\n";
+-}
+-echo "\r\n";
+-var_dump($dp);
+-
+-$ser = serialize($dp); // $ser is: O:10:"DatePeriod":0:{}
+-
+-// Create dangerous instance
+-$dpu = unserialize($ser); // $dpu has invalid values???
+-var_dump($dpu);
+-
+-echo "Unserialized:\r\n";
+-foreach($dpu as $dt) {
+-        echo $dt->format('Y-m-d H:i:s')."\r\n";
+-}
+-?>
+---EXPECTF--
+-Original:
+-2010-01-01 00:00:00
+-2010-01-02 00:00:00
+-2010-01-03 00:00:00
+-
+-object(DatePeriod)#%d (%d) {
+-  ["start"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2010-01-01 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2010-01-04 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["end"]=>
+-  NULL
+-  ["interval"]=>
+-  object(DateInterval)#%d (%d) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(1)
+-    ["h"]=>
+-    int(0)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(3)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-}
+-object(DatePeriod)#%d (%d) {
+-  ["start"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2010-01-01 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2010-01-04 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["end"]=>
+-  NULL
+-  ["interval"]=>
+-  object(DateInterval)#%d (%d) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(1)
+-    ["h"]=>
+-    int(0)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(3)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-}
+-Unserialized:
+-2010-01-01 00:00:00
+-2010-01-02 00:00:00
+-2010-01-03 00:00:00
+diff --git a/ext/date/tests/bug53437_var1.phpt b/ext/date/tests/bug53437_var1.phpt
+index 9413c6ff..938439ab 100644
+--- a/ext/date/tests/bug53437_var1.phpt
++++ b/ext/date/tests/bug53437_var1.phpt
+@@ -12,7 +12,7 @@ var_dump($dp);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DatePeriod object in %sbug53437_var1.php:%d
+ Stack trace:
+-#0 [internal function]: DatePeriod->__unserialize(Array)
++#0 [internal function]: DatePeriod->__wakeup()
+ #1 %sbug53437_var1.php(%d): unserialize('O:10:"DatePerio...')
+ #2 {main}
+   thrown in %sbug53437_var1.php on line %d
+diff --git a/ext/date/tests/bug53437_var2.phpt b/ext/date/tests/bug53437_var2.phpt
+index 9ca6a0f6..7a87b384 100644
+--- a/ext/date/tests/bug53437_var2.phpt
++++ b/ext/date/tests/bug53437_var2.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #53437 (DateInterval basic serialization)
++Bug #53437 DateInterval basic serialization
+ --FILE--
+ <?php
+ $di0 = new DateInterval('P2Y4DT6H8M');
+@@ -11,8 +11,8 @@ $di1 = unserialize($s);
+ var_dump($di0, $di1);
+ 
+ ?>
+---EXPECTF--
+-object(DateInterval)#1 (%d) {
++--EXPECT--
++object(DateInterval)#1 (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -27,14 +27,26 @@ object(DateInterval)#1 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+-object(DateInterval)#2 (%d) {
++object(DateInterval)#2 (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -49,10 +61,22 @@ object(DateInterval)#2 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug53437_var3.phpt b/ext/date/tests/bug53437_var3.phpt
+index c87c5c8b..eb043398 100644
+--- a/ext/date/tests/bug53437_var3.phpt
++++ b/ext/date/tests/bug53437_var3.phpt
+@@ -4,14 +4,14 @@ Bug #53437 DateInterval unserialize bad data, 32 bit
+ <?php if (PHP_INT_SIZE != 4) { die('skip 32 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":8:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":15:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -24,12 +24,24 @@ object(DateInterval)#%d (%d) {
+   int(8)
+   ["s"]=>
+   int(0)
+-  ["f"]=>
+-  float(0)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(-1)
++  ["have_weekday_relative"]=>
++  int(%d)
++  ["have_special_relative"]=>
++  int(0)
++  ["f"]=>
++  float(0)
+ }
+diff --git a/ext/date/tests/bug53437_var4.phpt b/ext/date/tests/bug53437_var4.phpt
+index 14823fb4..b53483ab 100644
+--- a/ext/date/tests/bug53437_var4.phpt
++++ b/ext/date/tests/bug53437_var4.phpt
+@@ -21,7 +21,7 @@ var_dump($df,
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -36,12 +36,24 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(2)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+ int(0)
+ int(0)
+diff --git a/ext/date/tests/bug53437_var5.phpt b/ext/date/tests/bug53437_var5.phpt
+index 77d117bc..55bba9ed 100644
+--- a/ext/date/tests/bug53437_var5.phpt
++++ b/ext/date/tests/bug53437_var5.phpt
+@@ -1,17 +1,17 @@
+ --TEST--
+-Bug #53437 (DateInterval unserialize bad data, 64 bit)
++Bug #53437 DateInterval unserialize bad data, 64 bit
+ --SKIPIF--
+ <?php if (PHP_INT_SIZE != 8) { die('skip true 64 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":8:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":15:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -24,12 +24,24 @@ object(DateInterval)#%d (%d) {
+   int(8)
+   ["s"]=>
+   int(0)
+-  ["f"]=>
+-  float(0)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(9223372036854775807)
++  ["have_weekday_relative"]=>
++  int(9)
++  ["have_special_relative"]=>
++  int(0)
++  ["f"]=>
++  float(0)
+ }
+diff --git a/ext/date/tests/bug53437_var6.phpt b/ext/date/tests/bug53437_var6.phpt
+index cfc60e6c..f5ff22c4 100644
+--- a/ext/date/tests/bug53437_var6.phpt
++++ b/ext/date/tests/bug53437_var6.phpt
+@@ -1,17 +1,17 @@
+ --TEST--
+-Bug #53437 (DateInterval unserialize bad data, 64 bit)
++Bug #53437 DateInterval unserialize bad data, 64 bit
+ --SKIPIF--
+ <?php if (PHP_INT_SIZE != 8) { die('skip true 64 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":9:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:1:"f";d:0.123654;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":16:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:1:"f";d:0.123654;s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -26,10 +26,22 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0.123654)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(9223372036854775807)
++  ["have_weekday_relative"]=>
++  int(9)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug55397.phpt b/ext/date/tests/bug55397.phpt
+index 559490df..98f29a25 100644
+--- a/ext/date/tests/bug55397.phpt
++++ b/ext/date/tests/bug55397.phpt
+@@ -8,7 +8,7 @@ var_dump(unserialize('O:8:"DateTime":0:{}') == new DateTime);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug55397.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
++#0 [internal function]: DateTime->__wakeup()
+ #1 %sbug55397.php(%d): unserialize('O:8:"DateTime":...')
+ #2 {main}
+   thrown in %sbug55397.php on line %d
+diff --git a/ext/date/tests/bug60774.phpt b/ext/date/tests/bug60774.phpt
+index 2f3de6ba..0a9c4223 100644
+--- a/ext/date/tests/bug60774.phpt
++++ b/ext/date/tests/bug60774.phpt
+@@ -9,10 +9,38 @@ echo $i->format("%a"), "\n";
+ ?>
+ --EXPECTF--
+ object(DateInterval)#1 (%d) {
+-  ["from_string"]=>
+-  bool(true)
+-  ["date_string"]=>
+-  string(6) "2 days"
++  ["y"]=>
++  int(0)
++  ["m"]=>
++  int(0)
++  ["d"]=>
++  int(2)
++  ["h"]=>
++  int(0)
++  ["i"]=>
++  int(0)
++  ["s"]=>
++  int(0)
++  ["f"]=>
++  float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
++  ["invert"]=>
++  int(0)
++  ["days"]=>
++  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+ 2
+ (unknown)
+diff --git a/ext/date/tests/bug62852.phpt b/ext/date/tests/bug62852.phpt
+index 120c08fa..4ec9a0ea 100644
+--- a/ext/date/tests/bug62852.phpt
++++ b/ext/date/tests/bug62852.phpt
+@@ -13,7 +13,7 @@ try {
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug62852.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
++#0 [internal function]: DateTime->__wakeup()
+ #1 %sbug62852.php(%d): unserialize('O:8:"DateTime":...')
+ #2 {main}
+   thrown in %sbug62852.php on line %d
+diff --git a/ext/date/tests/bug62852_var2.phpt b/ext/date/tests/bug62852_var2.phpt
+index 4749d2a9..57fbd6e9 100644
+--- a/ext/date/tests/bug62852_var2.phpt
++++ b/ext/date/tests/bug62852_var2.phpt
+@@ -24,7 +24,8 @@ var_dump( $foo );
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug62852_var2.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
+-#1 %sbug62852_var2.php(%d): unserialize('O:3:"Foo":3:{s:...')
+-#2 {main}
++#0 %sbug62852_var2.php(%d): DateTime->__wakeup()
++#1 [internal function]: Foo->__wakeup()
++#2 %sbug62852_var2.php(%d): unserialize('O:3:"Foo":3:{s:...')
++#3 {main}
+   thrown in %sbug62852_var2.php on line %d
+diff --git a/ext/date/tests/bug62852_var3.phpt b/ext/date/tests/bug62852_var3.phpt
+index 7049efce..df366989 100644
+--- a/ext/date/tests/bug62852_var3.phpt
++++ b/ext/date/tests/bug62852_var3.phpt
+@@ -24,7 +24,8 @@ var_dump( $foo );
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug62852_var3.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
+-#1 %sbug62852_var3.php(%d): unserialize('O:3:"Foo":3:{s:...')
+-#2 {main}
++#0 %sbug62852_var3.php(%d): DateTime->__wakeup()
++#1 [internal function]: Foo->__wakeup()
++#2 %sbug62852_var3.php(%d): unserialize('O:3:"Foo":3:{s:...')
++#3 {main}
+   thrown in %sbug62852_var3.php on line %d
+diff --git a/ext/date/tests/bug65672.phpt b/ext/date/tests/bug65672.phpt
+index a3a4542e..a01287d9 100644
+--- a/ext/date/tests/bug65672.phpt
++++ b/ext/date/tests/bug65672.phpt
+@@ -32,7 +32,7 @@ $period->dynamic3[] = "array";
+ var_dump($period->dynamic3);
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ string(5) "stuff"
+ string(8) "modified"
+ array(1) {
+@@ -40,17 +40,11 @@ array(1) {
+   string(5) "array"
+ }
+ bool(false)
+-
+-Deprecated: Creation of dynamic property DatePeriod@anonymous::$dynamic1 is deprecated in %s on line %d
+ string(7) "dynamic"
+-
+-Deprecated: Creation of dynamic property DatePeriod@anonymous::$dynamic2 is deprecated in %s on line %d
+ array(1) {
+   [0]=>
+   string(5) "array"
+ }
+-
+-Deprecated: Creation of dynamic property DatePeriod@anonymous::$dynamic3 is deprecated in %s on line %d
+ array(1) {
+   [0]=>
+   string(5) "array"
+diff --git a/ext/date/tests/bug66545.phpt b/ext/date/tests/bug66545.phpt
+index 0d2f3375..276c6d5f 100644
+--- a/ext/date/tests/bug66545.phpt
++++ b/ext/date/tests/bug66545.phpt
+@@ -25,7 +25,13 @@ DateInterval Object
+     [i] => 59
+     [s] => 59
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 14
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug66721.phpt b/ext/date/tests/bug66721.phpt
+index 5636aa60..9effb7ca 100644
+--- a/ext/date/tests/bug66721.phpt
++++ b/ext/date/tests/bug66721.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Test for bug #66721: __unserialize of DateTime segfaults when invalid object data is supplied
++Test for bug #66721: __wakeup of DateTime segfaults when invalid object data is supplied
+ --CREDITS--
+ Boro Sitnikovski <buritomath@yahoo.com>
+ --FILE--
+@@ -10,7 +10,7 @@ var_dump(unserialize($y));
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug66721.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
++#0 [internal function]: DateTime->__wakeup()
+ #1 %sbug66721.php(%d): unserialize('O:8:"DateTime":...')
+ #2 {main}
+   thrown in %sbug66721.php on line %d
+diff --git a/ext/date/tests/bug68942.phpt b/ext/date/tests/bug68942.phpt
+index 91df60b0..9a9a5cfb 100644
+--- a/ext/date/tests/bug68942.phpt
++++ b/ext/date/tests/bug68942.phpt
+@@ -6,9 +6,9 @@ $data = unserialize('a:2:{i:0;O:12:"DateTimeZone":2:{s:13:"timezone_type";a:2:{i
+ var_dump($data);
+ ?>
+ --EXPECTF--
+-Fatal error: Uncaught Error: Invalid serialization data for DateTimeZone object in %s:%d
++Fatal error: Uncaught Error: Timezone initialization failed in %s:%d
+ Stack trace:
+-#0 [internal function]: DateTimeZone->__unserialize(Array)
++#0 [internal function]: DateTimeZone->__wakeup()
+ #1 %s(%d): unserialize('a:2:{i:0;O:12:"...')
+ #2 {main}
+   thrown in %s on line %d
+diff --git a/ext/date/tests/bug68942_2.phpt b/ext/date/tests/bug68942_2.phpt
+index 5718db92..9870bbce 100644
+--- a/ext/date/tests/bug68942_2.phpt
++++ b/ext/date/tests/bug68942_2.phpt
+@@ -8,7 +8,7 @@ var_dump($data);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug68942_2.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
++#0 [internal function]: DateTime->__wakeup()
+ #1 %sbug68942_2.php(%d): unserialize('a:2:{i:0;O:8:"D...')
+ #2 {main}
+   thrown in %sbug68942_2.php on line %d
+diff --git a/ext/date/tests/bug70153.phpt b/ext/date/tests/bug70153.phpt
+index 9aaa0e7d..5b965207 100644
+--- a/ext/date/tests/bug70153.phpt
++++ b/ext/date/tests/bug70153.phpt
+@@ -3,29 +3,12 @@ Bug #70153 (\DateInterval incorrectly unserialized)
+ --FILE--
+ <?php
+ $i1 = \DateInterval::createFromDateString('+1 month');
+-print_r($i1);
+-
+-$s = serialize($i1);
+-print_r($s);
+-
+-echo "\n";
+-
+-$i2 = unserialize($s);
+-print_r($i2);
+-
++$i2 = unserialize(serialize($i1));
+ var_dump($i1->days, $i2->days);
++var_dump($i2->special_amount, $i2->special_amount);
+ ?>
+ --EXPECT--
+-DateInterval Object
+-(
+-    [from_string] => 1
+-    [date_string] => +1 month
+-)
+-O:12:"DateInterval":2:{s:11:"from_string";b:1;s:11:"date_string";s:8:"+1 month";}
+-DateInterval Object
+-(
+-    [from_string] => 1
+-    [date_string] => +1 month
+-)
+ bool(false)
+ bool(false)
++int(0)
++int(0)
+diff --git a/ext/date/tests/bug71700.phpt b/ext/date/tests/bug71700.phpt
+index 09f6e760..53a6f9db 100644
+--- a/ext/date/tests/bug71700.phpt
++++ b/ext/date/tests/bug71700.phpt
+@@ -11,8 +11,8 @@ $diff = date_diff($date1, $date2, true);
+ 
+ var_dump($diff);
+ ?>
+---EXPECTF--
+-object(DateInterval)#3 (%d) {
++--EXPECT--
++object(DateInterval)#3 (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -27,10 +27,22 @@ object(DateInterval)#3 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(30)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug73091.phpt b/ext/date/tests/bug73091.phpt
+index 440f2bbc..918170d8 100644
+--- a/ext/date/tests/bug73091.phpt
++++ b/ext/date/tests/bug73091.phpt
+@@ -12,7 +12,9 @@ class foo {
+ var_dump(unserialize('O:12:"DateInterval":1:{s:4:"days";O:3:"foo":0:{}}'));
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
++  ["days"]=>
++  int(-1)
+   ["y"]=>
+   int(-1)
+   ["m"]=>
+@@ -27,10 +29,20 @@ object(DateInterval)#%d (%d) {
+   int(-1)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(-1)
++  ["weekday_behavior"]=>
++  int(-1)
++  ["first_last_day_of"]=>
++  int(-1)
+   ["invert"]=>
+   int(0)
+-  ["days"]=>
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
+   int(-1)
+-  ["from_string"]=>
+-  bool(false)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug73239.phpt b/ext/date/tests/bug73239.phpt
+deleted file mode 100644
+index ce86e43c..00000000
+--- a/ext/date/tests/bug73239.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Bug #73239 (Odd warning/exception message with invalid timezones)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-ini_set('date.timezone', 'dummy');
+-try {
+-	$dt = new DateTime('now');
+-} catch (Exception $e) {
+-	echo $e->getMessage(), "\n";
+-}
+-?>
+---EXPECTF--
+-Warning: ini_set(): Invalid date.timezone value 'dummy', using 'UTC' instead in %sbug73239.php on line %d
+diff --git a/ext/date/tests/bug74274.phpt b/ext/date/tests/bug74274.phpt
+index 20387419..e03d40cf 100644
+--- a/ext/date/tests/bug74274.phpt
++++ b/ext/date/tests/bug74274.phpt
+@@ -18,7 +18,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 1
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug74524.phpt b/ext/date/tests/bug74524.phpt
+index 825fb0be..f49a5340 100644
+--- a/ext/date/tests/bug74524.phpt
++++ b/ext/date/tests/bug74524.phpt
+@@ -20,7 +20,13 @@ DateInterval Object
+     [i] => 36
+     [s] => 10
+     [f] => 0.920541
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 1
+     [days] => 227
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug75035.phpt b/ext/date/tests/bug75035.phpt
+deleted file mode 100644
+index 9e37dc90..00000000
+--- a/ext/date/tests/bug75035.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-Bug #75035 (Datetime fails to unserialize "extreme" dates)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-var_dump('PHP version', PHP_VERSION);
+-
+-foreach ([PHP_INT_MIN, PHP_INT_MAX] as $extreme) {
+-    $i = 64;
+-    while ($i-- > 1) {
+-        $d = new DateTime('@' . ($extreme >> $i));
+-        $s = serialize($d);
+-        try {
+-            $u = unserialize($s);
+-        } catch (Error $e) {
+-            $u = "failed unserialization: " . $e->getMessage() . ' : ' . $s;
+-        }
+-        $original = $d->format('Y-m-d H:i:s');
+-        $serializedUnserialized = is_string($u) ? $u : $u->format('Y-m-d H:i:s');
+-        if ($original !== $serializedUnserialized) {
+-            var_dump('[' . ($extreme >> $i) . '] ' . $original . ' => ' . $serializedUnserialized);
+-        }
+-    }
+-}
+-?>
+---EXPECTF--
+-string(11) "PHP version"
+-string(%d) "%s"
+diff --git a/ext/date/tests/bug77571.phpt b/ext/date/tests/bug77571.phpt
+index 84790e0c..f6a5b55d 100644
+--- a/ext/date/tests/bug77571.phpt
++++ b/ext/date/tests/bug77571.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #77571 (DateTime's diff DateInterval incorrect in timezones from UTC+01:00 to UTC+12:00)
++Bug #77571 (DateTime's diff DateInterval incorrect in timezones from UTC+01:00 to UTC+12:00
+ --FILE--
+ <?php
+ 
+@@ -21,7 +21,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 35
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug78055.phpt b/ext/date/tests/bug78055.phpt
+index 0ad25279..743cea8d 100644
+--- a/ext/date/tests/bug78055.phpt
++++ b/ext/date/tests/bug78055.phpt
+@@ -13,9 +13,6 @@ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ $period = new DatePeriod($start, $interval, $recurrences);
+ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ 
+-$period = new DatePeriod($start, $interval, $recurrences, DatePeriod::INCLUDE_END_DATE);
+-echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+-
+ $period = new DatePeriod($start, $interval, $end);
+ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ 
+@@ -25,6 +22,5 @@ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ --EXPECT--
+ 5 5
+ 5 6
+-5 7
+  1
+  0
+diff --git a/ext/date/tests/bug78452.phpt b/ext/date/tests/bug78452.phpt
+index ba693655..a4b095de 100644
+--- a/ext/date/tests/bug78452.phpt
++++ b/ext/date/tests/bug78452.phpt
+@@ -7,8 +7,8 @@ $date1 = new \DateTime('2019-09-24 11:47:24');
+ $date2 = new \DateTime('2019-08-21 12:47:24');
+ var_dump($date1->diff($date2));
+ ?>
+---EXPECTF--
+-object(DateInterval)#3 (%d) {
++--EXPECT--
++object(DateInterval)#3 (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -23,10 +23,22 @@ object(DateInterval)#3 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(1)
+   ["days"]=>
+   int(33)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug79015.phpt b/ext/date/tests/bug79015.phpt
+index 99cb03f7..9d752dee 100644
+--- a/ext/date/tests/bug79015.phpt
++++ b/ext/date/tests/bug79015.phpt
+@@ -2,11 +2,11 @@
+ Bug #79015 (undefined-behavior in php_date.c)
+ --FILE--
+ <?php
+-$payload = 'O:12:"DateInterval":9:{s:1:"y";i:1;s:1:"m";i:0;s:1:"d";i:4;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";i:9999999999990;s:6:"invert";i:0;s:4:"days";b:0;}';
++$payload = 'O:12:"DateInterval":16:{s:1:"y";i:1;s:1:"m";i:0;s:1:"d";i:4;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";i:9999999999990;s:7:"weekday";i:0;s:16:"weekday_behavior";i:0;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";b:0;s:12:"special_type";i:0;s:14:"special_amount";i:0;s:21:"have_weekday_relative";i:0;s:21:"have_special_relative";i:0;}';
+ var_dump(unserialize($payload));
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(1)
+   ["m"]=>
+@@ -21,10 +21,22 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(%f)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug80483.phpt b/ext/date/tests/bug80483.phpt
+deleted file mode 100644
+index 17dbcc10..00000000
+--- a/ext/date/tests/bug80483.phpt
++++ /dev/null
+@@ -1,35 +0,0 @@
+---TEST--
+-Bug #80483 (DateTime Object with 5-digit year can't unserialized)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-
+-$the_date = new DateTime();
+-$the_date->SetTime(0, 0, 0);
+-$the_date->SetDate(20201, 01, 01);
+-
+-var_dump($the_date);
+-
+-$serialized = serialize($the_date);
+-var_dump($serialized);
+-var_dump(unserialize($serialized));
+-?>
+---EXPECTF--
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(28) "+20201-01-01 00:00:00.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(116) "O:8:"DateTime":3:{s:4:"date";s:28:"+20201-01-01 00:00:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}"
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(28) "+20201-01-01 00:00:00.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+diff --git a/ext/date/tests/bug80963.phpt b/ext/date/tests/bug80963.phpt
+index 8ee645ab..6476f9ab 100644
+--- a/ext/date/tests/bug80963.phpt
++++ b/ext/date/tests/bug80963.phpt
+@@ -19,7 +19,7 @@ array(5) {
+   ["ts"]=>
+   int(2140045200)
+   ["time"]=>
+-  string(25) "2037-10-25T01:00:00+00:00"
++  string(24) "2037-10-25T01:00:00+0000"
+   ["offset"]=>
+   int(0)
+   ["isdst"]=>
+@@ -32,7 +32,7 @@ array(5) {
+   ["ts"]=>
+   int(2140668000)
+   ["time"]=>
+-  string(25) "2037-11-01T06:00:00+00:00"
++  string(24) "2037-11-01T06:00:00+0000"
+   ["offset"]=>
+   int(-18000)
+   ["isdst"]=>
+@@ -45,7 +45,7 @@ array(5) {
+   ["ts"]=>
+   int(2140045200)
+   ["time"]=>
+-  string(25) "2037-10-25T01:00:00+00:00"
++  string(24) "2037-10-25T01:00:00+0000"
+   ["offset"]=>
+   int(3600)
+   ["isdst"]=>
+diff --git a/ext/date/tests/bug81263.phpt b/ext/date/tests/bug81263.phpt
+index afeba1eb..7b344d30 100644
+--- a/ext/date/tests/bug81263.phpt
++++ b/ext/date/tests/bug81263.phpt
+@@ -19,9 +19,15 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 0
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+ DateInterval Object
+ (
+@@ -32,7 +38,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 0
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug81504.phpt b/ext/date/tests/bug81504.phpt
+index 17213ce3..ede995b2 100644
+--- a/ext/date/tests/bug81504.phpt
++++ b/ext/date/tests/bug81504.phpt
+@@ -11,8 +11,8 @@ foreach ($tz->getTransitions(strtotime("1996-01-01"), strtotime("1997-12-31")) a
+ }
+ ?>
+ --EXPECT--
+-1996-01-01T00:00:00+00:00 3600 CET
+-1996-03-31T01:00:00+00:00 7200 CEST
+-1996-10-27T01:00:00+00:00 3600 CET
+-1997-03-30T01:00:00+00:00 7200 CEST
+-1997-10-26T01:00:00+00:00 3600 CET
++1996-01-01T00:00:00+0000 3600 CET
++1996-03-31T01:00:00+0000 7200 CEST
++1996-10-27T01:00:00+0000 3600 CET
++1997-03-30T01:00:00+0000 7200 CEST
++1997-10-26T01:00:00+0000 3600 CET
+diff --git a/ext/date/tests/bug81565.phpt b/ext/date/tests/bug81565.phpt
+index b23e950e..b7392540 100644
+--- a/ext/date/tests/bug81565.phpt
++++ b/ext/date/tests/bug81565.phpt
+@@ -12,7 +12,7 @@ var_export(
+ echo "\n", (new DatetimeZone('+01:45:30'))->getName();
+ ?>
+ --EXPECT--
+-\DateTime::__set_state(array(
++DateTime::__set_state(array(
+    'date' => '0021-08-21 00:00:00.000000',
+    'timezone_type' => 1,
+    'timezone' => '+00:49',
+diff --git a/ext/date/tests/call_function_from_method.phpt b/ext/date/tests/call_function_from_method.phpt
+index de49b068..7cbe6848 100644
+--- a/ext/date/tests/call_function_from_method.phpt
++++ b/ext/date/tests/call_function_from_method.phpt
+@@ -6,8 +6,6 @@ date.timezone=UTC
+ <?php
+ 
+ class Date {
+-    public $date;
+-
+     public function __construct($in) {
+         $this->date = date_create($in);
+     }
+diff --git a/ext/date/tests/date-lenient-create.phpt b/ext/date/tests/date-lenient-create.phpt
+index 0168238a..2d59ceba 100644
+--- a/ext/date/tests/date-lenient-create.phpt
++++ b/ext/date/tests/date-lenient-create.phpt
+@@ -113,6 +113,19 @@ DateTime Object
+     [timezone_type] => 3
+     [timezone] => UTC
+ )
++Array
++(
++    [warning_count] => 0
++    [warnings] => Array
++        (
++        )
++
++    [error_count] => 0
++    [errors] => Array
++        (
++        )
++
++)
+ ==
+ DateTime Object
+ (
+@@ -120,4 +133,17 @@ DateTime Object
+     [timezone_type] => 3
+     [timezone] => UTC
+ )
++Array
++(
++    [warning_count] => 0
++    [warnings] => Array
++        (
++        )
++
++    [error_count] => 0
++    [errors] => Array
++        (
++        )
++
++)
+ ==
+diff --git a/ext/date/tests/date_default_timezone_get-1.phpt b/ext/date/tests/date_default_timezone_get-1.phpt
+index 3164ba75..fc466d41 100644
+--- a/ext/date/tests/date_default_timezone_get-1.phpt
++++ b/ext/date/tests/date_default_timezone_get-1.phpt
+@@ -13,6 +13,5 @@ date.timezone=
+     echo date('e'), "\n";
+ ?>
+ --EXPECT--
+-Warning: PHP Startup: Invalid date.timezone value '', using 'UTC' instead in Unknown on line 0
+ UTC
+ UTC
+diff --git a/ext/date/tests/date_default_timezone_get-2.phpt b/ext/date/tests/date_default_timezone_get-2.phpt
+index d79d8de0..44d94cd7 100644
+--- a/ext/date/tests/date_default_timezone_get-2.phpt
++++ b/ext/date/tests/date_default_timezone_get-2.phpt
+@@ -12,5 +12,4 @@ date.timezone=
+     echo date_default_timezone_get(), "\n";
+ ?>
+ --EXPECT--
+-Warning: PHP Startup: Invalid date.timezone value '', using 'UTC' instead in Unknown on line 0
+ UTC
+diff --git a/ext/date/tests/date_default_timezone_get-4.phpt b/ext/date/tests/date_default_timezone_get-4.phpt
+index dc9fac3e..f2319856 100644
+--- a/ext/date/tests/date_default_timezone_get-4.phpt
++++ b/ext/date/tests/date_default_timezone_get-4.phpt
+@@ -7,5 +7,5 @@ date.timezone=Incorrect/Zone
+     echo date_default_timezone_get(), "\n";
+ ?>
+ --EXPECTF--
+-Warning: PHP Startup: Invalid date.timezone value 'Incorrect/Zone', using 'UTC' instead in %s on line %d
++Warning: date_default_timezone_get(): Invalid date.timezone value 'Incorrect/Zone', we selected the timezone 'UTC' for now. in %sdate_default_timezone_get-4.php on line %d
+ UTC
+diff --git a/ext/date/tests/date_default_timezone_set-1.phpt b/ext/date/tests/date_default_timezone_set-1.phpt
+index d4e5d915..54f1fa73 100644
+--- a/ext/date/tests/date_default_timezone_set-1.phpt
++++ b/ext/date/tests/date_default_timezone_set-1.phpt
+@@ -21,8 +21,7 @@ date.timezone=
+     echo date(DATE_ISO8601, $date3), "\n";
+     echo date(DATE_ISO8601, $date4), "\n";
+ ?>
+---EXPECTF--
+-Warning: PHP Startup: Invalid date.timezone value '', using 'UTC' instead in %s on line %d
++--EXPECT--
+ America/Indiana/Knox
+ 2005-01-12T03:00:00-0500
+ 2005-07-12T03:00:00-0500
+diff --git a/ext/date/tests/date_diff1.phpt b/ext/date/tests/date_diff1.phpt
+index fa2c64dd..2b73eae6 100644
+--- a/ext/date/tests/date_diff1.phpt
++++ b/ext/date/tests/date_diff1.phpt
+@@ -28,7 +28,7 @@ object(DateTime)#2 (3) {
+   ["timezone"]=>
+   string(3) "EDT"
+ }
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -36,17 +36,29 @@ object(DateInterval)#%d (%d) {
+   ["d"]=>
+   int(2)
+   ["h"]=>
+-  int(%d)
++  int(16)
+   ["i"]=>
+   int(19)
+   ["s"]=>
+   int(40)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(33)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/date_interval_non_relative_warning.phpt b/ext/date/tests/date_interval_non_relative_warning.phpt
+deleted file mode 100644
+index fc0b2462..00000000
+--- a/ext/date/tests/date_interval_non_relative_warning.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-GH-8458 (DateInterval::createFromDateString does not warn when non-relative items are present)
+---FILE--
+-<?php
+-$formats = [
+-	'next weekday 15:30',
+-	'+5 hours noon',
+-	'-8 days March 23',
+-	'+72 seconds UTC',
+-];
+-
+-foreach ($formats as $format) {
+-	$d = DateInterval::createFromDateString($format);
+-}
+-
+-foreach ($formats as $format) {
+-	$d = date_interval_create_from_date_string($format);
+-}
+-
+-?>
+---EXPECTF--
+-Warning: DateInterval::createFromDateString(): String 'next weekday 15:30' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '+5 hours noon' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '-8 days March 23' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '+72 seconds UTC' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String 'next weekday 15:30' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '+5 hours noon' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '-8 days March 23' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '+72 seconds UTC' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+diff --git a/ext/date/tests/date_interval_prop_dim.phpt b/ext/date/tests/date_interval_prop_dim.phpt
+index 6b5423d1..5d33bade 100644
+--- a/ext/date/tests/date_interval_prop_dim.phpt
++++ b/ext/date/tests/date_interval_prop_dim.phpt
+@@ -12,6 +12,5 @@ while ($i < 1026) {
+ }
+ ?>
+ ==NOCRASH==
+---EXPECTF--
+-Deprecated: Creation of dynamic property Z::$prop is deprecated in %s on line %d
++--EXPECT--
+ ==NOCRASH==
+diff --git a/ext/date/tests/date_period_exclude_start_and_include_end.phpt b/ext/date/tests/date_period_exclude_start_and_include_end.phpt
+deleted file mode 100644
+index 6238f670..00000000
+--- a/ext/date/tests/date_period_exclude_start_and_include_end.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-DatePeriod::EXCLUDE_START_DATE|DatePeriod::INCLUDE_END_DATE
+---FILE--
+-<?php
+-date_default_timezone_set('UTC');
+-$start = new DateTime('2010-06-07');
+-$end = new DateTime('2010-06-10');
+-$interval = new DateInterval('P1D');
+-
+-$dp = new DatePeriod($start, $interval, $end, DatePeriod::EXCLUDE_START_DATE | DatePeriod::INCLUDE_END_DATE);
+-foreach ($dp as $day) {
+-    echo $day->format('Y-m-d') . "\n";
+-}
+-?>
+---EXPECT--
+-2010-06-08
+-2010-06-09
+-2010-06-10
+-
+diff --git a/ext/date/tests/date_period_include_end.phpt b/ext/date/tests/date_period_include_end.phpt
+deleted file mode 100644
+index c96e2794..00000000
+--- a/ext/date/tests/date_period_include_end.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-DatePeriod::INCLUDE_END_DATE
+---FILE--
+-<?php
+-date_default_timezone_set('UTC');
+-$start = new DateTime('2010-06-07');
+-$end = new DateTime('2010-06-10');
+-$interval = new DateInterval('P1D');
+-
+-foreach (new DatePeriod($start, $interval, $end, DatePeriod::INCLUDE_END_DATE) as $day) {
+-    echo $day->format('Y-m-d') . "\n";
+-}
+-?>
+---EXPECT--
+-2010-06-07
+-2010-06-08
+-2010-06-09
+-2010-06-10
+-
+diff --git a/ext/date/tests/date_period_set_state1.phpt b/ext/date/tests/date_period_set_state1.phpt
+deleted file mode 100644
+index b3824cee..00000000
+--- a/ext/date/tests/date_period_set_state1.phpt
++++ /dev/null
+@@ -1,72 +0,0 @@
+---TEST--
+-Test that DatePeriod::__set_state() can be called directly
+---FILE--
+-<?php
+-
+-$period = DatePeriod::__set_state(
+-    [
+-        "start" => new DateTime("2022-07-14 12:00:00", new DateTimeZone("UTC")),
+-        "end" => new DateTime("2022-07-16 12:00:00", new DateTimeZone("UTC")),
+-        "current" => null,
+-        "interval" => new DateInterval('P2D'),
+-        "recurrences" => 2,
+-        "include_start_date" => false,
+-        "include_end_date" => true,
+-    ]
+-);
+-
+-var_dump($period);
+-
+-?>
+---EXPECTF--
+-object(DatePeriod)#%d (%d) {
+-  ["start"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-14 12:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-16 12:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#%d (%d) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(2)
+-    ["h"]=>
+-    int(0)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(2)
+-  ["include_start_date"]=>
+-  bool(false)
+-  ["include_end_date"]=>
+-  bool(true)
+-}
+diff --git a/ext/date/tests/date_period_set_state2.phpt b/ext/date/tests/date_period_set_state2.phpt
+deleted file mode 100644
+index 7d77a632..00000000
+--- a/ext/date/tests/date_period_set_state2.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Test that calling DatePeriod::__set_state() directly with missing arguments throws
+---FILE--
+-<?php
+-
+-try {
+-    DatePeriod::__set_state(
+-        [
+-            "start" => new DateTime,
+-        ]
+-    );
+-} catch (\Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Invalid serialization data for DatePeriod object
+diff --git a/ext/date/tests/date_period_unserialize1.phpt b/ext/date/tests/date_period_unserialize1.phpt
+deleted file mode 100644
+index 9ab7dd51..00000000
+--- a/ext/date/tests/date_period_unserialize1.phpt
++++ /dev/null
+@@ -1,77 +0,0 @@
+---TEST--
+-Test that DatePeriod::__unserialize() can be called directly
+---FILE--
+-<?php
+-
+-$start = new DateTime("2022-07-14 00:00:00", new DateTimeZone("UTC"));
+-$interval = new DateInterval('P1D');
+-$end = new DateTime("2022-07-16 00:00:00", new DateTimeZone("UTC"));
+-$period = new DatePeriod($start, $interval, $end);
+-
+-$period->__unserialize(
+-    [
+-        "start" => new DateTime("2022-07-14 12:00:00", new DateTimeZone("UTC")),
+-        "end" => new DateTime("2022-07-16 12:00:00", new DateTimeZone("UTC")),
+-        "current" => null,
+-        "interval" => new DateInterval('P2D'),
+-        "recurrences" => 2,
+-        "include_start_date" => false,
+-        "include_end_date" => true,
+-    ]
+-);
+-
+-var_dump($period);
+-
+-?>
+---EXPECTF--
+-object(DatePeriod)#%d (%d) {
+-  ["start"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-14 12:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-16 12:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#%d (%d) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(2)
+-    ["h"]=>
+-    int(0)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(2)
+-  ["include_start_date"]=>
+-  bool(false)
+-  ["include_end_date"]=>
+-  bool(true)
+-}
+diff --git a/ext/date/tests/date_period_unserialize2.phpt b/ext/date/tests/date_period_unserialize2.phpt
+deleted file mode 100644
+index c368155d..00000000
+--- a/ext/date/tests/date_period_unserialize2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Test that calling DatePeriod::__unserialize() directly with missing arguments throws
+---FILE--
+-<?php
+-
+-$start = new DateTime("2022-07-14 00:00:00", new DateTimeZone("UTC"));
+-$interval = new DateInterval('P1D');
+-$end = new DateTime("2022-07-16 00:00:00", new DateTimeZone("UTC"));
+-$period = new DatePeriod($start, $interval, $end);
+-
+-try {
+-    $period->__unserialize(
+-        [
+-            "start" => new DateTime,
+-        ]
+-    );
+-} catch (\Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Invalid serialization data for DatePeriod object
+diff --git a/ext/date/tests/date_period_unserialize3.phpt b/ext/date/tests/date_period_unserialize3.phpt
+deleted file mode 100644
+index 4213320e..00000000
+--- a/ext/date/tests/date_period_unserialize3.phpt
++++ /dev/null
+@@ -1,82 +0,0 @@
+---TEST--
+-Test that calling DatePeriod::__unserialize() directly with wrong argument type throws
+---FILE--
+-<?php
+-
+-$start = new DateTime("2022-07-14 00:00:00", new DateTimeZone("UTC"));
+-$interval = new DateInterval('P1D');
+-$end = new DateTime("2022-07-16 00:00:00", new DateTimeZone("UTC"));
+-$period = new DatePeriod($start, $interval, $end);
+-
+-try {
+-    $period->__unserialize(
+-        [
+-            "current" => new DateTime,
+-            "start" => new DateTime,
+-            "end" => new DateTime,
+-            "interval" => new DateInterval('P2D'),
+-            "recurrences" => 2,
+-            "include_start_date" => "wrong type",
+-            "include_end_date" => true,
+-        ]
+-    );
+-} catch (\Error $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-var_dump($period);
+-
+-?>
+---EXPECTF--
+-Invalid serialization data for DatePeriod object
+-object(DatePeriod)#%d (%d) {
+-  ["start"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-14 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTime)#%d (%d) {
+-    ["date"]=>
+-    string(26) "2022-07-16 00:00:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#%d (%d) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(1)
+-    ["h"]=>
+-    int(0)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(1)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-}
+diff --git a/ext/date/tests/date_time_fractions.phpt b/ext/date/tests/date_time_fractions.phpt
+index 4536e0f2..29f7cd0d 100644
+--- a/ext/date/tests/date_time_fractions.phpt
++++ b/ext/date/tests/date_time_fractions.phpt
+@@ -58,7 +58,7 @@ microseconds = true
+ 2016-10-02 00:00:00.000000
+ 2016-10-03 12:00:00.000000
+ 2016-10-17 12:47:18.081921
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -73,12 +73,24 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0.378189)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+ 2016-10-03 13:20:06.724934
+ 2016-10-03 13:20:07.103123
+diff --git a/ext/date/tests/gh-124.phpt b/ext/date/tests/gh-124.phpt
+deleted file mode 100644
+index 074e519d..00000000
+--- a/ext/date/tests/gh-124.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Test for timelib #124: Problem with large negative timestamps
+---INI--
+-date.timezone=UTC
+---SKIPIF--
+-<?php
+-if (PHP_INT_SIZE != 8) echo "skip this test is for 64-bit only";
+-if (getenv('SKIP_ASAN')) die('skip triggers undefined behavior');
+-?>
+---FILE--
+-<?php
+-var_dump((new DateTime("@-9223372036854775808"))->getTimestamp());
+-var_dump((new DateTime('-292277022657-01-27 08:29:52 UTC'))->getTimestamp());
+-var_dump((new DateTime('-292277022657-01-27 08:29:53 UTC'))->getTimestamp());
+-
+-var_dump((new DateTime("@9223372036854775807"))->getTimestamp());
+-var_dump((new DateTime('+292277026596-12-04 15:30:07 UTC'))->getTimestamp());
+-echo (new DateTime('+2512370164-01-01 00:00:00Z'))->format(DATE_RFC3339_EXTENDED);
+-?>
+---EXPECT--
+-int(-9223372036854775808)
+-int(-9223372036854775808)
+-int(-9223372036854775807)
+-int(9223372036854775807)
+-int(9223372036854775807)
+-2512370164-01-01T00:00:00.000+00:00
+diff --git a/ext/date/tests/gh10152.phpt b/ext/date/tests/gh10152.phpt
+deleted file mode 100644
+index 8b5ec952..00000000
+--- a/ext/date/tests/gh10152.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Bug GH-10152 (Custom properties of DateTimeImmutable child classes are not serialized)
+---FILE--
+-<?php
+-
+-class MyDateTimeImmutable extends DateTimeImmutable {
+-    public function __construct(
+-        string $datetime = "now",
+-        ?DateTimeZone $timezone = null,
+-        public ?bool $myProperty = null,
+-    ) {
+-        parent::__construct($datetime, $timezone);
+-    }
+-}
+-
+-$datetime = new MyDateTimeImmutable('2022-12-22T11:26:00Z', myProperty: true);
+-$serialized = serialize($datetime);
+-$unserialized = unserialize($serialized);
+-var_dump($unserialized->myProperty);
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/ext/date/tests/gh10747-1.phpt b/ext/date/tests/gh10747-1.phpt
+deleted file mode 100644
+index e02d84b0..00000000
+--- a/ext/date/tests/gh10747-1.phpt
++++ /dev/null
+@@ -1,59 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeImmutable objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeImmutable
+-{
+-	private   int $var1 = 1;
+-	private       $var2 = 0;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct()
+-	{
+-		parent::__construct();
+-		$this->var2 = 2;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I;
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(%d) "%s"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(%d) "O:1:"I":7:{s:4:"date";s:%d:"%s";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(%d) "%s"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+diff --git a/ext/date/tests/gh10747-2.phpt b/ext/date/tests/gh10747-2.phpt
+deleted file mode 100644
+index ba5e0273..00000000
+--- a/ext/date/tests/gh10747-2.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeZone objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeZone
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($tz)
+-	{
+-		parent::__construct($tz);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I('Europe/Kyiv');
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (6) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(11) "Europe/Kyiv"
+-}
+-string(143) "O:1:"I":6:{s:13:"timezone_type";i:3;s:8:"timezone";s:11:"Europe/Kyiv";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (6) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(11) "Europe/Kyiv"
+-}
+diff --git a/ext/date/tests/gh10747-3.phpt b/ext/date/tests/gh10747-3.phpt
+deleted file mode 100644
+index ea37c26e..00000000
+--- a/ext/date/tests/gh10747-3.phpt
++++ /dev/null
+@@ -1,87 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateInterval objects throw)
+---FILE--
+-<?php
+-class I extends DateInterval
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($tz)
+-	{
+-		parent::__construct($tz);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I('P3D');
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (14) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["y"]=>
+-  int(0)
+-  ["m"]=>
+-  int(0)
+-  ["d"]=>
+-  int(3)
+-  ["h"]=>
+-  int(0)
+-  ["i"]=>
+-  int(0)
+-  ["s"]=>
+-  int(0)
+-  ["f"]=>
+-  float(0)
+-  ["invert"]=>
+-  int(0)
+-  ["days"]=>
+-  bool(false)
+-  ["from_string"]=>
+-  bool(false)
+-}
+-string(224) "O:1:"I":14:{s:1:"y";i:0;s:1:"m";i:0;s:1:"d";i:3;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";d:0;s:6:"invert";i:0;s:4:"days";b:0;s:11:"from_string";b:0;s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (14) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["y"]=>
+-  int(0)
+-  ["m"]=>
+-  int(0)
+-  ["d"]=>
+-  int(3)
+-  ["h"]=>
+-  int(0)
+-  ["i"]=>
+-  int(0)
+-  ["s"]=>
+-  int(0)
+-  ["f"]=>
+-  float(0)
+-  ["invert"]=>
+-  int(0)
+-  ["days"]=>
+-  bool(false)
+-  ["from_string"]=>
+-  bool(false)
+-}
+diff --git a/ext/date/tests/gh10747-4.phpt b/ext/date/tests/gh10747-4.phpt
+deleted file mode 100644
+index 9933902a..00000000
+--- a/ext/date/tests/gh10747-4.phpt
++++ /dev/null
+@@ -1,147 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DatePeriod objects throw)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-class I extends DatePeriod
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($start, $interval, $end)
+-	{
+-		parent::__construct($start, $interval, $end);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I(new DateTimeImmutable('2023-03-03 16:24'), DateInterval::createFromDateString('+1 hour'), new DateTimeImmutable('2023-03-09 16:24'));
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (11) {
+-  ["start"]=>
+-  object(DateTimeImmutable)#5 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-03 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTimeImmutable)#6 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-09 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#7 (10) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(0)
+-    ["h"]=>
+-    int(1)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(1)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-}
+-string(631) "O:1:"I":11:{s:5:"start";O:17:"DateTimeImmutable":3:{s:4:"date";s:26:"2023-03-03 16:24:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}s:7:"current";N;s:3:"end";O:17:"DateTimeImmutable":3:{s:4:"date";s:26:"2023-03-09 16:24:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}s:8:"interval";O:12:"DateInterval":10:{s:1:"y";i:0;s:1:"m";i:0;s:1:"d";i:0;s:1:"h";i:1;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";d:0;s:6:"invert";i:0;s:4:"days";b:0;s:11:"from_string";b:0;}s:11:"recurrences";i:1;s:18:"include_start_date";b:1;s:16:"include_end_date";b:0;s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (11) {
+-  ["start"]=>
+-  object(DateTimeImmutable)#9 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-03 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTimeImmutable)#10 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-09 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#11 (10) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(0)
+-    ["h"]=>
+-    int(1)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(1)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-}
+diff --git a/ext/date/tests/gh10747-error.phpt b/ext/date/tests/gh10747-error.phpt
+deleted file mode 100644
+index b6c3900e..00000000
+--- a/ext/date/tests/gh10747-error.phpt
++++ /dev/null
+@@ -1,64 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeImmutable objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeImmutable
+-{
+-	private   int $var1 = 1;
+-	private       $var2 = 0;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct()
+-	{
+-		parent::__construct();
+-		$this->var2 = 2;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$s = 'O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}';
+-$u = unserialize(str_replace('!', chr(0), $s));
+-var_dump($s, $u);
+-
+-// this one has the class names for the private properties changed to something non-existing
+-$s = 'O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!J!var1";i:1;s:7:"!K!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}';
+-$u = unserialize(str_replace('!', chr(0), $s));
+-var_dump($s, $u);
+-
+-?>
+---EXPECTF--
+-string(179) "O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#1 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(26) "2023-03-09 17:03:11.123456"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(179) "O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!J!var1";i:1;s:7:"!K!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(0)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(26) "2023-03-09 17:03:11.123456"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+diff --git a/ext/date/tests/gh11455.phpt b/ext/date/tests/gh11455.phpt
+deleted file mode 100644
+index cb6784f0..00000000
+--- a/ext/date/tests/gh11455.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-Bug GH-11455 (PHP 8.2 Segmentation fault on nesbot/carbon)
+---FILE--
+-<?php
+-class MyDateTimeImmutable extends DateTimeImmutable {
+-    public function __construct(
+-        string $datetime = "now",
+-        ?DateTimeZone $timezone = null,
+-        public ?stdClass $myProperty = null,
+-    ) {
+-        parent::__construct($datetime, $timezone);
+-    }
+-}
+-
+-$datetime = new MyDateTimeImmutable('2022-12-22T11:26:00Z', myProperty: new stdClass);
+-$datetime->myProperty->field = str_repeat("hello", 3);
+-$serialized = serialize($datetime);
+-var_dump($datetime->myProperty);
+-$unserialized = unserialize($serialized);
+-var_dump($unserialized);
+-?>
+---EXPECT--
+-object(stdClass)#2 (1) {
+-  ["field"]=>
+-  string(15) "hellohellohello"
+-}
+-object(MyDateTimeImmutable)#3 (4) {
+-  ["myProperty"]=>
+-  object(stdClass)#4 (1) {
+-    ["field"]=>
+-    string(15) "hellohellohello"
+-  }
+-  ["date"]=>
+-  string(26) "2022-12-22 11:26:00.000000"
+-  ["timezone_type"]=>
+-  int(2)
+-  ["timezone"]=>
+-  string(1) "Z"
+-}
+diff --git a/ext/date/tests/gh11854.phpt b/ext/date/tests/gh11854.phpt
+deleted file mode 100644
+index ddcce97d..00000000
+--- a/ext/date/tests/gh11854.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Bug GH-11854 (DateTime:createFromFormat stopped parsing DateTime with extra space)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-$dateTime = DateTime::createFromFormat("D M d H:i:s Y", "Wed Aug  2 08:37:50 2023");
+-
+-var_dump($dateTime);
+-?>
+---EXPECTF--
+-object(DateTime)#1 (3) {
+-  ["date"]=>
+-  string(26) "2023-08-02 08:37:50.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+diff --git a/ext/date/tests/gh8730.phpt b/ext/date/tests/gh8730.phpt
+index 2992652e..d54d642e 100644
+--- a/ext/date/tests/gh8730.phpt
++++ b/ext/date/tests/gh8730.phpt
+@@ -16,7 +16,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 0
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/gh9165.phpt b/ext/date/tests/gh9165.phpt
+new file mode 100644
+index 00000000..4791b9f7
+--- /dev/null
++++ b/ext/date/tests/gh9165.phpt
+@@ -0,0 +1,21 @@
++--TEST--
++Bug GH-9165 (strtotime translates a date-time with DST/non-DST hour differently based on default timezone)
++--FILE--
++<?php
++date_default_timezone_set('America/Lower_Princes');
++echo strtotime("2018-10-28 01:00:00 Europe/London") . PHP_EOL;
++
++date_default_timezone_set('Europe/London');
++echo strtotime("2018-10-28 01:00:00 Europe/London"). PHP_EOL;
++
++date_default_timezone_set('America/Lower_Princes');
++echo strtotime("2018-10-28 04:00:00 Europe/London") . PHP_EOL;
++
++date_default_timezone_set('Europe/London');
++echo strtotime("2018-10-28 04:00:00 Europe/London"). PHP_EOL;
++?>
++--EXPECT--
++1540684800
++1540684800
++1540699200
++1540699200
+diff --git a/ext/date/tests/ini_set_incorrect-002.phpt b/ext/date/tests/ini_set_incorrect-002.phpt
+deleted file mode 100644
+index c34bc223..00000000
+--- a/ext/date/tests/ini_set_incorrect-002.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Test invalid time zone and defaults
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-echo ini_get("date.timezone"), "\n";
+-
+-ini_set("date.timezone", "foo");
+-echo ini_get("date.timezone"), "\n";
+-
+-ini_set("date.timezone", "Europe/London");
+-echo ini_get("date.timezone"), "\n";
+-
+-ini_set("date.timezone", "Mars/Valles_Marineris");
+-echo ini_get("date.timezone"), "\n";
+-?>
+---EXPECTF--
+-UTC
+-
+-Warning: ini_set(): Invalid date.timezone value 'foo', using 'UTC' instead in %sini_set_incorrect-002.php on line %d
+-UTC
+-Europe/London
+-
+-Warning: ini_set(): Invalid date.timezone value 'Mars/Valles_Marineris', using 'Europe/London' instead in %sini_set_incorrect-002.php on line %d
+-Europe/London
+diff --git a/ext/date/tests/ini_set_incorrect.phpt b/ext/date/tests/ini_set_incorrect.phpt
+index 0041d6db..10773335 100644
+--- a/ext/date/tests/ini_set_incorrect.phpt
++++ b/ext/date/tests/ini_set_incorrect.phpt
+@@ -1,7 +1,5 @@
+ --TEST--
+ Test invalid time zone passed to ini_set
+---INI--
+-date.timezone=UTC
+ --FILE--
+ <?php
+ 
+@@ -9,4 +7,4 @@ ini_set("date.timezone", "Incorrect/Zone");
+ 
+ ?>
+ --EXPECTF--
+-Warning: ini_set(): Invalid date.timezone value 'Incorrect/Zone', using 'UTC' instead in %sini_set_incorrect.php on line %d
++Warning: ini_set(): Invalid date.timezone value 'Incorrect/Zone', we selected the timezone 'UTC' for now. in %sini_set_incorrect.php on line %d
+diff --git a/ext/date/tests/ossfuzz-55589.txt b/ext/date/tests/ossfuzz-55589.txt
+deleted file mode 100644
+index 77b4041f..00000000
+--- a/ext/date/tests/ossfuzz-55589.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-|O:12:"DaTeInterval":2:{i:2;r:1;i:0;R:2;
+\ No newline at end of file
+diff --git a/ext/date/tests/ossfuzz-55599.txt b/ext/date/tests/ossfuzz-55599.txt
+deleted file mode 100644
+index 624a0058..00000000
+--- a/ext/date/tests/ossfuzz-55599.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-|O:8:"DateTime":1:{i:1;d:2;
+\ No newline at end of file
+diff --git a/ext/date/tests/ossfuzz-56931.txt b/ext/date/tests/ossfuzz-56931.txt
+deleted file mode 100644
+index 57c0ee79..00000000
+--- a/ext/date/tests/ossfuzz-56931.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-|O:12:"DateInterval":1:{s:0:"";s:2:"  ";
+\ No newline at end of file
+diff --git a/ext/date/tests/rfc-datetime_and_daylight_saving_time-type3-bd2.phpt b/ext/date/tests/rfc-datetime_and_daylight_saving_time-type3-bd2.phpt
+index 6639c421..74ee0403 100644
+--- a/ext/date/tests/rfc-datetime_and_daylight_saving_time-type3-bd2.phpt
++++ b/ext/date/tests/rfc-datetime_and_daylight_saving_time-type3-bd2.phpt
+@@ -54,7 +54,7 @@ echo 'bd8b ' . $end->format($date_format) . ' - ' . $start->format($date_format)
+ echo "\n";
+ ?>
+ --EXPECT--
+-bd0 2010-11-07 01:00:00 EST America/New_York - 2010-11-07 01:59:59 EDT America/New_York = P0DT0H0M1S
++bd0 2010-11-07 01:00:00 EST America/New_York - 2010-11-07 01:59:59 EDT America/New_York = P0DT0H59M59S
+ bd5 2010-11-07 01:30:00 EST America/New_York - 2010-11-06 04:30:00 EDT America/New_York = P0DT22H
+ bd6 2010-11-07 01:30:00 EDT America/New_York - 2010-11-06 04:30:00 EDT America/New_York = P0DT21H
+ bd8a 2010-11-07 01:00:00 EST America/New_York - 2010-11-06 01:00:00 EDT America/New_York = P1DT0H
+diff --git a/ext/date/tests/timezone_transitions_get_basic1.phpt b/ext/date/tests/timezone_transitions_get_basic1.phpt
+index 5a84746d..19596797 100644
+--- a/ext/date/tests/timezone_transitions_get_basic1.phpt
++++ b/ext/date/tests/timezone_transitions_get_basic1.phpt
+@@ -35,7 +35,7 @@ array(5) {
+   ["ts"]=>
+   int(-213228000)
+   ["time"]=>
+-  string(25) "1963-03-31T02:00:00+00:00"
++  string(24) "1963-03-31T02:00:00+0000"
+   ["offset"]=>
+   int(3600)
+   ["isdst"]=>
+diff --git a/ext/date/tests/unserialize-test.phpt b/ext/date/tests/unserialize-test.phpt
+deleted file mode 100644
+index 95a37580..00000000
+--- a/ext/date/tests/unserialize-test.phpt
++++ /dev/null
+@@ -1,47 +0,0 @@
+---TEST--
+-Test DateInterval::__unserialize OSS fuzz issues
+---FILE--
+-<?php
+-$files = [
+-	'ossfuzz-55589.txt',
+-	'ossfuzz-55599.txt',
+-	'ossfuzz-55727.txt',
+-	'ossfuzz-56931.txt',
+-];
+-
+-foreach ($files as $file) {
+-	echo "{$file}: ";
+-
+-	$s = file_get_contents(__DIR__ . "/{$file}");
+-
+-	try {
+-		$x = unserialize(substr($s, strpos($s, "|") + 1));
+-	} catch (Error $e) {
+-		echo get_class($e), ': ', $e->getMessage(), "\n";
+-	}
+-	var_dump($x);
+-	echo "\n\n";
+-}
+-?>
+---EXPECTF--
+-ossfuzz-55589.txt: 
+-%s: unserialize(): Error at offset 39 of 39 bytes in %sunserialize-test.php on line %d
+-bool(false)
+-
+-
+-ossfuzz-55599.txt: 
+-%s: unserialize(): Error at offset 26 of 26 bytes in %sunserialize-test.php on line %d
+-Error: Invalid serialization data for DateTime object
+-bool(false)
+-
+-
+-ossfuzz-55727.txt: 
+-%s: unserialize(): Error at offset 230 of 509 bytes in %sunserialize-test.php on line %d
+-bool(false)
+-
+-
+-ossfuzz-56931.txt: 
+-Notice: unserialize(): Error at offset 39 of 39 bytes in %sunserialize-test.php on line %d
+-
+-Deprecated: Creation of dynamic property DateInterval::$ is deprecated in %s on line %d
+-bool(false)
+diff --git a/ext/dba/dba.c b/ext/dba/dba.c
+index 7e0f56b4..04428d68 100644
+--- a/ext/dba/dba.c
++++ b/ext/dba/dba.c
+@@ -21,7 +21,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef HAVE_DBA
++#if HAVE_DBA
+ 
+ #include "php_ini.h"
+ #include <stdio.h>
+@@ -89,61 +89,109 @@ ZEND_TSRMLS_CACHE_DEFINE()
+ ZEND_GET_MODULE(dba)
+ #endif
+ 
+-/* {{{ php_dba_make_key */
+-static zend_string* php_dba_make_key(HashTable *key)
++/* {{{ macromania */
++
++#define DBA_ID_PARS 											\
++	zval *id; 													\
++	dba_info *info = NULL; 										\
++	int ac = ZEND_NUM_ARGS()
++
++/* these are used to get the standard arguments */
++
++/* {{{ php_dba_myke_key */
++static size_t php_dba_make_key(zval *key, char **key_str, char **key_free)
+ {
+-	zval *group, *name;
+-	zend_string *group_str, *name_str;
+-	HashPosition pos;
++	if (Z_TYPE_P(key) == IS_ARRAY) {
++		zval *group, *name;
++		HashPosition pos;
++		size_t len;
++
++		if (zend_hash_num_elements(Z_ARRVAL_P(key)) != 2) {
++			zend_argument_error(NULL, 1, "must have exactly two elements: \"key\" and \"name\"");
++			return 0;
++		}
++		zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(key), &pos);
++		group = zend_hash_get_current_data_ex(Z_ARRVAL_P(key), &pos);
++		zend_hash_move_forward_ex(Z_ARRVAL_P(key), &pos);
++		name = zend_hash_get_current_data_ex(Z_ARRVAL_P(key), &pos);
++		convert_to_string(group);
++		convert_to_string(name);
++		if (Z_STRLEN_P(group) == 0) {
++			*key_str = Z_STRVAL_P(name);
++			*key_free = NULL;
++			return Z_STRLEN_P(name);
++		}
++		len = spprintf(key_str, 0, "[%s]%s", Z_STRVAL_P(group), Z_STRVAL_P(name));
++		*key_free = *key_str;
++		return len;
++	} else {
++		zval tmp;
++		size_t len;
+ 
+-	if (zend_hash_num_elements(key) != 2) {
+-		zend_argument_error(NULL, 1, "must have exactly two elements: \"key\" and \"name\"");
+-		return NULL;
+-	}
++		ZVAL_COPY(&tmp, key);
++		convert_to_string(&tmp);
+ 
+-	// TODO: Use ZEND_HASH_FOREACH_VAL() API?
+-	zend_hash_internal_pointer_reset_ex(key, &pos);
+-	group = zend_hash_get_current_data_ex(key, &pos);
+-	group_str = zval_try_get_string(group);
+-	if (!group_str) {
+-		return NULL;
++		len = Z_STRLEN(tmp);
++		if (len) {
++			*key_free = *key_str = estrndup(Z_STRVAL(tmp), Z_STRLEN(tmp));
++		}
++		zval_ptr_dtor(&tmp);
++		return len;
+ 	}
++}
++/* }}} */
+ 
+-	zend_hash_move_forward_ex(key, &pos);
+-	name = zend_hash_get_current_data_ex(key, &pos);
+-	name_str = zval_try_get_string(name);
+-	if (!name_str) {
+-		zend_string_release_ex(group_str, false);
+-		return NULL;
++#define DBA_GET2 												\
++	zval *key;													\
++	char *key_str, *key_free;									\
++	size_t key_len; 											\
++	if (zend_parse_parameters(ac, "zr", &key, &id) == FAILURE) { 	\
++		RETURN_THROWS();										\
++	} 															\
++	if ((key_len = php_dba_make_key(key, &key_str, &key_free)) == 0) {\
++		RETURN_FALSE;											\
+ 	}
+ 
+-	// TODO: Check ZSTR_LEN(name) != 0
+-	if (ZSTR_LEN(group_str) == 0) {
+-		zend_string_release_ex(group_str, false);
+-		return name_str;
++#define DBA_GET2_3												\
++	zval *key;													\
++	char *key_str, *key_free;									\
++	size_t key_len; 											\
++	zend_long skip = 0;  											\
++	switch(ac) {												\
++	case 2: 													\
++		if (zend_parse_parameters(ac, "zr", &key, &id) == FAILURE) { \
++			RETURN_THROWS();									\
++		} 														\
++		break;  												\
++	case 3: 													\
++		if (zend_parse_parameters(ac, "zlr", &key, &skip, &id) == FAILURE) { \
++			RETURN_THROWS();									\
++		} 														\
++		break;  												\
++	default:													\
++		WRONG_PARAM_COUNT; 										\
++	} 															\
++	if ((key_len = php_dba_make_key(key, &key_str, &key_free)) == 0) {\
++		RETURN_FALSE;											\
+ 	}
+ 
+-	zend_string *key_str = zend_strpprintf(0, "[%s]%s", ZSTR_VAL(group_str), ZSTR_VAL(name_str));
+-	zend_string_release_ex(group_str, false);
+-	zend_string_release_ex(name_str, false);
+-	return key_str;
+-}
+-/* }}} */
+-
+-#define DBA_RELEASE_HT_KEY_CREATION() if (key_ht) {zend_string_release_ex(key_str, false);}
+ 
+ #define DBA_FETCH_RESOURCE(info, id)	\
+ 	if ((info = (dba_info *)zend_fetch_resource2(Z_RES_P(id), "DBA identifier", le_db, le_pdb)) == NULL) { \
+ 		RETURN_THROWS(); \
+ 	}
+ 
+-/* check whether the user has write access */
+-#define DBA_WRITE_CHECK(info) \
+-	if ((info)->mode != DBA_WRITER && (info)->mode != DBA_TRUNC && (info)->mode != DBA_CREAT) { \
+-		php_error_docref(NULL, E_WARNING, "Cannot perform a modification on a readonly database"); \
+-		RETURN_FALSE; \
++#define DBA_FETCH_RESOURCE_WITH_ID(info, id)	\
++	if ((info = (dba_info *)zend_fetch_resource2(Z_RES_P(id), "DBA identifier", le_db, le_pdb)) == NULL) { \
++		DBA_ID_DONE; \
++		RETURN_THROWS(); \
+ 	}
+ 
++#define DBA_ID_GET2   DBA_ID_PARS; DBA_GET2;   DBA_FETCH_RESOURCE_WITH_ID(info, id)
++#define DBA_ID_GET2_3 DBA_ID_PARS; DBA_GET2_3; DBA_FETCH_RESOURCE_WITH_ID(info, id)
++
++#define DBA_ID_DONE												\
++	if (key_free) efree(key_free)
+ /* a DBA handler must have specific routines */
+ 
+ #define DBA_NAMED_HND(alias, name, flags) \
+@@ -155,77 +203,92 @@ static zend_string* php_dba_make_key(HashTable *key)
+ 
+ #define DBA_HND(name, flags) DBA_NAMED_HND(name, name, flags)
+ 
++/* check whether the user has write access */
++#define DBA_WRITE_CHECK \
++	if(info->mode != DBA_WRITER && info->mode != DBA_TRUNC && info->mode != DBA_CREAT) { \
++		php_error_docref(NULL, E_WARNING, "You cannot perform a modification to a database without proper access"); \
++		RETURN_FALSE; \
++	}
++
++/* the same check, but with a call to DBA_ID_DONE before returning */
++#define DBA_WRITE_CHECK_WITH_ID \
++	if(info->mode != DBA_WRITER && info->mode != DBA_TRUNC && info->mode != DBA_CREAT) { \
++		php_error_docref(NULL, E_WARNING, "You cannot perform a modification to a database without proper access"); \
++		DBA_ID_DONE; \
++		RETURN_FALSE; \
++	}
++
+ /* }}} */
+ 
+ /* {{{ globals */
+ 
+ static dba_handler handler[] = {
+-#ifdef DBA_GDBM
++#if DBA_GDBM
+ 	DBA_HND(gdbm, DBA_LOCK_EXT) /* Locking done in library if set */
+ #endif
+-#ifdef DBA_DBM
++#if DBA_DBM
+ 	DBA_HND(dbm, DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_NDBM
++#if DBA_NDBM
+ 	DBA_HND(ndbm, DBA_LOCK_ALL) /* Could be done in library: filemode = 0644 + S_ENFMT */
+ #endif
+-#ifdef DBA_CDB
++#if DBA_CDB
+ 	DBA_HND(cdb, DBA_STREAM_OPEN|DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_CDB_BUILTIN
++#if DBA_CDB_BUILTIN
+ 	DBA_NAMED_HND(cdb_make, cdb, DBA_STREAM_OPEN|DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_DB1
++#if DBA_DB1
+ 	DBA_HND(db1, DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_DB2
++#if DBA_DB2
+ 	DBA_HND(db2, DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_DB3
++#if DBA_DB3
+ 	DBA_HND(db3, DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_DB4
++#if DBA_DB4
+ 	DBA_HND(db4, DBA_LOCK_ALL) /* No lock in lib */
+ #endif
+-#ifdef DBA_INIFILE
++#if DBA_INIFILE
+ 	DBA_HND(inifile, DBA_STREAM_OPEN|DBA_LOCK_ALL|DBA_CAST_AS_FD) /* No lock in lib */
+ #endif
+-#ifdef DBA_FLATFILE
++#if DBA_FLATFILE
+ 	DBA_HND(flatfile, DBA_STREAM_OPEN|DBA_LOCK_ALL|DBA_NO_APPEND) /* No lock in lib */
+ #endif
+-#ifdef DBA_QDBM
++#if DBA_QDBM
+ 	DBA_HND(qdbm, DBA_LOCK_EXT)
+ #endif
+-#ifdef DBA_TCADB
++#if DBA_TCADB
+ 	DBA_HND(tcadb, DBA_LOCK_ALL)
+ #endif
+-#ifdef DBA_LMDB
++#if DBA_LMDB
+ 	DBA_HND(lmdb, DBA_LOCK_EXT)
+ #endif
+ 	{ NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
+ };
+ 
+-#ifdef DBA_FLATFILE
++#if DBA_FLATFILE
+ #define DBA_DEFAULT "flatfile"
+-#elif defined(DBA_DB4)
++#elif DBA_DB4
+ #define DBA_DEFAULT "db4"
+-#elif defined(DBA_DB3)
++#elif DBA_DB3
+ #define DBA_DEFAULT "db3"
+-#elif defined(DBA_DB2)
++#elif DBA_DB2
+ #define DBA_DEFAULT "db2"
+-#elif defined(DBA_DB1)
++#elif DBA_DB1
+ #define DBA_DEFAULT "db1"
+-#elif defined(DBA_GDBM)
++#elif DBA_GDBM
+ #define DBA_DEFAULT "gdbm"
+-#elif defined(DBA_NBBM)
++#elif DBA_NBBM
+ #define DBA_DEFAULT "ndbm"
+-#elif defined(DBA_DBM)
++#elif DBA_DBM
+ #define DBA_DEFAULT "dbm"
+-#elif defined(DBA_QDBM)
++#elif DBA_QDBM
+ #define DBA_DEFAULT "qdbm"
+-#elif defined(DBA_TCADB)
++#elif DBA_TCADB
+ #define DBA_DEFAULT "tcadb"
+-#elif defined(DBA_LMDB)
++#elif DBA_LMDB
+ #define DBA_DEFAULT "lmdb"
+ #else
+ #define DBA_DEFAULT ""
+@@ -279,6 +342,9 @@ static void dba_close(dba_info *info)
+ 			php_stream_close(info->lock.fp);
+ 		}
+ 	}
++	if (info->lock.name) {
++		pefree(info->lock.name, info->flags&DBA_PERSISTENT);
++	}
+ 	pefree(info, info->flags&DBA_PERSISTENT);
+ }
+ /* }}} */
+@@ -359,7 +425,6 @@ PHP_MINIT_FUNCTION(dba)
+ 	REGISTER_INI_ENTRIES();
+ 	le_db = zend_register_list_destructors_ex(dba_close_rsrc, NULL, "dba", module_number);
+ 	le_pdb = zend_register_list_destructors_ex(dba_close_pe_rsrc, dba_close_rsrc, "dba persistent", module_number);
+-	register_dba_symbols(module_number);
+ 	return SUCCESS;
+ }
+ /* }}} */
+@@ -402,34 +467,39 @@ PHP_MINFO_FUNCTION(dba)
+ /* {{{ php_dba_update */
+ static void php_dba_update(INTERNAL_FUNCTION_PARAMETERS, int mode)
+ {
++	size_t val_len;
+ 	zval *id;
+ 	dba_info *info = NULL;
+-	HashTable *key_ht = NULL;
+-	zend_string *key_str = NULL;
+-	zend_string *value;
++	int ac = ZEND_NUM_ARGS();
++	zval *key;
++	char *val;
++	char *key_str, *key_free;
++	size_t key_len;
+ 
+-	ZEND_PARSE_PARAMETERS_START(3, 3)
+-		Z_PARAM_ARRAY_HT_OR_STR(key_ht, key_str)
+-		Z_PARAM_STR(value)
+-		Z_PARAM_RESOURCE(id);
+-	ZEND_PARSE_PARAMETERS_END();
++	if (zend_parse_parameters(ac, "zsr", &key, &val, &val_len, &id) == FAILURE) {
++		RETURN_THROWS();
++	}
+ 
+-	DBA_FETCH_RESOURCE(info, id);
+-	DBA_WRITE_CHECK(info);
++	if ((key_len = php_dba_make_key(key, &key_str, &key_free)) == 0) {
++		RETURN_FALSE;
++	}
+ 
+-	if (key_ht) {
+-		key_str = php_dba_make_key(key_ht);
+-		if (!key_str) {
+-			// TODO ValueError?
+-			RETURN_FALSE;
+-		}
++	DBA_FETCH_RESOURCE_WITH_ID(info, id);
++
++	DBA_WRITE_CHECK_WITH_ID;
++
++	if (info->hnd->update(info, key_str, key_len, val, val_len, mode) == SUCCESS) {
++		DBA_ID_DONE;
++		RETURN_TRUE;
+ 	}
+ 
+-	RETVAL_BOOL(info->hnd->update(info, key_str, value, mode) == SUCCESS);
+-	DBA_RELEASE_HT_KEY_CREATION();
++	DBA_ID_DONE;
++	RETURN_FALSE;
+ }
+ /* }}} */
+ 
++#define FREENOW if(args) {int i; for (i=0; i<ac; i++) { zval_ptr_dtor(&args[i]); } efree(args);} if(key) efree(key)
++
+ /* {{{ php_find_dbm */
+ dba_info *php_dba_find(const char* path)
+ {
+@@ -454,18 +524,20 @@ dba_info *php_dba_find(const char* path)
+ }
+ /* }}} */
+ 
+-#define FREE_PERSISTENT_RESOURCE_KEY() if (persistent_resource_key) {zend_string_release_ex(persistent_resource_key, false);}
+-
+ /* {{{ php_dba_open */
+-static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
++static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, int persistent)
+ {
++	zval *args = NULL;
++	int ac = ZEND_NUM_ARGS();
+ 	dba_mode_t modenr;
+ 	dba_info *info, *other;
+ 	dba_handler *hptr;
+-	char *error = NULL;
+-	int lock_mode, lock_flag = 0;
++	char *key = NULL, *error = NULL;
++	size_t keylen = 0;
++	int i;
++	int lock_mode, lock_flag, lock_dbf = 0;
+ 	char *file_mode;
+-	char *lock_file_mode = NULL;
++	char mode[4], *pmode, *lock_file_mode = NULL;
+ 	int persistent_flag = persistent ? STREAM_OPEN_PERSISTENT : 0;
+ 	zend_string *opened_path = NULL;
+ 	char *lock_name;
+@@ -474,64 +546,47 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ 	bool need_creation = 0;
+ #endif
+ 
+-	zend_string *path;
+-	zend_string *mode;
+-	zend_string *handler_str = NULL;
+-	zend_long permission = 0644;
+-	zend_long map_size = 0;
+-	zend_long driver_flags = DBA_DEFAULT_DRIVER_FLAGS;
+-	bool is_flags_null = true;
+-	zend_string *persistent_resource_key = NULL;
+-
+-	if (FAILURE == zend_parse_parameters(ZEND_NUM_ARGS(), "PS|S!lll!", &path, &mode, &handler_str,
+-			&permission, &map_size, &driver_flags, &is_flags_null)) {
+-		RETURN_THROWS();
++	if (ac < 2) {
++		WRONG_PARAM_COUNT;
+ 	}
+ 
+-	if (ZSTR_LEN(path) == 0) {
+-		zend_argument_value_error(1, "cannot be empty");
+-		RETURN_THROWS();
+-	}
+-	if (ZSTR_LEN(mode) == 0) {
+-		zend_argument_value_error(2, "cannot be empty");
+-		RETURN_THROWS();
+-	}
+-	if (handler_str && ZSTR_LEN(handler_str) == 0) {
+-		zend_argument_value_error(3, "cannot be empty");
+-		RETURN_THROWS();
++	/* we pass additional args to the respective handler */
++	args = safe_emalloc(ac, sizeof(zval), 0);
++	if (zend_get_parameters_array_ex(ac, args) != SUCCESS) {
++		efree(args);
++		WRONG_PARAM_COUNT;
+ 	}
+-	// TODO Check Value for permission
+-	if (map_size < 0) {
+-		zend_argument_value_error(5, "must be greater than or equal to 0");
+-		RETURN_THROWS();
++
++	/* we only take string arguments */
++	for (i = 0; i < ac; i++) {
++		ZVAL_STR(&args[i], zval_get_string(&args[i]));
++		keylen += Z_STRLEN(args[i]);
+ 	}
+ 
+-	if (!is_flags_null && driver_flags < 0) {
+-		zend_argument_value_error(6, "must be greater than or equal to 0");
++	/* Exception during string conversion */
++	if (EG(exception)) {
++		FREENOW;
+ 		RETURN_THROWS();
+ 	}
+ 
+ 	if (persistent) {
+ 		zend_resource *le;
+ 
+-		if (handler_str) {
+-			persistent_resource_key = zend_string_concat3(
+-				ZSTR_VAL(path), ZSTR_LEN(path),
+-				ZSTR_VAL(mode), ZSTR_LEN(mode),
+-				ZSTR_VAL(handler_str), ZSTR_LEN(handler_str)
+-			);
+-		} else {
+-			persistent_resource_key = zend_string_concat2(
+-				ZSTR_VAL(path), ZSTR_LEN(path),
+-				ZSTR_VAL(mode), ZSTR_LEN(mode)
+-			);
++		/* calculate hash */
++		key = safe_emalloc(keylen, 1, 1);
++		key[keylen] = '\0';
++		keylen = 0;
++
++		for(i = 0; i < ac; i++) {
++			memcpy(key+keylen, Z_STRVAL(args[i]), Z_STRLEN(args[i]));
++			keylen += Z_STRLEN(args[i]);
+ 		}
+ 
+ 		/* try to find if we already have this link in our persistent list */
+-		if ((le = zend_hash_find_ptr(&EG(persistent_list), persistent_resource_key)) != NULL) {
+-			FREE_PERSISTENT_RESOURCE_KEY();
++		if ((le = zend_hash_str_find_ptr(&EG(persistent_list), key, keylen)) != NULL) {
++			FREENOW;
++
+ 			if (le->type != le_pdb) {
+-				// TODO This should never happen
+ 				RETURN_FALSE;
+ 			}
+ 
+@@ -539,29 +594,28 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ 
+ 			GC_ADDREF(le);
+ 			RETURN_RES(zend_register_resource(info, le_pdb));
++			return;
+ 		}
+ 	}
+ 
+-	if (!handler_str) {
++	if (ac==2) {
+ 		hptr = DBA_G(default_hptr);
+ 		if (!hptr) {
+-			php_error_docref(NULL, E_WARNING, "No default handler selected");
+-			FREE_PERSISTENT_RESOURCE_KEY();
++			php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "No default handler selected");
++			FREENOW;
+ 			RETURN_FALSE;
+ 		}
+-		ZEND_ASSERT(hptr->name);
+ 	} else {
+-		/* Loop through global static var handlers to see if such a handler exists */
+-		for (hptr = handler; hptr->name && strcasecmp(hptr->name, ZSTR_VAL(handler_str)); hptr++);
++		for (hptr = handler; hptr->name && strcasecmp(hptr->name, Z_STRVAL(args[2])); hptr++);
++	}
+ 
+-		if (!hptr->name) {
+-			php_error_docref(NULL, E_WARNING, "Handler \"%s\" is not available", ZSTR_VAL(handler_str));
+-			FREE_PERSISTENT_RESOURCE_KEY();
+-			RETURN_FALSE;
+-		}
++	if (!hptr->name) {
++		php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "No such handler: %s", Z_STRVAL(args[2]));
++		FREENOW;
++		RETURN_FALSE;
+ 	}
+ 
+-	/* Check mode: [rwnc][dl-]?t?
++	/* Check mode: [rwnc][fl]?t?
+ 	 * r: Read
+ 	 * w: Write
+ 	 * n: Create/Truncate
+@@ -573,68 +627,38 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ 	 *
+ 	 * t: test open database, warning if locked
+ 	 */
+-	bool is_test_lock = false;
+-	bool is_db_lock = false;
+-	bool is_lock_ignored = false;
+-	// bool is_file_lock = false;
+-
+-	if (ZSTR_LEN(mode) == 0) {
+-		zend_argument_value_error(2, "cannot be empty");
+-		FREE_PERSISTENT_RESOURCE_KEY();
+-		RETURN_THROWS();
+-	}
+-	if (ZSTR_LEN(mode) > 3) {
+-		zend_argument_value_error(2, "must be at most 3 characters");
+-		FREE_PERSISTENT_RESOURCE_KEY();
+-		RETURN_THROWS();
+-	}
+-	if (ZSTR_LEN(mode) == 3) {
+-		if (ZSTR_VAL(mode)[2] != 't') {
+-			zend_argument_value_error(2, "third character must be \"t\"");
+-			FREE_PERSISTENT_RESOURCE_KEY();
+-			RETURN_THROWS();
+-		}
+-		is_test_lock = true;
+-	}
+-	if (ZSTR_LEN(mode) >= 2) {
+-		switch (ZSTR_VAL(mode)[1]) {
+-			case 't':
+-				is_test_lock = true;
++	strlcpy(mode, Z_STRVAL(args[1]), sizeof(mode));
++	pmode = &mode[0];
++	if (pmode[0] && (pmode[1]=='d' || pmode[1]=='l' || pmode[1]=='-')) { /* force lock on db file or lck file or disable locking */
++		switch (pmode[1]) {
++		case 'd':
++			lock_dbf = 1;
++			if ((hptr->flags & DBA_LOCK_ALL) == 0) {
++				lock_flag = (hptr->flags & DBA_LOCK_ALL);
+ 				break;
+-			case '-':
+-				if ((hptr->flags & DBA_LOCK_ALL) == 0) {
+-					php_error_docref(NULL, E_WARNING, "Locking cannot be disabled for handler %s", hptr->name);
+-					FREE_PERSISTENT_RESOURCE_KEY();
+-					RETURN_FALSE;
+-				}
+-				is_lock_ignored = true;
+-				lock_flag = 0;
++			}
++			ZEND_FALLTHROUGH;
++		case 'l':
++			lock_flag = DBA_LOCK_ALL;
++			if ((hptr->flags & DBA_LOCK_ALL) == 0) {
++				php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_NOTICE, "Handler %s does locking internally", hptr->name);
++			}
++			break;
++		default:
++		case '-':
++			if ((hptr->flags & DBA_LOCK_ALL) == 0) {
++				php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Locking cannot be disabled for handler %s", hptr->name);
++				FREENOW;
++				RETURN_FALSE;
++			}
++			lock_flag = 0;
+ 			break;
+-			case 'd':
+-				is_db_lock = true;
+-				if ((hptr->flags & DBA_LOCK_ALL) == 0) {
+-					lock_flag = (hptr->flags & DBA_LOCK_ALL);
+-					break;
+-				}
+-				ZEND_FALLTHROUGH;
+-			case 'l':
+-				// is_file_lock = true;
+-				lock_flag = DBA_LOCK_ALL;
+-				if ((hptr->flags & DBA_LOCK_ALL) == 0) {
+-					php_error_docref(NULL, E_NOTICE, "Handler %s does locking internally", hptr->name);
+-				}
+-				break;
+-			default:
+-				zend_argument_value_error(2, "second character must be one of \"d\", \"l\", \"-\", or \"t\"");
+-				FREE_PERSISTENT_RESOURCE_KEY();
+-				RETURN_THROWS();
+ 		}
+ 	} else {
+ 		lock_flag = (hptr->flags&DBA_LOCK_ALL);
+-		is_db_lock = true;
++		lock_dbf = 1;
+ 	}
+-
+-	switch (ZSTR_VAL(mode)[0]) {
++	switch (*pmode++) {
+ 		case 'r':
+ 			modenr = DBA_READER;
+ 			lock_mode = (lock_flag & DBA_LOCK_READER) ? LOCK_SH : 0;
+@@ -649,13 +673,13 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ #ifdef PHP_WIN32
+ 			if (hptr->flags & (DBA_NO_APPEND|DBA_CAST_AS_FD)) {
+ 				php_stream_statbuf ssb;
+-				need_creation = (SUCCESS != php_stream_stat_path(ZSTR_VAL(path), &ssb));
++				need_creation = (SUCCESS != php_stream_stat_path(Z_STRVAL(args[0]), &ssb));
+ 			}
+ #endif
+ 			modenr = DBA_CREAT;
+ 			lock_mode = (lock_flag & DBA_LOCK_CREAT) ? LOCK_EX : 0;
+ 			if (lock_mode) {
+-				if (is_db_lock) {
++				if (lock_dbf) {
+ 					/* the create/append check will be done on the lock
+ 					 * when the lib opens the file it is already created
+ 					 */
+@@ -694,46 +718,54 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ 			file_mode = "w+b";
+ 			break;
+ 		default:
+-			zend_argument_value_error(2, "first character must be one of \"r\", \"w\", \"c\", or \"n\"");
+-			FREE_PERSISTENT_RESOURCE_KEY();
+-			RETURN_THROWS();
++			php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Illegal DBA mode");
++			FREENOW;
++			RETURN_FALSE;
+ 	}
+ 	if (!lock_file_mode) {
+ 		lock_file_mode = file_mode;
+ 	}
+-	if (is_test_lock) {
+-		if (is_lock_ignored) {
+-			zend_argument_value_error(2, "cannot combine mode \"-\" (no lock) and \"t\" (test lock)");
+-			FREE_PERSISTENT_RESOURCE_KEY();
+-			RETURN_THROWS();
++	if (*pmode=='d' || *pmode=='l' || *pmode=='-') {
++		pmode++; /* done already - skip here */
++	}
++	if (*pmode=='t') {
++		pmode++;
++		if (!lock_flag) {
++			php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "You cannot combine modifiers - (no lock) and t (test lock)");
++			FREENOW;
++			RETURN_FALSE;
+ 		}
+ 		if (!lock_mode) {
+ 			if ((hptr->flags & DBA_LOCK_ALL) == 0) {
+-				php_error_docref(NULL, E_WARNING, "Handler %s uses its own locking which doesn't support mode modifier t (test lock)", hptr->name);
+-				FREE_PERSISTENT_RESOURCE_KEY();
++				php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Handler %s uses its own locking which doesn't support mode modifier t (test lock)", hptr->name);
++				FREENOW;
+ 				RETURN_FALSE;
+ 			} else {
+-				php_error_docref(NULL, E_WARNING, "Handler %s doesn't uses locking for this mode which makes modifier t (test lock) obsolete", hptr->name);
+-				FREE_PERSISTENT_RESOURCE_KEY();
++				php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Handler %s doesn't uses locking for this mode which makes modifier t (test lock) obsolete", hptr->name);
++				FREENOW;
+ 				RETURN_FALSE;
+ 			}
+ 		} else {
+ 			lock_mode |= LOCK_NB; /* test =: non blocking */
+ 		}
+ 	}
++	if (*pmode) {
++		php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Illegal DBA mode");
++		FREENOW;
++		RETURN_FALSE;
++	}
+ 
+ 	info = pemalloc(sizeof(dba_info), persistent);
+ 	memset(info, 0, sizeof(dba_info));
+-	info->path = pestrdup(ZSTR_VAL(path), persistent);
++	info->path = pestrdup(Z_STRVAL(args[0]), persistent);
+ 	info->mode = modenr;
+-	info->file_permission = permission;
+-	info->map_size = map_size;
+-	info->driver_flags = driver_flags;
++	info->argc = ac - 3;
++	info->argv = args + 3;
+ 	info->flags = (hptr->flags & ~DBA_LOCK_ALL) | (lock_flag & DBA_LOCK_ALL) | (persistent ? DBA_PERSISTENT : 0);
+ 	info->lock.mode = lock_mode;
+ 
+ 	/* if any open call is a locking call:
+-	 * check if we already have a locking call open that should block this call
++	 * check if we already habe a locking call open that should block this call
+ 	 * the problem is some systems would allow read during write
+ 	 */
+ 	if (hptr->flags & DBA_LOCK_ALL) {
+@@ -750,8 +782,8 @@ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ restart:
+ #endif
+ 	if (!error && lock_mode) {
+-		if (is_db_lock) {
+-			lock_name = ZSTR_VAL(path);
++		if (lock_dbf) {
++			lock_name = Z_STRVAL(args[0]);
+ 		} else {
+ 			spprintf(&lock_name, 0, "%s.lck", info->path);
+ 			if (!strcmp(file_mode, "r")) {
+@@ -759,33 +791,37 @@ restart:
+ 				/* do not log errors for .lck file while in read only mode on .lck file */
+ 				lock_file_mode = "rb";
+ 				info->lock.fp = php_stream_open_wrapper(lock_name, lock_file_mode, STREAM_MUST_SEEK|IGNORE_PATH|persistent_flag, &opened_path);
+-				if (opened_path) {
+-					zend_string_release_ex(opened_path, 0);
+-				}
+ 			}
+ 			if (!info->lock.fp) {
+ 				/* when not in read mode or failed to open .lck file read only. now try again in create(write) mode and log errors */
+ 				lock_file_mode = "a+b";
++			} else {
++				if (opened_path) {
++					info->lock.name = pestrndup(ZSTR_VAL(opened_path), ZSTR_LEN(opened_path), persistent);
++					zend_string_release_ex(opened_path, 0);
++				}
+ 			}
+ 		}
+ 		if (!info->lock.fp) {
+ 			info->lock.fp = php_stream_open_wrapper(lock_name, lock_file_mode, STREAM_MUST_SEEK|REPORT_ERRORS|IGNORE_PATH|persistent_flag, &opened_path);
+ 			if (info->lock.fp) {
+-				if (is_db_lock) {
++				if (lock_dbf) {
+ 					/* replace the path info with the real path of the opened file */
+ 					pefree(info->path, persistent);
+ 					info->path = pestrndup(ZSTR_VAL(opened_path), ZSTR_LEN(opened_path), persistent);
+ 				}
++				/* now store the name of the lock */
++				info->lock.name = pestrndup(ZSTR_VAL(opened_path), ZSTR_LEN(opened_path), persistent);
+ 				zend_string_release_ex(opened_path, 0);
+ 			}
+ 		}
+-		if (!is_db_lock) {
++		if (!lock_dbf) {
+ 			efree(lock_name);
+ 		}
+ 		if (!info->lock.fp) {
+ 			dba_close(info);
+ 			/* stream operation already wrote an error message */
+-			FREE_PERSISTENT_RESOURCE_KEY();
++			FREENOW;
+ 			RETURN_FALSE;
+ 		}
+ 		if (!php_stream_supports_lock(info->lock.fp)) {
+@@ -798,7 +834,7 @@ restart:
+ 
+ 	/* centralised open stream for builtin */
+ 	if (!error && (hptr->flags&DBA_STREAM_OPEN)==DBA_STREAM_OPEN) {
+-		if (info->lock.fp && is_db_lock) {
++		if (info->lock.fp && lock_dbf) {
+ 			info->fp = info->lock.fp; /* use the same stream for locking and database access */
+ 		} else {
+ 			info->fp = php_stream_open_wrapper(info->path, file_mode, STREAM_MUST_SEEK|REPORT_ERRORS|IGNORE_PATH|persistent_flag, NULL);
+@@ -806,7 +842,7 @@ restart:
+ 		if (!info->fp) {
+ 			dba_close(info);
+ 			/* stream operation already wrote an error message */
+-			FREE_PERSISTENT_RESOURCE_KEY();
++			FREENOW;
+ 			RETURN_FALSE;
+ 		}
+ 		if (hptr->flags & (DBA_NO_APPEND|DBA_CAST_AS_FD)) {
+@@ -816,7 +852,7 @@ restart:
+ 			if (SUCCESS != php_stream_cast(info->fp, PHP_STREAM_AS_FD, (void*)&info->fd, 1)) {
+ 				php_error_docref(NULL, E_WARNING, "Could not cast stream");
+ 				dba_close(info);
+-				FREE_PERSISTENT_RESOURCE_KEY();
++				FREENOW;
+ 				RETURN_FALSE;
+ #ifdef F_SETFL
+ 			} else if (modenr == DBA_CREAT) {
+@@ -834,6 +870,8 @@ restart:
+ 				info->lock.fp = NULL;
+ 				info->fd = -1;
+ 
++				pefree(info->lock.name, persistent);
++
+ 				lock_file_mode = "r+b";
+ 
+ 				restarted = 1;
+@@ -843,35 +881,31 @@ restart:
+ 		}
+ 	}
+ 
+-	if (error || hptr->open(info, &error) == FAILURE) {
++	if (error || hptr->open(info, &error) != SUCCESS) {
+ 		dba_close(info);
+-		if (EXPECTED(!EG(exception))) {
+-			if (error) {
+-				php_error_docref(NULL, E_WARNING, "Driver initialization failed for handler: %s: %s", hptr->name, error);
+-			} else {
+-				php_error_docref(NULL, E_WARNING, "Driver initialization failed for handler: %s", hptr->name);
+-			}
+-		}
+-		FREE_PERSISTENT_RESOURCE_KEY();
++		php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Driver initialization failed for handler: %s%s%s", hptr->name, error?": ":"", error?error:"");
++		FREENOW;
+ 		RETURN_FALSE;
+ 	}
+ 
+ 	info->hnd = hptr;
++	info->argc = 0;
++	info->argv = NULL;
+ 
+ 	if (persistent) {
+-		ZEND_ASSERT(persistent_resource_key);
+-		if (zend_register_persistent_resource_ex(persistent_resource_key, info, le_pdb) == NULL) {
++		if (zend_register_persistent_resource(key, keylen, info, le_pdb) == NULL) {
+ 			dba_close(info);
+-			php_error_docref(NULL, E_WARNING, "Could not register persistent resource");
+-			FREE_PERSISTENT_RESOURCE_KEY();
++			php_error_docref2(NULL, Z_STRVAL(args[0]), Z_STRVAL(args[1]), E_WARNING, "Could not register persistent resource");
++			FREENOW;
+ 			RETURN_FALSE;
+ 		}
+-		FREE_PERSISTENT_RESOURCE_KEY();
+ 	}
+ 
+-	RETURN_RES(zend_register_resource(info, (persistent ? le_pdb : le_db)));
++	RETVAL_RES(zend_register_resource(info, (persistent ? le_pdb : le_db)));
++	FREENOW;
+ }
+ /* }}} */
++#undef FREENOW
+ 
+ /* {{{ Opens path using the specified handler in mode persistently */
+ PHP_FUNCTION(dba_popen)
+@@ -906,70 +940,26 @@ PHP_FUNCTION(dba_close)
+ /* {{{ Checks, if the specified key exists */
+ PHP_FUNCTION(dba_exists)
+ {
+-	zval *id;
+-	dba_info *info = NULL;
+-	HashTable *key_ht = NULL;
+-	zend_string *key_str = NULL;
+-
+-	ZEND_PARSE_PARAMETERS_START(2, 2)
+-		Z_PARAM_ARRAY_HT_OR_STR(key_ht, key_str)
+-		Z_PARAM_RESOURCE(id);
+-	ZEND_PARSE_PARAMETERS_END();
++	DBA_ID_GET2;
+ 
+-	DBA_FETCH_RESOURCE(info, id);
+-
+-	if (key_ht) {
+-		key_str = php_dba_make_key(key_ht);
+-		if (!key_str) {
+-			// TODO ValueError?
+-			RETURN_FALSE;
+-		}
++	if(info->hnd->exists(info, key_str, key_len) == SUCCESS) {
++		DBA_ID_DONE;
++		RETURN_TRUE;
+ 	}
+-
+-	RETVAL_BOOL(info->hnd->exists(info, key_str) == SUCCESS);
+-	DBA_RELEASE_HT_KEY_CREATION();
++	DBA_ID_DONE;
++	RETURN_FALSE;
+ }
+ /* }}} */
+ 
+ /* {{{ Fetches the data associated with key */
+ PHP_FUNCTION(dba_fetch)
+ {
+-	zval *id;
+-	dba_info *info = NULL;
+-	HashTable *key_ht = NULL;
+-	zend_string *key_str = NULL;
+-	zend_long skip = 0;
+-
+-	/* Check for legacy signature */
+-	if (ZEND_NUM_ARGS() == 3) {
+-		ZEND_PARSE_PARAMETERS_START_EX(ZEND_PARSE_PARAMS_QUIET, 3, 3)
+-			Z_PARAM_ARRAY_HT_OR_STR(key_ht, key_str)
+-			Z_PARAM_LONG(skip)
+-			Z_PARAM_RESOURCE(id);
+-		ZEND_PARSE_PARAMETERS_END_EX(goto standard;);
+-	} else {
+-		standard:
+-		ZEND_PARSE_PARAMETERS_START(2, 3)
+-			Z_PARAM_ARRAY_HT_OR_STR(key_ht, key_str)
+-			Z_PARAM_RESOURCE(id);
+-			Z_PARAM_OPTIONAL
+-			Z_PARAM_LONG(skip)
+-		ZEND_PARSE_PARAMETERS_END();
+-	}
+-
+-	DBA_FETCH_RESOURCE(info, id);
+-
+-	if (key_ht) {
+-		key_str = php_dba_make_key(key_ht);
+-		if (!key_str) {
+-			// TODO ValueError?
+-			RETURN_FALSE;
+-		}
+-	}
++	char *val;
++	size_t len = 0;
++	DBA_ID_GET2_3;
+ 
+-	if (skip != 0) {
++	if (ac==3) {
+ 		if (!strcmp(info->hnd->name, "cdb")) {
+-			// TODO ValueError?
+ 			if (skip < 0) {
+ 				php_error_docref(NULL, E_NOTICE, "Handler %s accepts only skip values greater than or equal to zero, using skip=0", info->hnd->name);
+ 				skip = 0;
+@@ -982,7 +972,6 @@ PHP_FUNCTION(dba_fetch)
+ 			 * value to 0 ensures the first value.
+ 			 */
+ 			if (skip < -1) {
+-				// TODO ValueError?
+ 				php_error_docref(NULL, E_NOTICE, "Handler %s accepts only skip value -1 and greater, using skip=0", info->hnd->name);
+ 				skip = 0;
+ 			}
+@@ -990,15 +979,17 @@ PHP_FUNCTION(dba_fetch)
+ 			php_error_docref(NULL, E_NOTICE, "Handler %s does not support optional skip parameter, the value will be ignored", info->hnd->name);
+ 			skip = 0;
+ 		}
++	} else {
++		skip = 0;
+ 	}
+-
+-	zend_string *val;
+-	if ((val = info->hnd->fetch(info, key_str, skip)) == NULL) {
+-		DBA_RELEASE_HT_KEY_CREATION();
+-		RETURN_FALSE;
++	if((val = info->hnd->fetch(info, key_str, key_len, skip, &len)) != NULL) {
++		DBA_ID_DONE;
++		RETVAL_STRINGL(val, len);
++		efree(val);
++		return;
+ 	}
+-	DBA_RELEASE_HT_KEY_CREATION();
+-	RETURN_STR(val);
++	DBA_ID_DONE;
++	RETURN_FALSE;
+ }
+ /* }}} */
+ 
+@@ -1014,7 +1005,7 @@ PHP_FUNCTION(dba_key_split)
+ 	}
+ 	if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS(), "z", &zkey) == SUCCESS) {
+ 		if (Z_TYPE_P(zkey) == IS_NULL || (Z_TYPE_P(zkey) == IS_FALSE)) {
+-			RETURN_FALSE;
++			RETURN_BOOL(0);
+ 		}
+ 	}
+ 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "s", &key, &key_len) == FAILURE) {
+@@ -1034,6 +1025,8 @@ PHP_FUNCTION(dba_key_split)
+ /* {{{ Resets the internal key pointer and returns the first key */
+ PHP_FUNCTION(dba_firstkey)
+ {
++	char *fkey;
++	size_t len;
+ 	zval *id;
+ 	dba_info *info = NULL;
+ 
+@@ -1043,10 +1036,12 @@ PHP_FUNCTION(dba_firstkey)
+ 
+ 	DBA_FETCH_RESOURCE(info, id);
+ 
+-	zend_string *fkey = info->hnd->firstkey(info);
++	fkey = info->hnd->firstkey(info, &len);
+ 
+ 	if (fkey) {
+-		RETURN_STR(fkey);
++		RETVAL_STRINGL(fkey, len);
++		efree(fkey);
++		return;
+ 	}
+ 
+ 	RETURN_FALSE;
+@@ -1056,6 +1051,8 @@ PHP_FUNCTION(dba_firstkey)
+ /* {{{ Returns the next key */
+ PHP_FUNCTION(dba_nextkey)
+ {
++	char *nkey;
++	size_t len;
+ 	zval *id;
+ 	dba_info *info = NULL;
+ 
+@@ -1065,10 +1062,12 @@ PHP_FUNCTION(dba_nextkey)
+ 
+ 	DBA_FETCH_RESOURCE(info, id);
+ 
+-	zend_string *nkey = info->hnd->nextkey(info);
++	nkey = info->hnd->nextkey(info, &len);
+ 
+ 	if (nkey) {
+-		RETURN_STR(nkey);
++		RETVAL_STRINGL(nkey, len);
++		efree(nkey);
++		return;
+ 	}
+ 
+ 	RETURN_FALSE;
+@@ -1079,29 +1078,17 @@ PHP_FUNCTION(dba_nextkey)
+    If inifile: remove all other key lines */
+ PHP_FUNCTION(dba_delete)
+ {
+-	zval *id;
+-	dba_info *info = NULL;
+-	HashTable *key_ht = NULL;
+-	zend_string *key_str = NULL;
++	DBA_ID_GET2;
+ 
+-	ZEND_PARSE_PARAMETERS_START(2, 2)
+-		Z_PARAM_ARRAY_HT_OR_STR(key_ht, key_str)
+-		Z_PARAM_RESOURCE(id);
+-	ZEND_PARSE_PARAMETERS_END();
++	DBA_WRITE_CHECK_WITH_ID;
+ 
+-	DBA_FETCH_RESOURCE(info, id);
+-	DBA_WRITE_CHECK(info);
+-
+-	if (key_ht) {
+-		key_str = php_dba_make_key(key_ht);
+-		if (!key_str) {
+-			// TODO ValueError?
+-			RETURN_FALSE;
+-		}
++	if(info->hnd->delete(info, key_str, key_len) == SUCCESS)
++	{
++		DBA_ID_DONE;
++		RETURN_TRUE;
+ 	}
+-
+-	RETVAL_BOOL(info->hnd->delete(info, key_str) == SUCCESS);
+-	DBA_RELEASE_HT_KEY_CREATION();
++	DBA_ID_DONE;
++	RETURN_FALSE;
+ }
+ /* }}} */
+ 
+@@ -1132,7 +1119,8 @@ PHP_FUNCTION(dba_optimize)
+ 	}
+ 
+ 	DBA_FETCH_RESOURCE(info, id);
+-	DBA_WRITE_CHECK(info);
++
++	DBA_WRITE_CHECK;
+ 
+ 	if (info->hnd->optimize(info) == SUCCESS) {
+ 		RETURN_TRUE;
+diff --git a/ext/dba/dba.stub.php b/ext/dba/dba.stub.php
+index ece850f4..c461678c 100644
+--- a/ext/dba/dba.stub.php
++++ b/ext/dba/dba.stub.php
+@@ -2,33 +2,39 @@
+ 
+ /** @generate-class-entries */
+ 
+-#ifdef DBA_LMDB
+-/** @var int */
+-const DBA_LMDB_USE_SUB_DIR = 0;
+ /**
+- * @var int
+- * @cvalue MDB_NOSUBDIR
++ * @param string $path
++ * @param string $mode
++ * @param string $handler
++ * @param string $handler_params
++ * @return resource|false
+  */
+-const DBA_LMDB_NO_SUB_DIR = UNKNOWN;
+-#endif
++function dba_popen($path, $mode, $handler = UNKNOWN, ...$handler_params) {}
+ 
+-/** @return resource|false */
+-function dba_popen(string $path, string $mode, ?string $handler = null, int $permission = 0o644, int $map_size = 0, ?int $flags = null) {}
+-
+-/** @return resource|false */
+-function dba_open(string $path, string $mode, ?string $handler = null, int $permission = 0o644, int $map_size = 0, ?int $flags = null) {}
++/**
++ * @param string $path
++ * @param string $mode
++ * @param string $handler
++ * @param string $handler_params
++ * @return resource|false
++ */
++function dba_open($path, $mode, $handler = UNKNOWN, ...$handler_params) {}
+ 
+ /** @param resource $dba */
+ function dba_close($dba): void {}
+ 
+-/** @param resource $dba */
+-function dba_exists(string|array $key, $dba): bool {}
++/**
++ * @param string|array $key
++ * @param resource $dba
++ */
++function dba_exists($key, $dba): bool {}
+ 
+ /**
+- * @param resource|int $dba overloaded legacy signature has params flipped
+- * @param resource|int $skip overloaded legacy signature has params flipped
++ * @param string|array $key
++ * @param int|resource $skip actually this parameter is optional, not $dba
++ * @param resource $dba
+  */
+-function dba_fetch(string|array $key, $dba, $skip = 0): string|false {}
++function dba_fetch($key, $skip, $dba = UNKNOWN): string|false {}
+ 
+ /** @return array<int, string>|false */
+ function dba_key_split(string|false|null $key): array|false {}
+@@ -39,14 +45,23 @@ function dba_firstkey($dba): string|false {}
+ /** @param resource $dba */
+ function dba_nextkey($dba): string|false {}
+ 
+-/** @param resource $dba */
+-function dba_delete(string|array $key, $dba): bool {}
++/**
++ * @param string|array $key
++ * @param resource $dba
++ */
++function dba_delete($key, $dba): bool {}
+ 
+-/** @param resource $dba */
+-function dba_insert(string|array $key, string $value, $dba): bool {}
++/**
++ * @param string|array $key
++ * @param resource $dba
++ */
++function dba_insert($key, string $value, $dba): bool {}
+ 
+-/** @param resource $dba */
+-function dba_replace(string|array $key, string $value, $dba): bool {}
++/**
++ * @param string|array $key
++ * @param resource $dba
++ */
++function dba_replace($key, string $value, $dba): bool {}
+ 
+ /** @param resource $dba */
+ function dba_optimize($dba): bool {}
+diff --git a/ext/dba/dba_arginfo.h b/ext/dba/dba_arginfo.h
+index 447f1ff3..33a8be8c 100644
+--- a/ext/dba/dba_arginfo.h
++++ b/ext/dba/dba_arginfo.h
+@@ -1,13 +1,11 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 1a02eaf9da45edb40720620e3beef43fd19dd520 */
++ * Stub hash: 670f79f43896b4f0cfd45396bdd8d7a06af1b613 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_dba_popen, 0, 0, 2)
+-	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, mode, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, handler, IS_STRING, 1, "null")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, permission, IS_LONG, 0, "0644")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, map_size, IS_LONG, 0, "0")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 1, "null")
++	ZEND_ARG_INFO(0, path)
++	ZEND_ARG_INFO(0, mode)
++	ZEND_ARG_INFO(0, handler)
++	ZEND_ARG_VARIADIC_INFO(0, handler_params)
+ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_dba_open arginfo_dba_popen
+@@ -17,14 +15,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_close, 0, 1, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_exists, 0, 2, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
+ 	ZEND_ARG_INFO(0, dba)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dba_fetch, 0, 2, MAY_BE_STRING|MAY_BE_FALSE)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
++	ZEND_ARG_INFO(0, skip)
+ 	ZEND_ARG_INFO(0, dba)
+-	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, skip, "0")
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dba_key_split, 0, 1, MAY_BE_ARRAY|MAY_BE_FALSE)
+@@ -40,7 +38,7 @@ ZEND_END_ARG_INFO()
+ #define arginfo_dba_delete arginfo_dba_exists
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_insert, 0, 3, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
+ 	ZEND_ARG_TYPE_INFO(0, value, IS_STRING, 0)
+ 	ZEND_ARG_INFO(0, dba)
+ ZEND_END_ARG_INFO()
+@@ -96,13 +94,3 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(dba_list, arginfo_dba_list)
+ 	ZEND_FE_END
+ };
+-
+-static void register_dba_symbols(int module_number)
+-{
+-#if defined(DBA_LMDB)
+-	REGISTER_LONG_CONSTANT("DBA_LMDB_USE_SUB_DIR", 0, CONST_PERSISTENT);
+-#endif
+-#if defined(DBA_LMDB)
+-	REGISTER_LONG_CONSTANT("DBA_LMDB_NO_SUB_DIR", MDB_NOSUBDIR, CONST_PERSISTENT);
+-#endif
+-}
+diff --git a/ext/dba/dba_cdb.c b/ext/dba/dba_cdb.c
+index 5af9121b..44517811 100644
+--- a/ext/dba/dba_cdb.c
++++ b/ext/dba/dba_cdb.c
+@@ -21,7 +21,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_CDB
++#if DBA_CDB
+ #include "php_cdb.h"
+ 
+ #include <sys/types.h>
+@@ -145,30 +145,32 @@ DBA_CLOSE_FUNC(cdb)
+ DBA_FETCH_FUNC(cdb)
+ {
+ 	CDB_INFO;
+-	zend_string *fetched_val = NULL;
+ 	unsigned int len;
++	char *new_entry = NULL;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+ 		return NULL; /* database was opened writeonly */
+ #endif
+-	if (php_cdb_find(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) == 1) {
++	if (php_cdb_find(&cdb->c, key, keylen) == 1) {
+ 		while(skip--) {
+-			if (php_cdb_findnext(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) != 1) {
++			if (php_cdb_findnext(&cdb->c, key, keylen) != 1) {
+ 				return NULL;
+ 			}
+ 		}
+ 		len = cdb_datalen(&cdb->c);
+-		fetched_val = zend_string_alloc(len, /* persistent */ false);
++		new_entry = safe_emalloc(len, 1, 1);
+ 
+-		if (php_cdb_read(&cdb->c, ZSTR_VAL(fetched_val), len, cdb_datapos(&cdb->c)) == -1) {
+-			zend_string_release_ex(fetched_val, /* persistent */ false);
++		if (php_cdb_read(&cdb->c, new_entry, len, cdb_datapos(&cdb->c)) == -1) {
++			efree(new_entry);
+ 			return NULL;
+ 		}
+-		ZSTR_VAL(fetched_val)[len] = 0;
++		new_entry[len] = 0;
++		if (newlen)
++			*newlen = len;
+ 	}
+ 
+-	return fetched_val;
++	return new_entry;
+ }
+ 
+ DBA_UPDATE_FUNC(cdb)
+@@ -180,7 +182,7 @@ DBA_UPDATE_FUNC(cdb)
+ 		return FAILURE; /* database was opened readonly */
+ 	if (!mode)
+ 		return FAILURE; /* cdb_make doesn't know replace */
+-	if (cdb_make_add(&cdb->m, ZSTR_VAL(key), ZSTR_LEN(key), ZSTR_VAL(val), ZSTR_LEN(val)) != -1)
++	if (cdb_make_add(&cdb->m, key, keylen, val, vallen) != -1)
+ 		return SUCCESS;
+ #endif
+ 	return FAILURE;
+@@ -194,7 +196,7 @@ DBA_EXISTS_FUNC(cdb)
+ 	if (cdb->make)
+ 		return FAILURE; /* database was opened writeonly */
+ #endif
+-	if (php_cdb_find(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) == 1)
++	if (php_cdb_find(&cdb->c, key, keylen) == 1)
+ 		return SUCCESS;
+ 	return FAILURE;
+ }
+@@ -241,7 +243,7 @@ DBA_FIRSTKEY_FUNC(cdb)
+ 	CDB_INFO;
+ 	uint32 klen, dlen;
+ 	char buf[8];
+-	zend_string *key;
++	char *key;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+@@ -262,12 +264,13 @@ DBA_FIRSTKEY_FUNC(cdb)
+ 	uint32_unpack(buf, &klen);
+ 	uint32_unpack(buf + 4, &dlen);
+ 
+-	key = zend_string_alloc(klen, /* persistent */ false);
+-	if (cdb_file_read(cdb->file, ZSTR_VAL(key), klen) < klen) {
+-		zend_string_release_ex(key, /* persistent */ false);
++	key = safe_emalloc(klen, 1, 1);
++	if (cdb_file_read(cdb->file, key, klen) < klen) {
++		efree(key);
+ 		key = NULL;
+ 	} else {
+-		ZSTR_VAL(key)[klen] = 0;
++		key[klen] = '\0';
++		if (newlen) *newlen = klen;
+ 	}
+ 
+ 	/*       header + klenlen + dlenlen + klen + dlen */
+@@ -281,7 +284,7 @@ DBA_NEXTKEY_FUNC(cdb)
+ 	CDB_INFO;
+ 	uint32 klen, dlen;
+ 	char buf[8];
+-	zend_string *key;
++	char *key;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+@@ -293,12 +296,13 @@ DBA_NEXTKEY_FUNC(cdb)
+ 	uint32_unpack(buf, &klen);
+ 	uint32_unpack(buf + 4, &dlen);
+ 
+-	key = zend_string_alloc(klen, /* persistent */ false);
+-	if (cdb_file_read(cdb->file, ZSTR_VAL(key), klen) < klen) {
+-		zend_string_release_ex(key, /* persistent */ false);
++	key = safe_emalloc(klen, 1, 1);
++	if (cdb_file_read(cdb->file, key, klen) < klen) {
++		efree(key);
+ 		key = NULL;
+ 	} else {
+-		ZSTR_VAL(key)[klen] = 0;
++		key[klen] = '\0';
++		if (newlen) *newlen = klen;
+ 	}
+ 
+ 	cdb->pos += 8 + klen + dlen;

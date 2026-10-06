@@ -1,0 +1,62 @@
+diff --git a/parse.y b/parse.y
+index 6836576d8..01b88c445 100644
+--- a/parse.y
++++ b/parse.y
+@@ -12909,14 +13305,14 @@ literal_concat(struct parser_params *p, NODE *head, NODE *tail, const YYLTYPE *l
+     }
+     switch (nd_type(tail)) {
+       case NODE_STR:
+-        if ((lit = string_literal_head(p, htype, head)) != Qfalse) {
++        if ((lit = string_literal_head(p, htype, head)) != false) {
+             htype = NODE_STR;
+         }
+         else {
+-            lit = RNODE_DSTR(head)->nd_lit;
++            lit = RNODE_DSTR(head)->string;
+         }
+         if (htype == NODE_STR) {
+-            if (!literal_concat0(p, lit, RNODE_STR(tail)->nd_lit)) {
++            if (!literal_concat0(p, lit, RNODE_STR(tail)->string)) {
+               error:
+                 rb_discard_node(p, head);
+                 rb_discard_node(p, tail);
+@@ -12931,13 +13327,15 @@ literal_concat(struct parser_params *p, NODE *head, NODE *tail, const YYLTYPE *l
+ 
+       case NODE_DSTR:
+         if (htype == NODE_STR) {
+-            if (!literal_concat0(p, RNODE_STR(head)->nd_lit, RNODE_DSTR(tail)->nd_lit))
++            if (!literal_concat0(p, RNODE_STR(head)->string, RNODE_DSTR(tail)->string))
+                 goto error;
+-            RNODE_DSTR(tail)->nd_lit = RNODE_STR(head)->nd_lit;
++            rb_parser_string_free(p, RNODE_DSTR(tail)->string);
++            RNODE_DSTR(tail)->string = RNODE_STR(head)->string;
++            RNODE_STR(head)->string = NULL;
+             rb_discard_node(p, head);
+             head = tail;
+         }
+-        else if (NIL_P(RNODE_DSTR(tail)->nd_lit)) {
++        else if (!RNODE_DSTR(tail)->string) {
+           append:
+             RNODE_DSTR(head)->as.nd_alen += RNODE_DSTR(tail)->as.nd_alen - 1;
+             if (!RNODE_DSTR(head)->nd_next) {
+@@ -12949,14 +13347,16 @@ literal_concat(struct parser_params *p, NODE *head, NODE *tail, const YYLTYPE *l
+             }
+             rb_discard_node(p, tail);
+         }
+-        else if ((lit = string_literal_head(p, htype, head)) != Qfalse) {
+-            if (!literal_concat0(p, lit, RNODE_DSTR(tail)->nd_lit))
++        else if ((lit = string_literal_head(p, htype, head)) != false) {
++            if (!literal_concat0(p, lit, RNODE_DSTR(tail)->string))
+                 goto error;
+-            RNODE_DSTR(tail)->nd_lit = Qnil;
++            rb_parser_string_free(p, RNODE_DSTR(tail)->string);
++            RNODE_DSTR(tail)->string = 0;
+             goto append;
+         }
+         else {
+-            list_concat(head, NEW_LIST2(NEW_STR(RNODE_DSTR(tail)->nd_lit, loc), RNODE_DSTR(tail)->as.nd_alen, (NODE *)RNODE_DSTR(tail)->nd_next, loc));
++            list_concat(head, NEW_LIST2(NEW_STR(RNODE_DSTR(tail)->string, loc), RNODE_DSTR(tail)->as.nd_alen, (NODE *)RNODE_DSTR(tail)->nd_next, loc));
++            RNODE_DSTR(tail)->string = 0;
+         }
+         break;
+ 

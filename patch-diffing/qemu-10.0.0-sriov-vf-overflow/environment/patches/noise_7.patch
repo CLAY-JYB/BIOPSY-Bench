@@ -1,0 +1,591 @@
+diff --git a/gdbstub/system.c b/gdbstub/system.c
+index d235403855..1ad87fe7fd 100644
+--- a/gdbstub/system.c
++++ b/gdbstub/system.c
+@@ -16,6 +16,7 @@
+ #include "qemu/cutils.h"
+ #include "exec/gdbstub.h"
+ #include "gdbstub/syscalls.h"
++#include "gdbstub/commands.h"
+ #include "exec/hwaddr.h"
+ #include "exec/tb-flush.h"
+ #include "sysemu/cpus.h"
+@@ -501,7 +502,7 @@ void gdb_handle_set_qemu_phy_mem_mode(GArray *params, void *ctx)
+         return;
+     }
+ 
+-    if (!get_param(params, 0)->val_ul) {
++    if (!gdb_get_cmd_param(params, 0)->val_ul) {
+         phy_memory_mode = 0;
+     } else {
+         phy_memory_mode = 1;
+@@ -519,7 +520,7 @@ void gdb_handle_query_rcmd(GArray *params, void *ctx)
+         return;
+     }
+ 
+-    len = strlen(get_param(params, 0)->data);
++    len = strlen(gdb_get_cmd_param(params, 0)->data);
+     if (len % 2) {
+         gdb_put_packet("E01");
+         return;
+@@ -527,7 +528,7 @@ void gdb_handle_query_rcmd(GArray *params, void *ctx)
+ 
+     g_assert(gdbserver_state.mem_buf->len == 0);
+     len = len / 2;
+-    gdb_hextomem(gdbserver_state.mem_buf, get_param(params, 0)->data, len);
++    gdb_hextomem(gdbserver_state.mem_buf, gdb_get_cmd_param(params, 0)->data, len);
+     g_byte_array_append(gdbserver_state.mem_buf, &zero, 1);
+     qemu_chr_be_write(gdbserver_system_state.mon_chr,
+                       gdbserver_state.mem_buf->data,
+diff --git a/gdbstub/user-target.c b/gdbstub/user-target.c
+index a9c6c64512..b5e01fd8b0 100644
+--- a/gdbstub/user-target.c
++++ b/gdbstub/user-target.c
+@@ -9,6 +9,7 @@
+ 
+ #include "qemu/osdep.h"
+ #include "exec/gdbstub.h"
++#include "gdbstub/commands.h"
+ #include "qemu.h"
+ #include "internals.h"
+ #ifdef CONFIG_LINUX
+@@ -250,8 +251,8 @@ void gdb_handle_query_xfer_auxv(GArray *params, void *user_ctx)
+         return;
+     }
+ 
+-    offset = get_param(params, 0)->val_ul;
+-    len = get_param(params, 1)->val_ul;
++    offset = gdb_get_cmd_param(params, 0)->val_ul;
++    len = gdb_get_cmd_param(params, 1)->val_ul;
+     ts = get_task_state(gdbserver_state.c_cpu);
+     saved_auxv = ts->info->saved_auxv;
+     auxv_len = ts->info->auxv_len;
+@@ -288,7 +289,7 @@ void gdb_handle_query_xfer_auxv(GArray *params, void *user_ctx)
+ 
+ static const char *get_filename_param(GArray *params, int i)
+ {
+-    const char *hex_filename = get_param(params, i)->data;
++    const char *hex_filename = gdb_get_cmd_param(params, i)->data;
+     gdb_hextomem(gdbserver_state.mem_buf, hex_filename,
+                  strlen(hex_filename) / 2);
+     g_byte_array_append(gdbserver_state.mem_buf, (const guint8 *)"", 1);
+@@ -306,8 +307,8 @@ static void hostio_reply_with_data(const void *buf, size_t n)
+ void gdb_handle_v_file_open(GArray *params, void *user_ctx)
+ {
+     const char *filename = get_filename_param(params, 0);
+-    uint64_t flags = get_param(params, 1)->val_ull;
+-    uint64_t mode = get_param(params, 2)->val_ull;
++    uint64_t flags = gdb_get_cmd_param(params, 1)->val_ull;
++    uint64_t mode = gdb_get_cmd_param(params, 2)->val_ull;
+ 
+ #ifdef CONFIG_LINUX
+     int fd = do_guest_openat(cpu_env(gdbserver_state.g_cpu), 0, filename,
+@@ -325,7 +326,7 @@ void gdb_handle_v_file_open(GArray *params, void *user_ctx)
+ 
+ void gdb_handle_v_file_close(GArray *params, void *user_ctx)
+ {
+-    int fd = get_param(params, 0)->val_ul;
++    int fd = gdb_get_cmd_param(params, 0)->val_ul;
+ 
+     if (close(fd) == -1) {
+         g_string_printf(gdbserver_state.str_buf, "F-1,%d", errno);
+@@ -338,9 +339,9 @@ void gdb_handle_v_file_close(GArray *params, void *user_ctx)
+ 
+ void gdb_handle_v_file_pread(GArray *params, void *user_ctx)
+ {
+-    int fd = get_param(params, 0)->val_ul;
+-    size_t count = get_param(params, 1)->val_ull;
+-    off_t offset = get_param(params, 2)->val_ull;
++    int fd = gdb_get_cmd_param(params, 0)->val_ul;
++    size_t count = gdb_get_cmd_param(params, 1)->val_ull;
++    off_t offset = gdb_get_cmd_param(params, 2)->val_ull;
+ 
+     size_t bufsiz = MIN(count, BUFSIZ);
+     g_autofree char *buf = g_try_malloc(bufsiz);
+@@ -383,9 +384,9 @@ void gdb_handle_v_file_readlink(GArray *params, void *user_ctx)
+ 
+ void gdb_handle_query_xfer_exec_file(GArray *params, void *user_ctx)
+ {
+-    uint32_t pid = get_param(params, 0)->val_ul;
+-    uint32_t offset = get_param(params, 1)->val_ul;
+-    uint32_t length = get_param(params, 2)->val_ul;
++    uint32_t pid = gdb_get_cmd_param(params, 0)->val_ul;
++    uint32_t offset = gdb_get_cmd_param(params, 1)->val_ul;
++    uint32_t length = gdb_get_cmd_param(params, 2)->val_ul;
+ 
+     GDBProcess *process = gdb_get_process(pid);
+     if (!process) {
+diff --git a/gdbstub/user.c b/gdbstub/user.c
+index e34b58b407..b36033bc7a 100644
+--- a/gdbstub/user.c
++++ b/gdbstub/user.c
+@@ -16,6 +16,7 @@
+ #include "exec/hwaddr.h"
+ #include "exec/tb-flush.h"
+ #include "exec/gdbstub.h"
++#include "gdbstub/commands.h"
+ #include "gdbstub/syscalls.h"
+ #include "gdbstub/user.h"
+ #include "gdbstub/enums.h"
+@@ -793,7 +794,7 @@ void gdb_syscall_return(CPUState *cs, int num)
+ 
+ void gdb_handle_set_catch_syscalls(GArray *params, void *user_ctx)
+ {
+-    const char *param = get_param(params, 0)->data;
++    const char *param = gdb_get_cmd_param(params, 0)->data;
+     GDBSyscallsMask catch_syscalls_mask;
+     bool catch_all_syscalls;
+     unsigned int num;
+@@ -858,8 +859,8 @@ void gdb_handle_query_xfer_siginfo(GArray *params, void *user_ctx)
+     unsigned long offset, len;
+     uint8_t *siginfo_offset;
+ 
+-    offset = get_param(params, 0)->val_ul;
+-    len = get_param(params, 1)->val_ul;
++    offset = gdb_get_cmd_param(params, 0)->val_ul;
++    len = gdb_get_cmd_param(params, 1)->val_ul;
+ 
+     if (offset + len > gdbserver_user_state.siginfo_len) {
+         /* Invalid offset and/or requested length. */
+diff --git a/host/include/riscv/host/cpuinfo.h b/host/include/riscv/host/cpuinfo.h
+new file mode 100644
+index 0000000000..2b00660e36
+--- /dev/null
++++ b/host/include/riscv/host/cpuinfo.h
+@@ -0,0 +1,23 @@
++/*
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ * Host specific cpu identification for RISC-V.
++ */
++
++#ifndef HOST_CPUINFO_H
++#define HOST_CPUINFO_H
++
++#define CPUINFO_ALWAYS          (1u << 0)  /* so cpuinfo is nonzero */
++#define CPUINFO_ZBA             (1u << 1)
++#define CPUINFO_ZBB             (1u << 2)
++#define CPUINFO_ZICOND          (1u << 3)
++
++/* Initialized with a constructor. */
++extern unsigned cpuinfo;
++
++/*
++ * We cannot rely on constructor ordering, so other constructors must
++ * use the function interface rather than the variable above.
++ */
++unsigned cpuinfo_init(void);
++
++#endif /* HOST_CPUINFO_H */
+diff --git a/hw/adc/aspeed_adc.c b/hw/adc/aspeed_adc.c
+index 68bdbc73b0..48328ef891 100644
+--- a/hw/adc/aspeed_adc.c
++++ b/hw/adc/aspeed_adc.c
+@@ -398,6 +398,15 @@ static void aspeed_1030_adc_class_init(ObjectClass *klass, void *data)
+     aac->nr_engines = 2;
+ }
+ 
++static void aspeed_2700_adc_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    AspeedADCClass *aac = ASPEED_ADC_CLASS(klass);
++
++    dc->desc = "ASPEED 2700 ADC Controller";
++    aac->nr_engines = 2;
++}
++
+ static const TypeInfo aspeed_adc_info = {
+     .name = TYPE_ASPEED_ADC,
+     .parent = TYPE_SYS_BUS_DEVICE,
+@@ -430,6 +439,12 @@ static const TypeInfo aspeed_1030_adc_info = {
+     .class_init = aspeed_1030_adc_class_init, /* No change since AST2600 */
+ };
+ 
++static const TypeInfo aspeed_2700_adc_info = {
++    .name = TYPE_ASPEED_2700_ADC,
++    .parent = TYPE_ASPEED_ADC,
++    .class_init = aspeed_2700_adc_class_init,
++};
++
+ static void aspeed_adc_register_types(void)
+ {
+     type_register_static(&aspeed_adc_engine_info);
+@@ -438,6 +453,7 @@ static void aspeed_adc_register_types(void)
+     type_register_static(&aspeed_2500_adc_info);
+     type_register_static(&aspeed_2600_adc_info);
+     type_register_static(&aspeed_1030_adc_info);
++    type_register_static(&aspeed_2700_adc_info);
+ }
+ 
+ type_init(aspeed_adc_register_types);
+diff --git a/hw/arm/aspeed.c b/hw/arm/aspeed.c
+index 40dc0e4c76..fd5603f7aa 100644
+--- a/hw/arm/aspeed.c
++++ b/hw/arm/aspeed.c
+@@ -46,6 +46,7 @@ struct AspeedMachineState {
+     uint32_t uart_chosen;
+     char *fmc_model;
+     char *spi_model;
++    uint32_t hw_strap1;
+ };
+ 
+ /* On 32-bit hosts, lower RAM to 1G because of the 2047 MB limit */
+@@ -189,7 +190,7 @@ struct AspeedMachineState {
+ #define TACOMA_BMC_HW_STRAP2  0x00000040
+ 
+ /* Rainier hardware value: (QEMU prototype) */
+-#define RAINIER_BMC_HW_STRAP1 0x00422016
++#define RAINIER_BMC_HW_STRAP1 (0x00422016 | SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC)
+ #define RAINIER_BMC_HW_STRAP2 0x80000848
+ 
+ /* Fuji hardware value */
+@@ -265,7 +266,8 @@ static void write_boot_rom(BlockBackend *blk, hwaddr addr, size_t rom_size,
+     g_autofree void *storage = NULL;
+     int64_t size;
+ 
+-    /* The block backend size should have already been 'validated' by
++    /*
++     * The block backend size should have already been 'validated' by
+      * the creation of the m25p80 object.
+      */
+     size = blk_getlength(blk);
+@@ -327,14 +329,20 @@ void aspeed_board_init_flashes(AspeedSMCState *s, const char *flashtype,
+     }
+ }
+ 
+-static void sdhci_attach_drive(SDHCIState *sdhci, DriveInfo *dinfo)
++static void sdhci_attach_drive(SDHCIState *sdhci, DriveInfo *dinfo, bool emmc,
++                               bool boot_emmc)
+ {
+         DeviceState *card;
+ 
+         if (!dinfo) {
+             return;
+         }
+-        card = qdev_new(TYPE_SD_CARD);
++        card = qdev_new(emmc ? TYPE_EMMC : TYPE_SD_CARD);
++        if (emmc) {
++            qdev_prop_set_uint64(card, "boot-partition-size", 1 * MiB);
++            qdev_prop_set_uint8(card, "boot-config",
++                                boot_emmc ? 0x1 << 3 : 0x0);
++        }
+         qdev_prop_set_drive_err(card, "drive", blk_by_legacy_dinfo(dinfo),
+                                 &error_fatal);
+         qdev_realize_and_unref(card,
+@@ -364,6 +372,8 @@ static void aspeed_machine_init(MachineState *machine)
+     AspeedMachineClass *amc = ASPEED_MACHINE_GET_CLASS(machine);
+     AspeedSoCClass *sc;
+     int i;
++    DriveInfo *emmc0 = NULL;
++    bool boot_emmc;
+ 
+     bmc->soc = ASPEED_SOC(object_new(amc->soc_name));
+     object_property_add_child(OBJECT(machine), "soc", OBJECT(bmc->soc));
+@@ -385,7 +395,7 @@ static void aspeed_machine_init(MachineState *machine)
+         }
+     }
+ 
+-    object_property_set_int(OBJECT(bmc->soc), "hw-strap1", amc->hw_strap1,
++    object_property_set_int(OBJECT(bmc->soc), "hw-strap1", bmc->hw_strap1,
+                             &error_abort);
+     object_property_set_int(OBJECT(bmc->soc), "hw-strap2", amc->hw_strap2,
+                             &error_abort);
+@@ -436,21 +446,25 @@ static void aspeed_machine_init(MachineState *machine)
+ 
+     for (i = 0; i < bmc->soc->sdhci.num_slots; i++) {
+         sdhci_attach_drive(&bmc->soc->sdhci.slots[i],
+-                           drive_get(IF_SD, 0, i));
++                           drive_get(IF_SD, 0, i), false, false);
+     }
+ 
++    boot_emmc = sc->boot_from_emmc(bmc->soc);
++
+     if (bmc->soc->emmc.num_slots) {
+-        sdhci_attach_drive(&bmc->soc->emmc.slots[0],
+-                           drive_get(IF_SD, 0, bmc->soc->sdhci.num_slots));
++        emmc0 = drive_get(IF_SD, 0, bmc->soc->sdhci.num_slots);
++        sdhci_attach_drive(&bmc->soc->emmc.slots[0], emmc0, true, boot_emmc);
+     }
+ 
+     if (!bmc->mmio_exec) {
+         DeviceState *dev = ssi_get_cs(bmc->soc->fmc.spi, 0);
+         BlockBackend *fmc0 = dev ? m25p80_get_blk(dev) : NULL;
+ 
+-        if (fmc0) {
++        if (fmc0 && !boot_emmc) {
+             uint64_t rom_size = memory_region_size(&bmc->soc->spi_boot);
+             aspeed_install_boot_rom(bmc, fmc0, rom_size);
++        } else if (emmc0) {
++            aspeed_install_boot_rom(bmc, blk_by_legacy_dinfo(emmc0), 64 * KiB);
+         }
+     }
+ 
+@@ -463,8 +477,10 @@ static void palmetto_bmc_i2c_init(AspeedMachineState *bmc)
+     DeviceState *dev;
+     uint8_t *eeprom_buf = g_malloc0(32 * 1024);
+ 
+-    /* The palmetto platform expects a ds3231 RTC but a ds1338 is
+-     * enough to provide basic RTC features. Alarms will be missing */
++    /*
++     * The palmetto platform expects a ds3231 RTC but a ds1338 is
++     * enough to provide basic RTC features. Alarms will be missing
++     */
+     i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 0), "ds1338", 0x68);
+ 
+     smbus_eeprom_init_one(aspeed_i2c_get_bus(&soc->i2c, 0), 0x50,
+@@ -555,8 +571,10 @@ static void romulus_bmc_i2c_init(AspeedMachineState *bmc)
+ {
+     AspeedSoCState *soc = bmc->soc;
+ 
+-    /* The romulus board expects Epson RX8900 I2C RTC but a ds1338 is
+-     * good enough */
++    /*
++     * The romulus board expects Epson RX8900 I2C RTC but a ds1338 is
++     * good enough
++     */
+     i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 11), "ds1338", 0x32);
+ }
+ 
+@@ -664,8 +682,10 @@ static void witherspoon_bmc_i2c_init(AspeedMachineState *bmc)
+     i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 9), TYPE_TMP105,
+                      0x4a);
+ 
+-    /* The witherspoon board expects Epson RX8900 I2C RTC but a ds1338 is
+-     * good enough */
++    /*
++     * The witherspoon board expects Epson RX8900 I2C RTC but a ds1338 is
++     * good enough
++     */
+     i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 11), "ds1338", 0x32);
+ 
+     smbus_eeprom_init_one(aspeed_i2c_get_bus(&soc->i2c, 11), 0x51,
+@@ -1065,7 +1085,10 @@ static void aspeed_set_mmio_exec(Object *obj, bool value, Error **errp)
+ 
+ static void aspeed_machine_instance_init(Object *obj)
+ {
++    AspeedMachineClass *amc = ASPEED_MACHINE_GET_CLASS(obj);
++
+     ASPEED_MACHINE(obj)->mmio_exec = false;
++    ASPEED_MACHINE(obj)->hw_strap1 = amc->hw_strap1;
+ }
+ 
+ static char *aspeed_get_fmc_model(Object *obj, Error **errp)
+@@ -1162,6 +1185,34 @@ static void aspeed_machine_class_init_cpus_defaults(MachineClass *mc)
+     mc->valid_cpu_types = sc->valid_cpu_types;
+ }
+ 
++static bool aspeed_machine_ast2600_get_boot_from_emmc(Object *obj, Error **errp)
++{
++    AspeedMachineState *bmc = ASPEED_MACHINE(obj);
++
++    return !!(bmc->hw_strap1 & SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC);
++}
++
++static void aspeed_machine_ast2600_set_boot_from_emmc(Object *obj, bool value,
++                                                      Error **errp)
++{
++    AspeedMachineState *bmc = ASPEED_MACHINE(obj);
++
++    if (value) {
++        bmc->hw_strap1 |= SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC;
++    } else {
++        bmc->hw_strap1 &= ~SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC;
++    }
++}
++
++static void aspeed_machine_ast2600_class_emmc_init(ObjectClass *oc)
++{
++    object_class_property_add_bool(oc, "boot-emmc",
++                                   aspeed_machine_ast2600_get_boot_from_emmc,
++                                   aspeed_machine_ast2600_set_boot_from_emmc);
++    object_class_property_set_description(oc, "boot-emmc",
++                                          "Set or unset boot from EMMC");
++}
++
+ static void aspeed_machine_class_init(ObjectClass *oc, void *data)
+ {
+     MachineClass *mc = MACHINE_CLASS(oc);
+@@ -1361,6 +1412,7 @@ static void aspeed_machine_ast2600_evb_class_init(ObjectClass *oc, void *data)
+     amc->i2c_init  = ast2600_evb_i2c_init;
+     mc->default_ram_size = 1 * GiB;
+     aspeed_machine_class_init_cpus_defaults(mc);
++    aspeed_machine_ast2600_class_emmc_init(oc);
+ };
+ 
+ static void aspeed_machine_tacoma_class_init(ObjectClass *oc, void *data)
+@@ -1379,6 +1431,8 @@ static void aspeed_machine_tacoma_class_init(ObjectClass *oc, void *data)
+     amc->i2c_init  = witherspoon_bmc_i2c_init; /* Same board layout */
+     mc->default_ram_size = 1 * GiB;
+     aspeed_machine_class_init_cpus_defaults(mc);
++
++    mc->deprecation_reason = "Please use the similar 'rainier-bmc' machine";
+ };
+ 
+ static void aspeed_machine_g220a_class_init(ObjectClass *oc, void *data)
+@@ -1431,6 +1485,7 @@ static void aspeed_machine_rainier_class_init(ObjectClass *oc, void *data)
+     amc->i2c_init  = rainier_bmc_i2c_init;
+     mc->default_ram_size = 1 * GiB;
+     aspeed_machine_class_init_cpus_defaults(mc);
++    aspeed_machine_ast2600_class_emmc_init(oc);
+ };
+ 
+ #define FUJI_BMC_RAM_SIZE ASPEED_RAM_SIZE(2 * GiB)
+diff --git a/hw/arm/aspeed_ast2600.c b/hw/arm/aspeed_ast2600.c
+index 31713de74a..be3eb70cdd 100644
+--- a/hw/arm/aspeed_ast2600.c
++++ b/hw/arm/aspeed_ast2600.c
+@@ -646,6 +646,13 @@ static void aspeed_soc_ast2600_realize(DeviceState *dev, Error **errp)
+     }
+ }
+ 
++static bool aspeed_soc_ast2600_boot_from_emmc(AspeedSoCState *s)
++{
++    uint32_t hw_strap1 = object_property_get_uint(OBJECT(&s->scu),
++                                                  "hw-strap1", &error_abort);
++    return !!(hw_strap1 & SCU_AST2600_HW_STRAP_BOOT_SRC_EMMC);
++}
++
+ static void aspeed_soc_ast2600_class_init(ObjectClass *oc, void *data)
+ {
+     static const char * const valid_cpu_types[] = {
+@@ -673,6 +680,7 @@ static void aspeed_soc_ast2600_class_init(ObjectClass *oc, void *data)
+     sc->memmap       = aspeed_soc_ast2600_memmap;
+     sc->num_cpus     = 2;
+     sc->get_irq      = aspeed_soc_ast2600_get_irq;
++    sc->boot_from_emmc = aspeed_soc_ast2600_boot_from_emmc;
+ }
+ 
+ static const TypeInfo aspeed_soc_ast2600_types[] = {
+diff --git a/hw/arm/aspeed_ast27x0.c b/hw/arm/aspeed_ast27x0.c
+index b6876b4862..4257b5e8af 100644
+--- a/hw/arm/aspeed_ast27x0.c
++++ b/hw/arm/aspeed_ast27x0.c
+@@ -60,6 +60,7 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
+     [ASPEED_DEV_SLIIO]     =  0x14C1E000,
+     [ASPEED_GIC_DIST]      =  0x12200000,
+     [ASPEED_GIC_REDIST]    =  0x12280000,
++    [ASPEED_DEV_ADC]       =  0x14C00000,
+ };
+ 
+ #define AST2700_MAX_IRQ 288
+@@ -211,6 +212,8 @@ static void aspeed_ram_capacity_write(void *opaque, hwaddr addr, uint64_t data,
+     ram_size = object_property_get_uint(OBJECT(&s->sdmc), "ram-size",
+                                         &error_abort);
+ 
++    assert(ram_size > 0);
++
+     /*
+      * Emulate ddr capacity hardware behavior.
+      * If writes the data to the address which is beyond the ram size,
+@@ -342,6 +345,9 @@ static void aspeed_soc_ast2700_init(Object *obj)
+     object_initialize_child(obj, "sli", &s->sli, TYPE_ASPEED_2700_SLI);
+     object_initialize_child(obj, "sliio", &s->sliio, TYPE_ASPEED_2700_SLIIO);
+     object_initialize_child(obj, "intc", &a->intc, TYPE_ASPEED_2700_INTC);
++
++    snprintf(typename, sizeof(typename), "aspeed.adc-%s", socname);
++    object_initialize_child(obj, "adc", &s->adc, typename);
+ }
+ 
+ /*
+@@ -550,9 +556,12 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
+         return;
+     }
+ 
++    /* Net */
+     for (i = 0; i < sc->macs_num; i++) {
+         object_property_set_bool(OBJECT(&s->ftgmac100[i]), "aspeed", true,
+                                  &error_abort);
++        object_property_set_bool(OBJECT(&s->ftgmac100[i]), "dma64", true,
++                                 &error_abort);
+         if (!sysbus_realize(SYS_BUS_DEVICE(&s->ftgmac100[i]), errp)) {
+             return;
+         }
+@@ -596,6 +605,14 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
+     aspeed_mmio_map(s, SYS_BUS_DEVICE(&s->sliio), 0,
+                     sc->memmap[ASPEED_DEV_SLIIO]);
+ 
++    /* ADC */
++    if (!sysbus_realize(SYS_BUS_DEVICE(&s->adc), errp)) {
++        return;
++    }
++    aspeed_mmio_map(s, SYS_BUS_DEVICE(&s->adc), 0, sc->memmap[ASPEED_DEV_ADC]);
++    sysbus_connect_irq(SYS_BUS_DEVICE(&s->adc), 0,
++                       aspeed_soc_get_irq(s, ASPEED_DEV_ADC));
++
+     create_unimplemented_device("ast2700.dpmcu", 0x11000000, 0x40000);
+     create_unimplemented_device("ast2700.iomem0", 0x12000000, 0x01000000);
+     create_unimplemented_device("ast2700.iomem1", 0x14000000, 0x01000000);
+diff --git a/hw/arm/aspeed_soc_common.c b/hw/arm/aspeed_soc_common.c
+index 1e8f2558fd..05551461ae 100644
+--- a/hw/arm/aspeed_soc_common.c
++++ b/hw/arm/aspeed_soc_common.c
+@@ -134,6 +134,11 @@ static void aspeed_soc_realize(DeviceState *dev, Error **errp)
+     }
+ }
+ 
++static bool aspeed_soc_boot_from_emmc(AspeedSoCState *s)
++{
++    return false;
++}
++
+ static Property aspeed_soc_properties[] = {
+     DEFINE_PROP_LINK("dram", AspeedSoCState, dram_mr, TYPE_MEMORY_REGION,
+                      MemoryRegion *),
+@@ -145,9 +150,11 @@ static Property aspeed_soc_properties[] = {
+ static void aspeed_soc_class_init(ObjectClass *oc, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(oc);
++    AspeedSoCClass *sc = ASPEED_SOC_CLASS(oc);
+ 
+     dc->realize = aspeed_soc_realize;
+     device_class_set_props(dc, aspeed_soc_properties);
++    sc->boot_from_emmc = aspeed_soc_boot_from_emmc;
+ }
+ 
+ static const TypeInfo aspeed_soc_types[] = {
+diff --git a/hw/arm/bcm2835_peripherals.c b/hw/arm/bcm2835_peripherals.c
+index 1695d8b453..ac153a96b9 100644
+--- a/hw/arm/bcm2835_peripherals.c
++++ b/hw/arm/bcm2835_peripherals.c
+@@ -116,6 +116,10 @@ static void raspi_peripherals_base_init(Object *obj)
+     object_property_add_const_link(OBJECT(&s->fb), "dma-mr",
+                                    OBJECT(&s->gpu_bus_mr));
+ 
++    /* OTP */
++    object_initialize_child(obj, "bcm2835-otp", &s->otp,
++                            TYPE_BCM2835_OTP);
++
+     /* Property channel */
+     object_initialize_child(obj, "property", &s->property,
+                             TYPE_BCM2835_PROPERTY);
+@@ -128,6 +132,8 @@ static void raspi_peripherals_base_init(Object *obj)
+                                    OBJECT(&s->fb));
+     object_property_add_const_link(OBJECT(&s->property), "dma-mr",
+                                    OBJECT(&s->gpu_bus_mr));
++    object_property_add_const_link(OBJECT(&s->property), "otp",
++                                   OBJECT(&s->otp));
+ 
+     /* Extended Mass Media Controller */
+     object_initialize_child(obj, "sdhci", &s->sdhci, TYPE_SYSBUS_SDHCI);
+@@ -374,6 +380,14 @@ void bcm_soc_peripherals_common_realize(DeviceState *dev, Error **errp)
+     sysbus_connect_irq(SYS_BUS_DEVICE(&s->fb), 0,
+                        qdev_get_gpio_in(DEVICE(&s->mboxes), MBOX_CHAN_FB));
+ 
++    /* OTP */
++    if (!sysbus_realize(SYS_BUS_DEVICE(&s->otp), errp)) {
++        return;
++    }
++
++    memory_region_add_subregion(&s->peri_mr, OTP_OFFSET,
++                sysbus_mmio_get_region(SYS_BUS_DEVICE(&s->otp), 0));
++
+     /* Property channel */
+     if (!sysbus_realize(SYS_BUS_DEVICE(&s->property), errp)) {
+         return;
+@@ -500,7 +514,6 @@ void bcm_soc_peripherals_common_realize(DeviceState *dev, Error **errp)
+     create_unimp(s, &s->i2s, "bcm2835-i2s", I2S_OFFSET, 0x100);
+     create_unimp(s, &s->smi, "bcm2835-smi", SMI_OFFSET, 0x100);
+     create_unimp(s, &s->bscsl, "bcm2835-spis", BSC_SL_OFFSET, 0x100);
+-    create_unimp(s, &s->otp, "bcm2835-otp", OTP_OFFSET, 0x80);
+     create_unimp(s, &s->dbus, "bcm2835-dbus", DBUS_OFFSET, 0x8000);
+     create_unimp(s, &s->ave0, "bcm2835-ave0", AVE0_OFFSET, 0x8000);
+     create_unimp(s, &s->v3d, "bcm2835-v3d", V3D_OFFSET, 0x1000);

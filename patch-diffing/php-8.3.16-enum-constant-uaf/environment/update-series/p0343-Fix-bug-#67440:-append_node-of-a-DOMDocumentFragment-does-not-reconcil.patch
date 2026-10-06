@@ -1,0 +1,1573 @@
+From 31a72188 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0343] Fix bug #67440: append_node of a DOMDocumentFragment does not reconcil
+
+---
+diff --git a/ext/standard/tests/math/bug75170.phpt b/ext/standard/tests/math/bug75170.phpt
+new file mode 100644
+index 00000000..cc7d2c56
+--- /dev/null
++++ b/ext/standard/tests/math/bug75170.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++Bug #75170: mt_rand() bias on 64-bit machines
++--CREDITS--
++Solar Designer in https://externals.io/message/100229
++--FILE--
++<?php
++
++// PHP pre-7.1.0 modulo bias
++mt_srand(1234567890);
++$total = 10000;
++$max = 0x66666666;
++$halves[0] = $halves[1] = 0;
++for ($i = 0; $i < $total; $i++) {
++    $halves[(mt_rand(0, $max - 1) >> 1) & 1]++;
++}
++printf("%.1f%% vs. %.1f%%\n", 100. * $halves[0] / $total, 100. * $halves[1] / $total);
++
++// PHP 7.1.0 to 7.2.0beta2 modulo bias bug found during work
++// on http://www.openwall.com/php_mt_seed/
++mt_srand(1234567890);
++$total = 10000;
++$max = 0x66666666;
++$halves[0] = $halves[1] = 0;
++for ($i = 0; $i < $total; $i++) {
++    $halves[(int) (mt_rand(0, $max - 1) / ($max / 2))]++;
++}
++printf("%.1f%% vs. %.1f%%\n", 100. * $halves[0] / $total, 100. * $halves[1] / $total);
++
++?>
++--EXPECT--
++49.5% vs. 50.5%
++50.5% vs. 49.5%
+diff --git a/ext/standard/tests/math/bug75514.phpt b/ext/standard/tests/math/bug75514.phpt
+new file mode 100644
+index 00000000..da77b9bd
+--- /dev/null
++++ b/ext/standard/tests/math/bug75514.phpt
+@@ -0,0 +1,10 @@
++--TEST--
++Bug #75514 mt_rand returns value outside [$min,$max]
++--FILE--
++<?php
++mt_srand(0, MT_RAND_PHP);
++var_dump(mt_rand(0,999999999), mt_rand(0,999));
++?>
++--EXPECT--
++int(448865905)
++int(592)
+diff --git a/ext/standard/tests/math/constants.phpt b/ext/standard/tests/math/constants.phpt
+index b9a87b57..9492629e 100644
+--- a/ext/standard/tests/math/constants.phpt
++++ b/ext/standard/tests/math/constants.phpt
+@@ -1,7 +1,7 @@
+ --TEST--
+ Math constants
+ --INI--
+-precision=-1
++precision=14
+ --FILE--
+ <?php
+ $constants = array(
+@@ -27,21 +27,21 @@ foreach($constants as $constant) {
+     printf("%-10s: %s\n", $constant, constant($constant));
+ }
+ ?>
+---EXPECT--
+-M_E       : 2.718281828459045
+-M_LOG2E   : 1.4426950408889634
+-M_LOG10E  : 0.4342944819032518
+-M_LN2     : 0.6931471805599453
+-M_LN10    : 2.302585092994046
+-M_PI      : 3.141592653589793
+-M_PI_2    : 1.5707963267948966
+-M_PI_4    : 0.7853981633974483
+-M_1_PI    : 0.3183098861837907
+-M_2_PI    : 0.6366197723675814
+-M_SQRTPI  : 1.772453850905516
+-M_2_SQRTPI: 1.1283791670955126
+-M_LNPI    : 1.1447298858494002
+-M_EULER   : 0.5772156649015329
+-M_SQRT2   : 1.4142135623730951
+-M_SQRT1_2 : 0.7071067811865476
+-M_SQRT3   : 1.7320508075688772
++--EXPECTREGEX--
++M_E       : 2.718281[0-9]*
++M_LOG2E   : 1.442695[0-9]*
++M_LOG10E  : 0.434294[0-9]*
++M_LN2     : 0.693147[0-9]*
++M_LN10    : 2.302585[0-9]*
++M_PI      : 3.141592[0-9]*
++M_PI_2    : 1.570796[0-9]*
++M_PI_4    : 0.785398[0-9]*
++M_1_PI    : 0.318309[0-9]*
++M_2_PI    : 0.636619[0-9]*
++M_SQRTPI  : 1.772453[0-9]*
++M_2_SQRTPI: 1.128379[0-9]*
++M_LNPI    : 1.144729[0-9]*
++M_EULER   : 0.577215[0-9]*
++M_SQRT2   : 1.414213[0-9]*
++M_SQRT1_2 : 0.707106[0-9]*
++M_SQRT3   : 1.732050[0-9]*
+diff --git a/ext/standard/tests/math/constants_basic.phpt b/ext/standard/tests/math/constants_basic.phpt
+index 82b09bb3..f08940b2 100644
+--- a/ext/standard/tests/math/constants_basic.phpt
++++ b/ext/standard/tests/math/constants_basic.phpt
+@@ -1,5 +1,7 @@
+ --TEST--
+ Test for pre-defined math constants
++--INI--
++precision=14
+ --FILE--
+ <?php
+ echo "M_E= ";
+diff --git a/ext/standard/tests/math/lcg_value_basic.phpt b/ext/standard/tests/math/lcg_value_basic.phpt
+new file mode 100644
+index 00000000..ca76b5c8
+--- /dev/null
++++ b/ext/standard/tests/math/lcg_value_basic.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++Maths test for xapic versions of lcg_value()
++--FILE--
++<?php
++
++echo "MATHS test script started\n";
++
++
++echo "\n lcg_value tests...\n";
++for ($i = 0; $i < 100; $i++) {
++    $res = lcg_value();
++
++    if (!is_float($res) || $res < 0 || $res > 1) {
++        break;
++    }
++}
++
++if ($i != 100) {
++    echo "FAILED\n";
++} else {
++    echo "PASSED\n";
++}
++
++echo "MATHS test script completed\n";
++
++?>
++--EXPECT--
++MATHS test script started
++
++ lcg_value tests...
++PASSED
++MATHS test script completed
+diff --git a/ext/standard/tests/math/mt_getrandmax_basic.phpt b/ext/standard/tests/math/mt_getrandmax_basic.phpt
+new file mode 100644
+index 00000000..3bc4200f
+--- /dev/null
++++ b/ext/standard/tests/math/mt_getrandmax_basic.phpt
+@@ -0,0 +1,8 @@
++--TEST--
++Test mt_getrandmax() - basic function test mt_getrandmax()
++--FILE--
++<?php
++var_dump(mt_getrandmax());
++?>
++--EXPECTF--
++int(%d)
+diff --git a/ext/standard/tests/math/mt_rand_basic.phpt b/ext/standard/tests/math/mt_rand_basic.phpt
+new file mode 100644
+index 00000000..87a7d2bd
+--- /dev/null
++++ b/ext/standard/tests/math/mt_rand_basic.phpt
+@@ -0,0 +1,63 @@
++--TEST--
++Test mt_rand() - basic function test mt_rand()
++--FILE--
++<?php
++$default_max = mt_getrandmax();
++
++echo "\nmt_rand() tests with default min and max value (i.e 0 thru ", $default_max, ")\n";
++for ($i = 0; $i < 100; $i++) {
++    $res = mt_rand();
++
++// By default RAND_MAX is 32768 although no constant is defined for it for user space apps
++    if ($res < 0 || $res > $default_max) {
++        break;
++    }
++}
++
++if ($i != 100) {
++    echo "FAILED: res = ",  $res, " min = 0 max = ", $default_max, "\n";
++} else {
++    echo "PASSED: range min = 0  max = ", $default_max, "\n";
++}
++
++echo "\nmt_rand() tests with defined min and max value\n";
++
++$min = array(10,
++             100,
++             10.5e3,
++             0x10,
++             0400);
++
++$max = array(100,
++             1000,
++             10.5e5,
++             0x10000,
++             0700);
++
++for ($x = 0; $x < count($min); $x++) {
++    for ($i = 0; $i < 100; $i++) {
++        $res = mt_rand($min[$x], $max[$x]);
++
++        if (!is_int($res) || $res < intval($min[$x]) || $res > intval($max[$x])) {
++            echo "FAILED: res = ",  $res, " min = ", intval($min[$x]), " max = ", intval($max[$x]), "\n";
++            break;
++        }
++    }
++
++    if ($i == 100) {
++        echo "PASSED: range min = ", intval($min[$x]), " max = ", intval($max[$x]), "\n";
++    }
++}
++
++?>
++--EXPECT--
++mt_rand() tests with default min and max value (i.e 0 thru 2147483647)
++PASSED: range min = 0  max = 2147483647
++
++mt_rand() tests with defined min and max value
++PASSED: range min = 10 max = 100
++PASSED: range min = 100 max = 1000
++PASSED: range min = 10500 max = 1050000
++PASSED: range min = 16 max = 65536
++PASSED: range min = 256 max = 448
++
+diff --git a/ext/standard/tests/math/mt_rand_value.phpt b/ext/standard/tests/math/mt_rand_value.phpt
+new file mode 100644
+index 00000000..ab6d7327
+--- /dev/null
++++ b/ext/standard/tests/math/mt_rand_value.phpt
+@@ -0,0 +1,77 @@
++--TEST--
++Test mt_rand() output
++--FILE--
++<?php
++
++mt_srand(12345678, MT_RAND_PHP);
++
++for ($i=0; $i<16; $i++) {
++    echo mt_rand().PHP_EOL;
++}
++echo PHP_EOL;
++
++$x = 0;
++for ($i=0; $i<1024; $i++) {
++    $x ^= mt_rand();
++}
++echo $x.PHP_EOL;
++echo PHP_EOL;
++
++mt_srand(12345678 /*, MT_RAND_MT19937 */);
++
++for ($i=0; $i<16; $i++) {
++    echo mt_rand().PHP_EOL;
++}
++echo PHP_EOL;
++
++$x = 0;
++for ($i=0; $i<1024; $i++) {
++    $x ^= mt_rand();
++}
++echo $x.PHP_EOL;
++
++/*
++ * Note that the output will be different from the original mt19937ar.c,
++ * because PHP's implementation contains a bug. Thus, this test actually
++ * checks to make sure that PHP's behaviour is wrong, but consistently so.
++ */
++
++?>
++--EXPECT--
++1614640687
++1711027313
++857485497
++688176834
++1386682158
++412773096
++813703253
++898651287
++2087374214
++1382556330
++1640700129
++1863374167
++1324097651
++1923803667
++676334965
++853386222
++
++1571178311
++
++527860569
++1711027313
++1280820687
++688176834
++770499160
++412773096
++813703253
++898651287
++52508912
++757323740
++511765911
++274407457
++833082629
++1923803667
++1461450755
++1301698200
++
++1612214270
+diff --git a/ext/standard/tests/math/mt_srand_basic.phpt b/ext/standard/tests/math/mt_srand_basic.phpt
+new file mode 100644
+index 00000000..aee012d7
+--- /dev/null
++++ b/ext/standard/tests/math/mt_srand_basic.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Test mt_srand() - basic function (return values) mt_srand()
++--FILE--
++<?php
++// Should return NULL if given anything that it can convert to long
++// This doesn't actually test what it does with the input :-\
++var_dump(mt_srand());
++var_dump(mt_srand(500));
++var_dump(mt_srand(500.1));
++var_dump(mt_srand("500"));
++var_dump(mt_srand("500E3"));
++var_dump(mt_srand(true));
++var_dump(mt_srand(false));
++?>
++--EXPECTF--
++NULL
++NULL
++
++Deprecated: Implicit conversion from float 500.1 to int loses precision in %s on line %d
++NULL
++NULL
++NULL
++NULL
++NULL
+diff --git a/ext/standard/tests/math/rand_basic.phpt b/ext/standard/tests/math/rand_basic.phpt
+new file mode 100644
+index 00000000..c3d208ac
+--- /dev/null
++++ b/ext/standard/tests/math/rand_basic.phpt
+@@ -0,0 +1,62 @@
++--TEST--
++Test  rand() - basic function test rand()
++--FILE--
++<?php
++$default_max = getrandmax();
++
++echo "\nrand() tests with default min and max value (i.e 0 thru ", $default_max, ")\n";
++for ($i = 0; $i < 100; $i++) {
++    $res = rand();
++
++// By default RAND_MAX is 32768 although no constant is defined for it for user space apps
++    if ($res < 0 || $res > $default_max) {
++        break;
++    }
++}
++
++if ($i != 100) {
++    echo "FAILED: res = ", $res, " min = 0 max = ", $default_max, "\n";
++} else {
++    echo "PASSED: range min = 0 max = ", $default_max, "\n";
++}
++
++echo "\nrand() tests with defined min and max value\n";
++
++$min = array(10,
++             100,
++             10.5e3,
++             0x10,
++             0400);
++
++$max = array(100,
++             1000,
++             10.5e5,
++             0x10000,
++             0700);
++
++for ($x = 0; $x < count($min); $x++) {
++    for ($i = 0; $i < 100; $i++) {
++        $res = rand($min[$x], $max[$x]);
++
++        if (!is_int($res) || $res < intval($min[$x]) || $res > intval($max[$x])) {
++            echo "FAILED: res = ",  $res, " min = ", intval($min[$x]), " max = ", intval($max[$x]), "\n";
++            break;
++        }
++    }
++
++    if ($i == 100) {
++        echo "PASSED: range min = ", intval($min[$x]), " max = ", intval($max[$x]), "\n";
++    }
++}
++
++?>
++--EXPECTF--
++rand() tests with default min and max value (i.e 0 thru %i)
++PASSED: range min = 0 max = %i
++
++rand() tests with defined min and max value
++PASSED: range min = 10 max = 100
++PASSED: range min = 100 max = 1000
++PASSED: range min = 10500 max = 1050000
++PASSED: range min = 16 max = 65536
++PASSED: range min = 256 max = 448
+diff --git a/ext/standard/tests/math/rand_inverted_order.phpt b/ext/standard/tests/math/rand_inverted_order.phpt
+new file mode 100644
+index 00000000..f3af4c02
+--- /dev/null
++++ b/ext/standard/tests/math/rand_inverted_order.phpt
+@@ -0,0 +1,20 @@
++--TEST--
++Test rand function when min and max are in proper or inverted order
++--CREDITS--
++PHP TestFEst 2017 - PHPDublin, PHPSP - Joao P V Martins <jp.joao@gmail.com>
++--FILE--
++<?php
++$min_value = 10;
++$max_value = 20;
++$correct_order = rand($min_value, $max_value);
++$incorrect_order = rand($max_value, $min_value);
++var_dump($correct_order >= $min_value);
++var_dump($correct_order <= $max_value);
++var_dump($incorrect_order >= $min_value);
++var_dump($incorrect_order <= $max_value);
++?>
++--EXPECT--
++bool(true)
++bool(true)
++bool(true)
++bool(true)
+diff --git a/ext/standard/tests/math/srand_basic.phpt b/ext/standard/tests/math/srand_basic.phpt
+new file mode 100644
+index 00000000..99f43bc5
+--- /dev/null
++++ b/ext/standard/tests/math/srand_basic.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++Test srand() - basic function test for srand()
++--FILE--
++<?php
++echo "*** Testing srand() : basic functionality ***\n";
++
++// Should return NULL if given anything that it can convert to long
++// This doesn't actually test what it does with the input :-\
++var_dump(srand());
++var_dump(srand(500));
++var_dump(srand(500.1));
++var_dump(srand("500"));
++var_dump(srand("500E3"));
++var_dump(srand(true));
++var_dump(srand(false));
++?>
++--EXPECTF--
++*** Testing srand() : basic functionality ***
++NULL
++NULL
++
++Deprecated: Implicit conversion from float 500.1 to int loses precision in %s on line %d
++NULL
++NULL
++NULL
++NULL
++NULL
+diff --git a/ext/standard/tests/network/bug72071.phpt b/ext/standard/tests/network/bug72071.phpt
+index 3940083f..6d19ab46 100644
+--- a/ext/standard/tests/network/bug72071.phpt
++++ b/ext/standard/tests/network/bug72071.phpt
+@@ -11,4 +11,4 @@ setcookie("name", "value", $date);
+ ?>
+ --EXPECT--
+ --EXPECTHEADERS--
+-Set-Cookie: name=value; expires=Sat, 01 Apr 2017 12:25:39 GMT; Max-Age=0
++Set-Cookie: name=value; expires=Sat, 01-Apr-2017 12:25:39 GMT; Max-Age=0
+diff --git a/ext/standard/tests/network/bug80067.phpt b/ext/standard/tests/network/bug80067.phpt
+index f9ec8c4c..ed7802cc 100644
+--- a/ext/standard/tests/network/bug80067.phpt
++++ b/ext/standard/tests/network/bug80067.phpt
+@@ -7,10 +7,7 @@ if (!in_array('https', stream_get_wrappers())) die('skip: https wrapper is requi
+ ?>
+ --FILE--
+ <?php
+-$context = stream_context_create([
+-    'socket' => ['bindto' => '0'],
+-    'ssl' => ['verify_peer' => false]
+-]);
++$context = stream_context_create(['socket' => ['bindto' => '0']]);
+ var_dump(file_get_contents('https://httpbin.org/get', false, $context) !== false);
+ ?>
+ --EXPECT--
+diff --git a/ext/standard/tests/network/setcookie.phpt b/ext/standard/tests/network/setcookie.phpt
+index f43680a5..aad67298 100644
+--- a/ext/standard/tests/network/setcookie.phpt
++++ b/ext/standard/tests/network/setcookie.phpt
+@@ -21,20 +21,20 @@ setcookie('name', 'value', ['expires' => $tsp]);
+ setcookie('name', 'value', ['expires' => $tsn, 'path' => '/path/', 'domain' => 'domain.tld', 'secure' => true, 'httponly' => true, 'samesite' => 'Strict']);
+ 
+ $expected = array(
+-    'Set-Cookie: name=deleted; expires='.date('D, d M Y H:i:s', 1).' GMT; Max-Age=0',
+-    'Set-Cookie: name=deleted; expires='.date('D, d M Y H:i:s', 1).' GMT; Max-Age=0',
++    'Set-Cookie: name=deleted; expires='.date('D, d-M-Y H:i:s', 1).' GMT; Max-Age=0',
++    'Set-Cookie: name=deleted; expires='.date('D, d-M-Y H:i:s', 1).' GMT; Max-Age=0',
+     'Set-Cookie: name=value',
+     'Set-Cookie: name=space%20value',
+     'Set-Cookie: name=value',
+-    'Set-Cookie: name=value; expires='.date('D, d M Y H:i:s', $tsp).' GMT; Max-Age=5',
+-    'Set-Cookie: name=value; expires='.date('D, d M Y H:i:s', $tsn).' GMT; Max-Age=0',
+-    'Set-Cookie: name=value; expires='.date('D, d M Y H:i:s', $tsc).' GMT; Max-Age=0',
++    'Set-Cookie: name=value; expires='.date('D, d-M-Y H:i:s', $tsp).' GMT; Max-Age=5',
++    'Set-Cookie: name=value; expires='.date('D, d-M-Y H:i:s', $tsn).' GMT; Max-Age=0',
++    'Set-Cookie: name=value; expires='.date('D, d-M-Y H:i:s', $tsc).' GMT; Max-Age=0',
+     'Set-Cookie: name=value; path=/path/',
+     'Set-Cookie: name=value; domain=domain.tld',
+     'Set-Cookie: name=value; secure',
+     'Set-Cookie: name=value; HttpOnly',
+-    'Set-Cookie: name=value; expires='.date('D, d M Y H:i:s', $tsp).' GMT; Max-Age=5',
+-    'Set-Cookie: name=value; expires='.date('D, d M Y H:i:s', $tsn).' GMT; Max-Age=0; path=/path/; domain=domain.tld; secure; HttpOnly; SameSite=Strict'
++    'Set-Cookie: name=value; expires='.date('D, d-M-Y H:i:s', $tsp).' GMT; Max-Age=5',
++    'Set-Cookie: name=value; expires='.date('D, d-M-Y H:i:s', $tsn).' GMT; Max-Age=0; path=/path/; domain=domain.tld; secure; HttpOnly; SameSite=Strict'
+ );
+ 
+ $headers = headers_list();
+diff --git a/ext/standard/tests/network/syslog_basic.phpt b/ext/standard/tests/network/syslog_basic.phpt
+new file mode 100644
+index 00000000..128a73cb
+--- /dev/null
++++ b/ext/standard/tests/network/syslog_basic.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++Test syslog() function : basic functionality
++--FILE--
++<?php
++echo "*** Testing syslog() : basic functionality ***\n";
++
++
++// Initialise all required variables
++$priority = LOG_WARNING;
++$message = 'A test syslog call invocation';
++
++// Calling syslog() with all possible arguments
++var_dump( syslog($priority, $message) );
++
++?>
++--EXPECT--
++*** Testing syslog() : basic functionality ***
++bool(true)
+diff --git a/ext/standard/tests/password/password_hash_sensitive_parameter.phpt b/ext/standard/tests/password/password_hash_sensitive_parameter.phpt
+deleted file mode 100644
+index 9b2b364e..00000000
+--- a/ext/standard/tests/password/password_hash_sensitive_parameter.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Test that the password parameter is marked sensitive.
+---FILE--
+-<?php
+-try {
+-    var_dump(password_hash("foo"));
+-} catch (\Throwable $e) {
+-    echo $e, PHP_EOL;
+-}
+-try {
+-    var_dump(password_hash("foo", "Invalid"));
+-} catch (\Throwable $e) {
+-    echo $e, PHP_EOL;
+-}
+-?>
+---EXPECTF--
+-ArgumentCountError: password_hash() expects at least 2 arguments, 1 given in %spassword_hash_sensitive_parameter.php:3
+-Stack trace:
+-#0 %spassword_hash_sensitive_parameter.php(3): password_hash(Object(SensitiveParameterValue))
+-#1 {main}
+-ValueError: password_hash(): Argument #2 ($algo) must be a valid password hashing algorithm in%spassword_hash_sensitive_parameter.php:8
+-Stack trace:
+-#0 %spassword_hash_sensitive_parameter.php(8): password_hash(Object(SensitiveParameterValue), 'Invalid')
+-#1 {main}
+diff --git a/ext/standard/tests/random/random_bytes.phpt b/ext/standard/tests/random/random_bytes.phpt
+new file mode 100644
+index 00000000..6a7d4388
+--- /dev/null
++++ b/ext/standard/tests/random/random_bytes.phpt
+@@ -0,0 +1,17 @@
++--TEST--
++Test normal operation of random_bytes()
++--FILE--
++<?php
++//-=-=-=-
++
++var_dump(strlen(bin2hex(random_bytes(16))));
++
++var_dump(is_string(random_bytes(10)));
++
++var_dump(is_string(random_bytes(257)));
++
++?>
++--EXPECT--
++int(32)
++bool(true)
++bool(true)
+diff --git a/ext/standard/tests/random/random_bytes_error.phpt b/ext/standard/tests/random/random_bytes_error.phpt
+new file mode 100644
+index 00000000..bc0c1ccc
+--- /dev/null
++++ b/ext/standard/tests/random/random_bytes_error.phpt
+@@ -0,0 +1,22 @@
++--TEST--
++Test error operation of random_bytes()
++--FILE--
++<?php
++//-=-=-=-
++
++try {
++    $bytes = random_bytes();
++} catch (TypeError $e) {
++    echo $e->getMessage().PHP_EOL;
++}
++
++try {
++    $bytes = random_bytes(0);
++} catch (Error $e) {
++    echo $e->getMessage().PHP_EOL;
++}
++
++?>
++--EXPECT--
++random_bytes() expects exactly 1 argument, 0 given
++random_bytes(): Argument #1 ($length) must be greater than 0
+diff --git a/ext/standard/tests/random/random_int.phpt b/ext/standard/tests/random/random_int.phpt
+new file mode 100644
+index 00000000..6fd04420
+--- /dev/null
++++ b/ext/standard/tests/random/random_int.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Test normal operation of random_int()
++--FILE--
++<?php
++
++var_dump(is_int(random_int(10, 100)));
++
++$x = random_int(10, 100);
++var_dump($x >= 10 && $x <= 100);
++
++var_dump(random_int(-1000, -1) < 0);
++var_dump(random_int(-1, PHP_INT_MAX) >= -1);
++var_dump(is_int(random_int(PHP_INT_MIN, PHP_INT_MAX)));
++
++var_dump(random_int(42,42));
++
++?>
++--EXPECT--
++bool(true)
++bool(true)
++bool(true)
++bool(true)
++bool(true)
++int(42)
+diff --git a/ext/standard/tests/random/random_int_error.phpt b/ext/standard/tests/random/random_int_error.phpt
+new file mode 100644
+index 00000000..fe461275
+--- /dev/null
++++ b/ext/standard/tests/random/random_int_error.phpt
+@@ -0,0 +1,29 @@
++--TEST--
++Test error operation of random_int()
++--FILE--
++<?php
++//-=-=-=-
++
++try {
++    $randomInt = random_int();
++} catch (TypeError $e) {
++    echo $e->getMessage().PHP_EOL;
++}
++
++try {
++    $randomInt = random_int(42);
++} catch (TypeError $e) {
++    echo $e->getMessage().PHP_EOL;
++}
++
++try {
++    $randomInt = random_int(42,0);
++} catch (Error $e) {
++    echo $e->getMessage().PHP_EOL;
++}
++
++?>
++--EXPECT--
++random_int() expects exactly 2 arguments, 0 given
++random_int() expects exactly 2 arguments, 1 given
++random_int(): Argument #1 ($min) must be less than or equal to argument #2 ($max)
+diff --git a/ext/standard/tests/random/reflection.phpt b/ext/standard/tests/random/reflection.phpt
+new file mode 100644
+index 00000000..662b23e8
+--- /dev/null
++++ b/ext/standard/tests/random/reflection.phpt
+@@ -0,0 +1,17 @@
++--TEST--
++Bug #74708 Wrong reflection on random_bytes and random_int
++--FILE--
++<?php
++$rf = new ReflectionFunction('random_bytes');
++var_dump($rf->getNumberOfParameters());
++var_dump($rf->getNumberOfRequiredParameters());
++
++$rf = new ReflectionFunction('random_int');
++var_dump($rf->getNumberOfParameters());
++var_dump($rf->getNumberOfRequiredParameters());
++?>
++--EXPECT--
++int(1)
++int(1)
++int(2)
++int(2)
+diff --git a/ext/standard/tests/serialize/001.phpt b/ext/standard/tests/serialize/001.phpt
+index f2ac0340..147c355b 100644
+--- a/ext/standard/tests/serialize/001.phpt
++++ b/ext/standard/tests/serialize/001.phpt
+@@ -4,7 +4,6 @@ serialize()/unserialize()/var_dump()
+ serialize_precision=100
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class t
+ {
+     function __construct()
+@@ -13,7 +12,6 @@ class t
+     }
+ }
+ 
+-#[AllowDynamicProperties]
+ class s
+ {
+     public $a;
+diff --git a/ext/standard/tests/serialize/__serialize_004.phpt b/ext/standard/tests/serialize/__serialize_004.phpt
+index 66db8bf5..cc55d67a 100644
+--- a/ext/standard/tests/serialize/__serialize_004.phpt
++++ b/ext/standard/tests/serialize/__serialize_004.phpt
+@@ -3,7 +3,6 @@ __serialize() mechanism (004): Delayed __unserialize() calls
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Wakeup {
+     public $data;
+     public function __construct(array $data) {
+@@ -16,7 +15,6 @@ class Wakeup {
+     }
+ }
+ 
+-#[AllowDynamicProperties]
+ class Unserialize {
+     public $data;
+     public function __construct(array $data) {
+diff --git a/ext/standard/tests/serialize/bug14293.phpt b/ext/standard/tests/serialize/bug14293.phpt
+index c52ced3d..86066607 100644
+--- a/ext/standard/tests/serialize/bug14293.phpt
++++ b/ext/standard/tests/serialize/bug14293.phpt
+@@ -4,8 +4,6 @@ Bug #14293 (serialize() and __sleep())
+ <?php
+ class t
+ {
+-    public $a;
+-
+     function __construct()
+     {
+         $this->a = 'hello';
+diff --git a/ext/standard/tests/serialize/bug36424.phpt b/ext/standard/tests/serialize/bug36424.phpt
+index 27c18afb..55bc38e9 100644
+--- a/ext/standard/tests/serialize/bug36424.phpt
++++ b/ext/standard/tests/serialize/bug36424.phpt
+@@ -3,7 +3,6 @@ Bug #36424 - Serializable interface breaks object references
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class a implements Serializable {
+     function serialize() {
+         return serialize(get_object_vars($this));
+diff --git a/ext/standard/tests/serialize/bug49649.phpt b/ext/standard/tests/serialize/bug49649.phpt
+index 310cd5b8..7bbba03c 100644
+--- a/ext/standard/tests/serialize/bug49649.phpt
++++ b/ext/standard/tests/serialize/bug49649.phpt
+@@ -33,8 +33,7 @@ class Foo
+ $class = unserialize(base64_decode($serialized));
+ var_dump($class);
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property Foo::$notThere is deprecated in %s on line %d
++--EXPECT--
+ object(Foo)#1 (4) {
+   ["public"]=>
+   int(3)
+diff --git a/ext/standard/tests/serialize/bug49649_1.phpt b/ext/standard/tests/serialize/bug49649_1.phpt
+index ddaff1e9..e4f01d30 100644
+--- a/ext/standard/tests/serialize/bug49649_1.phpt
++++ b/ext/standard/tests/serialize/bug49649_1.phpt
+@@ -33,8 +33,7 @@ class Foo
+ $class = unserialize(base64_decode($serialized));
+ var_dump($class);
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property Foo::$notThere is deprecated in %s on line %d
++--EXPECT--
+ object(Foo)#1 (4) {
+   ["public":protected]=>
+   int(3)
+diff --git a/ext/standard/tests/serialize/bug49649_2.phpt b/ext/standard/tests/serialize/bug49649_2.phpt
+index 16a9b4d7..93b5e298 100644
+--- a/ext/standard/tests/serialize/bug49649_2.phpt
++++ b/ext/standard/tests/serialize/bug49649_2.phpt
+@@ -33,8 +33,7 @@ class Foo
+ $class = unserialize(base64_decode($serialized));
+ var_dump($class);
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property Foo::$notThere is deprecated in %s on line %d
++--EXPECT--
+ object(Foo)#1 (4) {
+   ["public":"Foo":private]=>
+   int(3)
+diff --git a/ext/standard/tests/serialize/bug62836_1.phpt b/ext/standard/tests/serialize/bug62836_1.phpt
+index 480dbab1..7d03e9fd 100644
+--- a/ext/standard/tests/serialize/bug62836_1.phpt
++++ b/ext/standard/tests/serialize/bug62836_1.phpt
+@@ -5,7 +5,7 @@ Bug #62836 (Seg fault or broken object references on unserialize())
+ $serialized_object='O:1:"A":4:{s:1:"b";O:1:"B":0:{}s:2:"b1";r:2;s:1:"c";O:1:"B":0:{}s:2:"c1";r:4;}';
+ spl_autoload_register(function ($name) {
+     unserialize("i:4;");
+-    eval("#[AllowDynamicProperties] class $name {} ");
++    eval("class $name {} ");
+ });
+ 
+ print_r(unserialize($serialized_object));
+diff --git a/ext/standard/tests/serialize/bug62836_2.phpt b/ext/standard/tests/serialize/bug62836_2.phpt
+index 95bd75bb..0634b1da 100644
+--- a/ext/standard/tests/serialize/bug62836_2.phpt
++++ b/ext/standard/tests/serialize/bug62836_2.phpt
+@@ -8,7 +8,7 @@ ini_set('unserialize_callback_func','mycallback');
+ 
+ function mycallback($classname) {
+     unserialize("i:4;");
+-    eval ("#[AllowDynamicProperties] class $classname {} ");
++    eval ("class $classname {} ");
+ }
+ 
+ print_r(unserialize($serialized_object));
+diff --git a/ext/standard/tests/serialize/bug69425.phpt b/ext/standard/tests/serialize/bug69425.phpt
+index 1bc79c03..906c7192 100644
+--- a/ext/standard/tests/serialize/bug69425.phpt
++++ b/ext/standard/tests/serialize/bug69425.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #69425 (Use After Free in unserialize())
++Bug #69425: Use After Free in unserialize()
+ --FILE--
+ <?php
+ 
+@@ -22,11 +22,11 @@ $data = unserialize('a:2:{i:0;O:12:"DateInterval":1:{s:1:"y";R:1;}i:1;i:2;}');
+ var_dump($data);
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ int(1)
+ array(2) {
+   [0]=>
+-  object(DateInterval)#1 (%d) {
++  object(DateInterval)#1 (16) {
+     ["y"]=>
+     int(-1)
+     ["m"]=>
+@@ -41,12 +41,24 @@ array(2) {
+     int(-1)
+     ["f"]=>
+     float(0)
++    ["weekday"]=>
++    int(-1)
++    ["weekday_behavior"]=>
++    int(-1)
++    ["first_last_day_of"]=>
++    int(-1)
+     ["invert"]=>
+     int(0)
+     ["days"]=>
+     int(-1)
+-    ["from_string"]=>
+-    bool(false)
++    ["special_type"]=>
++    int(0)
++    ["special_amount"]=>
++    int(-1)
++    ["have_weekday_relative"]=>
++    int(0)
++    ["have_special_relative"]=>
++    int(0)
+   }
+   [1]=>
+   int(2)
+diff --git a/ext/standard/tests/serialize/bug72663.phpt b/ext/standard/tests/serialize/bug72663.phpt
+index 9c006d50..c50591ca 100644
+--- a/ext/standard/tests/serialize/bug72663.phpt
++++ b/ext/standard/tests/serialize/bug72663.phpt
+@@ -3,7 +3,6 @@ Bug #72663 (1): Don't call __destruct if __wakeup not called or fails
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test1 {
+     public function __wakeup() {
+         echo "Wakeup\n";
+@@ -13,7 +12,6 @@ class Test1 {
+     }
+ }
+ 
+-#[AllowDynamicProperties]
+ class Test2 {
+     public function __wakeup() {
+         throw new Exception('Unserialization forbidden');
+diff --git a/ext/standard/tests/serialize/bug73341.phpt b/ext/standard/tests/serialize/bug73341.phpt
+index 3bdad064..2f38949c 100644
+--- a/ext/standard/tests/serialize/bug73341.phpt
++++ b/ext/standard/tests/serialize/bug73341.phpt
+@@ -2,13 +2,6 @@
+ Bug #73144 (Use-afte-free in ArrayObject Deserialization)
+ --FILE--
+ <?php
+-try {
+-$token = 'a:2:{i:0;O:1:"0":2:{s:1:"0";i:0;s:1:"0";a:1:{i:0;C:11:"ArrayObject":7:{x:i:0;r}';
+-$obj = unserialize($token);
+-} catch(Exception $e) {
+-    echo $e->getMessage()."\n";
+-}
+-
+ try {
+ $token = 'a:2:{i:0;O:1:"0":2:0s:1:"0";i:0;s:1:"0";a:1:{i:0;C:11:"ArrayObject":7:{x:i:0;r}';
+ $obj = unserialize($token);
+@@ -27,7 +20,5 @@ unserialize($exploit);
+ --EXPECTF--
+ Error at offset 6 of 7 bytes
+ 
+-Notice: unserialize(): Error at offset 19 of 79 bytes in %s on line %d
+-
+ Notice: ArrayObject::unserialize(): Unexpected end of serialized data in %sbug73341.php on line %d
+ Error at offset 24 of 34 bytes
+diff --git a/ext/standard/tests/serialize/bug74111.phpt b/ext/standard/tests/serialize/bug74111.phpt
+index 2062687a..62922bea 100644
+--- a/ext/standard/tests/serialize/bug74111.phpt
++++ b/ext/standard/tests/serialize/bug74111.phpt
+@@ -6,5 +6,5 @@ $s = 'O:8:"stdClass":00000000';
+ var_dump(unserialize($s));
+ ?>
+ --EXPECTF--
+-Notice: unserialize(): Error at offset 23 of 23 bytes in %s on line %d
++Notice: unserialize(): Error at offset 25 of 23 bytes in %s on line %d
+ bool(false)
+diff --git a/ext/standard/tests/serialize/serialization_objects_005.phpt b/ext/standard/tests/serialize/serialization_objects_005.phpt
+index e38ead00..77733514 100644
+--- a/ext/standard/tests/serialize/serialization_objects_005.phpt
++++ b/ext/standard/tests/serialize/serialization_objects_005.phpt
+@@ -5,7 +5,7 @@ Check behaviour of incomplete class
+ $serialized = 'O:1:"C":1:{s:1:"p";i:1;}';
+ 
+ $incomplete = unserialize($serialized);
+-eval('#[AllowDynamicProperties] Class C {}');
++eval('Class C {}');
+ $complete   = unserialize($serialized);
+ 
+ 
+diff --git a/ext/standard/tests/serialize/serialization_objects_008.phpt b/ext/standard/tests/serialize/serialization_objects_008.phpt
+index 650ba563..3670ddde 100644
+--- a/ext/standard/tests/serialize/serialization_objects_008.phpt
++++ b/ext/standard/tests/serialize/serialization_objects_008.phpt
+@@ -3,11 +3,14 @@ Bad unserialize_callback_func
+ --FILE--
+ <?php
+ ini_set('unserialize_callback_func','Nonexistent');
+-try {
+-    unserialize('O:3:"FOO":0:{}');
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
++$o = unserialize('O:3:"FOO":0:{}');
++var_dump($o);
++echo "Done";
+ ?>
+---EXPECT--
+-Invalid callback Nonexistent, function "Nonexistent" not found or invalid function name
++--EXPECTF--
++Warning: unserialize(): defined (Nonexistent) but not found in %s on line %d
++object(__PHP_Incomplete_Class)#%d (1) {
++  ["__PHP_Incomplete_Class_Name"]=>
++  string(3) "FOO"
++}
++Done
+diff --git a/ext/standard/tests/serialize/serialization_objects_017.phpt b/ext/standard/tests/serialize/serialization_objects_017.phpt
+deleted file mode 100644
+index 901d73f2..00000000
+--- a/ext/standard/tests/serialize/serialization_objects_017.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Object serialization / unserialization: Strict format
+---FILE--
+-<?php
+-class A {public $a;}
+-
+-var_dump(unserialize('O:1:"A":1x{s:1:"a";N;}'));
+-                    //0123456789012345678901
+-var_dump(unserialize('O:1:"A":1:xs:1:"a";N;}'));
+-                    //0123456789012345678901
+-?>
+---EXPECTF--
+-Notice: unserialize(): Error at offset 9 of 22 bytes in %s on line %d
+-bool(false)
+-
+-Notice: unserialize(): Error at offset 10 of 22 bytes in %s on line %d
+-bool(false)
+diff --git a/ext/standard/tests/serialize/serialization_objects_018.phpt b/ext/standard/tests/serialize/serialization_objects_018.phpt
+deleted file mode 100644
+index e05ff5ca..00000000
+--- a/ext/standard/tests/serialize/serialization_objects_018.phpt
++++ /dev/null
+@@ -1,33 +0,0 @@
+---TEST--
+-Object serialization / unserialization: Strict format (2)
+---FILE--
+-<?php
+-class A implements Serializable {
+-	public function serialize() {}
+-	public function unserialize($data) {}
+-	public function __serialize() {}
+-	public function __unserialize($data) {}
+-}
+-
+-var_dump(unserialize('C:1:"A":3x{foo}'));
+-                    //012345678901234
+-var_dump(unserialize('C:1:"A":3:xfoo}'));
+-                    //012345678901234
+-var_dump(unserialize('C:1:"A":3:{foox'));
+-                    //012345678901234
+-var_dump(unserialize('C:1:"A":'));
+-                    //01234567
+-
+-?>
+---EXPECTF--
+-Notice: unserialize(): Error at offset 9 of 15 bytes in %s on line %d
+-bool(false)
+-
+-Notice: unserialize(): Error at offset 10 of 15 bytes in %s on line %d
+-bool(false)
+-
+-Notice: unserialize(): Error at offset 14 of 15 bytes in %s on line %d
+-bool(false)
+-
+-Notice: unserialize(): Error at offset 8 of 8 bytes in %s on line %d
+-bool(false)
+diff --git a/ext/standard/tests/serialize/serialization_objects_incomplete.phpt b/ext/standard/tests/serialize/serialization_objects_incomplete.phpt
+deleted file mode 100644
+index 1a2b2563..00000000
+--- a/ext/standard/tests/serialize/serialization_objects_incomplete.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-Check behaviour of incomplete class
+---FILE--
+-<?php
+-$incomplete = unserialize('O:1:"C":1:{s:1:"p";i:1;}');
+-var_dump($incomplete);
+-?>
+---EXPECT--
+-object(__PHP_Incomplete_Class)#1 (2) {
+-  ["__PHP_Incomplete_Class_Name"]=>
+-  string(1) "C"
+-  ["p"]=>
+-  int(1)
+-}
+diff --git a/ext/standard/tests/serialize/unserialize_overwrite_undeclared_protected.phpt b/ext/standard/tests/serialize/unserialize_overwrite_undeclared_protected.phpt
+index d9f44c37..b442c922 100644
+--- a/ext/standard/tests/serialize/unserialize_overwrite_undeclared_protected.phpt
++++ b/ext/standard/tests/serialize/unserialize_overwrite_undeclared_protected.phpt
+@@ -12,8 +12,7 @@ O:4:"Test":2:{s:4:"\0*\0x";N;s:4:"\0*\0x";N;}
+ STR;
+ var_dump(unserialize($str));
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property Test::$x is deprecated in %s on line %d
++--EXPECT--
+ object(Test)#1 (2) {
+   ["foo"]=>
+   NULL
+diff --git a/ext/standard/tests/serialize/unserialize_ref_to_overwritten_declared_prop.phpt b/ext/standard/tests/serialize/unserialize_ref_to_overwritten_declared_prop.phpt
+index c4c3c957..f32b0c12 100644
+--- a/ext/standard/tests/serialize/unserialize_ref_to_overwritten_declared_prop.phpt
++++ b/ext/standard/tests/serialize/unserialize_ref_to_overwritten_declared_prop.phpt
+@@ -3,10 +3,10 @@ Trying to create a reference to an overwritten declared property
+ --FILE--
+ <?php
+ $str = <<<STR
+-O:9:"Attribute":1:{s:5:"flags";i:63;s:5:"flags";R:2}
++O:5:"Error":2:{S:8:"previous";N;S:8:"previous";R:2;}
+ STR;
+ var_dump(unserialize($str));
+ ?>
+ --EXPECTF--
+-Notice: unserialize(): Error at offset 36 of 52 bytes in %s on line %d
++Notice: unserialize(): Error at offset 51 of 52 bytes in %s on line %d
+ bool(false)
+diff --git a/ext/standard/tests/streams/bug40459.phpt b/ext/standard/tests/streams/bug40459.phpt
+index 3b9337bd..437e44e3 100644
+--- a/ext/standard/tests/streams/bug40459.phpt
++++ b/ext/standard/tests/streams/bug40459.phpt
+@@ -6,7 +6,6 @@ allow_url_fopen=1
+ <?php
+ // Test whether the constructor of the user-space stream wrapper is called when stream functions are called
+ class testwrapper {
+-    public $context;
+     private $constructorCalled = false;
+     function __construct() {
+         $this->constructorCalled = true;
+diff --git a/ext/standard/tests/streams/bug53903.phpt b/ext/standard/tests/streams/bug53903.phpt
+index 01061842..7ee62ad2 100644
+--- a/ext/standard/tests/streams/bug53903.phpt
++++ b/ext/standard/tests/streams/bug53903.phpt
+@@ -4,7 +4,6 @@ Bug #53903 streamwrapper/stream_stat causes problems
+ <?php
+ 
+ class sw {
+-    public $context;
+ 
+     public function stream_open($path, $mode, $options, &$opened_path) {
+         return true;
+diff --git a/ext/standard/tests/streams/bug60455_02.phpt b/ext/standard/tests/streams/bug60455_02.phpt
+index 67676916..625d228f 100644
+--- a/ext/standard/tests/streams/bug60455_02.phpt
++++ b/ext/standard/tests/streams/bug60455_02.phpt
+@@ -3,7 +3,6 @@ Bug #60455: stream_get_line and 1-line followed by eol input
+ --FILE--
+ <?php
+ class TestStream {
+-    public $context;
+     private $s = 0;
+     function stream_open($path, $mode, $options, &$opened_path) {
+             return true;
+diff --git a/ext/standard/tests/streams/bug60455_03.phpt b/ext/standard/tests/streams/bug60455_03.phpt
+index d1c656ee..215e91f0 100644
+--- a/ext/standard/tests/streams/bug60455_03.phpt
++++ b/ext/standard/tests/streams/bug60455_03.phpt
+@@ -3,7 +3,6 @@ Bug #60455: stream_get_line and 2 lines, one possibly empty
+ --FILE--
+ <?php
+ class TestStream {
+-    public $context;
+     private $lines = array();
+     private $s = 0;
+     private $eofth = 3;
+diff --git a/ext/standard/tests/streams/bug60455_04.phpt b/ext/standard/tests/streams/bug60455_04.phpt
+index 8dce1b4c..066b29ea 100644
+--- a/ext/standard/tests/streams/bug60455_04.phpt
++++ b/ext/standard/tests/streams/bug60455_04.phpt
+@@ -4,7 +4,6 @@ read with EOL indication
+ --FILE--
+ <?php
+ class TestStream {
+-    public $context;
+     private $s = 0;
+     function stream_open($path, $mode, $options, &$opened_path) {
+             return true;
+diff --git a/ext/standard/tests/streams/bug60817.phpt b/ext/standard/tests/streams/bug60817.phpt
+index 34b40946..8a790eff 100644
+--- a/ext/standard/tests/streams/bug60817.phpt
++++ b/ext/standard/tests/streams/bug60817.phpt
+@@ -3,7 +3,6 @@ Bug #60817: stream_get_line() reads from stream even when there is already suffi
+ --FILE--
+ <?php
+ class TestStream { //data, empty data, empty data + eof
+-    public $context;
+     private $s = 0;
+     function stream_open($path, $mode, $options, &$opened_path) {
+             return true;
+diff --git a/ext/standard/tests/streams/bug67626.phpt b/ext/standard/tests/streams/bug67626.phpt
+index 54be1b51..c251a40b 100644
+--- a/ext/standard/tests/streams/bug67626.phpt
++++ b/ext/standard/tests/streams/bug67626.phpt
+@@ -4,8 +4,6 @@ Bug #67626: Exceptions not properly handled in user stream handlers
+ <?php
+ class MyStream
+ {
+-    public $context;
+-
+     public function stream_open() { return true; }
+ 
+     public function stream_read()
+diff --git a/ext/standard/tests/streams/bug78662.phpt b/ext/standard/tests/streams/bug78662.phpt
+index 7b655d57..2ea00b67 100644
+--- a/ext/standard/tests/streams/bug78662.phpt
++++ b/ext/standard/tests/streams/bug78662.phpt
+@@ -3,7 +3,6 @@ Bug #78662 (stream_write bad error detection)
+ --FILE--
+ <?php
+ class FailedStream {
+-    public $context;
+     function stream_open($path, $mode, $options, &$opened_path)
+     {
+         return true;
+diff --git a/ext/standard/tests/streams/gh10406.phpt b/ext/standard/tests/streams/gh10406.phpt
+deleted file mode 100644
+index 0721dfbe..00000000
+--- a/ext/standard/tests/streams/gh10406.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-GH-10406: feof() behavior change for UNIX based socket resources
+---SKIPIF--
+-<?php
+-if (!strncasecmp(PHP_OS, 'WIN', 3)) die("skip. Do not run on Windows");
+-?>
+---FILE--
+-<?php
+-$socket_path = '/tmp/gh-10406-test.socket';
+-
+-if (file_exists($socket_path)) {
+-    unlink($socket_path);
+-}
+-
+-$socket = stream_socket_server('unix://' . $socket_path);
+-var_dump(feof($socket));
+-unlink($socket_path);
+-?>
+---EXPECT--
+-bool(false)
+diff --git a/ext/standard/tests/streams/glob-wrapper.phpt b/ext/standard/tests/streams/glob-wrapper.phpt
+index 212a33f1..fcd7add1 100644
+--- a/ext/standard/tests/streams/glob-wrapper.phpt
++++ b/ext/standard/tests/streams/glob-wrapper.phpt
+@@ -5,7 +5,6 @@ open_basedir=/does_not_exist
+ --SKIPIF--
+ <?php
+ if (!in_array("glob", stream_get_wrappers())) echo "skip";
+-?>
+ --FILE--
+ <?php
+ 
+@@ -30,4 +29,8 @@ Warning: opendir(): open_basedir restriction in effect. File(%s) is not within t
+ Warning: opendir(%s): Failed to open directory: Operation not permitted in %s%eglob-wrapper.php on line 5
+ Failed to open %s
+ ** Opening glob://%s
+-No files in glob://%s
++
++Warning: opendir(): open_basedir restriction in effect. File(%s) is not within the allowed path(s): (/does_not_exist) in %s%eglob-wrapper.php on line 5
++
++Warning: opendir(glob://%s): Failed to open directory: operation failed in %s%eglob-wrapper.php on line 5
++Failed to open glob://%s
+diff --git a/ext/standard/tests/streams/set_file_buffer.phpt b/ext/standard/tests/streams/set_file_buffer.phpt
+index ef808a24..5e5051c8 100644
+--- a/ext/standard/tests/streams/set_file_buffer.phpt
++++ b/ext/standard/tests/streams/set_file_buffer.phpt
+@@ -6,7 +6,6 @@ marcosptf - <marcosptf@yahoo.com.br> - #phparty7 - @phpsp - novatec/2015 - sao p
+ <?php
+ 
+ class test_wrapper {
+-  public $context;
+ 
+   function stream_open($path, $mode, $openedpath) {
+     return true;
+@@ -33,6 +32,11 @@ var_dump(set_file_buffer($fd, 50));
+ var_dump(stream_set_chunk_size($fd, 42));
+ var_dump(fwrite($fd, str_repeat('0', 70)));
+ ?>
++--CLEAN--
++<?php
++fclose($fd);
++unset($fd);
++?>
+ --EXPECTF--
+ bool(true)
+ option: %d, %d, %d
+diff --git a/ext/standard/tests/streams/stream_get_line_NUL_delimiter.phpt b/ext/standard/tests/streams/stream_get_line_NUL_delimiter.phpt
+index b14cef71..bc40d557 100644
+--- a/ext/standard/tests/streams/stream_get_line_NUL_delimiter.phpt
++++ b/ext/standard/tests/streams/stream_get_line_NUL_delimiter.phpt
+@@ -3,7 +3,6 @@ Bug #60455: stream_get_line and \0 as a delimiter
+ --FILE--
+ <?php
+ class TestStream {
+-    public $context;
+     private $s = 0;
+     function stream_open($path, $mode, $options, &$opened_path) {
+             return true;
+diff --git a/ext/standard/tests/streams/stream_read_object_return.phpt b/ext/standard/tests/streams/stream_read_object_return.phpt
+index 08555bcc..acb0363f 100644
+--- a/ext/standard/tests/streams/stream_read_object_return.phpt
++++ b/ext/standard/tests/streams/stream_read_object_return.phpt
+@@ -3,7 +3,6 @@ Returning an object from stream_read() is invalid, but should not leak
+ --FILE--
+ <?php
+ class MyStream {
+-    public $context;
+     function stream_open() {
+         return true;
+     }
+diff --git a/ext/standard/tests/streams/stream_set_chunk_size.phpt b/ext/standard/tests/streams/stream_set_chunk_size.phpt
+index 77d9bac0..dcf9789d 100644
+--- a/ext/standard/tests/streams/stream_set_chunk_size.phpt
++++ b/ext/standard/tests/streams/stream_set_chunk_size.phpt
+@@ -3,7 +3,6 @@ stream_set_chunk_size basic tests
+ --FILE--
+ <?php
+ class test_wrapper {
+-    public $context;
+     function stream_open($path, $mode, $openedpath) {
+         return true;
+     }
+diff --git a/ext/standard/tests/streams/user-stream-error.phpt b/ext/standard/tests/streams/user-stream-error.phpt
+index 8ad4be64..e39448fc 100644
+--- a/ext/standard/tests/streams/user-stream-error.phpt
++++ b/ext/standard/tests/streams/user-stream-error.phpt
+@@ -4,7 +4,6 @@ E_ERROR during UserStream Open
+ <?php
+ 
+ class FailStream {
+-  public $context;
+   public function stream_open($path, $mode, $options, &$opened_path) {
+     _some_undefined_function();
+   }
+diff --git a/ext/standard/tests/strings/bug20934.phpt b/ext/standard/tests/strings/bug20934.phpt
+index e068d2a6..121d9b6e 100644
+--- a/ext/standard/tests/strings/bug20934.phpt
++++ b/ext/standard/tests/strings/bug20934.phpt
+@@ -2,10 +2,10 @@
+ Bug #20934 (htmlspecialchars returns latin1 from UTF-8)
+ --FILE--
+ <?php
+-$str = "\xc3\xa0\xc3\xa1";
+-echo bin2hex($str), "\n";
+-echo bin2hex(htmlspecialchars($str, ENT_COMPAT, "UTF-8")), "\n";
++$str = utf8_encode("\xe0\xe1");
++var_dump(utf8_decode($str));
++var_dump(utf8_decode(htmlspecialchars($str, ENT_COMPAT, "UTF-8")));
+ ?>
+---EXPECTF--
+-c3a0c3a1
+-c3a0c3a1
++--EXPECT--
++string(2) "��"
++string(2) "��"
+diff --git a/ext/standard/tests/strings/bug40754.phpt b/ext/standard/tests/strings/bug40754.phpt
+index 41032a94..f8f8c103 100644
+--- a/ext/standard/tests/strings/bug40754.phpt
++++ b/ext/standard/tests/strings/bug40754.phpt
+@@ -90,6 +90,6 @@ stripos(): Argument #3 ($offset) must be contained in argument #1 ($haystack)
+ strrpos(): Argument #3 ($offset) must be contained in argument #1 ($haystack)
+ strripos(): Argument #3 ($offset) must be contained in argument #1 ($haystack)
+ strripos(): Argument #3 ($offset) must be contained in argument #1 ($haystack)
+-int(1)
++int(2)
+ string(8) "abcdeabc"
+ string(0) ""
+diff --git a/ext/standard/tests/strings/bug43957.phpt b/ext/standard/tests/strings/bug43957.phpt
+index 8a50fe88..b74b83a1 100644
+--- a/ext/standard/tests/strings/bug43957.phpt
++++ b/ext/standard/tests/strings/bug43957.phpt
+@@ -4,6 +4,5 @@ Bug #43957 (utf8_decode() bogus conversion on multibyte indicator near end of st
+ <?php
+   echo utf8_decode('abc'.chr(0xe0));
+ ?>
+---EXPECTF--
+-Deprecated: Function utf8_decode() is deprecated in %s on line %d
++--EXPECT--
+ abc?
+diff --git a/ext/standard/tests/strings/bug49687.phpt b/ext/standard/tests/strings/bug49687.phpt
+index a23019c0..b4f7ac66 100644
+--- a/ext/standard/tests/strings/bug49687.phpt
++++ b/ext/standard/tests/strings/bug49687.phpt
+@@ -13,13 +13,8 @@ foreach ($tests as $t) {
+ }
+ echo "Done.\n";
+ ?>
+---EXPECTF--
+-Deprecated: Function utf8_decode() is deprecated in %s on line %d
++--EXPECT--
+ 413f3e42
+-
+-Deprecated: Function utf8_decode() is deprecated in %s on line %d
+ 3f22
+-
+-Deprecated: Function utf8_decode() is deprecated in %s on line %d
+ 413f3f423f433f3f
+ Done.
+diff --git a/ext/standard/tests/strings/bug54454.phpt b/ext/standard/tests/strings/bug54454.phpt
+index 783fe43c..88835c98 100644
+--- a/ext/standard/tests/strings/bug54454.phpt
++++ b/ext/standard/tests/strings/bug54454.phpt
+@@ -5,4 +5,4 @@ Bug #54454 (substr_compare incorrectly reports equality in some cases)
+ var_dump(substr_compare('/', '/asd', 0, 4));
+ ?>
+ --EXPECT--
+-int(-1)
++int(-3)
+diff --git a/ext/standard/tests/strings/bug79986.phpt b/ext/standard/tests/strings/bug79986.phpt
+new file mode 100644
+index 00000000..fcbc7214
+--- /dev/null
++++ b/ext/standard/tests/strings/bug79986.phpt
+@@ -0,0 +1,13 @@
++--TEST--
++Bug #79986 (str_ireplace bug with diacritics characters)
++--SKIPIF--
++<?php
++if (!setlocale(LC_ALL, 'de_DE.ISO-8859-1', 'de-DE')) die('skip German locale not available');
++?>
++--FILE--
++<?php
++setlocale(LC_ALL, 'de_DE.ISO-8859-1', 'de-DE');
++echo str_ireplace(["\xE4", "\xF6", "\xFC"], ['1', '2', '3'], "\xE4\xC4 \xF6\xD6 \xFC\xDC") . PHP_EOL;
++?>
++--EXPECT--
++11 22 33
+diff --git a/ext/standard/tests/strings/lcfirst.phpt b/ext/standard/tests/strings/lcfirst.phpt
+index 1abc31d0..d98b3a9c 100644
+--- a/ext/standard/tests/strings/lcfirst.phpt
++++ b/ext/standard/tests/strings/lcfirst.phpt
+@@ -130,7 +130,6 @@ var_dump(lcfirst(lcfirst("hello")));
+ echo "Done\n";
+ ?>
+ --EXPECTF--
+-Deprecated: Using ${var} in strings is deprecated, use {$var} instead in %s on line %d
+ #### Basic and Various operations ####
+ string(16) "tesTing lcfirst."
+ string(17) "1.testing lcfirst"
+diff --git a/ext/standard/tests/strings/locale_independent_float_to_string.phpt b/ext/standard/tests/strings/locale_independent_float_to_string.phpt
+index ffcb6b86..fc496c7e 100644
+--- a/ext/standard/tests/strings/locale_independent_float_to_string.phpt
++++ b/ext/standard/tests/strings/locale_independent_float_to_string.phpt
+@@ -2,7 +2,7 @@
+ Test that floats are converted to string locale independently
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
++
+ if (!setlocale
+     (LC_ALL,
+     "german", "de", "de_DE", "de_DE.ISO8859-1", "de_DE.ISO_8859-1", "de_DE.UTF-8",
+@@ -10,6 +10,7 @@ if (!setlocale
+     )) {
+     die("skip - locale needed for this test is not supported on this platform");
+ }
++
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/standard/tests/strings/printf_h_H.phpt b/ext/standard/tests/strings/printf_h_H.phpt
+index 01fe69ac..a4ee0b86 100644
+--- a/ext/standard/tests/strings/printf_h_H.phpt
++++ b/ext/standard/tests/strings/printf_h_H.phpt
+@@ -2,7 +2,6 @@
+ sprintf() %h and %H specifiers
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (!setlocale(LC_ALL, "de_DE.utf8")) die("skip de_DE.utf8 locale not available");
+ ?>
+ --FILE--
+diff --git a/ext/standard/tests/strings/setlocale_basic1.phpt b/ext/standard/tests/strings/setlocale_basic1.phpt
+index aeacba8c..3a1b4ace 100644
+--- a/ext/standard/tests/strings/setlocale_basic1.phpt
++++ b/ext/standard/tests/strings/setlocale_basic1.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : basic functionality - setting system locale to a specific
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_basic2.phpt b/ext/standard/tests/strings/setlocale_basic2.phpt
+index ab29b264..c4cf9097 100644
+--- a/ext/standard/tests/strings/setlocale_basic2.phpt
++++ b/ext/standard/tests/strings/setlocale_basic2.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : basic functionality - set locale using an array
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_basic3.phpt b/ext/standard/tests/strings/setlocale_basic3.phpt
+index de2e0bb4..37acde5f 100644
+--- a/ext/standard/tests/strings/setlocale_basic3.phpt
++++ b/ext/standard/tests/strings/setlocale_basic3.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : basic functionality - passing multiple locales as argument
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_error.phpt b/ext/standard/tests/strings/setlocale_error.phpt
+index 11d49fec..2d73b8d1 100644
+--- a/ext/standard/tests/strings/setlocale_error.phpt
++++ b/ext/standard/tests/strings/setlocale_error.phpt
+@@ -4,7 +4,6 @@ Test setlocale() function : error condition
+ error_reporting=E_ALL
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_variation1.phpt b/ext/standard/tests/strings/setlocale_variation1.phpt
+index 4f81fca7..3238e5f7 100644
+--- a/ext/standard/tests/strings/setlocale_variation1.phpt
++++ b/ext/standard/tests/strings/setlocale_variation1.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : usage variations - passing multiple valid/invalid locales as argument
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_variation3.phpt b/ext/standard/tests/strings/setlocale_variation3.phpt
+index 551eece0..2875795e 100644
+--- a/ext/standard/tests/strings/setlocale_variation3.phpt
++++ b/ext/standard/tests/strings/setlocale_variation3.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : usage variations - setting system locale = 0
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+diff --git a/ext/standard/tests/strings/setlocale_variation4.phpt b/ext/standard/tests/strings/setlocale_variation4.phpt
+index 91171543..540d9066 100644
+--- a/ext/standard/tests/strings/setlocale_variation4.phpt
++++ b/ext/standard/tests/strings/setlocale_variation4.phpt
+@@ -2,7 +2,6 @@
+ Test setlocale() function : usage variations - setting system locale as null
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (substr(PHP_OS, 0, 3) == 'WIN') {
+     die('skip Not valid for windows');
+ }
+
+-- 
+2.43.0

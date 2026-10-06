@@ -1,0 +1,600 @@
+From 81811b82 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0074] tests/tcg/aarch64: Add MTE gdbstub tests
+
+---
+diff --git a/tests/tcg/aarch64/gdbstub/test-mte.py b/tests/tcg/aarch64/gdbstub/test-mte.py
+new file mode 100644
+index 0000000000..2db0663c1a
+--- /dev/null
++++ b/tests/tcg/aarch64/gdbstub/test-mte.py
+@@ -0,0 +1,86 @@
++from __future__ import print_function
++#
++# Test GDB memory-tag commands that exercise the stubs for the qIsAddressTagged,
++# qMemTag, and QMemTag packets. Logical tag-only commands rely on local
++# operations, hence don't exercise any stub.
++#
++# The test consists in breaking just after a atag() call (which sets the
++# allocation tag -- see mte-8.c for details) and setting/getting tags in
++# different memory locations and ranges starting at the address of the array
++# 'a'.
++#
++# This is launched via tests/guest-debug/run-test.py
++#
++
++
++import gdb
++import re
++from test_gdbstub import main, report
++
++
++PATTERN_0 = "Memory tags for address 0x[0-9a-f]+ match \(0x[0-9a-f]+\)."
++PATTERN_1 = ".*(0x[0-9a-f]+)"
++
++
++def run_test():
++    gdb.execute("break 95", False, True)
++    gdb.execute("continue", False, True)
++    try:
++        # Test if we can check correctly that the allocation tag for
++        # array 'a' matches the logical tag after atag() is called.
++        co = gdb.execute("memory-tag check a", False, True)
++        tags_match = re.findall(PATTERN_0, co, re.MULTILINE)
++        if tags_match:
++            report(True, f"{tags_match[0]}")
++        else:
++            report(False, "Logical and allocation tags don't match!")
++
++        # Test allocation tag 'set and print' commands. Commands on logical
++        # tags rely on local operation and so don't exercise any stub.
++
++        # Set the allocation tag for the first granule (16 bytes) of
++        # address starting at 'a' address to a known value, i.e. 0x04.
++        gdb.execute("memory-tag set-allocation-tag a 1 04", False, True)
++
++        # Then set the allocation tag for the second granule to a known
++        # value, i.e. 0x06. This tests that contiguous tag granules are
++        # set correct and don't run over each other.
++        gdb.execute("memory-tag set-allocation-tag a+16 1 06", False, True)
++
++        # Read the known values back and check if they remain the same.
++
++        co = gdb.execute("memory-tag print-allocation-tag a", False, True)
++        first_tag = re.match(PATTERN_1, co)[1]
++
++        co = gdb.execute("memory-tag print-allocation-tag a+16", False, True)
++        second_tag = re.match(PATTERN_1, co)[1]
++
++        if first_tag == "0x4" and second_tag == "0x6":
++            report(True, "Allocation tags are correctly set/printed.")
++        else:
++            report(False, "Can't set/print allocation tags!")
++
++        # Now test fill pattern by setting a whole page with a pattern.
++        gdb.execute("memory-tag set-allocation-tag a 4096 0a0b", False, True)
++
++        # And read back the tags of the last two granules in page so
++        # we also test if the pattern is set correctly up to the end of
++        # the page.
++        co = gdb.execute("memory-tag print-allocation-tag a+4096-32", False, True)
++        tag = re.match(PATTERN_1, co)[1]
++
++        co = gdb.execute("memory-tag print-allocation-tag a+4096-16", False, True)
++        last_tag = re.match(PATTERN_1, co)[1]
++
++        if tag == "0xa" and last_tag == "0xb":
++            report(True, "Fill pattern is ok.")
++        else:
++            report(False, "Fill pattern failed!")
++
++    except gdb.error:
++        # This usually happens because a GDB version that does not
++        # support memory tagging was used to run the test.
++        report(False, "'memory-tag' command failed!")
++
++
++main(run_test, expected_arch="aarch64")
+diff --git a/tests/tcg/aarch64/mte-1.c b/tests/tcg/aarch64/mte-1.c
+index 88dcd617ad..146cad4a04 100644
+--- a/tests/tcg/aarch64/mte-1.c
++++ b/tests/tcg/aarch64/mte-1.c
+@@ -15,7 +15,7 @@ int main(int ac, char **av)
+     enable_mte(PR_MTE_TCF_NONE);
+     p0 = alloc_mte_mem(sizeof(*p0));
+ 
+-    asm("irg %0,%1,%2" : "=r"(p1) : "r"(p0), "r"(1));
++    asm("irg %0,%1,%2" : "=r"(p1) : "r"(p0), "r"(1l));
+     assert(p1 != p0);
+     asm("subp %0,%1,%2" : "=r"(c) : "r"(p0), "r"(p1));
+     assert(c == 0);
+diff --git a/tests/tcg/aarch64/mte-8.c b/tests/tcg/aarch64/mte-8.c
+new file mode 100644
+index 0000000000..808135ba43
+--- /dev/null
++++ b/tests/tcg/aarch64/mte-8.c
+@@ -0,0 +1,99 @@
++/*
++ * To be compiled with -march=armv8.5-a+memtag
++ *
++ * This test is adapted from a Linux test. Please see:
++ *
++ * https://www.kernel.org/doc/html/next/arch/arm64/memory-tagging-extension.html#example-of-correct-usage
++ */
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <sys/auxv.h>
++#include <sys/mman.h>
++#include <sys/prctl.h>
++#include <string.h>
++/*
++ * From arch/arm64/include/uapi/asm/hwcap.h
++ */
++#define HWCAP2_MTE              (1 << 18)
++
++/*
++ * From arch/arm64/include/uapi/asm/mman.h
++ */
++#define PROT_MTE                 0x20
++
++/*
++ * Insert a random logical tag into the given pointer.
++ */
++#define insert_random_tag(ptr) ({                   \
++    uint64_t __val;                                 \
++    asm("irg %0, %1" : "=r" (__val) : "r" (ptr));   \
++    __val;                                          \
++})
++
++/*
++ * Set the allocation tag on the destination address.
++ */
++#define set_tag(tagged_addr) do {                                      \
++        asm volatile("stg %0, [%0]" : : "r" (tagged_addr) : "memory"); \
++} while (0)
++
++
++int main(int argc, char *argv[])
++{
++    unsigned char *a;
++    unsigned long page_sz = sysconf(_SC_PAGESIZE);
++    unsigned long hwcap2 = getauxval(AT_HWCAP2);
++
++    /* check if MTE is present */
++    if (!(hwcap2 & HWCAP2_MTE)) {
++        return EXIT_FAILURE;
++    }
++
++    /*
++     * Enable the tagged address ABI, synchronous or asynchronous MTE
++     * tag check faults (based on per-CPU preference) and allow all
++     * non-zero tags in the randomly generated set.
++     */
++    if (prctl(PR_SET_TAGGED_ADDR_CTRL,
++              PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_SYNC | PR_MTE_TCF_ASYNC |
++              (0xfffe << PR_MTE_TAG_SHIFT),
++              0, 0, 0)) {
++        perror("prctl() failed");
++        return EXIT_FAILURE;
++    }
++
++    a = mmap(0, page_sz, PROT_READ | PROT_WRITE,
++             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++    if (a == MAP_FAILED) {
++        perror("mmap() failed");
++        return EXIT_FAILURE;
++    }
++
++    printf("a[] address is %p\n", a);
++
++    /*
++     * Enable MTE on the above anonymous mmap. The flag could be passed
++     * directly to mmap() and skip this step.
++     */
++    if (mprotect(a, page_sz, PROT_READ | PROT_WRITE | PROT_MTE)) {
++        perror("mprotect() failed");
++        return EXIT_FAILURE;
++    }
++
++    /* access with the default tag (0) */
++    a[0] = 1;
++    a[1] = 2;
++
++    printf("a[0] = %hhu a[1] = %hhu\n", a[0], a[1]);
++
++    /* set the logical and allocation tags */
++    a = (unsigned char *)insert_random_tag(a);
++    set_tag(a);
++
++    printf("%p\n", a);
++
++    return 0;
++}
+diff --git a/tests/tcg/aarch64/sme-fmopa-1.c b/tests/tcg/aarch64/sme-fmopa-1.c
+new file mode 100644
+index 0000000000..652c4ea090
+--- /dev/null
++++ b/tests/tcg/aarch64/sme-fmopa-1.c
+@@ -0,0 +1,63 @@
++/*
++ * SME outer product, 1 x 1.
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include <stdio.h>
++
++static void foo(float *dst)
++{
++    asm(".arch_extension sme\n\t"
++        "smstart\n\t"
++        "ptrue p0.s, vl4\n\t"
++        "fmov z0.s, #1.0\n\t"
++        /*
++         * An outer product of a vector of 1.0 by itself should be a matrix of 1.0.
++         * Note that we are using tile 1 here (za1.s) rather than tile 0.
++         */
++        "zero {za}\n\t"
++        "fmopa za1.s, p0/m, p0/m, z0.s, z0.s\n\t"
++        /*
++         * Read the first 4x4 sub-matrix of elements from tile 1:
++         * Note that za1h should be interchangeable here.
++         */
++        "mov w12, #0\n\t"
++        "mova z0.s, p0/m, za1v.s[w12, #0]\n\t"
++        "mova z1.s, p0/m, za1v.s[w12, #1]\n\t"
++        "mova z2.s, p0/m, za1v.s[w12, #2]\n\t"
++        "mova z3.s, p0/m, za1v.s[w12, #3]\n\t"
++        /*
++         * And store them to the input pointer (dst in the C code):
++         */
++        "st1w {z0.s}, p0, [%0]\n\t"
++        "add x0, x0, #16\n\t"
++        "st1w {z1.s}, p0, [x0]\n\t"
++        "add x0, x0, #16\n\t"
++        "st1w {z2.s}, p0, [x0]\n\t"
++        "add x0, x0, #16\n\t"
++        "st1w {z3.s}, p0, [x0]\n\t"
++        "smstop"
++        : : "r"(dst)
++        : "x12", "d0", "d1", "d2", "d3", "memory");
++}
++
++int main()
++{
++    float dst[16] = { };
++
++    foo(dst);
++
++    for (int i = 0; i < 16; i++) {
++        if (dst[i] != 1.0f) {
++            goto failure;
++        }
++    }
++    /* success */
++    return 0;
++
++ failure:
++    for (int i = 0; i < 16; i++) {
++        printf("%f%c", dst[i], i % 4 == 3 ? '\n' : ' ');
++    }
++    return 1;
++}
+diff --git a/tests/tcg/aarch64/sme-fmopa-2.c b/tests/tcg/aarch64/sme-fmopa-2.c
+new file mode 100644
+index 0000000000..15f0972d83
+--- /dev/null
++++ b/tests/tcg/aarch64/sme-fmopa-2.c
+@@ -0,0 +1,56 @@
++/*
++ * SME outer product, FZ vs FZ16
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include <stdint.h>
++#include <stdio.h>
++
++static void test_fmopa(uint32_t *result)
++{
++    asm(".arch_extension sme\n\t"
++        "smstart\n\t"               /* Z*, P* and ZArray cleared */
++        "ptrue p2.b, vl16\n\t"      /* Limit vector length to 16 */
++        "ptrue p5.b, vl16\n\t"
++        "movi d0, #0x00ff\n\t"      /* fp16 denormal */
++        "movi d16, #0x00ff\n\t"
++        "mov w15, #0x0001000000\n\t" /* FZ=1, FZ16=0 */
++        "msr fpcr, x15\n\t"
++        "fmopa za3.s, p2/m, p5/m, z16.h, z0.h\n\t"
++        "mov w15, #0\n\t"
++        "st1w {za3h.s[w15, 0]}, p2, [%0]\n\t"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 1]}, p2, [%0]\n\t"
++        "mov w15, #2\n\t"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 0]}, p2, [%0]\n\t"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 1]}, p2, [%0]\n\t"
++        "smstop"
++        : "+r"(result) :
++        : "x15", "x16", "p2", "p5", "d0", "d16", "memory");
++}
++
++int main(void)
++{
++    uint32_t result[4 * 4] = { };
++
++    test_fmopa(result);
++
++    if (result[0] != 0x2f7e0100) {
++        printf("Test failed: Incorrect output in first 4 bytes\n"
++               "Expected: %08x\n"
++               "Got:      %08x\n",
++               0x2f7e0100, result[0]);
++        return 1;
++    }
++
++    for (int i = 1; i < 16; ++i) {
++        if (result[i] != 0) {
++            printf("Test failed: Non-zero word at position %d\n", i);
++            return 1;
++        }
++    }
++
++    return 0;
++}
+diff --git a/tests/tcg/aarch64/sme-fmopa-3.c b/tests/tcg/aarch64/sme-fmopa-3.c
+new file mode 100644
+index 0000000000..3bfec34914
+--- /dev/null
++++ b/tests/tcg/aarch64/sme-fmopa-3.c
+@@ -0,0 +1,63 @@
++/*
++ * SME outer product, [ 1 2 3 4 ] squared
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include <stdio.h>
++#include <stdint.h>
++#include <string.h>
++#include <math.h>
++
++static const float i_1234[4] = {
++    1.0f, 2.0f, 3.0f, 4.0f
++};
++
++static const float expected[4] = {
++    4.515625f, 5.750000f, 6.984375f, 8.218750f
++};
++
++static void test_fmopa(float *result)
++{
++    asm(".arch_extension sme\n\t"
++        "smstart\n\t"               /* ZArray cleared */
++        "ptrue p2.b, vl16\n\t"      /* Limit vector length to 16 */
++        "ld1w {z0.s}, p2/z, [%1]\n\t"
++        "mov w15, #0\n\t"
++        "mov za3h.s[w15, 0], p2/m, z0.s\n\t"
++        "mov za3h.s[w15, 1], p2/m, z0.s\n\t"
++        "mov w15, #2\n\t"
++        "mov za3h.s[w15, 0], p2/m, z0.s\n\t"
++        "mov za3h.s[w15, 1], p2/m, z0.s\n\t"
++        "msr fpcr, xzr\n\t"
++        "fmopa za3.s, p2/m, p2/m, z0.h, z0.h\n\t"
++        "mov w15, #0\n\t"
++        "st1w {za3h.s[w15, 0]}, p2, [%0]\n"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 1]}, p2, [%0]\n\t"
++        "mov w15, #2\n\t"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 0]}, p2, [%0]\n\t"
++        "add %0, %0, #16\n\t"
++        "st1w {za3h.s[w15, 1]}, p2, [%0]\n\t"
++        "smstop"
++        : "+r"(result) : "r"(i_1234)
++        : "x15", "x16", "p2", "d0", "memory");
++}
++
++int main(void)
++{
++    float result[4 * 4] = { };
++    int ret = 0;
++
++    test_fmopa(result);
++
++    for (int i = 0; i < 4; i++) {
++        float actual = result[i];
++        if (fabsf(actual - expected[i]) > 0.001f) {
++            printf("Test failed at element %d: Expected %f, got %f\n",
++                   i, expected[i], actual);
++            ret = 1;
++        }
++    }
++    return ret;
++}
+diff --git a/tests/tcg/aarch64/test-2375.c b/tests/tcg/aarch64/test-2375.c
+new file mode 100644
+index 0000000000..84c7e7de71
+--- /dev/null
++++ b/tests/tcg/aarch64/test-2375.c
+@@ -0,0 +1,21 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++/* Copyright (c) 2024 Linaro Ltd */
++/* See https://gitlab.com/qemu-project/qemu/-/issues/2375 */
++
++#include <assert.h>
++
++int main(void)
++{
++   int r, z;
++
++   asm("msr fpcr, %2\n\t"
++       "fjcvtzs %w0, %d3\n\t"
++       "cset %1, eq"
++       : "=r"(r), "=r"(z)
++       : "r"(0x01000000L),      /* FZ = 1 */
++         "w"(0xfcff00L));       /* denormal */
++
++    assert(r == 0);
++    assert(z == 0);
++    return 0;
++}
+diff --git a/tests/tcg/arm/Makefile.softmmu-target b/tests/tcg/arm/Makefile.softmmu-target
+index 39e01ce49d..547063c08c 100644
+--- a/tests/tcg/arm/Makefile.softmmu-target
++++ b/tests/tcg/arm/Makefile.softmmu-target
+@@ -13,7 +13,7 @@ VPATH 		+= $(ARM_SRC)
+ test-armv6m-undef: test-armv6m-undef.S
+ 	$(CC) -mcpu=cortex-m0 -mfloat-abi=soft \
+ 		-Wl,--build-id=none -x assembler-with-cpp \
+-		$< -o $@ -nostdlib -N -static \
++		$< -o $@ -nostdlib -static \
+ 		-T $(ARM_SRC)/$@.ld
+ 
+ run-test-armv6m-undef: QEMU_OPTS=-semihosting-config enable=on,target=native,chardev=output -M microbit -kernel
+@@ -30,7 +30,7 @@ CRT_PATH=$(ARM_SRC)
+ LINK_SCRIPT=$(ARM_SRC)/kernel.ld
+ LDFLAGS=-Wl,-T$(LINK_SCRIPT)
+ CFLAGS+=-nostdlib -ggdb -O0 $(MINILIB_INC)
+-LDFLAGS+=-static -nostdlib -N $(CRT_OBJS) $(MINILIB_OBJS) -lgcc
++LDFLAGS+=-static -nostdlib $(CRT_OBJS) $(MINILIB_OBJS) -lgcc
+ 
+ # building head blobs
+ .PRECIOUS: $(CRT_OBJS)
+diff --git a/tests/tcg/arm/Makefile.target b/tests/tcg/arm/Makefile.target
+index 0a1965fce7..8e287191af 100644
+--- a/tests/tcg/arm/Makefile.target
++++ b/tests/tcg/arm/Makefile.target
+@@ -8,6 +8,11 @@ ARM_SRC=$(SRC_PATH)/tests/tcg/arm
+ # Set search path for all sources
+ VPATH 		+= $(ARM_SRC)
+ 
++config-cc.mak: Makefile
++	$(quiet-@)( \
++	    $(call cc-option,-fno-integrated-as, CROSS_CC_HAS_FNIA)) 3> config-cc.mak
++-include config-cc.mak
++
+ float_madds: CFLAGS+=-mfpu=neon-vfpv4
+ 
+ # Basic Hello World
+@@ -17,14 +22,15 @@ hello-arm: LDFLAGS+=-nostdlib
+ 
+ # IWMXT floating point extensions
+ ARM_TESTS += test-arm-iwmmxt
+-test-arm-iwmmxt: CFLAGS+=-marm -march=iwmmxt -mabi=aapcs -mfpu=fpv4-sp-d16
++# Clang assembler does not support IWMXT, so use the external assembler.
++test-arm-iwmmxt: CFLAGS += -marm -march=iwmmxt -mabi=aapcs -mfpu=fpv4-sp-d16 $(CROSS_CC_HAS_FNIA)
+ test-arm-iwmmxt: test-arm-iwmmxt.S
+ 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+ 
+ # Float-convert Tests
+ ARM_TESTS += fcvt
+-fcvt: LDFLAGS+=-lm
+-# fcvt: CFLAGS+=-march=armv8.2-a+fp16 -mfpu=neon-fp-armv8
++fcvt: LDFLAGS += -lm
++fcvt: CFLAGS += -march=armv8.2-a+fp16 -mfpu=neon-fp-armv8
+ run-fcvt: fcvt
+ 	$(call run-test,fcvt,$(QEMU) $<)
+ 	$(call diff-out,fcvt,$(ARM_SRC)/fcvt.ref)
+diff --git a/tests/tcg/arm/fcvt.c b/tests/tcg/arm/fcvt.c
+index 7ac47b564e..ecebbb0247 100644
+--- a/tests/tcg/arm/fcvt.c
++++ b/tests/tcg/arm/fcvt.c
+@@ -126,7 +126,7 @@ static void convert_single_to_half(void)
+         asm("vcvtb.f16.f32 %0, %1" : "=t" (output) : "x" (input));
+ #else
+         uint16_t output;
+-        asm("fcvt %h0, %s1" : "=w" (output) : "x" (input));
++        asm("fcvt %h0, %s1" : "=w" (output) : "w" (input));
+ #endif
+         print_half_number(i, output);
+     }
+@@ -149,7 +149,7 @@ static void convert_single_to_double(void)
+ #if defined(__arm__)
+         asm("vcvt.f64.f32 %P0, %1" : "=w" (output) : "t" (input));
+ #else
+-        asm("fcvt %d0, %s1" : "=w" (output) : "x" (input));
++        asm("fcvt %d0, %s1" : "=w" (output) : "w" (input));
+ #endif
+         print_double_number(i, output);
+     }
+@@ -244,7 +244,7 @@ static void convert_double_to_half(void)
+         /* asm("vcvtb.f16.f64 %0, %P1" : "=t" (output) : "x" (input)); */
+         output = input;
+ #else
+-        asm("fcvt %h0, %d1" : "=w" (output) : "x" (input));
++        asm("fcvt %h0, %d1" : "=w" (output) : "w" (input));
+ #endif
+         print_half_number(i, output);
+     }
+@@ -258,7 +258,7 @@ static void convert_double_to_single(void)
+ 
+     for (i = 0; i < ARRAY_SIZE(double_numbers); ++i) {
+         double input = double_numbers[i].d;
+-        uint32_t output;
++        float output;
+ 
+         feclearexcept(FE_ALL_EXCEPT);
+ 
+@@ -267,7 +267,7 @@ static void convert_double_to_single(void)
+ #if defined(__arm__)
+         asm("vcvt.f32.f64 %0, %P1" : "=w" (output) : "x" (input));
+ #else
+-        asm("fcvt %s0, %d1" : "=w" (output) : "x" (input));
++        asm("fcvt %s0, %d1" : "=w" (output) : "w" (input));
+ #endif
+ 
+         print_single_number(i, output);
+@@ -335,7 +335,7 @@ static void convert_half_to_double(void)
+         /* asm("vcvtb.f64.f16 %P0, %1" : "=w" (output) : "t" (input)); */
+         output = input;
+ #else
+-        asm("fcvt %d0, %h1" : "=w" (output) : "x" (input));
++        asm("fcvt %d0, %h1" : "=w" (output) : "w" (input));
+ #endif
+         print_double_number(i, output);
+     }
+@@ -355,9 +355,14 @@ static void convert_half_to_single(void)
+ 
+         print_half_number(i, input);
+ #if defined(__arm__)
+-        asm("vcvtb.f32.f16 %0, %1" : "=w" (output) : "x" ((uint32_t)input));
++        /*
++         * Clang refuses to allocate an integer to a fp register.
++         * Perform the move from a general register by hand.
++         */
++        asm("vmov %0, %1\n\t"
++            "vcvtb.f32.f16 %0, %0" : "=w" (output) : "r" (input));
+ #else
+-        asm("fcvt %s0, %h1" : "=w" (output) : "x" (input));
++        asm("fcvt %s0, %h1" : "=w" (output) : "w" (input));
+ #endif
+         print_single_number(i, output);
+     }
+@@ -380,7 +385,7 @@ static void convert_half_to_integer(void)
+         /* asm("vcvt.s32.f16 %0, %1" : "=t" (output) : "t" (input)); v8.2*/
+         output = input;
+ #else
+-        asm("fcvt %s0, %h1" : "=w" (output) : "x" (input));
++        asm("fcvt %s0, %h1" : "=w" (output) : "w" (input));
+ #endif
+         print_int64(i, output);
+     }
+@@ -422,10 +427,9 @@ int main(int argc, char *argv[argc])
+ 
+     /* And now with ARM alternative FP16 */
+ #if defined(__arm__)
+-    /* See glibc sysdeps/arm/fpu_control.h */
+-    asm("mrc p10, 7, r1, cr1, cr0, 0\n\t"
++    asm("vmrs r1, fpscr\n\t"
+         "orr r1, r1, %[flags]\n\t"
+-        "mcr p10, 7, r1, cr1, cr0, 0\n\t"
++        "vmsr fpscr, r1"
+         : /* no output */ : [flags] "n" (1 << 26) : "r1" );
+ #else
+     asm("mrs x1, fpcr\n\t"
+
+-- 
+2.43.0

@@ -1,0 +1,54 @@
+From fb70ad43 Mon Sep @@
+From: Vendor Sync <dev@null>
+Date: Thu, 01 Jan 2026 00:00:00 +0000
+Subject: [PATCH 0498] Fix use-after-free of constant name (part 51/53)
+
+---
+diff --git a/Zend/zend_ini.c b/Zend/zend_ini.c
+index 1aaac0ba..866e1b9c 100644
+--- a/Zend/zend_ini.c
++++ b/Zend/zend_ini.c
+@@ -948,14 +623,14 @@ ZEND_API ZEND_INI_MH(OnUpdateBool) /* {{{ */
+ ZEND_API ZEND_INI_MH(OnUpdateLong) /* {{{ */
+ {
+ 	zend_long *p = (zend_long *) ZEND_INI_GET_ADDR();
+-	*p = zend_ini_parse_quantity_warn(new_value, entry->name);
++	*p = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
+ 	return SUCCESS;
+ }
+ /* }}} */
+ 
+ ZEND_API ZEND_INI_MH(OnUpdateLongGEZero) /* {{{ */
+ {
+-	zend_long tmp = zend_ini_parse_quantity_warn(new_value, entry->name);
++	zend_long tmp = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
+ 	if (tmp < 0) {
+ 		return FAILURE;
+ 	}
+@@ -994,23 +669,3 @@ ZEND_API ZEND_INI_MH(OnUpdateStringUnempty) /* {{{ */
+ 	return SUCCESS;
+ }
+ /* }}} */
+-
+-ZEND_API ZEND_INI_MH(OnUpdateStr) /* {{{ */
+-{
+-	zend_string **p = (zend_string **) ZEND_INI_GET_ADDR();
+-	*p = new_value;
+-	return SUCCESS;
+-}
+-/* }}} */
+-
+-ZEND_API ZEND_INI_MH(OnUpdateStrNotEmpty) /* {{{ */
+-{
+-	if (new_value && ZSTR_LEN(new_value) == 0) {
+-		return FAILURE;
+-	}
+-
+-	zend_string **p = (zend_string **) ZEND_INI_GET_ADDR();
+-	*p = new_value;
+-	return SUCCESS;
+-}
+-/* }}} */
+
+-- 
+2.43.0

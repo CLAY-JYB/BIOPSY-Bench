@@ -1,0 +1,1743 @@
+diff --git a/hw/arm/smmu-common.c b/hw/arm/smmu-common.c
+index 1ce706bf94..d73ad62211 100644
+--- a/hw/arm/smmu-common.c
++++ b/hw/arm/smmu-common.c
+@@ -57,7 +57,7 @@ static gboolean smmu_iotlb_key_equal(gconstpointer v1, gconstpointer v2)
+            (k1->vmid == k2->vmid);
+ }
+ 
+-SMMUIOTLBKey smmu_get_iotlb_key(uint16_t asid, uint16_t vmid, uint64_t iova,
++SMMUIOTLBKey smmu_get_iotlb_key(int asid, int vmid, uint64_t iova,
+                                 uint8_t tg, uint8_t level)
+ {
+     SMMUIOTLBKey key = {.asid = asid, .vmid = vmid, .iova = iova,
+@@ -66,8 +66,10 @@ SMMUIOTLBKey smmu_get_iotlb_key(uint16_t asid, uint16_t vmid, uint64_t iova,
+     return key;
+ }
+ 
+-SMMUTLBEntry *smmu_iotlb_lookup(SMMUState *bs, SMMUTransCfg *cfg,
+-                                SMMUTransTableInfo *tt, hwaddr iova)
++static SMMUTLBEntry *smmu_iotlb_lookup_all_levels(SMMUState *bs,
++                                                  SMMUTransCfg *cfg,
++                                                  SMMUTransTableInfo *tt,
++                                                  hwaddr iova)
+ {
+     uint8_t tg = (tt->granule_sz - 10) / 2;
+     uint8_t inputsize = 64 - tt->tsz;
+@@ -88,6 +90,36 @@ SMMUTLBEntry *smmu_iotlb_lookup(SMMUState *bs, SMMUTransCfg *cfg,
+         }
+         level++;
+     }
++    return entry;
++}
++
++/**
++ * smmu_iotlb_lookup - Look up for a TLB entry.
++ * @bs: SMMU state which includes the TLB instance
++ * @cfg: Configuration of the translation
++ * @tt: Translation table info (granule and tsz)
++ * @iova: IOVA address to lookup
++ *
++ * returns a valid entry on success, otherwise NULL.
++ * In case of nested translation, tt can be updated to include
++ * the granule of the found entry as it might different from
++ * the IOVA granule.
++ */
++SMMUTLBEntry *smmu_iotlb_lookup(SMMUState *bs, SMMUTransCfg *cfg,
++                                SMMUTransTableInfo *tt, hwaddr iova)
++{
++    SMMUTLBEntry *entry = NULL;
++
++    entry = smmu_iotlb_lookup_all_levels(bs, cfg, tt, iova);
++    /*
++     * For nested translation also try the s2 granule, as the TLB will insert
++     * it if the size of s2 tlb entry was smaller.
++     */
++    if (!entry && (cfg->stage == SMMU_NESTED) &&
++        (cfg->s2cfg.granule_sz != tt->granule_sz)) {
++        tt->granule_sz = cfg->s2cfg.granule_sz;
++        entry = smmu_iotlb_lookup_all_levels(bs, cfg, tt, iova);
++    }
+ 
+     if (entry) {
+         cfg->iotlb_hits++;
+@@ -127,24 +159,35 @@ void smmu_iotlb_inv_all(SMMUState *s)
+     g_hash_table_remove_all(s->iotlb);
+ }
+ 
+-static gboolean smmu_hash_remove_by_asid(gpointer key, gpointer value,
+-                                         gpointer user_data)
++static gboolean smmu_hash_remove_by_asid_vmid(gpointer key, gpointer value,
++                                              gpointer user_data)
+ {
+-    uint16_t asid = *(uint16_t *)user_data;
++    SMMUIOTLBPageInvInfo *info = (SMMUIOTLBPageInvInfo *)user_data;
+     SMMUIOTLBKey *iotlb_key = (SMMUIOTLBKey *)key;
+ 
+-    return SMMU_IOTLB_ASID(*iotlb_key) == asid;
++    return (SMMU_IOTLB_ASID(*iotlb_key) == info->asid) &&
++           (SMMU_IOTLB_VMID(*iotlb_key) == info->vmid);
+ }
+ 
+ static gboolean smmu_hash_remove_by_vmid(gpointer key, gpointer value,
+                                          gpointer user_data)
+ {
+-    uint16_t vmid = *(uint16_t *)user_data;
++    int vmid = *(int *)user_data;
+     SMMUIOTLBKey *iotlb_key = (SMMUIOTLBKey *)key;
+ 
+     return SMMU_IOTLB_VMID(*iotlb_key) == vmid;
+ }
+ 
++static gboolean smmu_hash_remove_by_vmid_s1(gpointer key, gpointer value,
++                                            gpointer user_data)
++{
++    int vmid = *(int *)user_data;
++    SMMUIOTLBKey *iotlb_key = (SMMUIOTLBKey *)key;
++
++    return (SMMU_IOTLB_VMID(*iotlb_key) == vmid) &&
++           (SMMU_IOTLB_ASID(*iotlb_key) >= 0);
++}
++
+ static gboolean smmu_hash_remove_by_asid_vmid_iova(gpointer key, gpointer value,
+                                               gpointer user_data)
+ {
+@@ -163,6 +206,25 @@ static gboolean smmu_hash_remove_by_asid_vmid_iova(gpointer key, gpointer value,
+            ((entry->iova & ~info->mask) == info->iova);
+ }
+ 
++static gboolean smmu_hash_remove_by_vmid_ipa(gpointer key, gpointer value,
++                                             gpointer user_data)
++{
++    SMMUTLBEntry *iter = (SMMUTLBEntry *)value;
++    IOMMUTLBEntry *entry = &iter->entry;
++    SMMUIOTLBPageInvInfo *info = (SMMUIOTLBPageInvInfo *)user_data;
++    SMMUIOTLBKey iotlb_key = *(SMMUIOTLBKey *)key;
++
++    if (SMMU_IOTLB_ASID(iotlb_key) >= 0) {
++        /* This is a stage-1 address. */
++        return false;
++    }
++    if (info->vmid != SMMU_IOTLB_VMID(iotlb_key)) {
++        return false;
++    }
++    return ((info->iova & ~entry->addr_mask) == entry->iova) ||
++           ((entry->iova & ~info->mask) == info->iova);
++}
++
+ void smmu_iotlb_inv_iova(SMMUState *s, int asid, int vmid, dma_addr_t iova,
+                          uint8_t tg, uint64_t num_pages, uint8_t ttl)
+ {
+@@ -191,18 +253,57 @@ void smmu_iotlb_inv_iova(SMMUState *s, int asid, int vmid, dma_addr_t iova,
+                                 &info);
+ }
+ 
+-void smmu_iotlb_inv_asid(SMMUState *s, uint16_t asid)
++/*
++ * Similar to smmu_iotlb_inv_iova(), but for Stage-2, ASID is always -1,
++ * in Stage-1 invalidation ASID = -1, means don't care.
++ */
++void smmu_iotlb_inv_ipa(SMMUState *s, int vmid, dma_addr_t ipa, uint8_t tg,
++                        uint64_t num_pages, uint8_t ttl)
+ {
+-    trace_smmu_iotlb_inv_asid(asid);
+-    g_hash_table_foreach_remove(s->iotlb, smmu_hash_remove_by_asid, &asid);
++    uint8_t granule = tg ? tg * 2 + 10 : 12;
++    int asid = -1;
++
++   if (ttl && (num_pages == 1)) {
++        SMMUIOTLBKey key = smmu_get_iotlb_key(asid, vmid, ipa, tg, ttl);
++
++        if (g_hash_table_remove(s->iotlb, &key)) {
++            return;
++        }
++    }
++
++    SMMUIOTLBPageInvInfo info = {
++        .iova = ipa,
++        .vmid = vmid,
++        .mask = (num_pages << granule) - 1};
++
++    g_hash_table_foreach_remove(s->iotlb,
++                                smmu_hash_remove_by_vmid_ipa,
++                                &info);
++}
++
++void smmu_iotlb_inv_asid_vmid(SMMUState *s, int asid, int vmid)
++{
++    SMMUIOTLBPageInvInfo info = {
++        .asid = asid,
++        .vmid = vmid,
++    };
++
++    trace_smmu_iotlb_inv_asid_vmid(asid, vmid);
++    g_hash_table_foreach_remove(s->iotlb, smmu_hash_remove_by_asid_vmid, &info);
+ }
+ 
+-void smmu_iotlb_inv_vmid(SMMUState *s, uint16_t vmid)
++void smmu_iotlb_inv_vmid(SMMUState *s, int vmid)
+ {
+     trace_smmu_iotlb_inv_vmid(vmid);
+     g_hash_table_foreach_remove(s->iotlb, smmu_hash_remove_by_vmid, &vmid);
+ }
+ 
++inline void smmu_iotlb_inv_vmid_s1(SMMUState *s, int vmid)
++{
++    trace_smmu_iotlb_inv_vmid_s1(vmid);
++    g_hash_table_foreach_remove(s->iotlb, smmu_hash_remove_by_vmid_s1, &vmid);
++}
++
+ /* VMSAv8-64 Translation */
+ 
+ /**
+@@ -286,8 +387,41 @@ SMMUTransTableInfo *select_tt(SMMUTransCfg *cfg, dma_addr_t iova)
+     return NULL;
+ }
+ 
++/* Translate stage-1 table address using stage-2 page table. */
++static inline int translate_table_addr_ipa(SMMUState *bs,
++                                           dma_addr_t *table_addr,
++                                           SMMUTransCfg *cfg,
++                                           SMMUPTWEventInfo *info)
++{
++    dma_addr_t addr = *table_addr;
++    SMMUTLBEntry *cached_entry;
++    int asid;
++
++    /*
++     * The translation table walks performed from TTB0 or TTB1 are always
++     * performed in IPA space if stage 2 translations are enabled.
++     */
++    asid = cfg->asid;
++    cfg->stage = SMMU_STAGE_2;
++    cfg->asid = -1;
++    cached_entry = smmu_translate(bs, cfg, addr, IOMMU_RO, info);
++    cfg->asid = asid;
++    cfg->stage = SMMU_NESTED;
++
++    if (cached_entry) {
++        *table_addr = CACHED_ENTRY_TO_ADDR(cached_entry, addr);
++        return 0;
++    }
++
++    info->stage = SMMU_STAGE_2;
++    info->addr = addr;
++    info->is_ipa_descriptor = true;
++    return -EINVAL;
++}
++
+ /**
+  * smmu_ptw_64_s1 - VMSAv8-64 Walk of the page tables for a given IOVA
++ * @bs: smmu state which includes TLB instance
+  * @cfg: translation config
+  * @iova: iova to translate
+  * @perm: access type
+@@ -299,12 +433,12 @@ SMMUTransTableInfo *select_tt(SMMUTransCfg *cfg, dma_addr_t iova)
+  * Upon success, @tlbe is filled with translated_addr and entry
+  * permission rights.
+  */
+-static int smmu_ptw_64_s1(SMMUTransCfg *cfg,
++static int smmu_ptw_64_s1(SMMUState *bs, SMMUTransCfg *cfg,
+                           dma_addr_t iova, IOMMUAccessFlags perm,
+                           SMMUTLBEntry *tlbe, SMMUPTWEventInfo *info)
+ {
+     dma_addr_t baseaddr, indexmask;
+-    int stage = cfg->stage;
++    SMMUStage stage = cfg->stage;
+     SMMUTransTableInfo *tt = select_tt(cfg, iova);
+     uint8_t level, granule_sz, inputsize, stride;
+ 
+@@ -318,7 +452,8 @@ static int smmu_ptw_64_s1(SMMUTransCfg *cfg,
+     inputsize = 64 - tt->tsz;
+     level = 4 - (inputsize - 4) / stride;
+     indexmask = VMSA_IDXMSK(inputsize, stride, level);
+-    baseaddr = extract64(tt->ttb, 0, 48);
++
++    baseaddr = extract64(tt->ttb, 0, cfg->oas);
+     baseaddr &= ~indexmask;
+ 
+     while (level < VMSA_LEVELS) {
+@@ -349,6 +484,11 @@ static int smmu_ptw_64_s1(SMMUTransCfg *cfg,
+                 goto error;
+             }
+             baseaddr = get_table_pte_address(pte, granule_sz);
++            if (cfg->stage == SMMU_NESTED) {
++                if (translate_table_addr_ipa(bs, &baseaddr, cfg, info)) {
++                    goto error;
++                }
++            }
+             level++;
+             continue;
+         } else if (is_page_pte(pte, level)) {
+@@ -381,10 +521,21 @@ static int smmu_ptw_64_s1(SMMUTransCfg *cfg,
+             goto error;
+         }
+ 
++        /*
++         * The address output from the translation causes a stage 1 Address
++         * Size fault if it exceeds the range of the effective IPA size for
++         * the given CD.
++         */
++        if (gpa >= (1ULL << cfg->oas)) {
++            info->type = SMMU_PTW_ERR_ADDR_SIZE;
++            goto error;
++        }
++
+         tlbe->entry.translated_addr = gpa;
+         tlbe->entry.iova = iova & ~mask;
+         tlbe->entry.addr_mask = mask;
+-        tlbe->entry.perm = PTE_AP_TO_PERM(ap);
++        tlbe->parent_perm = PTE_AP_TO_PERM(ap);
++        tlbe->entry.perm = tlbe->parent_perm;
+         tlbe->level = level;
+         tlbe->granule = granule_sz;
+         return 0;
+@@ -392,7 +543,7 @@ static int smmu_ptw_64_s1(SMMUTransCfg *cfg,
+     info->type = SMMU_PTW_ERR_TRANSLATION;
+ 
+ error:
+-    info->stage = 1;
++    info->stage = SMMU_STAGE_1;
+     tlbe->entry.perm = IOMMU_NONE;
+     return -EINVAL;
+ }
+@@ -415,7 +566,7 @@ static int smmu_ptw_64_s2(SMMUTransCfg *cfg,
+                           dma_addr_t ipa, IOMMUAccessFlags perm,
+                           SMMUTLBEntry *tlbe, SMMUPTWEventInfo *info)
+ {
+-    const int stage = 2;
++    const SMMUStage stage = SMMU_STAGE_2;
+     int granule_sz = cfg->s2cfg.granule_sz;
+     /* ARM DDI0487I.a: Table D8-7. */
+     int inputsize = 64 - cfg->s2cfg.tsz;
+@@ -426,8 +577,8 @@ static int smmu_ptw_64_s2(SMMUTransCfg *cfg,
+      * Get the ttb from concatenated structure.
+      * The offset is the idx * size of each ttb(number of ptes * (sizeof(pte))
+      */
+-    uint64_t baseaddr = extract64(cfg->s2cfg.vttb, 0, 48) + (1 << stride) *
+-                                  idx * sizeof(uint64_t);
++    uint64_t baseaddr = extract64(cfg->s2cfg.vttb, 0, cfg->s2cfg.eff_ps) +
++                                  (1 << stride) * idx * sizeof(uint64_t);
+     dma_addr_t indexmask = VMSA_IDXMSK(inputsize, stride, level);
+ 
+     baseaddr &= ~indexmask;
+@@ -438,7 +589,7 @@ static int smmu_ptw_64_s2(SMMUTransCfg *cfg,
+      */
+     if (ipa >= (1ULL << inputsize)) {
+         info->type = SMMU_PTW_ERR_TRANSLATION;
+-        goto error;
++        goto error_ipa;
+     }
+ 
+     while (level < VMSA_LEVELS) {
+@@ -484,13 +635,13 @@ static int smmu_ptw_64_s2(SMMUTransCfg *cfg,
+          */
+         if (!PTE_AF(pte) && !cfg->s2cfg.affd) {
+             info->type = SMMU_PTW_ERR_ACCESS;
+-            goto error;
++            goto error_ipa;
+         }
+ 
+         s2ap = PTE_AP(pte);
+         if (is_permission_fault_s2(s2ap, perm)) {
+             info->type = SMMU_PTW_ERR_PERMISSION;
+-            goto error;
++            goto error_ipa;
+         }
+ 
+         /*
+@@ -499,28 +650,54 @@ static int smmu_ptw_64_s2(SMMUTransCfg *cfg,
+          */
+         if (gpa >= (1ULL << cfg->s2cfg.eff_ps)) {
+             info->type = SMMU_PTW_ERR_ADDR_SIZE;
+-            goto error;
++            goto error_ipa;
+         }
+ 
+         tlbe->entry.translated_addr = gpa;
+         tlbe->entry.iova = ipa & ~mask;
+         tlbe->entry.addr_mask = mask;
+-        tlbe->entry.perm = s2ap;
++        tlbe->parent_perm = s2ap;
++        tlbe->entry.perm = tlbe->parent_perm;
+         tlbe->level = level;
+         tlbe->granule = granule_sz;
+         return 0;
+     }
+     info->type = SMMU_PTW_ERR_TRANSLATION;
+ 
++error_ipa:
++    info->addr = ipa;
+ error:
+-    info->stage = 2;
++    info->stage = SMMU_STAGE_2;
+     tlbe->entry.perm = IOMMU_NONE;
+     return -EINVAL;
+ }
+ 
++/*
++ * combine S1 and S2 TLB entries into a single entry.
++ * As a result the S1 entry is overriden with combined data.
++ */
++static void combine_tlb(SMMUTLBEntry *tlbe, SMMUTLBEntry *tlbe_s2,
++                        dma_addr_t iova, SMMUTransCfg *cfg)
++{
++    if (tlbe_s2->entry.addr_mask < tlbe->entry.addr_mask) {
++        tlbe->entry.addr_mask = tlbe_s2->entry.addr_mask;
++        tlbe->granule = tlbe_s2->granule;
++        tlbe->level = tlbe_s2->level;
++    }
++
++    tlbe->entry.translated_addr = CACHED_ENTRY_TO_ADDR(tlbe_s2,
++                                    tlbe->entry.translated_addr);
++
++    tlbe->entry.iova = iova & ~tlbe->entry.addr_mask;
++    /* parent_perm has s2 perm while perm keeps s1 perm. */
++    tlbe->parent_perm = tlbe_s2->entry.perm;
++    return;
++}
++
+ /**
+  * smmu_ptw - Walk the page tables for an IOVA, according to @cfg
+  *
++ * @bs: smmu state which includes TLB instance
+  * @cfg: translation configuration
+  * @iova: iova to translate
+  * @perm: tentative access type
+@@ -529,12 +706,16 @@ error:
+  *
+  * return 0 on success
+  */
+-int smmu_ptw(SMMUTransCfg *cfg, dma_addr_t iova, IOMMUAccessFlags perm,
+-             SMMUTLBEntry *tlbe, SMMUPTWEventInfo *info)
++int smmu_ptw(SMMUState *bs, SMMUTransCfg *cfg, dma_addr_t iova,
++             IOMMUAccessFlags perm, SMMUTLBEntry *tlbe, SMMUPTWEventInfo *info)
+ {
+-    if (cfg->stage == 1) {
+-        return smmu_ptw_64_s1(cfg, iova, perm, tlbe, info);
+-    } else if (cfg->stage == 2) {
++    int ret;
++    SMMUTLBEntry tlbe_s2;
++    dma_addr_t ipa;
++
++    if (cfg->stage == SMMU_STAGE_1) {
++        return smmu_ptw_64_s1(bs, cfg, iova, perm, tlbe, info);
++    } else if (cfg->stage == SMMU_STAGE_2) {
+         /*
+          * If bypassing stage 1(or unimplemented), the input address is passed
+          * directly to stage 2 as IPA. If the input address of a transaction
+@@ -543,7 +724,7 @@ int smmu_ptw(SMMUTransCfg *cfg, dma_addr_t iova, IOMMUAccessFlags perm,
+          */
+         if (iova >= (1ULL << cfg->oas)) {
+             info->type = SMMU_PTW_ERR_ADDR_SIZE;
+-            info->stage = 1;
++            info->stage = SMMU_STAGE_1;
+             tlbe->entry.perm = IOMMU_NONE;
+             return -EINVAL;
+         }
+@@ -551,7 +732,72 @@ int smmu_ptw(SMMUTransCfg *cfg, dma_addr_t iova, IOMMUAccessFlags perm,
+         return smmu_ptw_64_s2(cfg, iova, perm, tlbe, info);
+     }
+ 
+-    g_assert_not_reached();
++    /* SMMU_NESTED. */
++    ret = smmu_ptw_64_s1(bs, cfg, iova, perm, tlbe, info);
++    if (ret) {
++        return ret;
++    }
++
++    ipa = CACHED_ENTRY_TO_ADDR(tlbe, iova);
++    ret = smmu_ptw_64_s2(cfg, ipa, perm, &tlbe_s2, info);
++    if (ret) {
++        return ret;
++    }
++
++    combine_tlb(tlbe, &tlbe_s2, iova, cfg);
++    return 0;
++}
++
++SMMUTLBEntry *smmu_translate(SMMUState *bs, SMMUTransCfg *cfg, dma_addr_t addr,
++                             IOMMUAccessFlags flag, SMMUPTWEventInfo *info)
++{
++    SMMUTLBEntry *cached_entry = NULL;
++    SMMUTransTableInfo *tt;
++    int status;
++
++    /*
++     * Combined attributes used for TLB lookup, holds the attributes for
++     * the input stage.
++     */
++    SMMUTransTableInfo tt_combined;
++
++    if (cfg->stage == SMMU_STAGE_2) {
++        /* Stage2. */
++        tt_combined.granule_sz = cfg->s2cfg.granule_sz;
++        tt_combined.tsz = cfg->s2cfg.tsz;
++    } else {
++        /* Select stage1 translation table. */
++        tt = select_tt(cfg, addr);
++        if (!tt) {
++            info->type = SMMU_PTW_ERR_TRANSLATION;
++            info->stage = SMMU_STAGE_1;
++            return NULL;
++        }
++        tt_combined.granule_sz = tt->granule_sz;
++        tt_combined.tsz = tt->tsz;
++    }
++
++    cached_entry = smmu_iotlb_lookup(bs, cfg, &tt_combined, addr);
++    if (cached_entry) {
++        if ((flag & IOMMU_WO) && !(cached_entry->entry.perm &
++            cached_entry->parent_perm & IOMMU_WO)) {
++            info->type = SMMU_PTW_ERR_PERMISSION;
++            info->stage = !(cached_entry->entry.perm & IOMMU_WO) ?
++                          SMMU_STAGE_1 :
++                          SMMU_STAGE_2;
++            return NULL;
++        }
++        return cached_entry;
++    }
++
++    cached_entry = g_new0(SMMUTLBEntry, 1);
++    status = smmu_ptw(bs, cfg, addr, flag, cached_entry, info);
++    if (status) {
++            g_free(cached_entry);
++            return NULL;
++    }
++    smmu_iotlb_insert(bs, cfg, cached_entry);
++    return cached_entry;
+ }
+ 
+ /**
+@@ -620,20 +866,16 @@ static const PCIIOMMUOps smmu_ops = {
+     .get_address_space = smmu_find_add_as,
+ };
+ 
+-IOMMUMemoryRegion *smmu_iommu_mr(SMMUState *s, uint32_t sid)
++SMMUDevice *smmu_find_sdev(SMMUState *s, uint32_t sid)
+ {
+     uint8_t bus_n, devfn;
+     SMMUPciBus *smmu_bus;
+-    SMMUDevice *smmu;
+ 
+     bus_n = PCI_BUS_NUM(sid);
+     smmu_bus = smmu_find_smmu_pcibus(s, bus_n);
+     if (smmu_bus) {
+         devfn = SMMU_PCI_DEVFN(sid);
+-        smmu = smmu_bus->pbdev[devfn];
+-        if (smmu) {
+-            return &smmu->iommu;
+-        }
++        return smmu_bus->pbdev[devfn];
+     }
+     return NULL;
+ }
+diff --git a/hw/arm/smmuv3-internal.h b/hw/arm/smmuv3-internal.h
+index e4dd11e1e6..0ebf2eebcf 100644
+--- a/hw/arm/smmuv3-internal.h
++++ b/hw/arm/smmuv3-internal.h
+@@ -32,6 +32,12 @@ typedef enum SMMUTranslationStatus {
+     SMMU_TRANS_SUCCESS,
+ } SMMUTranslationStatus;
+ 
++typedef enum SMMUTranslationClass {
++    SMMU_CLASS_CD,
++    SMMU_CLASS_TT,
++    SMMU_CLASS_IN,
++} SMMUTranslationClass;
++
+ /* MMIO Registers */
+ 
+ REG32(IDR0,                0x0)
+@@ -596,19 +602,6 @@ static inline int oas2bits(int oas_field)
+     return -1;
+ }
+ 
+-static inline int pa_range(STE *ste)
+-{
+-    int oas_field = MIN(STE_S2PS(ste), SMMU_IDR5_OAS);
+-
+-    if (!STE_S2AA64(ste)) {
+-        return 40;
+-    }
+-
+-    return oas2bits(oas_field);
+-}
+-
+-#define MAX_PA(ste) ((1 << pa_range(ste)) - 1)
+-
+ /* CD fields */
+ 
+ #define CD_VALID(x)   extract32((x)->word[0], 31, 1)
+diff --git a/hw/arm/smmuv3.c b/hw/arm/smmuv3.c
+index 2d1e0d55ec..3971976389 100644
+--- a/hw/arm/smmuv3.c
++++ b/hw/arm/smmuv3.c
+@@ -34,8 +34,10 @@
+ #include "smmuv3-internal.h"
+ #include "smmu-internal.h"
+ 
+-#define PTW_RECORD_FAULT(cfg)   (((cfg)->stage == 1) ? (cfg)->record_faults : \
+-                                 (cfg)->s2cfg.record_faults)
++#define PTW_RECORD_FAULT(ptw_info, cfg) (((ptw_info).stage == SMMU_STAGE_1 && \
++                                        (cfg)->record_faults) || \
++                                        ((ptw_info).stage == SMMU_STAGE_2 && \
++                                        (cfg)->s2cfg.record_faults))
+ 
+ /**
+  * smmuv3_trigger_irq - pulse @irq if enabled and update
+@@ -259,6 +261,9 @@ static void smmuv3_init_regs(SMMUv3State *s)
+     /* Based on sys property, the stages supported in smmu will be advertised.*/
+     if (s->stage && !strcmp("2", s->stage)) {
+         s->idr[0] = FIELD_DP32(s->idr[0], IDR0, S2P, 1);
++    } else if (s->stage && !strcmp("nested", s->stage)) {
++        s->idr[0] = FIELD_DP32(s->idr[0], IDR0, S1P, 1);
++        s->idr[0] = FIELD_DP32(s->idr[0], IDR0, S2P, 1);
+     } else {
+         s->idr[0] = FIELD_DP32(s->idr[0], IDR0, S1P, 1);
+     }
+@@ -336,14 +341,35 @@ static int smmu_get_ste(SMMUv3State *s, dma_addr_t addr, STE *buf,
+ 
+ }
+ 
++static SMMUTranslationStatus smmuv3_do_translate(SMMUv3State *s, hwaddr addr,
++                                                 SMMUTransCfg *cfg,
++                                                 SMMUEventInfo *event,
++                                                 IOMMUAccessFlags flag,
++                                                 SMMUTLBEntry **out_entry,
++                                                 SMMUTranslationClass class);
+ /* @ssid > 0 not supported yet */
+-static int smmu_get_cd(SMMUv3State *s, STE *ste, uint32_t ssid,
+-                       CD *buf, SMMUEventInfo *event)
++static int smmu_get_cd(SMMUv3State *s, STE *ste, SMMUTransCfg *cfg,
++                       uint32_t ssid, CD *buf, SMMUEventInfo *event)
+ {
+     dma_addr_t addr = STE_CTXPTR(ste);
+     int ret, i;
++    SMMUTranslationStatus status;
++    SMMUTLBEntry *entry;
+ 
+     trace_smmuv3_get_cd(addr);
++
++    if (cfg->stage == SMMU_NESTED) {
++        status = smmuv3_do_translate(s, addr, cfg, event,
++                                     IOMMU_RO, &entry, SMMU_CLASS_CD);
++
++        /* Same PTW faults are reported but with CLASS = CD. */
++        if (status != SMMU_TRANS_SUCCESS) {
++            return -EINVAL;
++        }
++
++        addr = CACHED_ENTRY_TO_ADDR(entry, addr);
++    }
++
+     /* TODO: guarantee 64-bit single-copy atomicity */
+     ret = dma_memory_read(&address_space_memory, addr, buf, sizeof(*buf),
+                           MEMTXATTRS_UNSPECIFIED);
+@@ -376,10 +402,10 @@ static bool s2t0sz_valid(SMMUTransCfg *cfg)
+     }
+ 
+     if (cfg->s2cfg.granule_sz == 16) {
+-        return (cfg->s2cfg.tsz >= 64 - oas2bits(SMMU_IDR5_OAS));
++        return (cfg->s2cfg.tsz >= 64 - cfg->s2cfg.eff_ps);
+     }
+ 
+-    return (cfg->s2cfg.tsz >= MAX(64 - oas2bits(SMMU_IDR5_OAS), 16));
++    return (cfg->s2cfg.tsz >= MAX(64 - cfg->s2cfg.eff_ps, 16));
+ }
+ 
+ /*
+@@ -400,9 +426,10 @@ static bool s2_pgtable_config_valid(uint8_t sl0, uint8_t t0sz, uint8_t gran)
+     return nr_concat <= VMSA_MAX_S2_CONCAT;
+ }
+ 
+-static int decode_ste_s2_cfg(SMMUTransCfg *cfg, STE *ste)
++static int decode_ste_s2_cfg(SMMUv3State *s, SMMUTransCfg *cfg,
++                             STE *ste)
+ {
+-    cfg->stage = 2;
++    uint8_t oas = FIELD_EX32(s->idr[5], IDR5, OAS);
+ 
+     if (STE_S2AA64(ste) == 0x0) {
+         qemu_log_mask(LOG_UNIMP,
+@@ -436,7 +463,15 @@ static int decode_ste_s2_cfg(SMMUTransCfg *cfg, STE *ste)
+     }
+ 
+     /* For AA64, The effective S2PS size is capped to the OAS. */
+-    cfg->s2cfg.eff_ps = oas2bits(MIN(STE_S2PS(ste), SMMU_IDR5_OAS));
++    cfg->s2cfg.eff_ps = oas2bits(MIN(STE_S2PS(ste), oas));
++    /*
++     * For SMMUv3.1 and later, when OAS == IAS == 52, the stage 2 input
++     * range is further limited to 48 bits unless STE.S2TG indicates a
++     * 64KB granule.
++     */
++    if (cfg->s2cfg.granule_sz != 16) {
++        cfg->s2cfg.eff_ps = MIN(cfg->s2cfg.eff_ps, 48);
++    }
+     /*
+      * It is ILLEGAL for the address in S2TTB to be outside the range
+      * described by the effective S2PS value.
+@@ -486,11 +521,33 @@ bad_ste:
+     return -EINVAL;
+ }
+ 
++static void decode_ste_config(SMMUTransCfg *cfg, uint32_t config)
++{
++
++    if (STE_CFG_ABORT(config)) {
++        cfg->aborted = true;
++        return;
++    }
++    if (STE_CFG_BYPASS(config)) {
++        cfg->bypassed = true;
++        return;
++    }
++
++    if (STE_CFG_S1_ENABLED(config)) {
++        cfg->stage = SMMU_STAGE_1;
++    }
++
++    if (STE_CFG_S2_ENABLED(config)) {
++        cfg->stage |= SMMU_STAGE_2;
++    }
++}
++
+ /* Returns < 0 in case of invalid STE, 0 otherwise */
+ static int decode_ste(SMMUv3State *s, SMMUTransCfg *cfg,
+                       STE *ste, SMMUEventInfo *event)
+ {
+     uint32_t config;
++    uint8_t oas = FIELD_EX32(s->idr[5], IDR5, OAS);
+     int ret;
+ 
+     if (!STE_VALID(ste)) {
+@@ -502,13 +559,9 @@ static int decode_ste(SMMUv3State *s, SMMUTransCfg *cfg,
+ 
+     config = STE_CONFIG(ste);
+ 
+-    if (STE_CFG_ABORT(config)) {
+-        cfg->aborted = true;
+-        return 0;
+-    }
++    decode_ste_config(cfg, config);
+ 
+-    if (STE_CFG_BYPASS(config)) {
+-        cfg->bypassed = true;
++    if (cfg->aborted || cfg->bypassed) {
+         return 0;
+     }
+ 
+@@ -538,8 +591,8 @@ static int decode_ste(SMMUv3State *s, SMMUTransCfg *cfg,
+          * Stage-1 OAS defaults to OAS even if not enabled as it would be used
+          * in input address check for stage-2.
+          */
+-        cfg->oas = oas2bits(SMMU_IDR5_OAS);
+-        ret = decode_ste_s2_cfg(cfg, ste);
++        cfg->oas = oas2bits(oas);
++        ret = decode_ste_s2_cfg(s, cfg, ste);
+         if (ret) {
+             goto bad_ste;
+         }
+@@ -658,10 +711,14 @@ static int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste,
+     return 0;
+ }
+ 
+-static int decode_cd(SMMUTransCfg *cfg, CD *cd, SMMUEventInfo *event)
++static int decode_cd(SMMUv3State *s, SMMUTransCfg *cfg,
++                     CD *cd, SMMUEventInfo *event)
+ {
+     int ret = -EINVAL;
+     int i;
++    SMMUTranslationStatus status;
++    SMMUTLBEntry *entry;
++    uint8_t oas = FIELD_EX32(s->idr[5], IDR5, OAS);
+ 
+     if (!CD_VALID(cd) || !CD_AARCH64(cd)) {
+         goto bad_cd;
+@@ -678,10 +735,9 @@ static int decode_cd(SMMUTransCfg *cfg, CD *cd, SMMUEventInfo *event)
+ 
+     /* we support only those at the moment */
+     cfg->aa64 = true;
+-    cfg->stage = 1;
+ 
+     cfg->oas = oas2bits(CD_IPS(cd));
+-    cfg->oas = MIN(oas2bits(SMMU_IDR5_OAS), cfg->oas);
++    cfg->oas = MIN(oas2bits(oas), cfg->oas);
+     cfg->tbi = CD_TBI(cd);
+     cfg->asid = CD_ASID(cd);
+     cfg->affd = CD_AFFD(cd);
+@@ -710,11 +766,36 @@ static int decode_cd(SMMUTransCfg *cfg, CD *cd, SMMUEventInfo *event)
+             goto bad_cd;
+         }
+ 
++        /*
++         * An address greater than 48 bits in size can only be output from a
++         * TTD when, in SMMUv3.1 and later, the effective IPS is 52 and a 64KB
++         * granule is in use for that translation table
++         */
++        if (tt->granule_sz != 16) {
++            cfg->oas = MIN(cfg->oas, 48);
++        }
+         tt->tsz = tsz;
+         tt->ttb = CD_TTB(cd, i);
++
+         if (tt->ttb & ~(MAKE_64BIT_MASK(0, cfg->oas))) {
+             goto bad_cd;
+         }
++
++        /* Translate the TTBx, from IPA to PA if nesting is enabled. */
++        if (cfg->stage == SMMU_NESTED) {
++            status = smmuv3_do_translate(s, tt->ttb, cfg, event, IOMMU_RO,
++                                         &entry, SMMU_CLASS_TT);
++            /*
++             * Same PTW faults are reported but with CLASS = TT.
++             * If TTBx is larger than the effective stage 1 output addres
++             * size, it reports C_BAD_CD, which is handled by the above case.
++             */
++            if (status != SMMU_TRANS_SUCCESS) {
++                return -EINVAL;
++            }
++            tt->ttb = CACHED_ENTRY_TO_ADDR(entry, tt->ttb);
++        }
++
+         tt->had = CD_HAD(cd, i);
+         trace_smmuv3_decode_cd_tt(i, tt->tsz, tt->ttb, tt->granule_sz, tt->had);
+     }
+@@ -762,16 +843,16 @@ static int smmuv3_decode_config(IOMMUMemoryRegion *mr, SMMUTransCfg *cfg,
+         return ret;
+     }
+ 
+-    if (cfg->aborted || cfg->bypassed || (cfg->stage == 2)) {
++    if (cfg->aborted || cfg->bypassed || (cfg->stage == SMMU_STAGE_2)) {
+         return 0;
+     }
+ 
+-    ret = smmu_get_cd(s, &ste, 0 /* ssid */, &cd, event);
++    ret = smmu_get_cd(s, &ste, cfg, 0 /* ssid */, &cd, event);
+     if (ret) {
+         return ret;
+     }
+ 
+-    return decode_cd(cfg, &cd, event);
++    return decode_cd(s, cfg, &cd, event);
+ }
+ 
+ /**
+@@ -826,6 +907,133 @@ static void smmuv3_flush_config(SMMUDevice *sdev)
+     g_hash_table_remove(bc->configs, sdev);
+ }
+ 
++/* Do translation with TLB lookup. */
++static SMMUTranslationStatus smmuv3_do_translate(SMMUv3State *s, hwaddr addr,
++                                                 SMMUTransCfg *cfg,
++                                                 SMMUEventInfo *event,
++                                                 IOMMUAccessFlags flag,
++                                                 SMMUTLBEntry **out_entry,
++                                                 SMMUTranslationClass class)
++{
++    SMMUPTWEventInfo ptw_info = {};
++    SMMUState *bs = ARM_SMMU(s);
++    SMMUTLBEntry *cached_entry = NULL;
++    int asid, stage;
++    bool desc_s2_translation = class != SMMU_CLASS_IN;
++
++    /*
++     * The function uses the argument class to identify which stage is used:
++     * - CLASS = IN: Means an input translation, determine the stage from STE.
++     * - CLASS = CD: Means the addr is an IPA of the CD, and it would be
++     *   translated using the stage-2.
++     * - CLASS = TT: Means the addr is an IPA of the stage-1 translation table
++     *   and it would be translated using the stage-2.
++     * For the last 2 cases instead of having intrusive changes in the common
++     * logic, we modify the cfg to be a stage-2 translation only in case of
++     * nested, and then restore it after.
++     */
++    if (desc_s2_translation) {
++        asid = cfg->asid;
++        stage = cfg->stage;
++        cfg->asid = -1;
++        cfg->stage = SMMU_STAGE_2;
++    }
++
++    cached_entry = smmu_translate(bs, cfg, addr, flag, &ptw_info);
++
++    if (desc_s2_translation) {
++        cfg->asid = asid;
++        cfg->stage = stage;
++    }
++
++    if (!cached_entry) {
++        /* All faults from PTW has S2 field. */
++        event->u.f_walk_eabt.s2 = (ptw_info.stage == SMMU_STAGE_2);
++        /*
++         * Fault class is set as follows based on "class" input to
++         * the function and to "ptw_info" from "smmu_translate()"
++         * For stage-1:
++         *   - EABT => CLASS_TT (hardcoded)
++         *   - other events => CLASS_IN (input to function)
++         * For stage-2 => CLASS_IN (input to function)
++         * For nested, for all events:
++         *  - CD fetch => CLASS_CD (input to function)
++         *  - walking stage 1 translation table  => CLASS_TT (from
++         *    is_ipa_descriptor or input in case of TTBx)
++         *  - s2 translation => CLASS_IN (input to function)
++         */
++        class = ptw_info.is_ipa_descriptor ? SMMU_CLASS_TT : class;
++        switch (ptw_info.type) {
++        case SMMU_PTW_ERR_WALK_EABT:
++            event->type = SMMU_EVT_F_WALK_EABT;
++            event->u.f_walk_eabt.rnw = flag & 0x1;
++            event->u.f_walk_eabt.class = (ptw_info.stage == SMMU_STAGE_2) ?
++                                          class : SMMU_CLASS_TT;
++            event->u.f_walk_eabt.addr2 = ptw_info.addr;
++            break;
++        case SMMU_PTW_ERR_TRANSLATION:
++            if (PTW_RECORD_FAULT(ptw_info, cfg)) {
++                event->type = SMMU_EVT_F_TRANSLATION;
++                event->u.f_translation.addr2 = ptw_info.addr;
++                event->u.f_translation.class = class;
++                event->u.f_translation.rnw = flag & 0x1;
++            }
++            break;
++        case SMMU_PTW_ERR_ADDR_SIZE:
++            if (PTW_RECORD_FAULT(ptw_info, cfg)) {
++                event->type = SMMU_EVT_F_ADDR_SIZE;
++                event->u.f_addr_size.addr2 = ptw_info.addr;
++                event->u.f_addr_size.class = class;
++                event->u.f_addr_size.rnw = flag & 0x1;
++            }
++            break;
++        case SMMU_PTW_ERR_ACCESS:
++            if (PTW_RECORD_FAULT(ptw_info, cfg)) {
++                event->type = SMMU_EVT_F_ACCESS;
++                event->u.f_access.addr2 = ptw_info.addr;
++                event->u.f_access.class = class;
++                event->u.f_access.rnw = flag & 0x1;
++            }
++            break;
++        case SMMU_PTW_ERR_PERMISSION:
++            if (PTW_RECORD_FAULT(ptw_info, cfg)) {
++                event->type = SMMU_EVT_F_PERMISSION;
++                event->u.f_permission.addr2 = ptw_info.addr;
++                event->u.f_permission.class = class;
++                event->u.f_permission.rnw = flag & 0x1;
++            }
++            break;
++        default:
++            g_assert_not_reached();
++        }
++        return SMMU_TRANS_ERROR;
++    }
++    *out_entry = cached_entry;
++    return SMMU_TRANS_SUCCESS;
++}
++
++/*
++ * Sets the InputAddr for an SMMU_TRANS_ERROR, as it can't be
++ * set from all contexts, as smmuv3_get_config() can return
++ * translation faults in case of nested translation (for CD
++ * and TTBx). But in that case the iova is not known.
++ */
++static void smmuv3_fixup_event(SMMUEventInfo *event, hwaddr iova)
++{
++    switch (event->type) {
++    case SMMU_EVT_F_WALK_EABT:
++    case SMMU_EVT_F_TRANSLATION:
++    case SMMU_EVT_F_ADDR_SIZE:
++    case SMMU_EVT_F_ACCESS:
++    case SMMU_EVT_F_PERMISSION:
++        event->u.f_walk_eabt.addr = iova;
++        break;
++    default:
++        break;
++    }
++}
++
++/* Entry point to SMMU, does everything. */
+ static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
+                                       IOMMUAccessFlags flag, int iommu_idx)
+ {
+@@ -835,12 +1043,7 @@ static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
+     SMMUEventInfo event = {.type = SMMU_EVT_NONE,
+                            .sid = sid,
+                            .inval_ste_allowed = false};
+-    SMMUPTWEventInfo ptw_info = {};
+     SMMUTranslationStatus status;
+-    SMMUState *bs = ARM_SMMU(s);
+-    uint64_t page_mask, aligned_addr;
+-    SMMUTLBEntry *cached_entry = NULL;
+-    SMMUTransTableInfo *tt;
+     SMMUTransCfg *cfg = NULL;
+     IOMMUTLBEntry entry = {
+         .target_as = &address_space_memory,
+@@ -849,11 +1052,7 @@ static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
+         .addr_mask = ~(hwaddr)0,
+         .perm = IOMMU_NONE,
+     };
+-    /*
+-     * Combined attributes used for TLB lookup, as only one stage is supported,
+-     * it will hold attributes based on the enabled stage.
+-     */
+-    SMMUTransTableInfo tt_combined;
++    SMMUTLBEntry *cached_entry = NULL;
+ 
+     qemu_mutex_lock(&s->mutex);
+ 
+@@ -882,116 +1081,19 @@ static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
+         goto epilogue;
+     }
+ 
+-    if (cfg->stage == 1) {
+-        /* Select stage1 translation table. */
+-        tt = select_tt(cfg, addr);
+-        if (!tt) {
+-            if (cfg->record_faults) {
+-                event.type = SMMU_EVT_F_TRANSLATION;
+-                event.u.f_translation.addr = addr;
+-                event.u.f_translation.rnw = flag & 0x1;
+-            }
+-            status = SMMU_TRANS_ERROR;
+-            goto epilogue;
+-        }
+-        tt_combined.granule_sz = tt->granule_sz;
+-        tt_combined.tsz = tt->tsz;
+-
+-    } else {
+-        /* Stage2. */
+-        tt_combined.granule_sz = cfg->s2cfg.granule_sz;
+-        tt_combined.tsz = cfg->s2cfg.tsz;
+-    }
+-    /*
+-     * TLB lookup looks for granule and input size for a translation stage,
+-     * as only one stage is supported right now, choose the right values
+-     * from the configuration.
+-     */
+-    page_mask = (1ULL << tt_combined.granule_sz) - 1;
+-    aligned_addr = addr & ~page_mask;
+-
+-    cached_entry = smmu_iotlb_lookup(bs, cfg, &tt_combined, aligned_addr);
+-    if (cached_entry) {
+-        if ((flag & IOMMU_WO) && !(cached_entry->entry.perm & IOMMU_WO)) {
+-            status = SMMU_TRANS_ERROR;
+-            /*
+-             * We know that the TLB only contains either stage-1 or stage-2 as
+-             * nesting is not supported. So it is sufficient to check the
+-             * translation stage to know the TLB stage for now.
+-             */
+-            event.u.f_walk_eabt.s2 = (cfg->stage == 2);
+-            if (PTW_RECORD_FAULT(cfg)) {
+-                event.type = SMMU_EVT_F_PERMISSION;
+-                event.u.f_permission.addr = addr;
+-                event.u.f_permission.rnw = flag & 0x1;
+-            }
+-        } else {
+-            status = SMMU_TRANS_SUCCESS;
+-        }
+-        goto epilogue;
+-    }
+-
+-    cached_entry = g_new0(SMMUTLBEntry, 1);
+-
+-    if (smmu_ptw(cfg, aligned_addr, flag, cached_entry, &ptw_info)) {
+-        /* All faults from PTW has S2 field. */
+-        event.u.f_walk_eabt.s2 = (ptw_info.stage == 2);
+-        g_free(cached_entry);
+-        switch (ptw_info.type) {
+-        case SMMU_PTW_ERR_WALK_EABT:
+-            event.type = SMMU_EVT_F_WALK_EABT;
+-            event.u.f_walk_eabt.addr = addr;
+-            event.u.f_walk_eabt.rnw = flag & 0x1;
+-            event.u.f_walk_eabt.class = 0x1;
+-            event.u.f_walk_eabt.addr2 = ptw_info.addr;
+-            break;
+-        case SMMU_PTW_ERR_TRANSLATION:
+-            if (PTW_RECORD_FAULT(cfg)) {
+-                event.type = SMMU_EVT_F_TRANSLATION;
+-                event.u.f_translation.addr = addr;
+-                event.u.f_translation.rnw = flag & 0x1;
+-            }
+-            break;
+-        case SMMU_PTW_ERR_ADDR_SIZE:
+-            if (PTW_RECORD_FAULT(cfg)) {
+-                event.type = SMMU_EVT_F_ADDR_SIZE;
+-                event.u.f_addr_size.addr = addr;
+-                event.u.f_addr_size.rnw = flag & 0x1;
+-            }
+-            break;
+-        case SMMU_PTW_ERR_ACCESS:
+-            if (PTW_RECORD_FAULT(cfg)) {
+-                event.type = SMMU_EVT_F_ACCESS;
+-                event.u.f_access.addr = addr;
+-                event.u.f_access.rnw = flag & 0x1;
+-            }
+-            break;
+-        case SMMU_PTW_ERR_PERMISSION:
+-            if (PTW_RECORD_FAULT(cfg)) {
+-                event.type = SMMU_EVT_F_PERMISSION;
+-                event.u.f_permission.addr = addr;
+-                event.u.f_permission.rnw = flag & 0x1;
+-            }
+-            break;
+-        default:
+-            g_assert_not_reached();
+-        }
+-        status = SMMU_TRANS_ERROR;
+-    } else {
+-        smmu_iotlb_insert(bs, cfg, cached_entry);
+-        status = SMMU_TRANS_SUCCESS;
+-    }
++    status = smmuv3_do_translate(s, addr, cfg, &event, flag,
++                                 &cached_entry, SMMU_CLASS_IN);
+ 
+ epilogue:
+     qemu_mutex_unlock(&s->mutex);
+     switch (status) {
+     case SMMU_TRANS_SUCCESS:
+         entry.perm = cached_entry->entry.perm;
+-        entry.translated_addr = cached_entry->entry.translated_addr +
+-                                    (addr & cached_entry->entry.addr_mask);
++        entry.translated_addr = CACHED_ENTRY_TO_ADDR(cached_entry, addr);
+         entry.addr_mask = cached_entry->entry.addr_mask;
+         trace_smmuv3_translate_success(mr->parent_obj.name, sid, addr,
+-                                       entry.translated_addr, entry.perm);
++                                       entry.translated_addr, entry.perm,
++                                       cfg->stage);
+         break;
+     case SMMU_TRANS_DISABLE:
+         entry.perm = flag;
+@@ -1011,6 +1113,7 @@ epilogue:
+                                      entry.perm);
+         break;
+     case SMMU_TRANS_ERROR:
++        smmuv3_fixup_event(&event, addr);
+         qemu_log_mask(LOG_GUEST_ERROR,
+                       "%s translation failed for iova=0x%"PRIx64" (%s)\n",
+                       mr->parent_obj.name, addr, smmu_event_string(event.type));
+@@ -1032,27 +1135,38 @@ epilogue:
+  * @iova: iova
+  * @tg: translation granule (if communicated through range invalidation)
+  * @num_pages: number of @granule sized pages (if tg != 0), otherwise 1
++ * @stage: Which stage(1 or 2) is used
+  */
+ static void smmuv3_notify_iova(IOMMUMemoryRegion *mr,
+                                IOMMUNotifier *n,
+                                int asid, int vmid,
+                                dma_addr_t iova, uint8_t tg,
+-                               uint64_t num_pages)
++                               uint64_t num_pages, int stage)
+ {
+     SMMUDevice *sdev = container_of(mr, SMMUDevice, iommu);
++    SMMUEventInfo eventinfo = {.inval_ste_allowed = true};
++    SMMUTransCfg *cfg = smmuv3_get_config(sdev, &eventinfo);
+     IOMMUTLBEvent event;
+     uint8_t granule;
+-    SMMUv3State *s = sdev->smmu;
++
++    if (!cfg) {
++        return;
++    }
++
++    /*
++     * stage is passed from TLB invalidation commands which can be either
++     * stage-1 or stage-2.
++     * However, IOMMUTLBEvent only understands IOVA, for stage-1 or stage-2
++     * SMMU instances we consider the input address as the IOVA, but when
++     * nesting is used, we can't mix stage-1 and stage-2 addresses, so for
++     * nesting only stage-1 is considered the IOVA and would be notified.
++     */
++    if ((stage == SMMU_STAGE_2) && (cfg->stage == SMMU_NESTED))
++        return;
+ 
+     if (!tg) {
+-        SMMUEventInfo eventinfo = {.inval_ste_allowed = true};
+-        SMMUTransCfg *cfg = smmuv3_get_config(sdev, &eventinfo);
+         SMMUTransTableInfo *tt;
+ 
+-        if (!cfg) {
+-            return;
+-        }
+-
+         if (asid >= 0 && cfg->asid != asid) {
+             return;
+         }
+@@ -1061,7 +1175,7 @@ static void smmuv3_notify_iova(IOMMUMemoryRegion *mr,
+             return;
+         }
+ 
+-        if (STAGE1_SUPPORTED(s)) {
++        if (stage == SMMU_STAGE_1) {
+             tt = select_tt(cfg, iova);
+             if (!tt) {
+                 return;
+@@ -1087,7 +1201,7 @@ static void smmuv3_notify_iova(IOMMUMemoryRegion *mr,
+ /* invalidate an asid/vmid/iova range tuple in all mr's */
+ static void smmuv3_inv_notifiers_iova(SMMUState *s, int asid, int vmid,
+                                       dma_addr_t iova, uint8_t tg,
+-                                      uint64_t num_pages)
++                                      uint64_t num_pages, int stage)
+ {
+     SMMUDevice *sdev;
+ 
+@@ -1096,15 +1210,15 @@ static void smmuv3_inv_notifiers_iova(SMMUState *s, int asid, int vmid,
+         IOMMUNotifier *n;
+ 
+         trace_smmuv3_inv_notifiers_iova(mr->parent_obj.name, asid, vmid,
+-                                        iova, tg, num_pages);
++                                        iova, tg, num_pages, stage);
+ 
+         IOMMU_NOTIFIER_FOREACH(n, mr) {
+-            smmuv3_notify_iova(mr, n, asid, vmid, iova, tg, num_pages);
++            smmuv3_notify_iova(mr, n, asid, vmid, iova, tg, num_pages, stage);
+         }
+     }
+ }
+ 
+-static void smmuv3_range_inval(SMMUState *s, Cmd *cmd)
++static void smmuv3_range_inval(SMMUState *s, Cmd *cmd, SMMUStage stage)
+ {
+     dma_addr_t end, addr = CMD_ADDR(cmd);
+     uint8_t type = CMD_TYPE(cmd);
+@@ -1129,9 +1243,13 @@ static void smmuv3_range_inval(SMMUState *s, Cmd *cmd)
+     }
+ 
+     if (!tg) {
+-        trace_smmuv3_range_inval(vmid, asid, addr, tg, 1, ttl, leaf);
+-        smmuv3_inv_notifiers_iova(s, asid, vmid, addr, tg, 1);
+-        smmu_iotlb_inv_iova(s, asid, vmid, addr, tg, 1, ttl);
++        trace_smmuv3_range_inval(vmid, asid, addr, tg, 1, ttl, leaf, stage);
++        smmuv3_inv_notifiers_iova(s, asid, vmid, addr, tg, 1, stage);
++        if (stage == SMMU_STAGE_1) {
++            smmu_iotlb_inv_iova(s, asid, vmid, addr, tg, 1, ttl);
++        } else {
++            smmu_iotlb_inv_ipa(s, vmid, addr, tg, 1, ttl);
++        }
+         return;
+     }
+ 
+@@ -1147,9 +1265,14 @@ static void smmuv3_range_inval(SMMUState *s, Cmd *cmd)
+         uint64_t mask = dma_aligned_pow2_mask(addr, end, 64);
+ 
+         num_pages = (mask + 1) >> granule;
+-        trace_smmuv3_range_inval(vmid, asid, addr, tg, num_pages, ttl, leaf);
+-        smmuv3_inv_notifiers_iova(s, asid, vmid, addr, tg, num_pages);
+-        smmu_iotlb_inv_iova(s, asid, vmid, addr, tg, num_pages, ttl);
++        trace_smmuv3_range_inval(vmid, asid, addr, tg, num_pages,
++                                 ttl, leaf, stage);
++        smmuv3_inv_notifiers_iova(s, asid, vmid, addr, tg, num_pages, stage);
++        if (stage == SMMU_STAGE_1) {
++            smmu_iotlb_inv_iova(s, asid, vmid, addr, tg, num_pages, ttl);
++        } else {
++            smmu_iotlb_inv_ipa(s, vmid, addr, tg, num_pages, ttl);
++        }
+         addr += mask + 1;
+     }
+ }
+@@ -1218,20 +1341,18 @@ static int smmuv3_cmdq_consume(SMMUv3State *s)
+         case SMMU_CMD_CFGI_STE:
+         {
+             uint32_t sid = CMD_SID(&cmd);
+-            IOMMUMemoryRegion *mr = smmu_iommu_mr(bs, sid);
+-            SMMUDevice *sdev;
++            SMMUDevice *sdev = smmu_find_sdev(bs, sid);
+ 
+             if (CMD_SSEC(&cmd)) {
+                 cmd_error = SMMU_CERROR_ILL;
+                 break;
+             }
+ 
+-            if (!mr) {
++            if (!sdev) {
+                 break;
+             }
+ 
+             trace_smmuv3_cmdq_cfgi_ste(sid);
+-            sdev = container_of(mr, SMMUDevice, iommu);
+             smmuv3_flush_config(sdev);
+ 
+             break;
+@@ -1260,45 +1381,67 @@ static int smmuv3_cmdq_consume(SMMUv3State *s)
+         case SMMU_CMD_CFGI_CD_ALL:
+         {
+             uint32_t sid = CMD_SID(&cmd);
+-            IOMMUMemoryRegion *mr = smmu_iommu_mr(bs, sid);
+-            SMMUDevice *sdev;
++            SMMUDevice *sdev = smmu_find_sdev(bs, sid);
+ 
+             if (CMD_SSEC(&cmd)) {
+                 cmd_error = SMMU_CERROR_ILL;
+                 break;
+             }
+ 
+-            if (!mr) {
++            if (!sdev) {
+                 break;
+             }
+ 
+             trace_smmuv3_cmdq_cfgi_cd(sid);
+-            sdev = container_of(mr, SMMUDevice, iommu);
+             smmuv3_flush_config(sdev);
+             break;
+         }
+         case SMMU_CMD_TLBI_NH_ASID:
+         {
+-            uint16_t asid = CMD_ASID(&cmd);
++            int asid = CMD_ASID(&cmd);
++            int vmid = -1;
+ 
+             if (!STAGE1_SUPPORTED(s)) {
+                 cmd_error = SMMU_CERROR_ILL;
+                 break;
+             }
+ 
++            /*
++             * VMID is only matched when stage 2 is supported, otherwise set it
++             * to -1 as the value used for stage-1 only VMIDs.
++             */
++            if (STAGE2_SUPPORTED(s)) {
++                vmid = CMD_VMID(&cmd);
++            }
++
+             trace_smmuv3_cmdq_tlbi_nh_asid(asid);
+             smmu_inv_notifiers_all(&s->smmu_state);
+-            smmu_iotlb_inv_asid(bs, asid);
++            smmu_iotlb_inv_asid_vmid(bs, asid, vmid);
+             break;
+         }
+         case SMMU_CMD_TLBI_NH_ALL:
++        {
++            int vmid = -1;
++
+             if (!STAGE1_SUPPORTED(s)) {
+                 cmd_error = SMMU_CERROR_ILL;
+                 break;
+             }
++
++            /*
++             * If stage-2 is supported, invalidate for this VMID only, otherwise
++             * invalidate the whole thing.
++             */
++            if (STAGE2_SUPPORTED(s)) {
++                vmid = CMD_VMID(&cmd);
++                trace_smmuv3_cmdq_tlbi_nh(vmid);
++                smmu_iotlb_inv_vmid_s1(bs, vmid);
++                break;
++            }
+             QEMU_FALLTHROUGH;
++        }
+         case SMMU_CMD_TLBI_NSNH_ALL:
+-            trace_smmuv3_cmdq_tlbi_nh();
++            trace_smmuv3_cmdq_tlbi_nsnh();
+             smmu_inv_notifiers_all(&s->smmu_state);
+             smmu_iotlb_inv_all(bs);
+             break;
+@@ -1308,11 +1451,11 @@ static int smmuv3_cmdq_consume(SMMUv3State *s)
+                 cmd_error = SMMU_CERROR_ILL;
+                 break;
+             }
+-            smmuv3_range_inval(bs, &cmd);
++            smmuv3_range_inval(bs, &cmd, SMMU_STAGE_1);
+             break;
+         case SMMU_CMD_TLBI_S12_VMALL:
+         {
+-            uint16_t vmid = CMD_VMID(&cmd);
++            int vmid = CMD_VMID(&cmd);
+ 
+             if (!STAGE2_SUPPORTED(s)) {
+                 cmd_error = SMMU_CERROR_ILL;
+@@ -1333,7 +1476,7 @@ static int smmuv3_cmdq_consume(SMMUv3State *s)
+              * As currently only either s1 or s2 are supported
+              * we can reuse same function for s2.
+              */
+-            smmuv3_range_inval(bs, &cmd);
++            smmuv3_range_inval(bs, &cmd, SMMU_STAGE_2);
+             break;
+         case SMMU_CMD_TLBI_EL3_ALL:
+         case SMMU_CMD_TLBI_EL3_VA:
+diff --git a/hw/arm/stm32l4x5_soc.c b/hw/arm/stm32l4x5_soc.c
+index 38f7a2d5d9..fac83d349c 100644
+--- a/hw/arm/stm32l4x5_soc.c
++++ b/hw/arm/stm32l4x5_soc.c
+@@ -81,6 +81,10 @@ static const int exti_irq[NUM_EXTI_IRQ] = {
+ #define RCC_BASE_ADDRESS 0x40021000
+ #define RCC_IRQ 5
+ 
++#define EXTI_USART1_IRQ 26
++#define EXTI_UART4_IRQ 29
++#define EXTI_LPUART1_IRQ 31
++
+ static const int exti_or_gates_out[NUM_EXTI_OR_GATES] = {
+     23, 40, 63, 1,
+ };
+@@ -129,10 +133,6 @@ static const hwaddr uart_addr[] = {
+ 
+ #define LPUART_BASE_ADDRESS 0x40008000
+ 
+-static const int usart_irq[] = { 37, 38, 39 };
+-static const int uart_irq[] = { 52, 53 };
+-#define LPUART_IRQ 70
+-
+ static void stm32l4x5_soc_initfn(Object *obj)
+ {
+     Stm32l4x5SocState *s = STM32L4X5_SOC(obj);
+@@ -297,6 +297,7 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+         }
+     }
+ 
++    /* Connect SYSCFG to EXTI */
+     for (unsigned i = 0; i < GPIO_NUM_PINS; i++) {
+         qdev_connect_gpio_out(DEVICE(&s->syscfg), i,
+                               qdev_get_gpio_in(DEVICE(&s->exti), i));
+@@ -322,15 +323,10 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+             return;
+         }
+         sysbus_mmio_map(busdev, 0, usart_addr[i]);
+-        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, usart_irq[i]));
++        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                       EXTI_USART1_IRQ + i));
+     }
+ 
+-    /*
+-     * TODO: Connect the USARTs, UARTs and LPUART to the EXTI once the EXTI
+-     * can handle other gpio-in than the gpios. (e.g. Direct Lines for the
+-     * usarts)
+-     */
+-
+     /* UART devices */
+     for (int i = 0; i < STM_NUM_UARTS; i++) {
+         g_autofree char *name = g_strdup_printf("uart%d-out", STM_NUM_USARTS + i + 1);
+@@ -343,7 +339,8 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+             return;
+         }
+         sysbus_mmio_map(busdev, 0, uart_addr[i]);
+-        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, uart_irq[i]));
++        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                       EXTI_UART4_IRQ + i));
+     }
+ 
+     /* LPUART device*/
+@@ -356,7 +353,8 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+         return;
+     }
+     sysbus_mmio_map(busdev, 0, LPUART_BASE_ADDRESS);
+-    sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, LPUART_IRQ));
++    sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                   EXTI_LPUART1_IRQ));
+ 
+     /* APB1 BUS */
+     create_unimplemented_device("TIM2",      0x40000000, 0x400);
+diff --git a/hw/arm/trace-events b/hw/arm/trace-events
+index f1a54a02df..be6c8f720b 100644
+--- a/hw/arm/trace-events
++++ b/hw/arm/trace-events
+@@ -11,13 +11,14 @@ smmu_ptw_page_pte(int stage, int level,  uint64_t iova, uint64_t baseaddr, uint6
+ smmu_ptw_block_pte(int stage, int level, uint64_t baseaddr, uint64_t pteaddr, uint64_t pte, uint64_t iova, uint64_t gpa, int bsize_mb) "stage=%d level=%d base@=0x%"PRIx64" pte@=0x%"PRIx64" pte=0x%"PRIx64" iova=0x%"PRIx64" block address = 0x%"PRIx64" block size = %d MiB"
+ smmu_get_pte(uint64_t baseaddr, int index, uint64_t pteaddr, uint64_t pte) "baseaddr=0x%"PRIx64" index=0x%x, pteaddr=0x%"PRIx64", pte=0x%"PRIx64
+ smmu_iotlb_inv_all(void) "IOTLB invalidate all"
+-smmu_iotlb_inv_asid(uint16_t asid) "IOTLB invalidate asid=%d"
+-smmu_iotlb_inv_vmid(uint16_t vmid) "IOTLB invalidate vmid=%d"
+-smmu_iotlb_inv_iova(uint16_t asid, uint64_t addr) "IOTLB invalidate asid=%d addr=0x%"PRIx64
++smmu_iotlb_inv_asid_vmid(int asid, int vmid) "IOTLB invalidate asid=%d vmid=%d"
++smmu_iotlb_inv_vmid(int vmid) "IOTLB invalidate vmid=%d"
++smmu_iotlb_inv_vmid_s1(int vmid) "IOTLB invalidate vmid=%d"
++smmu_iotlb_inv_iova(int asid, uint64_t addr) "IOTLB invalidate asid=%d addr=0x%"PRIx64
+ smmu_inv_notifiers_mr(const char *name) "iommu mr=%s"
+-smmu_iotlb_lookup_hit(uint16_t asid, uint16_t vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache HIT asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
+-smmu_iotlb_lookup_miss(uint16_t asid, uint16_t vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache MISS asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
+-smmu_iotlb_insert(uint16_t asid, uint16_t vmid, uint64_t addr, uint8_t tg, uint8_t level) "IOTLB ++ asid=%d vmid=%d addr=0x%"PRIx64" tg=%d level=%d"
++smmu_iotlb_lookup_hit(int asid, int vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache HIT asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
++smmu_iotlb_lookup_miss(int asid, int vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache MISS asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
++smmu_iotlb_insert(int asid, int vmid, uint64_t addr, uint8_t tg, uint8_t level) "IOTLB ++ asid=%d vmid=%d addr=0x%"PRIx64" tg=%d level=%d"
+ 
+ # smmuv3.c
+ smmuv3_read_mmio(uint64_t addr, uint64_t val, unsigned size, uint32_t r) "addr: 0x%"PRIx64" val:0x%"PRIx64" size: 0x%x(%d)"
+@@ -37,7 +38,7 @@ smmuv3_get_ste(uint64_t addr) "STE addr: 0x%"PRIx64
+ smmuv3_translate_disable(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x bypass (smmu disabled) iova:0x%"PRIx64" is_write=%d"
+ smmuv3_translate_bypass(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x STE bypass iova:0x%"PRIx64" is_write=%d"
+ smmuv3_translate_abort(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x abort on iova:0x%"PRIx64" is_write=%d"
+-smmuv3_translate_success(const char *n, uint16_t sid, uint64_t iova, uint64_t translated, int perm) "%s sid=0x%x iova=0x%"PRIx64" translated=0x%"PRIx64" perm=0x%x"
++smmuv3_translate_success(const char *n, uint16_t sid, uint64_t iova, uint64_t translated, int perm, int stage) "%s sid=0x%x iova=0x%"PRIx64" translated=0x%"PRIx64" perm=0x%x stage=%d"
+ smmuv3_get_cd(uint64_t addr) "CD addr: 0x%"PRIx64
+ smmuv3_decode_cd(uint32_t oas) "oas=%d"
+ smmuv3_decode_cd_tt(int i, uint32_t tsz, uint64_t ttb, uint32_t granule_sz, bool had) "TT[%d]:tsz:%d ttb:0x%"PRIx64" granule_sz:%d had:%d"
+@@ -46,14 +47,15 @@ smmuv3_cmdq_cfgi_ste_range(int start, int end) "start=0x%x - end=0x%x"
+ smmuv3_cmdq_cfgi_cd(uint32_t sid) "sid=0x%x"
+ smmuv3_config_cache_hit(uint32_t sid, uint32_t hits, uint32_t misses, uint32_t perc) "Config cache HIT for sid=0x%x (hits=%d, misses=%d, hit rate=%d)"
+ smmuv3_config_cache_miss(uint32_t sid, uint32_t hits, uint32_t misses, uint32_t perc) "Config cache MISS for sid=0x%x (hits=%d, misses=%d, hit rate=%d)"
+-smmuv3_range_inval(int vmid, int asid, uint64_t addr, uint8_t tg, uint64_t num_pages, uint8_t ttl, bool leaf) "vmid=%d asid=%d addr=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" ttl=%d leaf=%d"
+-smmuv3_cmdq_tlbi_nh(void) ""
+-smmuv3_cmdq_tlbi_nh_asid(uint16_t asid) "asid=%d"
+-smmuv3_cmdq_tlbi_s12_vmid(uint16_t vmid) "vmid=%d"
++smmuv3_range_inval(int vmid, int asid, uint64_t addr, uint8_t tg, uint64_t num_pages, uint8_t ttl, bool leaf, int stage) "vmid=%d asid=%d addr=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" ttl=%d leaf=%d stage=%d"
++smmuv3_cmdq_tlbi_nh(int vmid) "vmid=%d"
++smmuv3_cmdq_tlbi_nsnh(void) ""
++smmuv3_cmdq_tlbi_nh_asid(int asid) "asid=%d"
++smmuv3_cmdq_tlbi_s12_vmid(int vmid) "vmid=%d"
+ smmuv3_config_cache_inv(uint32_t sid) "Config cache INV for sid=0x%x"
+ smmuv3_notify_flag_add(const char *iommu) "ADD SMMUNotifier node for iommu mr=%s"
+ smmuv3_notify_flag_del(const char *iommu) "DEL SMMUNotifier node for iommu mr=%s"
+-smmuv3_inv_notifiers_iova(const char *name, uint16_t asid, uint16_t vmid, uint64_t iova, uint8_t tg, uint64_t num_pages) "iommu mr=%s asid=%d vmid=%d iova=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64
++smmuv3_inv_notifiers_iova(const char *name, int asid, int vmid, uint64_t iova, uint8_t tg, uint64_t num_pages, int stage) "iommu mr=%s asid=%d vmid=%d iova=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" stage=%d"
+ 
+ # strongarm.c
+ strongarm_uart_update_parameters(const char *label, int speed, char parity, int data_bits, int stop_bits) "%s speed=%d parity=%c data=%d stop=%d"
+diff --git a/hw/arm/virt.c b/hw/arm/virt.c
+index 0784ee7f46..b0c68d66a3 100644
+--- a/hw/arm/virt.c
++++ b/hw/arm/virt.c
+@@ -101,33 +101,37 @@ static void arm_virt_compat_set(MachineClass *mc)
+                      arm_virt_compat_len);
+ }
+ 
+-#define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
+-    static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
+-                                                    void *data) \
++#define DEFINE_VIRT_MACHINE_IMPL(latest, ...) \
++    static void MACHINE_VER_SYM(class_init, virt, __VA_ARGS__)( \
++        ObjectClass *oc, \
++        void *data) \
+     { \
+         MachineClass *mc = MACHINE_CLASS(oc); \
+         arm_virt_compat_set(mc); \
+-        virt_machine_##major##_##minor##_options(mc); \
+-        mc->desc = "QEMU " # major "." # minor " ARM Virtual Machine"; \
++        MACHINE_VER_SYM(options, virt, __VA_ARGS__)(mc); \
++        mc->desc = "QEMU " MACHINE_VER_STR(__VA_ARGS__) " ARM Virtual Machine"; \
++        MACHINE_VER_DEPRECATION(__VA_ARGS__); \
+         if (latest) { \
+             mc->alias = "virt"; \
+         } \
+     } \
+-    static const TypeInfo machvirt_##major##_##minor##_info = { \
+-        .name = MACHINE_TYPE_NAME("virt-" # major "." # minor), \
++    static const TypeInfo MACHINE_VER_SYM(info, virt, __VA_ARGS__) = \
++    { \
++        .name = MACHINE_VER_TYPE_NAME("virt", __VA_ARGS__), \
+         .parent = TYPE_VIRT_MACHINE, \
+-        .class_init = virt_##major##_##minor##_class_init, \
++        .class_init = MACHINE_VER_SYM(class_init, virt, __VA_ARGS__), \
+     }; \
+-    static void machvirt_machine_##major##_##minor##_init(void) \
++    static void MACHINE_VER_SYM(register, virt, __VA_ARGS__)(void) \
+     { \
+-        type_register_static(&machvirt_##major##_##minor##_info); \
++        MACHINE_VER_DELETION(__VA_ARGS__); \
++        type_register_static(&MACHINE_VER_SYM(info, virt, __VA_ARGS__)); \
+     } \
+-    type_init(machvirt_machine_##major##_##minor##_init);
++    type_init(MACHINE_VER_SYM(register, virt, __VA_ARGS__));
+ 
+ #define DEFINE_VIRT_MACHINE_AS_LATEST(major, minor) \
+-    DEFINE_VIRT_MACHINE_LATEST(major, minor, true)
++    DEFINE_VIRT_MACHINE_IMPL(true, major, minor)
+ #define DEFINE_VIRT_MACHINE(major, minor) \
+-    DEFINE_VIRT_MACHINE_LATEST(major, minor, false)
++    DEFINE_VIRT_MACHINE_IMPL(false, major, minor)
+ 
+ 
+ /* Number of external interrupt lines to configure the GIC with */
+diff --git a/hw/arm/xilinx_zynq.c b/hw/arm/xilinx_zynq.c
+index c79661bbc1..3c56b9abe1 100644
+--- a/hw/arm/xilinx_zynq.c
++++ b/hw/arm/xilinx_zynq.c
+@@ -38,6 +38,7 @@
+ #include "qom/object.h"
+ #include "exec/tswap.h"
+ #include "target/arm/cpu-qom.h"
++#include "qapi/visitor.h"
+ 
+ #define TYPE_ZYNQ_MACHINE MACHINE_TYPE_NAME("xilinx-zynq-a9")
+ OBJECT_DECLARE_SIMPLE_TYPE(ZynqMachineState, ZYNQ_MACHINE)
+@@ -90,6 +91,7 @@ struct ZynqMachineState {
+     MachineState parent;
+     Clock *ps_clk;
+     ARMCPU *cpu[ZYNQ_MAX_CPUS];
++    uint8_t boot_mode;
+ };
+ 
+ static void zynq_write_board_setup(ARMCPU *cpu,
+@@ -176,6 +178,27 @@ static inline int zynq_init_spi_flashes(uint32_t base_addr, qemu_irq irq,
+     return unit;
+ }
+ 
++static void zynq_set_boot_mode(Object *obj, const char *str,
++                                               Error **errp)
++{
++    ZynqMachineState *m = ZYNQ_MACHINE(obj);
++    uint8_t mode = 0;
++
++    if (!strncasecmp(str, "qspi", 4)) {
++        mode = 1;
++    } else if (!strncasecmp(str, "sd", 2)) {
++        mode = 5;
++    } else if (!strncasecmp(str, "nor", 3)) {
++        mode = 2;
++    } else if (!strncasecmp(str, "jtag", 4)) {
++        mode = 0;
++    } else {
++        error_setg(errp, "%s boot mode not supported", str);
++        return;
++    }
++    m->boot_mode = mode;
++}
++
+ static void zynq_init(MachineState *machine)
+ {
+     ZynqMachineState *zynq_machine = ZYNQ_MACHINE(machine);
+@@ -241,6 +264,7 @@ static void zynq_init(MachineState *machine)
+     /* Create slcr, keep a pointer to connect clocks */
+     slcr = qdev_new("xilinx-zynq_slcr");
+     qdev_connect_clock_in(slcr, "ps_clk", zynq_machine->ps_clk);
++    qdev_prop_set_uint8(slcr, "boot-mode", zynq_machine->boot_mode);
+     sysbus_realize_and_unref(SYS_BUS_DEVICE(slcr), &error_fatal);
+     sysbus_mmio_map(SYS_BUS_DEVICE(slcr), 0, 0xF8000000);
+ 
+@@ -373,6 +397,7 @@ static void zynq_machine_class_init(ObjectClass *oc, void *data)
+         NULL
+     };
+     MachineClass *mc = MACHINE_CLASS(oc);
++    ObjectProperty *prop;
+     mc->desc = "Xilinx Zynq Platform Baseboard for Cortex-A9";
+     mc->init = zynq_init;
+     mc->max_cpus = ZYNQ_MAX_CPUS;
+@@ -380,6 +405,12 @@ static void zynq_machine_class_init(ObjectClass *oc, void *data)
+     mc->ignore_memory_transaction_failures = true;
+     mc->valid_cpu_types = valid_cpu_types;
+     mc->default_ram_id = "zynq.ext_ram";
++    prop = object_class_property_add_str(oc, "boot-mode", NULL,
++                                         zynq_set_boot_mode);
++    object_class_property_set_description(oc, "boot-mode",
++                                          "Supported boot modes:"
++                                          " jtag qspi sd nor");
++    object_property_set_default_str(prop, "qspi");
+ }
+ 
+ static const TypeInfo zynq_machine_type = {
+diff --git a/hw/block/m25p80.c b/hw/block/m25p80.c
+index 8dec134832..9e99107b42 100644
+--- a/hw/block/m25p80.c
++++ b/hw/block/m25p80.c
+@@ -416,6 +416,7 @@ typedef enum {
+     /*
+      * Micron: 0x35 - enable QPI
+      * Spansion: 0x35 - read control register
++     * Winbond: 0x35 - quad enable
+      */
+     RDCR_EQIO = 0x35,
+     RSTQIO = 0xf5,
+@@ -798,6 +799,11 @@ static void complete_collecting_data(Flash *s)
+                 s->four_bytes_address_mode = extract32(s->data[1], 5, 1);
+             }
+             break;
++        case MAN_WINBOND:
++            if (s->len > 1) {
++                s->quad_enable = !!(s->data[1] & 0x02);
++            }
++            break;
+         default:
+             break;
+         }
+@@ -1254,6 +1260,10 @@ static void decode_new_cmd(Flash *s, uint32_t value)
+             s->needed_bytes = 2;
+             s->state = STATE_COLLECTING_VAR_LEN_DATA;
+             break;
++        case MAN_WINBOND:
++            s->needed_bytes = 2;
++            s->state = STATE_COLLECTING_VAR_LEN_DATA;
++            break;
+         default:
+             s->needed_bytes = 1;
+             s->state = STATE_COLLECTING_DATA;
+@@ -1431,6 +1441,12 @@ static void decode_new_cmd(Flash *s, uint32_t value)
+         case MAN_MACRONIX:
+             s->quad_enable = true;
+             break;
++        case MAN_WINBOND:
++            s->data[0] = (!!s->quad_enable) << 1;
++            s->pos = 0;
++            s->len = 1;
++            s->state = STATE_READING_DATA;
++            break;
+         default:
+             break;
+         }
+diff --git a/hw/char/pl011.c b/hw/char/pl011.c
+index 8753b84a84..f8078aa216 100644
+--- a/hw/char/pl011.c
++++ b/hw/char/pl011.c
+@@ -87,6 +87,12 @@ DeviceState *pl011_create(hwaddr addr, qemu_irq irq, Chardev *chr)
+ #define CR_DTR      (1 << 10)
+ #define CR_LBE      (1 << 7)
+ 
++/* Integer Baud Rate Divider, UARTIBRD */
++#define IBRD_MASK 0x3f
++
++/* Fractional Baud Rate Divider, UARTFBRD */
++#define FBRD_MASK 0xffff
++
+ static const unsigned char pl011_id_arm[8] =
+   { 0x11, 0x10, 0x14, 0x00, 0x0d, 0xf0, 0x05, 0xb1 };
+ static const unsigned char pl011_id_luminary[8] =
+@@ -374,11 +380,11 @@ static void pl011_write(void *opaque, hwaddr offset,
+         s->ilpr = value;
+         break;
+     case 9: /* UARTIBRD */
+-        s->ibrd = value;
++        s->ibrd = value & IBRD_MASK;
+         pl011_trace_baudrate_change(s);
+         break;
+     case 10: /* UARTFBRD */
+-        s->fbrd = value;
++        s->fbrd = value & FBRD_MASK;
+         pl011_trace_baudrate_change(s);
+         break;
+     case 11: /* UARTLCR_H */
+@@ -531,6 +537,9 @@ static int pl011_post_load(void *opaque, int version_id)
+         s->read_pos = 0;
+     }
+ 
++    s->ibrd &= IBRD_MASK;
++    s->fbrd &= FBRD_MASK;
++
+     return 0;
+ }
+ 
+diff --git a/hw/core/cpu-common.c b/hw/core/cpu-common.c
+index f131cde2c0..d2e3e4570a 100644
+--- a/hw/core/cpu-common.c
++++ b/hw/core/cpu-common.c
+@@ -192,13 +192,6 @@ static void cpu_common_parse_features(const char *typename, char *features,
+     }
+ }
+ 
+-#ifdef CONFIG_PLUGIN
+-static void qemu_plugin_vcpu_init__async(CPUState *cpu, run_on_cpu_data unused)
+-{
+-    qemu_plugin_vcpu_init_hook(cpu);
+-}
+-#endif
+-
+ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
+     CPUState *cpu = CPU(dev);
+@@ -274,7 +267,7 @@ static void cpu_common_initfn(Object *obj)
+ #ifdef CONFIG_PLUGIN
+     if (tcg_enabled()) {
+         cpu->plugin_state = qemu_plugin_create_vcpu_state();
+-        async_run_on_cpu(cpu, qemu_plugin_vcpu_init__async, RUN_ON_CPU_NULL);
++        qemu_plugin_vcpu_init_hook(cpu);
+     }
+ #endif
+ }
+@@ -283,6 +276,12 @@ static void cpu_common_finalize(Object *obj)
+ {
+     CPUState *cpu = CPU(obj);
+ 
++#ifdef CONFIG_PLUGIN
++    if (tcg_enabled()) {
++        g_free(cpu->plugin_state);
++    }
++#endif
++    free_queued_cpu_work(cpu);
+     g_array_free(cpu->gdb_regs, TRUE);
+     qemu_lockcnt_destroy(&cpu->in_ioctl_lock);
+     qemu_mutex_destroy(&cpu->work_mutex);
