@@ -16,6 +16,8 @@ We utilize **agent performance to provide actionable feedback for constructing h
 
 BIOPSY turns this feedback into an iterative construction loop.
 
+![BIOPSY workflow](assets/workflow.png)
+
 1. **Construct.** The Task Agent builds verifiable tasks grounded in real software and documented cases.
 2. **Evaluate.** Evaluation agents attempt the tasks while we collect scores and trajectories.
 3. **Propose.** The Task Agent mines the trajectories for candidate *hardness patterns*, which are changes to the task structure that might require more substantial analysis.
