@@ -88,7 +88,7 @@ TRACE_SCORES=(
 )
 
 # Max partial credit (within the 50-point License bucket) for a REJECTED key
-# that still drives the verification chain partway down. Kept well below 60 so
+# that still drives the verification chain partway down. Kept well below 50 so
 # a near-miss key never scores close to a fully valid one.
 TRACE_PARTIAL_MAX=20
 
@@ -942,7 +942,7 @@ prop_bypass() {
 
 # ------------------------------------------------------------------------------
 # License Verification -- 50-point bucket:
-#   - valid key (flag + exit 0 on the challenge binary) -> 60, short-circuit.
+#   - valid key (flag + exit 0 on the challenge binary) -> 50, short-circuit.
 #     The run is dropped to nobody and strace-wrapped (baseline #3/#4: the
 #     challenge binary itself is the one exempted verifier-side target).
 #     Trace misses never deduct here: a valid key deterministically traverses

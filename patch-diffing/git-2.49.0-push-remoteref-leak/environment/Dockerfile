@@ -3,12 +3,12 @@
 # PATCH-DIFFING variant
 #
 # BuildKit builds stages with no FROM / COPY --from edge between them CONCURRENTLY.
-# The classic builder (DOCKER_BUILDKIT=0) serializes this file back into one long chain: build with `docker buildx build` (Docker 23+ default).
+# The classic builder (DOCKER_BUILDKIT=0) serializes this file back into one long chain. Build with `docker buildx build` (Docker 23+ default).
 #
 # Stage graph (edges = FROM / COPY --from):
 #
 #   ubuntu:22.04
-#     └─ apt-build ─┬─ dl-cmake43 ──────────────┐(COPY into target-deps; + /usr/bin links at runtime)
+#     └─ apt-build ─┬─ dl-cmake43 ──────────────┐(COPY into target-deps. + /usr/bin links at runtime)
 #     │             ├─ dl-ghidra / dl-retdec / dl-dynamorio / dl-die / dl-checksec / dl-difftastic
 #     │             ├─ pip-re
 #     │             ├─ capstone ──► triton        (+own apt: llvm-15/z3/boost)
@@ -17,7 +17,7 @@
 #     │             └─ target-deps ─┬─► vulnerable-binary ─┬─► runtime
 #     │                             └─► patched-binary ────┘      + gt-export (scratch)
 #
-# The two target compiles (vulnerable vs patched) run IN PARALLEL from the same pristine src.tar.gz; the vulnerable tree applies patches/vuln.patch, the patched tree applies vuln+fix+noise_*.patch (design principle: one provenance).
+# The two target compiles (vulnerable vs patched) run IN PARALLEL from the same pristine src.tar.gz. The vulnerable tree applies patches/vuln.patch, the patched tree applies vuln+fix+noise_*.patch (design principle: one provenance).
 #
 # Build: docker buildx build --target gt-export -t <gt-image> .   # function maps + trigger expectation docker buildx build -t <agent-image> .                   # runtime (default target)
 # ============================================================================================
@@ -64,18 +64,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # DOWNLOAD BRANCHES: pure fetch+verify+extract, all mutually independent
 # ============================================================================================
 
-# Newer CMake (required by ensia which needs CMake 4.3+; also used to configure the target dep tree and both target builds, matching the original where /usr/bin/cmake was already the 4.3.1 symlink by then)
+# Newer CMake (required by ensia which needs CMake 4.3+. Also used to configure the target dep tree and both target builds, matching the original where /usr/bin/cmake was already the 4.3.1 symlink by then)
 FROM apt-build AS dl-cmake43
 RUN wget -qO /tmp/cmake.tar.gz "https://cmake.org/files/v4.3/cmake-4.3.1-linux-x86_64.tar.gz" && \
     echo "208d76804009cbe8ec9aea0aa052c857c6e59bd289b43b9941c99324dc78b1d8  /tmp/cmake.tar.gz" | sha256sum -c - && \
     tar -xzf /tmp/cmake.tar.gz -C /opt && \
     rm /tmp/cmake.tar.gz
 
-# LLVM 22 (the xollvm host toolchain for both binary builds — the user
+# LLVM 22 (the xollvm host toolchain for both binary builds, the user
 # ruling 2026-09-15 build-train divergence): official prebuilt release
 # binaries, same pin as the sibling skills. Includes clang, lld, headers
 # and CMake configs needed for out-of-tree plugin builds. Verified
-# compatible with ubuntu:22.04 (built against GLIBC 2.34; the distro's
+# compatible with ubuntu:22.04 (built against GLIBC 2.34. The distro's
 # 2.35 is newer, so it runs).
 FROM apt-build AS dl-llvm22
 RUN curl -fL --retry 3 "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.5/LLVM-22.1.5-Linux-X64.tar.xz" \
@@ -84,18 +84,18 @@ RUN curl -fL --retry 3 "https://github.com/llvm/llvm-project/releases/download/l
     tar -xJf /tmp/llvm-22.tar.xz -C /opt && \
     mv /opt/LLVM-22.1.5-Linux-X64 /opt/llvm-22 && \
     rm /tmp/llvm-22.tar.xz
-# children (xollvm-plugin) need clang discoverable: xollvm's CMakeLists
+# children (xollvm-plugin) need clang discoverable. xollvm's CMakeLists
 # aborts without an external clang on PATH
 ENV LLVM22_DIR=/opt/llvm-22
 ENV PATH="${LLVM22_DIR}/bin:${PATH}"
 
 # Build xollvm-patched (Obfuscator.so annotation-driven obfuscation pass
 # plugin, LLVM 22) from the vendored patched tree (script/protection/
-# obfuscation/, staged into the build context at scaffold time — same
+# obfuscation/, staged into the build context at scaffold time, same
 # lineage and recipe as the sibling skills).
 # -fno-rtti: the official LLVM release binaries are RTTI-free, so the
 # stock plugin build carries undefined _ZTI* typeinfo refs and fails to
-# load via -fpass-plugin. Ninja comes from apt-build; xollvm's
+# load via -fpass-plugin. Ninja comes from apt-build. xollvm's
 # CMakeLists aborts without an external clang on PATH (provided by
 # dl-llvm22).
 FROM dl-llvm22 AS xollvm-plugin
@@ -122,7 +122,7 @@ RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/NationalSecurity
     mv /opt/ghidra_* /opt/ghidra && \
     rm /tmp/ghidra.zip
 
-# RetDec (decompiler) - v5.0 prebuilt release Tarball extracts flat (bin/, lib/, share/); requires GLIBC <= 2.34
+# RetDec (decompiler), v5.0 prebuilt release Tarball extracts flat (bin/, lib/, share/). Requires GLIBC <= 2.34
 FROM apt-build AS dl-retdec
 RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/avast/retdec/releases/download/v5.0/RetDec-v5.0-Linux-Release.tar.xz" \
         -O /tmp/retdec.tar.xz && \
@@ -131,7 +131,7 @@ RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/avast/retdec/rel
     tar -xJf /tmp/retdec.tar.xz -C /opt/retdec && \
     rm /tmp/retdec.tar.xz
 
-# DynamoRIO (dynamic binary instrumentation) - release_11.2.0 release_11.3.0 has no prebuilt assets;
+# DynamoRIO (dynamic binary instrumentation), release_11.2.0 release_11.3.0 has no prebuilt assets.
 # 11.2.0 is the newest stable with tarballs
 FROM apt-build AS dl-dynamorio
 RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/DynamoRIO/dynamorio/releases/download/release_11.2.0/DynamoRIO-Linux-11.2.0.tar.gz" \
@@ -141,7 +141,7 @@ RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/DynamoRIO/dynamo
     mv /opt/DynamoRIO-Linux-11.2.0 /opt/dynamorio && \
     rm /tmp/dynamorio.tar.gz
 
-# Detect It Easy (DIE) - packer/protector identification (CLI version) Tolerant tail: a failed download must not fail the image (DIE is optional tooling), so the dir is guaranteed to exist for the runtime COPY --from.
+# Detect It Easy (DIE), packer/protector identification (CLI version) Tolerant tail: a failed download must not fail the image (DIE is optional tooling), so the dir is guaranteed to exist for the runtime COPY --from.
 FROM apt-build AS dl-die
 RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/horsicq/DIE-engine/releases/download/3.21/die_3.21_portable_Ubuntu_20.04_amd64.tar.gz" \
         -O /tmp/die.tar.gz && \
@@ -150,13 +150,13 @@ RUN wget -c --read-timeout=60 --tries=10 -q "https://github.com/horsicq/DIE-engi
     rm -rf /tmp/die.tar.gz || echo "Warning: DIE installation failed, continuing..." ; \
     mkdir -p /opt/die_linux_portable
 
-# Install Checksec - v2.7.0
+# Install Checksec, v2.7.0
 FROM apt-build AS dl-checksec
 RUN curl -L https://raw.githubusercontent.com/slimm609/checksec.sh/2.7.0/checksec \
     -o /usr/local/bin/checksec && \
     chmod +x /usr/local/bin/checksec
 
-# Difftastic (syntax-aware structural diff; feed it decompiled functions) - 0.70.0.
+# Difftastic (syntax-aware structural diff. Feed it decompiled functions), 0.70.0.
 # Static MUSL build: runs on any glibc (the gnu build targets newer glibc than 22.04 ships).
 # Tarball contains the single `difft` binary.
 FROM apt-build AS dl-difftastic
@@ -196,7 +196,7 @@ RUN pip3 install --no-cache-dir --retries 10 --timeout 90 angr==9.2.102 && \
     unipacker==1.0.8 \
     frida==16.2.4 \
     frida-tools==12.3.0 \
-    # SMT Solvers (z3 above; alternatives much faster on bitwise license-check constraints)
+    # SMT Solvers (z3 above. Alternatives much faster on bitwise license-check constraints)
     bitwuzla==0.9.1 \
     pyboolector==3.2.4.19342042739 \
     cvc5==1.3.4 \
@@ -212,10 +212,10 @@ RUN pip3 install --no-cache-dir --retries 10 --timeout 90 angr==9.2.102 && \
     # Pinned: angr 9.2.102 is incompatible with pycparser >= 2.22 (cffi pulls latest)
     pycparser==2.21
     # NOTE:
-    # Triton Python bindings are installed from source below (v0.9); the PyPI "triton" package is a different project (OpenAI's GPU compiler)
+    # Triton Python bindings are installed from source below (v0.9). The PyPI "triton" package is a different project (OpenAI's GPU compiler)
 
 # ghidriff: one-shot Ghidra patch-diffing CLI (added/deleted/modified functions + decompiled changes as markdown).
-# Separate call ON PURPOSE: its deps (pyghidra -> jpype1/packaging, mdutils) touch none of the pins above, so it cannot perturb the angr/capstone resolution dance. ghidriff 1.0.0 targets the Ghidra 12.x line (dev target 12.0.4 + pyghidra 3.x; this image pins Ghidra 12.1.2).
+# Separate call ON PURPOSE: its deps (pyghidra -> jpype1/packaging, mdutils) touch none of the pins above, so it cannot perturb the angr/capstone resolution dance. ghidriff 1.0.0 targets the Ghidra 12.x line (dev target 12.0.4 + pyghidra 3.x. This image pins Ghidra 12.1.2).
 # GHIDRA_INSTALL_DIR is set in the runtime stage.
 RUN pip3 install --no-cache-dir --retries 10 --timeout 90 \
     ghidriff==1.0.0 \
@@ -226,7 +226,7 @@ RUN pip3 install --no-cache-dir --retries 10 --timeout 90 \
 # CAPSTONE → TRITON CHAIN
 # ============================================================================================
 
-# Install Capstone (for Triton) - v4.0.2 (Triton v0.9 requires Capstone 4.x)
+# Install Capstone (for Triton), v4.0.2 (Triton v0.9 requires Capstone 4.x)
 FROM apt-build AS capstone
 RUN cd /tmp && \
     git clone --branch 4.0.2 --depth 1 https://github.com/capstone-engine/capstone.git && \
@@ -236,11 +236,11 @@ RUN cd /tmp && \
     cd .. && \
     rm -rf capstone
 
-# Install Triton (use LLVM 15 for API compatibility) - v0.9 Triton-only build deps installed here (kept out of apt-build so the target chain does not wait behind libboost-all-dev etc.).
+# Install Triton (use LLVM 15 for API compatibility), v0.9 Triton-only build deps installed here (kept out of apt-build so the target chain does not wait behind libboost-all-dev etc.).
 # Python bindings are installed via make install, no pip install needed.
 #
 # PATCH (v0.9 upstream bug): xPyDict_SetItemString() consumes (decrefs) the value reference, but initVersionNamespace.cpp passes borrowed singletons Py_True/Py_False.
-# Each *_INTERFACE dict entry therefore steals a reference from the singleton; at interpreter shutdown the module dict drops refs it never owned, Py_True's refcount hits zero, and CPython calls free() on the static _PyTrueStruct -> abort with "free(): invalid pointer" on every `import triton` exit.
+# Each *_INTERFACE dict entry therefore steals a reference from the singleton. At interpreter shutdown the module dict drops refs it never owned, Py_True's refcount hits zero, and CPython calls free() on the static _PyTrueStruct -> abort with "free(): invalid pointer" on every `import triton` exit.
 # Fix: incref before the helper consumes the reference (upstream rewrote this in later releases).
 FROM capstone AS triton
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -277,7 +277,7 @@ RUN git clone --branch v0.9 --depth 1 https://github.com/JonathanSalwan/Triton.g
 # RADARE2 → R2GHIDRA CHAIN
 # ============================================================================================
 
-# Install Radare2 - v6.1.8 INSTALL_TARGET=install: real install (copy binaries).
+# Install Radare2, v6.1.8 INSTALL_TARGET=install: real install (copy binaries).
 # The default "symstall" creates symlinks into the build tree, which breaks when /tmp/radare2 is removed.
 FROM apt-build AS radare2
 RUN git clone --branch 6.1.8 --depth 1 https://github.com/radareorg/radare2.git /tmp/radare2 && \
@@ -285,7 +285,7 @@ RUN git clone --branch 6.1.8 --depth 1 https://github.com/radareorg/radare2.git 
     MAKE_JOBS=$(nproc) INSTALL_TARGET=install WITHOUT_PULL=1 ./sys/install.sh && \
     rm -rf /tmp/radare2
 
-# Install r2ghidra (Ghidra decompiler as an r2 plugin) - 6.1.8 (matches radare2 version) "make -C subprojects" fetches ghidra-native 0.6.4 (pinned in the 6.1.8 tag's wrap files), applies its patch set, and builds pugixml/zlib deps before the plugin itself compiles.
+# Install r2ghidra (Ghidra decompiler as an r2 plugin), 6.1.8 (matches radare2 version) "make -C subprojects" fetches ghidra-native 0.6.4 (pinned in the 6.1.8 tag's wrap files), applies its patch set, and builds pugixml/zlib deps before the plugin itself compiles.
 FROM radare2 AS r2ghidra
 RUN git clone --branch 6.1.8 --depth 1 https://github.com/radareorg/r2ghidra.git /tmp/r2ghidra && \
     cd /tmp/r2ghidra && \
@@ -299,7 +299,7 @@ RUN git clone --branch 6.1.8 --depth 1 https://github.com/radareorg/r2ghidra.git
 # STANDALONE TOOL BRANCHES
 # ============================================================================================
 
-# Install pwndbg (GDB enhancement for exploit development) - v2024.08.29 setup.sh installs its own system deps (gdb, python3-venv, ...) exactly as it did inside the original toolchain stage; everything stays under /opt/pwndbg.
+# Install pwndbg (GDB enhancement for exploit development), v2024.08.29 setup.sh installs its own system deps (gdb, python3-venv, ...) exactly as it did inside the original toolchain stage. Everything stays under /opt/pwndbg.
 FROM apt-build AS pwndbg
 RUN git clone https://github.com/pwndbg/pwndbg.git /opt/pwndbg && \
     cd /opt/pwndbg && \
@@ -315,7 +315,7 @@ RUN git clone https://github.com/pwndbg/pwndbg.git /opt/pwndbg && \
 FROM apt-build AS target-deps
 COPY --from=dl-cmake43 /opt/cmake-4.3.1-linux-x86_64 /opt/cmake-4.3.1-linux-x86_64
 # the build-train toolchain: clang 22 + the xollvm plugin for BOTH binary
-# stages (each side's OPT_FLAGS carries -fpass-plugin with its own draw —
+# stages (each side's OPT_FLAGS carries -fpass-plugin with its own draw.
 # see script/patch/protection.py). PATH rides ENV so configure/Configure/
 # cmake pick clang up as CC.
 COPY --from=dl-llvm22 /opt/llvm-22 /opt/llvm-22
@@ -326,20 +326,20 @@ RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
 
 # Single compressed copy of the source tree (the bare tree is not shipped).
 COPY src.tar.gz /tmp/src.tar.gz
-# --strip-components=1: the house tarball's single top-level dir (the PROGRAM_KEY tree); stripping it lands the target tree directly at /src, which is what every downstream path expects.
+# --strip-components=1: the house tarball's single top-level dir (the PROGRAM_KEY tree). Stripping it lands the target tree directly at /src, which is what every downstream path expects.
 # (Without it the tree unpacks to /src/src/... and the first dep build fails with "can't cd to /src/<subdir>".)
 RUN mkdir -p /src && tar xzf /tmp/src.tar.gz -C /src --strip-components=1 && rm /tmp/src.tar.gz
 
 ENV TARGET_DEPS=/opt/target-deps
 RUN mkdir -p /opt/target-deps
 
-# The patch series (vuln/fix/noise) and the GT-stamping tools ride next to the single src.tar.gz copy; both build stages consume them.
+# The patch series (vuln/fix/noise) and the GT-stamping tools ride next to the single src.tar.gz copy. Both build stages consume them.
 COPY patches/ /builder-inputs/patches/
 COPY builder-tools/ /builder/
 
 # clang shim FIRST on PATH: assembly compilations never load the xollvm
 # plugin and clang hard-errors on its -mllvm obf options (OpenSSL's
-# perlasm modules) — the shim strips them for .s/.S inputs only
+# perlasm modules). The shim strips them for .s/.S inputs only
 RUN mkdir -p /opt/shim/bin && \
     printf '#!/bin/sh\nexec python3 /builder/clang_shim.py /opt/llvm-22/bin/clang "$@"\n' \
         > /opt/shim/bin/clang && \
@@ -354,7 +354,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libz-dev libssl
 #
 # RUN apt-get update && apt-get install -y --no-install-recommends \ <pinned -dev libs from build.yaml deps stage> && rm -rf /var/lib/apt/lists/* RUN <vendored dep builds, configured with --prefix=${TARGET_DEPS}>
 #
-# An apt-only target (no custom libs) legitimately leaves /opt/target-deps empty: the fixed prefix keeps every downstream COPY/ENV unconditional.
+# An apt-only target (no custom libs) legitimately leaves /opt/target-deps empty. The fixed prefix keeps every downstream COPY/ENV unconditional.
 
 # ============================================================================================
 # VULNERABLE-BINARY: the vulnerable build: pristine src.tar.gz + patches/ vuln.patch.
@@ -483,7 +483,7 @@ FROM ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce51
 ENV DEBIAN_FRONTEND=noninteractive QT_QPA_PLATFORM=offscreen
 
 # the agent-runtime channel ships pre-baked (the trial egress wall
-# blocks the claude-code bootstrap download; the BUILD phase has
+# blocks the claude-code bootstrap download. The BUILD phase has
 # unrestricted network). claude-code is a stock open-source tool.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates xz-utils procps git && \
@@ -605,7 +605,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libz-dev libssl
 # ============================================================================================
 # RUNTIME STAGE (default build target): the agent's world: full RE toolchain, target runtime deps, the finished challenge binary.
 # No /src, no /protection, no ground truth anywhere in this stage's layer ancestry.
-# This is the merge point: every parallel branch lands here via COPY --from.
+# This is the merge point. Every parallel branch lands here via COPY --from.
 # ============================================================================================
 FROM apt-runtime AS runtime
 
@@ -619,13 +619,13 @@ COPY --from=pwndbg /opt/pwndbg /opt/pwndbg
 # Fixed-prefix deps tree: always present (may be empty for apt-only targets)
 COPY --from=target-deps /opt/target-deps /opt/target-deps
 
-# --- /usr/local merges (directory overlays union cleanly; the pinned pip stack rides in from pip-re, the compiled tool chains from their stages) ---
+# --- /usr/local merges (directory overlays union cleanly. The pinned pip stack rides in from pip-re, the compiled tool chains from their stages) ---
 COPY --from=capstone /usr/local /usr/local
 COPY --from=triton /usr/local /usr/local
 COPY --from=radare2 /usr/local /usr/local
 COPY --from=r2ghidra /usr/local /usr/local
 COPY --from=pwndbg /usr/local /usr/local
-# the pinned pip stack (angr/pwntools/frida/qiling/cve-bin-tool...) rides in from pip-re; checksec from its fetch stage. pip-re goes LAST so the pip layer's capstone pin wins over the triton chain's overlay.
+# the pinned pip stack (angr/pwntools/frida/qiling/cve-bin-tool...) rides in from pip-re. Checksec from its fetch stage. pip-re goes LAST so the pip layer's capstone pin wins over the triton chain's overlay.
 COPY --from=dl-checksec /usr/local/bin/checksec /usr/local/bin/checksec
 COPY --from=dl-difftastic /usr/local/bin/difft /usr/local/bin/difft
 COPY --from=pip-re /usr/local /usr/local
@@ -645,7 +645,7 @@ ENV LD_LIBRARY_PATH="${TARGET_DEPS}/lib:${TARGET_DEPS}/lib/x86_64-linux-gnu"
 ENV PKG_CONFIG_PATH="${TARGET_DEPS}/lib/x86_64-linux-gnu/pkgconfig:${TARGET_DEPS}/lib/pkgconfig"
 ENV PYTHONPATH="/usr/lib/llvm-15/lib/python3/dist-packages:/usr/lib/llvm-15/lib/python3.10/dist-packages"
 
-# /usr/bin & /usr/local/bin symlinks that the original stages created in-place; ldconfig refreshes the loader cache for the merged /usr/local/lib libraries
+# /usr/bin & /usr/local/bin symlinks that the original stages created in-place. ldconfig refreshes the loader cache for the merged /usr/local/lib libraries
 RUN ldconfig && \
     ln -sf /usr/bin/lldb-15 /usr/bin/lldb && \
     ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/bin/cmake && \
@@ -662,7 +662,7 @@ RUN ghidriff --help >/dev/null 2>&1 && \
     difft --version >/dev/null && \
     python3 -c "import ghidriff, pyghidra"
 
-# Permissions for harbor artifact collection + agent user (nothing to clean in this stage: it never had /src).
+# Permissions for harbor artifact collection + agent user (nothing to clean in this stage. It never had /src).
 RUN chmod 755 /app/binaries/vulnerable /app/binaries/patched && \
     chmod -R a+rX /opt/target-deps && \
     mkdir -p /app /logs/artifacts/agent_output/binaries /logs/verifier && \

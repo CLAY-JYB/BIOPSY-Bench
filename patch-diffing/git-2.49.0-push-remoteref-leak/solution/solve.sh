@@ -9,7 +9,7 @@ set -euo pipefail
 #
 # The verifier executes it under the task's CANONICAL invocation against
 # both delivered binaries and scores the pure-dynamic ladder (100 raw: 70+20+10).
-# No report is read; no spec is submitted -- the invocation belongs to
+# No report is read. No spec is submitted. The invocation belongs to
 # the task, not the agent.
 # ═══════════════════════════════════════════════════════════════════════════
 

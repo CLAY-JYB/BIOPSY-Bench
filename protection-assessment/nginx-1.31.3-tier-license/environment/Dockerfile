@@ -455,9 +455,9 @@ ENV LLVM22_DIR=/opt/llvm-22
 ENV PATH="${LLVM22_DIR}/bin:${PATH}"
 WORKDIR /src
 
-# TEMPLATE: PROTECTION CHAIN — re-hardened profile P1 D3 O3 I3 (seed 20260922).
+# TEMPLATE: PROTECTION CHAIN — re-hardened profile P2 D3 O3 I3 (seed 20260922).
 # Mirrors the ffmpeg-9.0.1 PROVEN re-harden flow, adapted to nginx's own build
-# system (auto/configure + make, artifact objs/nginx) and P1 = UPX packing:
+# system (auto/configure + make, artifact objs/nginx) and P2 = UPX + stealth packing:
 #   (1) configure runs FIRST so the nginx build tree + objs/ headers exist.
 #   (2) interlock_gen (I3, level 3) runs on the CALL-SITE file src/core/nginx.c
 #       (ngx_license_stage() invokes validate_input): wraps the call ->
@@ -480,11 +480,11 @@ WORKDIR /src
 #       over nginx's clean object, so the RSA verify core + "Invalid key" anchors
 #       are genuinely obfuscated (anchor probe must print 0).
 #   (5) interlock_patch stamps expected section CRCs (incl. g_adbg) into the
-#       UNSTRIPPED objs/nginx BEFORE strip; then UPX deep-stealth packing (P1)
+#       UNSTRIPPED objs/nginx BEFORE strip; then UPX deep-stealth packing (P2)
 #       yields challenge_final; challenge_ldd is the pre-packing ELF.
 #
 # Two fixed artifact names, ALWAYS both staged (deterministic for the pipeline):
-#   /out/challenge_final — the packed artifact (P1) — becomes /app/binary.
+#   /out/challenge_final — the packed artifact (P2) — becomes /app/binary.
 #   /out/challenge_ldd   — packer-free ELF for the verifier's ldd closure.
 
 # === STAGE 0: configure (build tree + objs/ generated headers) ===
@@ -523,7 +523,7 @@ RUN VOBJ="$(find objs -name verification.o | head -1)" && test -n "$VOBJ" && \
 # (g_s*/g_canary/g_adbg) are disjoint from the UPX overlay.
 RUN python3 /protection/interdependency/interlock_patch.py --binary objs/nginx --manifest src/core/nginx_il.ilmanifest.json && \
     strip --strip-all objs/nginx
-# [packing P1] UPX deep-stealth (magic + p_info zeroing + section renaming, so
+# [packing P2] UPX deep-stealth (magic + p_info zeroing + section renaming, so
 # `upx -d` refuses the artifact — same contract as every other packed task).
 RUN upx -6 --overlay=copy --no-backup -q -o objs/nginx_packed_0 objs/nginx && \
     python3 /protection/packing/upx_stealth.py objs/nginx_packed_0 objs/nginx_packed_0_stealth

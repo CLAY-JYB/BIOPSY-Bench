@@ -34,7 +34,7 @@
 # ============================================================================================
 # APT-BUILD — minimal compile/download base shared by every build branch: compilers,
 # build tools, fetch tools, python3. Deliberately excludes the heavy agent-world
-# packages (java, Qt5, gdb, llvm-15, libboost-all-dev, ...) so the wesnoth chain
+# packages (java, Qt5, gdb, llvm-15, libboost-all-dev, ...) so the target chain
 # does not wait behind them.
 # ============================================================================================
 FROM ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982 AS apt-build
@@ -80,7 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================================================================
 
 # Newer CMake (required by ensia which needs CMake 4.3+; also used to configure the
-# wesnoth dep tree and both carrier builds, matching the original where /usr/bin/cmake
+# target dep tree and both target builds, matching the original where /usr/bin/cmake
 # was already the 4.3.1 symlink by then)
 FROM apt-build AS dl-cmake43
 RUN wget -qO /tmp/cmake.tar.gz "https://cmake.org/files/v4.3/cmake-4.3.1-linux-x86_64.tar.gz" && \
@@ -227,7 +227,7 @@ RUN cd /tmp && \
     rm -rf capstone
 
 # Install Triton (use LLVM 15 for API compatibility) - v0.9
-# Triton-only build deps installed here (kept out of apt-build so the wesnoth chain
+# Triton-only build deps installed here (kept out of apt-build so the target chain
 # does not wait behind libboost-all-dev etc.). Python bindings are installed via
 # make install, no pip install needed.
 #
@@ -540,7 +540,7 @@ COPY --from=origin-binary /gt /gt
 
 # ============================================================================================
 # APT-RUNTIME — the full agent-world package set (verbatim from the original
-# toolchain list, plus the wesnoth -dev set). No dependency on any build branch,
+# toolchain list, plus the target -dev set). No dependency on any build branch,
 # so it runs alongside the whole tree and is ready when the merge point needs it.
 # ============================================================================================
 FROM ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982 AS apt-runtime
@@ -672,7 +672,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # ============================================================================================
 # RUNTIME STAGE (default build target) — the agent's world: full RE toolchain,
-# wesnoth runtime deps, the finished challenge binary. No /src, no /protection,
+# target runtime deps, the finished challenge binary. No /src, no /protection,
 # no ground truth anywhere in this stage's layer ancestry. This is the merge
 # point: every parallel branch lands here via COPY --from.
 # ============================================================================================

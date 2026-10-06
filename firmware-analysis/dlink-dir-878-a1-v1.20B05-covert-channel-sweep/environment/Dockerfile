@@ -322,7 +322,7 @@ RUN curl -L https://raw.githubusercontent.com/slimm609/checksec.sh/2.7.0/checkse
 # GT-EXPORT: `buildx build --target gt-export`; the construct pipeline exports these verifier artifacts (oracle tree + challenge image only; the GT config and oracle binaries are host-side export products) into tests/ + solution/.
 # ============================================================================================
 FROM apt-build AS gt-export
-# the copy list = "firmware.bin assembled.bin" (+ firmware_v1.1.bin + its pre-F2 assembled_v1.1.bin on I6 chain tasks; the overlay tree derives from the PRE-CONCEALMENT v1.1, whose superblock is still a plain hsqs)
+# the copy list = "firmware.bin assembled.bin" (+ firmware_v1.1.bin + its pre-F2 assembled_v1.1.bin on chain (I6/I7) tasks; the overlay tree derives from the PRE-CONCEALMENT v1.1, whose superblock is still a plain hsqs)
 COPY firmware.bin assembled.bin firmware_v1.1.bin /work/
 
 # Oracle tree derivation only: this stage never sees the GT config (the
@@ -363,7 +363,7 @@ if off is not None:
     if n_files < 100:
         sys.exit("FATAL: oracle tree extraction produced only %d files" % n_files)
 
-# I6 chain: overlay the v1.1 tree onto the oracle set (v1.2 wins same-name conflicts; v1.1-only files (the decryptor) survive)
+# chain (I6/I7): overlay the v1.1 tree onto the oracle set (v1.2 wins same-name conflicts; v1.1-only files (the decryptor) survive)
 v11_src = "/work/assembled_v1.1.bin" if os.path.exists("/work/assembled_v1.1.bin") else "/work/firmware_v1.1.bin"
 if os.path.exists(v11_src) and off is not None:
     v11 = open(v11_src, "rb").read()
@@ -435,7 +435,7 @@ RUN ldconfig && \
 # ============================================================================================
 # Challenge artifact: generated outside Docker by gen_firmware.py, arrives via the build context (never built inside this image)
 # ============================================================================================
-# the copy list = firmware.bin to /app (+ firmware_v1.1.bin on I6 chain tasks: the agent receives BOTH images)
+# the copy list = firmware.bin to /app (+ firmware_v1.1.bin on chain (I6/I7) tasks: the agent receives BOTH images)
 COPY firmware.bin firmware_v1.1.bin /app/
 RUN chmod 0444 /app/*.bin
 

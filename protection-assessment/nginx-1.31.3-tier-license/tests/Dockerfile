@@ -35,9 +35,12 @@ COPY binary /app/binary
 RUN chmod 755 /app/binary
 COPY ground_truth/ /app/ground_truth/
 
-# Verifier entrypoint (harbor separate mode: the image owns /tests/test.sh)
+# Verifier entrypoint (harbor separate mode: the image owns /tests/test.sh).
+# test.sh stays root-only (700): it discloses the scoring thresholds and gate
+# internals, and agent-submitted binaries execute as nobody inside this
+# container during verification.
 COPY test.sh /tests/test.sh
-RUN chmod +x /tests/test.sh && mkdir -p /logs/verifier && \
+RUN chmod 700 /tests/test.sh && mkdir -p /logs/verifier && \
     ln -sf /usr/bin/lldb-15 /usr/bin/lldb
 
 # ==============================================================================
@@ -48,6 +51,7 @@ RUN chmod +x /tests/test.sh && mkdir -p /logs/verifier && \
 # ├── binary                        # Challenge binary (export from env build)
 # └── ground_truth/                 # Ground truth for verifier comparison
 #     ├── input.txt                 # Correct license key
+#     ├── trace_points.json         # PIE-decoupled ladder probes (when staged)
 #     └── binaries/
 #         └── origin_binary         # Original unprotected binary (oracle)
 #

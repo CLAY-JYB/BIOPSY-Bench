@@ -33,6 +33,10 @@ RUN tar xzf /tmp/tree.tar.gz -C /app/ground_truth/ && rm /tmp/tree.tar.gz
 #   assembled.bin             the pre-encryption image (P0 head reference
 #   + verbatim-copy void on encrypted engagements; root-only)
 COPY ground_truth/assembled.bin /app/ground_truth/assembled.bin
+#   assembled_perfile.bin     the perfile-layered image (P0's HEAD
+#   reference for L4 tasks — staged by the export; identical to
+#   assembled.bin when the task carries no perfile layer)
+COPY ground_truth/assembled_perfile.bin /app/ground_truth/assembled_perfile.bin
 COPY firmware.bin /app/firmware.bin
 
 # Diagnosis graph (assembled at pack time from the same GT config that produced the report): the attribution engine embedded in test.sh walks it over the scorers' ledger and writes /logs/verifier/diagnosis.json.
