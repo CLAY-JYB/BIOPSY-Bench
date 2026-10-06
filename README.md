@@ -2,7 +2,7 @@
 
 **Reverse-engineering benchmarks that remain difficult as agents become more capable.**
 
-BIOPSY is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable Harbor task that agents must solve from the binary alone.
+BIOPSY is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable [Harbor](https://github.com/harbor-framework/harbor) task that agents must solve from the binary alone.
 
 ## Motivation
 
@@ -40,6 +40,8 @@ BIOPSY covers five scenarios. Across all five, we require **verifiable outcomes 
 All tasks and agents share a single Claude Code scaffold. Performance is reported as pass@5 under a budget of two hours per attempt. Scoring is fully automated, with an oracle solution earning 1.0, a no-op solution earning 0.0, and anti-cheating invariants keeping the ground truth out of plaintext.
 
 On the initial task set, agents score between **0.84 and 0.96**. After reconstruction under the mined hardness patterns, scores fall to between **0.03 and 0.15**, which shows that the reconstructed tasks are substantially harder.
+
+![BIOPSY leaderboard](assets/leaderboard.png)
 
 ## Hardness patterns
 
