@@ -2,7 +2,7 @@
 
 **Reverse-engineering benchmarks that remain difficult as agents become more capable.**
 
-BIOPSY is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable Harbor task that agents must solve from the binary alone, with agent testing routed through tingly-box to select the target LLM.
+BIOPSY is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable Harbor task that agents must solve from the binary alone.
 
 ## Motivation
 
@@ -10,7 +10,7 @@ A fixed benchmark eventually becomes too easy. When nearly every agent solves th
 
 Our research question is how to keep constructing tasks that reveal those remaining bottlenecks.
 
-Our key insight is that **agent performance provides actionable feedback for constructing harder tasks**. Scores tell us when a task may have become too easy. Execution trajectories explain why, since they show which clues agents rely on and which analysis steps they manage to skip.
+We utilize **agent performance to provide actionable feedback for constructing harder tasks**. Scores tell us when a task may have become too easy. Execution trajectories explain why, since they show which clues agents rely on and which analysis steps they manage to skip.
 
 ## Workflow
 
@@ -25,7 +25,7 @@ Hardness patterns are hypotheses rather than guaranteed improvements. Each patte
 
 ## Scenarios
 
-BIOPSY covers five scenarios. Across all five, we require **verifiable outcomes rather than explanations alone**. A patch-diffing solution supplies a triggering input, a protocol-reconstruction solution supplies an executable client, and a firmware-analysis solution supplies a verdict backed by recovered artifacts and observed behavior.
+BIOPSY covers five scenarios. Across all five, we require **verifiable outcomes rather than explanations alone**. For example, a patch-diffing solution supplies a triggering input, a protocol-reconstruction solution supplies an executable client, and a firmware-analysis solution supplies a verdict backed by recovered artifacts and observed behavior.
 
 | Scenario                | Agent objective                                                                                                                                                                                                    |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -57,23 +57,31 @@ Together, these patterns illustrate the core idea of BIOPSY, which is to use age
 
 ## Task catalog
 
-Each scenario directory holds its finished and verified task instances. Created dates follow the commit that first added the task.toml of each task.
+Each scenario directory holds its finished and verified task instances.
 
 ### Protection assessment
 
 Five protected builds of real programs, each requiring the full protection chain to be defeated.
 
-| Task                                                                                             | Created    | Difficulty | Objective                                                                                            |
-|--------------------------------------------------------------------------------------------------|------------|------------|------------------------------------------------------------------------------------------------------|
-| [`ddnet-19.9-hardened-i3-strenc`](protection-assessment/ddnet-19.9-hardened-i3-strenc)           | 2026-09-19 | hard       | defeat the hardened I3 strenc chain on a protected DDNet binary to recover the license key           |
-| [`stk-code-1.5-hardened-i3-strenc`](protection-assessment/stk-code-1.5-hardened-i3-strenc)       | 2026-09-19 | expert     | defeat the hardened I3 strenc chain to unlock premium story content in SuperTuxKart                  |
-| [`wesnoth-1.19.26-hardened-i3-strenc`](protection-assessment/wesnoth-1.19.26-hardened-i3-strenc) | 2026-09-19 | hard       | defeat the hardened I3 strenc chain to recover save-data entitlement in Battle for Wesnoth           |
-| [`ffmpeg-9.0.1-hardened-i3-strenc`](protection-assessment/ffmpeg-9.0.1-hardened-i3-strenc)       | 2026-09-19 | hard       | defeat the PageGuard-packed, anti-debug-hardened chain on the license-protected transcoding tool     |
-| [`nginx-1.31.3-hardened-i3-strenc`](protection-assessment/nginx-1.31.3-hardened-i3-strenc)       | 2026-09-19 | hard       | defeat the UPX, Tigress, and interlock chain on the protected web server to forge the activation key |
+| Task                                                                                         | Created    | Difficulty | Objective                                                                                                                                   |
+|----------------------------------------------------------------------------------------------|------------|------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| [`ddnet-19.9-license-gate`](protection-assessment/ddnet-19.9-license-gate)                   | 2026-09-19 | hard       | defeat the packed, anti-debug-hardened, interlock-guarded chain to recover the headless server's startup entitlement key                    |
+| [`stk-code-1.5-premium-unlock`](protection-assessment/stk-code-1.5-premium-unlock)           | 2026-09-19 | expert     | defeat the packed, anti-debug-hardened, interlock-guarded chain to unlock premium story, challenge, kart, and track content in SuperTuxKart |
+| [`wesnoth-1.19.26-save-entitlement`](protection-assessment/wesnoth-1.19.26-save-entitlement) | 2026-09-19 | hard       | defeat the VM-obfuscated, packed, anti-debug-hardened chain to recover save-data entitlement in Battle for Wesnoth                          |
+| [`ffmpeg-9.0.1-transcode-unlock`](protection-assessment/ffmpeg-9.0.1-transcode-unlock)       | 2026-09-19 | hard       | defeat the PageGuard-packed, anti-debug-hardened chain to unlock the commercial transcoding tier of the protected tool                      |
+| [`nginx-1.31.3-tier-license`](protection-assessment/nginx-1.31.3-tier-license)               | 2026-09-19 | hard       | defeat the UPX, Tigress, and interlock chain on the protected web server to forge the load-balancing tier's activation key                  |
 
 ### Malware analysis
 
-No malware-analysis instances are published in this repository yet.
+Five trojanized builds of real network-facing carriers, each hiding its payload behind layered evasion such as stealth packing, anti-debug, anti-VM, anti-emulation, and obfuscation. The deliverable is a patched binary that keeps the carrier's genuine behavior but no longer detonates, plus a cleanup script that removes the infection's artifacts.
+
+| Task                                                                            | Created    | Difficulty | Objective                                                                                                                                                                             |
+|---------------------------------------------------------------------------------|------------|------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`httpd-2.4.68-cred-exfil`](malware-analysis/httpd-2.4.68-cred-exfil)           | 2026-10-05 | hard       | defeat stealthed UPX packing, anti-debug, and string obfuscation to strip the credential exfiltration from the trojanized shared-hosting web daemon while keeping it a working server |
+| [`busybox-1.36.1-nc-dropper`](malware-analysis/busybox-1.36.1-nc-dropper)       | 2026-10-06 | hard       | defeat UPX-stealth packing, anti-VM, anti-emulation, and timing evasion to strip the netcat dropper from the trojanized BusyBox while keeping the multi-tool working                  |
+| [`openssh-9.9p2-sshkey-harvest`](malware-analysis/openssh-9.9p2-sshkey-harvest) | 2026-10-06 | expert     | defeat a custom page-encrypted packer and obfuscated payload to strip the key harvest from the trojanized SSH client while keeping genuine behavior                                   |
+| [`socat-1.8.0.2-covert-relay`](malware-analysis/socat-1.8.0.2-covert-relay)     | 2026-10-06 | expert     | defeat custom-VM virtualization, stealth packing, and anti-analysis layers to strip the covert relay from the trojanized network tool while keeping genuine behavior                  |
+| [`stunnel-5.80-tls-beacon`](malware-analysis/stunnel-5.80-tls-beacon)           | 2026-10-06 | hard       | defeat whole-binary packing, trigger-point anti-debug, and environment fingerprinting to strip the TLS beacon from the trojanized tunnel while keeping genuine behavior               |
 
 ### Protocol reconstruction
 
@@ -114,7 +122,7 @@ Six stripped build pairs under six distinct engagement scenarios, covering backp
 
 ## Task package layout
 
-Every task directory shares the same core shape, with a category-specific extra under environment/ where needed (for example protection/ in protection-assessment or patches/ in patch-diffing). Protocol-reconstruction tasks additionally carry a jobs/ directory for long-running build jobs.
+Every task directory shares the same core shape, with a category-specific extra under environment/ where needed (for example protection/ in protection-assessment or patches/ in patch-diffing).
 
 ```text
 <scenario>/<task>/
@@ -125,8 +133,7 @@ Every task directory shares the same core shape, with a category-specific extra 
 ├── config/                # agent configs for cc, codex, and gemini-cli
 ├── environment/           # agent-side Dockerfile and, outside patch diffing, docker-compose.yaml
 ├── solution/              # held-out oracle with solve.sh and ground_truth/
-├── tests/                 # verifier side with Dockerfile, docker-compose.yaml, and test.sh
-└── jobs/                  # protocol-reconstruction only, for long-running build jobs
+└── tests/                 # verifier side with Dockerfile, docker-compose.yaml, and test.sh
 ```
 
 ## License
