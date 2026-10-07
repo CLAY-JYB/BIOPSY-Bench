@@ -1057,7 +1057,13 @@ def _main():
     else:
         if contracts:
             details.append("✗ D void: daemon bytes not delivered")
-            for _did in ("D1", "D2", "D3"):
+            # D3 exists only where the GT carries the chain contract (the
+            # diagnosis graph builds the node under the same condition --
+            # writing it unconditionally left an unmatched ledger record)
+            _dids = ["D1", "D2"]
+            if any(ct.get("chain") for ct in contracts):
+                _dids.append("D3")
+            for _did in _dids:
                 recs.append({"id": _did, "status": "voided",
                              "voided_by": "C3", "points": [0, 0]})
 
