@@ -118,6 +118,7 @@ TRACE_POINTS_FILE="$GROUND_TRUTH_DIR/trace_points.json"
 DEFEAT_PROPERTIES=(
     "unpack"
     "bypass"
+    "deobf"
 )
 PROPERTIES_MAX=50
 

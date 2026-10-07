@@ -443,7 +443,7 @@ RUN ./configure --disable-doc --disable-debug --disable-x86asm --extra-cflags="-
     python3 -c "import json; assert len(json.load(open('/gt/trace_points.json'))['points']) >= 2, 'no probe symbols in origin binary'"
 
 # ============================================================================================
-# CHALLENGE-BINARY — full protection chain (D3 + O3 + P4 PageGuard), runs IN PARALLEL with
+# CHALLENGE-BINARY — full protection chain (D3 + O3 + P2 + I3), runs IN PARALLEL with
 # origin-binary: identical deps stage, own build tree, clang+plugin toolchain.
 # ============================================================================================
 FROM target-deps AS challenge-binary
@@ -464,20 +464,17 @@ WORKDIR /src
 RUN python3 /protection/interdependency/interlock_gen.py --input fftools/ffmpeg.c --emit fftools/ffmpeg_il.c --num-guards 4 --level 3 --seed 20260922 --wrap validate_input && \
     mv fftools/ffmpeg_il.c fftools/ffmpeg.c
 # [anti-debug D3] advanced checks + anti-dump hardening + self-ptrace
-# DebugBlocker. adbg's blocker forwards signal-delivery stops (incl. SIGSEGV)
-# to the tracee, so PageGuard's on-demand page decryption keeps working. It
+# DebugBlocker. adbg's blocker forwards signal-delivery stops to the tracee, so
+# it composes with the interlock/packing layers. It
 # sees interlock's #include "adbg.c" already present -> skips its own include;
 # the wrapped call no longer matches the bare validate_input anchor, so the
 # check lands at transcode() start via the --target-function fallback.
 RUN python3 /protection/anti-debug/anti-debug.py fftools/ffmpeg.c --checks advanced --copy-libs --insert-at-call validate_input --target-function transcode --harden --debug-blocker
-# [packing/source] PageGuard Instrument (license section -> g_pg) on verification.c
-RUN python3 /protection/packing/pageguard.py fftools/verification.c
 # [obfuscation O3] annotate validate_input for xollvm; ccwrap (--cc below) routes
 # ONLY verification.c through clang+Obfuscator.so, so the RSA-style verify core is
-# flattened/bogus-CF'd/MBA'd/string-encrypted and buried beneath the PageGuard
-# page-encryption layer. Two passes union to {adec,bcf,flattening,mba,shield,
-# constenc,strenc} (no vm: keeps the modexp path near-native). Annotate AFTER
-# pageguard so the section() and annotate() attributes coexist.
+# flattened/bogus-CF'd/MBA'd/string-encrypted. Two passes union to {adec,bcf,
+# flattening,mba,shield,constenc,strenc} (no vm: keeps the modexp path
+# near-native). The whole artifact is then UPX+stealth packed (P2) below.
 RUN python3 /protection/obfuscation/xollvm_prep.py fftools/verification.c "adec,bcf,flattening,mba,shield" --function validate_input && \
     python3 /protection/obfuscation/xollvm_prep.py fftools/verification.c "flattening,bcf,constenc,strenc" --function validate_input
 
@@ -487,17 +484,21 @@ RUN ./configure --cc=/protection/obfuscation/ccwrap --disable-doc --disable-debu
 
 # === STAGE 3: Binary-level protection (AFTER compilation) ===
 # [interdependency I3 patch] stamp the guard network's expected section CRCs
-# into ffmpeg_g (reads the symbol table) — BEFORE pageguard_patch and strip.
-# The guard sections (g_guard_*, g_canary, g_adbg) are disjoint from PageGuard's
-# g_pg, so encryption below does not invalidate these CRCs.
+# into ffmpeg_g (reads the symbol table) — BEFORE strip. The guard sections
+# (g_guard_*, g_canary, g_adbg) are disjoint from the UPX overlay, so packing
+# below does not invalidate these CRCs.
 RUN python3 /protection/interdependency/interlock_patch.py --binary ffmpeg_g --manifest fftools/ffmpeg_il.ilmanifest.json
-# [packing] PageGuard Encrypt Section (self-key XOR) — BEFORE strip (needs
-# symtab); ffmpeg's build strips `ffmpeg` from `ffmpeg_g`, so the symbol-rich
-# ffmpeg_g is patched. No packer: the self-decrypting section IS the final
-# artifact, so challenge_ldd is the same file.
-RUN python3 /protection/packing/pageguard_patch.py --binary ffmpeg_g && \
-    strip --strip-all ffmpeg_g ffprobe
-RUN mkdir -p /out && cp ffmpeg_g /out/challenge_final && cp ffmpeg_g /out/challenge_ldd
+# [packing P2] UPX + stealth (deep mode: magic + p_info zeroing + section-name
+# renaming, so `upx -d` refuses the artifact). Strip first (the symbol table is
+# no longer needed once the interlock CRCs are stamped), then pack the whole
+# file; ffmpeg's build already strips `ffmpeg` from `ffmpeg_g`, so the
+# symbol-rich ffmpeg_g is the one packed.
+RUN strip --strip-all ffmpeg_g ffprobe && \
+    upx --best --overlay=copy --no-backup -q -o ffmpeg_g_packed_0 ffmpeg_g && \
+    python3 /protection/packing/upx_stealth.py ffmpeg_g_packed_0 ffmpeg_g_packed_0_stealth
+# Role-named staging: challenge_final (packed) + challenge_ldd (pre-packer ELF)
+RUN mkdir -p /out && cp ffmpeg_g_packed_0_stealth /out/challenge_final && \
+    cp ffmpeg_g /out/challenge_ldd
 
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp

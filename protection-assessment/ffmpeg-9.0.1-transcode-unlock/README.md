@@ -7,7 +7,7 @@
 | **Difficulty**      | hard                 |
 | **Challenge ID**    | ffmpeg-9.0.1-transcode-unlock |
 | **Focus**           | per-engine commercial transcoding tier (the transcode engine runs only under a valid entitlement key) |
-| **Protection Type** | multi-layer (PageGuard-packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) |
+| **Protection Type** | multi-layer (UPX+stealth-packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) |
 
 **Objective.** Locate the hidden license-key verification routine in `/app/binary`, defeat the protections around it (which may be interdependent), recover the full verification logic end-to-end, and derive a key that validates, per the contract in `instruction.md`. A correct key makes the binary print `flag{...}` and exit 0. A wrong key prints an error message and exits non-zero.
 
@@ -37,22 +37,22 @@ The challenge composes independent protection axes. This task's values are recor
 | **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum                                   |
 | **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards                       |
 
-**This task** is `A3 P4 D3 O3 I3`. It has a medium algorithm (A3), PageGuard packing (P4), advanced anti-debug with DebugBlocker (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **expert** for this stack because `I3` is an all-to-all interlock.
+**This task** is `A3 P2 D3 O3 I3`. It has a medium algorithm (A3), UPX+stealth packing (P2), advanced anti-debug with DebugBlocker (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **hard** for this stack.
 
 The protection stack is genuinely applied at build time.
 
 - **Interlock (I3).** An all-to-all CRC32 guard network (four guard sections plus a data canary) wraps the `validate_input` call site in `fftools/ffmpeg.c`. The anti-debug library is merged into section `g_adbg` with a guard CRC over it. Tampering the anti-debug or any guard poisons the key. Expected checksums are stamped post-compile.
 - **Anti-debug (D3).** The advanced probe set (ptrace, TracerPid, parent, gdb, and frida fingerprints, breakpoint and timing probes) plus anti-dump hardening and a self-ptrace DebugBlocker is anchored at the top of the transcode function. Under a debugger or tracer the probe feeds the interlock taint path. The submitted key is corrupted before the real verifier sees it.
-- **Obfuscation (O3).** `validate_input` is compiled through the xollvm plugin with anti-decompiler, bogus control flow, flattening, MBA, and constant and string encryption. Only that translation unit routes through the plugin compiler, and the obfuscated core is buried beneath the PageGuard page-encryption layer.
-- **Packing (P4, PageGuard).** The license-check code is isolated in a dedicated `g_pg` ELF section that is stored XOR-encrypted with a self-derived key (CRC32 of the runtime section's own bytes). At load time a constructor maps those pages `PROT_NONE`. The first execution fault triggers a SIGSEGV handler that decrypts exactly one page, remaps it R+X, and resumes. Plaintext code only ever exists one page at a time, in memory, on demand. There is no public unpacker for this scheme.
+- **Obfuscation (O3).** `validate_input` is compiled through the xollvm plugin with anti-decompiler, bogus control flow, flattening, MBA, and constant and string encryption. Only that translation unit routes through the plugin compiler, and the obfuscated core is then compressed inside the stealth-UPX packing layer.
+- **Packing (P2, UPX+stealth).** The whole binary is UPX-compressed and then stealth-processed (UPX magic, `p_info`, and section-name scrub) so the stock `upx -d` refuses it. The agent must recognize the mangled UPX overlay and reverse the stealth modifications to unpack and dump the real executable before any static analysis of the verification core is possible.
 - **Cryptographic verification (A3).** A real AEAD-style key check (see below) rather than a magic-string comparison.
 
 ## Protection architecture
 
-The binary implements multi-layer (PageGuard-packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) protection:
+The binary implements multi-layer (UPX+stealth-packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) protection:
 
 1. **Verification unit placement.** The verification code is compiled into the `fftools` translation units with `verification.o` linked into the converter. The license key is read once from stdin at startup into a global, and the gate sits at the top of the transcode function, so the protected feature only runs under a valid key.
-2. **PageGuard coupling.** The `g_pg` section (license algorithm) and `g_pg_rt` section (fault runtime) are page-owning and adjacent in the executable segment. The on-disk XOR key is derived from the runtime bytes, so patching the runtime breaks decryption (anti-tamper coupling). All runtime syscalls are raw with no PLT to survive faults. The guard sections (`g_s*`, `g_canary`, `g_adbg`) are disjoint from `g_pg`, so the section encryption does not invalidate the interlock CRCs.
+2. **Stealth-UPX packing.** The entire executable is UPX-compressed and stealth-processed (magic / `p_info` / section-name scrub) so the stock `upx -d` refuses it; the agent must repair or bypass the stealth modifications to unpack. The interlock guard sections (`g_s*`, `g_canary`, `g_adbg`) and their CRCs apply to the unpacked image.
 3. **Anti-debug anchoring (D3).** The advanced probe set is anchored at the top of the transcode function, before the verification call. Under a tracer the probe corrupts the key via the interlock taint path, so the run ends in a clean `Invalid key` rejection rather than a crash.
 4. **Invocation contract.** `echo KEY | ./binary -f lavfi -i anullsrc -t 0.05 -f null -` uses the program's own options for a minimal headless transcode, and this is what reaches the protected feature.
 
