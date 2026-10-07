@@ -687,5 +687,4 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── trigger.json               # Differential trigger spec (empty placeholder)
 #     └── trigger_input.bin          # Optional trigger input file (agent-supplied)
-
 #

@@ -743,11 +743,6 @@ RUN chmod 755 /app/binary && chmod -R a+rX /opt/target-deps && \
     useradd -m -s /bin/bash agent && \
     chown -R agent:agent /app /logs/artifacts
 
-# --- Claude Code: pre-downloaded native binary COPYed in (no build/runtime download;
-# place environment/claude-linux-x64 beforehand via get-claude.sh) ---
-COPY claude-linux-x64 /home/agent/.local/bin/claude
-RUN chmod +x /home/agent/.local/bin/claude && chown -R agent:agent /home/agent/.local && ln -sf /home/agent/.local/bin/claude /usr/local/bin/claude
-
 WORKDIR /app
 CMD ["/bin/bash"]
 
