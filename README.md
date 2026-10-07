@@ -74,7 +74,7 @@ Five protected builds of real programs, each requiring the full protection chain
 | [`ddnet-19.9-license-gate`](protection-assessment/ddnet-19.9-license-gate)                   | 2026-09-19 | hard       | defeat the packed, anti-debug-hardened, interlock-guarded chain to recover the headless server's startup entitlement key                    |
 | [`stk-code-1.5-premium-unlock`](protection-assessment/stk-code-1.5-premium-unlock)           | 2026-09-19 | expert     | defeat the packed, anti-debug-hardened, interlock-guarded chain to unlock premium story, challenge, kart, and track content in SuperTuxKart |
 | [`wesnoth-1.19.26-save-entitlement`](protection-assessment/wesnoth-1.19.26-save-entitlement) | 2026-09-19 | hard       | defeat the xollvm-obfuscated, packed, anti-debug-hardened chain to recover save-data entitlement in Battle for Wesnoth                          |
-| [`ffmpeg-9.0.1-transcode-unlock`](protection-assessment/ffmpeg-9.0.1-transcode-unlock)       | 2026-09-19 | hard       | defeat the PageGuard-packed, anti-debug-hardened chain to unlock the commercial transcoding tier of the protected tool                      |
+| [`ffmpeg-9.0.1-transcode-unlock`](protection-assessment/ffmpeg-9.0.1-transcode-unlock)       | 2026-09-19 | hard       | defeat the stealth-UPX-packed, anti-debug-hardened, xollvm-obfuscated chain to unlock the commercial transcoding tier of the protected tool                      |
 | [`nginx-1.31.3-tier-license`](protection-assessment/nginx-1.31.3-tier-license)               | 2026-09-19 | hard       | defeat the UPX, xollvm, and interlock chain on the protected web server to forge the load-balancing tier's activation key                  |
 
 ### Malware Analysis
