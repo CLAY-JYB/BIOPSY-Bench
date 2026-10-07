@@ -147,7 +147,7 @@ Every task directory ships as a self-contained [Harbor](https://github.com/harbo
 harbor run --dataset <scenario-or-task-directory> --agent <agent> --model <model>
 ```
 
-For installation instructions, supported agents and models, and execution options such as cloud providers and parallel runs, refer to the [Harbor repository](https://github.com/harbor-framework/harbor) and its documentation.
+For installation instructions, supported agents and models, and execution options such as cloud providers and parallel runs, refer to the [Harbor](https://github.com/harbor-framework/harbor) repository and its documentation.
 
 ## License
 
