@@ -1,8 +1,10 @@
-# BIOPSY
+# BIOPSY-Bench
 
 **Reverse-engineering benchmarks that remain difficult as agents become more capable.**
 
-BIOPSY is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable [Harbor](https://github.com/harbor-framework/harbor) task that agents must solve from the binary alone.
+BIOPSY-Bench is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable [Harbor](https://github.com/harbor-framework/harbor) task that agents must solve from the binary alone.
+
+The benchmark is produced by **BIOPSY**, a construction methodology that uses agent performance itself to keep producing tasks that stay difficult as agents improve.
 
 ## Motivation
 
@@ -12,9 +14,9 @@ Our research question is how to keep constructing tasks that reveal those remain
 
 We utilize **agent performance to provide actionable feedback for constructing harder tasks**. Scores tell us when a task may have become too easy. Execution trajectories explain why, since they show which clues agents rely on and which analysis steps they manage to skip.
 
-## Workflow
+## The BIOPSY methodology
 
-BIOPSY turns this feedback into an iterative construction loop.
+BIOPSY turns this feedback into an iterative construction loop, and BIOPSY-Bench is the benchmark it currently produces.
 
 ![BIOPSY workflow](assets/workflow.png)
 
@@ -27,7 +29,7 @@ Hardness patterns are hypotheses rather than guaranteed improvements. Each patte
 
 ## Scenarios
 
-BIOPSY covers five scenarios. Across all five, we require **verifiable outcomes rather than explanations alone**. For example, a patch-diffing solution supplies a triggering input, a protocol-reconstruction solution supplies an executable client, and a firmware-analysis solution supplies a verdict backed by recovered artifacts and observed behavior.
+BIOPSY-Bench covers five scenarios. Across all five, we require **verifiable outcomes rather than explanations alone**. For example, a patch-diffing solution supplies a triggering input, a protocol-reconstruction solution supplies an executable client, and a firmware-analysis solution supplies a verdict backed by recovered artifacts and observed behavior.
 
 | Scenario                | Agent objective                                                                                                                                                                                                    |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -43,7 +45,7 @@ All tasks and agents share a single Claude Code scaffold. Performance is reporte
 
 On the initial task set, agents score between **0.84 and 0.96**. After reconstruction under the mined hardness patterns, scores fall to between **0.03 and 0.15**, which shows that the reconstructed tasks are substantially harder.
 
-![BIOPSY leaderboard](assets/leaderboard.png)
+![BIOPSY-Bench leaderboard](assets/leaderboard.png)
 
 ## Hardness patterns
 
@@ -136,6 +138,16 @@ Every task directory shares the same core shape, with a category-specific extra 
 ├── solution/              # held-out oracle with solve.sh and ground_truth/
 └── tests/                 # verifier side with Dockerfile, docker-compose.yaml, and test.sh
 ```
+
+## Usage
+
+Every task directory ships as a self-contained [Harbor](https://github.com/harbor-framework/harbor) task package, so agents are evaluated with the standard Harbor workflow. To test your own agent against BIOPSY-Bench, install Harbor and point it at a scenario directory or an individual task:
+
+```bash
+harbor run --dataset <scenario-or-task-directory> --agent <agent> --model <model>
+```
+
+For installation instructions, supported agents and models, and execution options such as cloud providers and parallel runs, refer to the [Harbor repository](https://github.com/harbor-framework/harbor) and its documentation.
 
 ## License
 
