@@ -905,9 +905,19 @@ def _main():
         details.append("⊘ GT defines no components")
     else:
         details.append("✗ C void: no extracted_fs")
-        for _cid in ("C3", "C1", "C2"):
-            recs.append({"id": _cid, "status": "voided",
-                         "voided_by": "B1", "points": [0, 0]})
+        recs.append({"id": "C3", "status": "voided",
+                     "voided_by": "B1", "points": [0, 0]})
+        # per-component ids mirror the diagnosis graph's C1:<basename>/
+        # C2:<basename> nodes (synbmark excluded there too) -- the old
+        # bare C1/C2 left unmatched ledger records
+        for c in comps:
+            _rel = str(c.get("path") or "")
+            if "synbmark" in _rel:
+                continue
+            for _cid in ("C1", "C2"):
+                recs.append({"id": _cid + ":" + os.path.basename(_rel),
+                             "status": "voided", "voided_by": "B1",
+                             "points": [0, 0]})
 
     # ---- D: gated contracts (keys from activation.keys) ------------------
     d_pts = 0.0
