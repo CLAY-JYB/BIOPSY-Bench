@@ -80,8 +80,6 @@ The task source directory is as follows.
 README.md                      # this task card
 instruction.md                 # the agent-facing challenge (rendered per task)
 task.toml                      # harness metadata (id, difficulty, network policy)
-agent_third_party.py           # harness agent adapter (never graded; operator infra)
-config/                        # harness agent configs (cc/codex/gemini-cli)
 environment/                   # build context: the image + the ground-truth export stage
 tests/                         # the verifier (test.sh, diagnosis graph, ground truth)
 solution/                      # the reference solve + ground truth

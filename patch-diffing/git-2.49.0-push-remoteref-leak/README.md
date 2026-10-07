@@ -69,7 +69,6 @@ One category, exactly 100 raw points, everything measured by EXECUTING the singl
 README.md                      # this task card
 instruction.md                 # the agent-facing challenge (static by design)
 task.toml                      # harness metadata (id, difficulty, network policy)
-config/                        # agent runner configs (env-var reference style)
 environment/                   # build context: the carrier source, patches, the pair build
 tests/                         # the verifier (test.sh, ground truth, GT maps)
 solution/                      # the reference solve + ground truth

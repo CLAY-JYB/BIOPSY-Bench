@@ -133,8 +133,6 @@ Every task directory shares the same core shape, with a category-specific extra 
 ├── task.toml              # Harbor manifest with name, description, difficulty, verifier limits, and agent limits
 ├── instruction.md         # the brief that the solving agent reads
 ├── README.md              # per-challenge README
-├── agent_third_party.py   # adapter for running third-party agents inside the environment
-├── config/                # agent configs for cc, codex, and gemini-cli
 ├── environment/           # agent-side Dockerfile and, outside patch diffing, docker-compose.yaml
 ├── solution/              # held-out oracle with solve.sh and ground_truth/
 └── tests/                 # verifier side with Dockerfile, docker-compose.yaml, and test.sh
