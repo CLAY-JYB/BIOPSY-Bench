@@ -14,7 +14,7 @@ Our research question is how to keep constructing tasks that reveal those remain
 
 We utilize **agent performance to provide actionable feedback for constructing harder tasks**. Scores tell us when a task may have become too easy. Execution trajectories explain why, since they show which clues agents rely on and which analysis steps they manage to skip.
 
-## The BIOPSY methodology
+## The BIOPSY Methodology
 
 BIOPSY turns this feedback into an iterative construction loop, and BIOPSY-Bench is the benchmark it currently produces.
 
