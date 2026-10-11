@@ -1,0 +1,549 @@
+diff --git a/Zend/Optimizer/zend_optimizer_internal.h b/Zend/Optimizer/zend_optimizer_internal.h
+index 92410c18..2c12390b 100644
+--- a/Zend/Optimizer/zend_optimizer_internal.h
++++ b/Zend/Optimizer/zend_optimizer_internal.h
+@@ -76,40 +76,34 @@ static inline bool zend_optimizer_is_loop_var_free(const zend_op *opline) {
+ 		|| (opline->opcode == ZEND_FREE && opline->extended_value == ZEND_FREE_SWITCH);
+ }
+ 
+-void zend_optimizer_convert_to_free_op1(zend_op_array *op_array, zend_op *opline);
+ int  zend_optimizer_add_literal(zend_op_array *op_array, zval *zv);
+-bool zend_optimizer_get_persistent_constant(zend_string *name, zval *result, int copy);
++int  zend_optimizer_get_persistent_constant(zend_string *name, zval *result, int copy);
+ void zend_optimizer_collect_constant(zend_optimizer_ctx *ctx, zval *name, zval* value);
+-bool zend_optimizer_get_collected_constant(HashTable *constants, zval *name, zval* value);
+-zend_result zend_optimizer_eval_binary_op(zval *result, zend_uchar opcode, zval *op1, zval *op2);
+-zend_result zend_optimizer_eval_unary_op(zval *result, zend_uchar opcode, zval *op1);
+-zend_result zend_optimizer_eval_cast(zval *result, uint32_t type, zval *op1);
+-zend_result zend_optimizer_eval_strlen(zval *result, zval *op1);
+-zend_result zend_optimizer_eval_special_func_call(
+-		zval *result, zend_string *name, zend_string *arg);
+-bool zend_optimizer_update_op1_const(zend_op_array *op_array,
++int  zend_optimizer_get_collected_constant(HashTable *constants, zval *name, zval* value);
++int zend_optimizer_eval_binary_op(zval *result, zend_uchar opcode, zval *op1, zval *op2);
++int zend_optimizer_eval_unary_op(zval *result, zend_uchar opcode, zval *op1);
++int zend_optimizer_eval_cast(zval *result, uint32_t type, zval *op1);
++int zend_optimizer_eval_strlen(zval *result, zval *op1);
++int zend_optimizer_update_op1_const(zend_op_array *op_array,
+                                     zend_op       *opline,
+                                     zval          *val);
+-bool zend_optimizer_update_op2_const(zend_op_array *op_array,
++int zend_optimizer_update_op2_const(zend_op_array *op_array,
+                                     zend_op       *opline,
+                                     zval          *val);
+-bool zend_optimizer_replace_by_const(zend_op_array *op_array,
++int  zend_optimizer_replace_by_const(zend_op_array *op_array,
+                                      zend_op       *opline,
+                                      zend_uchar     type,
+                                      uint32_t       var,
+                                      zval          *val);
+ zend_op *zend_optimizer_get_loop_var_def(const zend_op_array *op_array, zend_op *free_opline);
+-zend_class_entry *zend_optimizer_get_class_entry(
+-		const zend_script *script, const zend_op_array *op_array, zend_string *lcname);
+-zend_class_entry *zend_optimizer_get_class_entry_from_op1(
+-		const zend_script *script, const zend_op_array *op_array, const zend_op *opline);
++zend_class_entry *zend_optimizer_get_class_entry(const zend_script *script, zend_string *lcname);
+ 
+ void zend_optimizer_pass1(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+ void zend_optimizer_pass3(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+ void zend_optimize_func_calls(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+ void zend_optimize_cfg(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+ void zend_optimize_dfa(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+-zend_result zend_dfa_analyze_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx, zend_ssa *ssa);
++int  zend_dfa_analyze_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx, zend_ssa *ssa);
+ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx, zend_ssa *ssa, zend_call_info **call_map);
+ void zend_optimize_temporary_variables(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+ void zend_optimizer_nop_removal(zend_op_array *op_array, zend_optimizer_ctx *ctx);
+@@ -121,8 +115,8 @@ uint32_t zend_optimizer_classify_function(zend_string *name, uint32_t num_args);
+ void zend_optimizer_migrate_jump(zend_op_array *op_array, zend_op *new_opline, zend_op *opline);
+ void zend_optimizer_shift_jump(zend_op_array *op_array, zend_op *opline, uint32_t *shiftlist);
+ int sccp_optimize_op_array(zend_optimizer_ctx *ctx, zend_op_array *op_array, zend_ssa *ssa, zend_call_info **call_map);
+-int dce_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *optimizer_ctx, zend_ssa *ssa, bool reorder_dtor_effects);
+-zend_result zend_ssa_escape_analysis(const zend_script *script, zend_op_array *op_array, zend_ssa *ssa);
++int dce_optimize_op_array(zend_op_array *op_array, zend_ssa *ssa, bool reorder_dtor_effects);
++int zend_ssa_escape_analysis(const zend_script *script, zend_op_array *op_array, zend_ssa *ssa);
+ 
+ typedef void (*zend_op_array_func_t)(zend_op_array *, void *context);
+ void zend_foreach_op_array(zend_script *script, zend_op_array_func_t func, void *context);
+diff --git a/Zend/Optimizer/zend_ssa.c b/Zend/Optimizer/zend_ssa.c
+index d6d0e70e..725fb092 100644
+--- a/Zend/Optimizer/zend_ssa.c
++++ b/Zend/Optimizer/zend_ssa.c
+@@ -257,6 +257,7 @@ static void place_essa_pis(
+ 		 */
+ 		switch (opline->opcode) {
+ 			case ZEND_JMPZ:
++			case ZEND_JMPZNZ:
+ 				bf = blocks[j].successors[0];
+ 				bt = blocks[j].successors[1];
+ 				break;
+@@ -526,7 +527,7 @@ static void place_essa_pis(
+ 				   (opline-1)->op2_type == IS_CONST) {
+ 			int var = EX_VAR_TO_NUM((opline-1)->op1.var);
+ 			zend_string *lcname = Z_STR_P(CRT_CONSTANT_EX(op_array, (opline-1), (opline-1)->op2) + 1);
+-			zend_class_entry *ce = zend_optimizer_get_class_entry(script, op_array, lcname);
++			zend_class_entry *ce = zend_optimizer_get_class_entry(script, lcname);
+ 			if (!ce) {
+ 				continue;
+ 			}
+@@ -588,6 +589,12 @@ add_op1_def:
+ 			break;
+ 		case ZEND_ASSIGN_DIM:
+ 		case ZEND_ASSIGN_OBJ:
++			if (opline->op1_type == IS_CV) {
++				ssa_ops[k].op1_def = ssa_vars_count;
++				var[EX_VAR_TO_NUM(opline->op1.var)] = ssa_vars_count;
++				ssa_vars_count++;
++				//NEW_SSA_VAR(opline->op1.var)
++			}
+ 			next = opline + 1;
+ 			if (next->op1_type & (IS_CV|IS_VAR|IS_TMP_VAR)) {
+ 				ssa_ops[k + 1].op1_use = var[EX_VAR_TO_NUM(next->op1.var)];
+@@ -599,12 +606,6 @@ add_op1_def:
+ 					//NEW_SSA_VAR(next->op1.var)
+ 				}
+ 			}
+-			if (opline->op1_type == IS_CV) {
+-				ssa_ops[k].op1_def = ssa_vars_count;
+-				var[EX_VAR_TO_NUM(opline->op1.var)] = ssa_vars_count;
+-				ssa_vars_count++;
+-				//NEW_SSA_VAR(opline->op1.var)
+-			}
+ 			break;
+ 		case ZEND_ASSIGN_OBJ_REF:
+ 			if (opline->op1_type == IS_CV) {
+@@ -786,7 +787,7 @@ ZEND_API int zend_ssa_rename_op(const zend_op_array *op_array, const zend_op *op
+ }
+ /* }}} */
+ 
+-static zend_result zend_ssa_rename(const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa, int *var, int n) /* {{{ */
++static int zend_ssa_rename(const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa, int *var, int n) /* {{{ */
+ {
+ 	zend_basic_block *blocks = ssa->cfg.blocks;
+ 	zend_ssa_block *ssa_blocks = ssa->blocks;
+@@ -890,7 +891,7 @@ static zend_result zend_ssa_rename(const zend_op_array *op_array, uint32_t build
+ 	j = blocks[n].children;
+ 	while (j >= 0) {
+ 		// FIXME: Tail call optimization?
+-		if (zend_ssa_rename(op_array, build_flags, ssa, var, j) == FAILURE)
++		if (zend_ssa_rename(op_array, build_flags, ssa, var, j) != SUCCESS)
+ 			return FAILURE;
+ 		j = blocks[j].next_child;
+ 	}
+@@ -903,7 +904,7 @@ static zend_result zend_ssa_rename(const zend_op_array *op_array, uint32_t build
+ }
+ /* }}} */
+ 
+-ZEND_API zend_result zend_build_ssa(zend_arena **arena, const zend_script *script, const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa) /* {{{ */
++ZEND_API int zend_build_ssa(zend_arena **arena, const zend_script *script, const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa) /* {{{ */
+ {
+ 	zend_basic_block *blocks = ssa->cfg.blocks;
+ 	zend_ssa_block *ssa_blocks;
+@@ -934,7 +935,10 @@ ZEND_API zend_result zend_build_ssa(zend_arena **arena, const zend_script *scrip
+ 	dfg.in  = dfg.use + set_size * blocks_count;
+ 	dfg.out = dfg.in  + set_size * blocks_count;
+ 
+-	zend_build_dfg(op_array, &ssa->cfg, &dfg, build_flags);
++	if (zend_build_dfg(op_array, &ssa->cfg, &dfg, build_flags) != SUCCESS) {
++		free_alloca(dfg.tmp, dfg_use_heap);
++		return FAILURE;
++	}
+ 
+ 	if (build_flags & ZEND_SSA_DEBUG_LIVENESS) {
+ 		zend_dump_dfg(op_array, &ssa->cfg, &dfg);
+@@ -1038,7 +1042,7 @@ ZEND_API zend_result zend_build_ssa(zend_arena **arena, const zend_script *scrip
+ 		var[j] = j;
+ 	}
+ 	ssa->vars_count = op_array->last_var;
+-	if (zend_ssa_rename(op_array, build_flags, ssa, var, 0) == FAILURE) {
++	if (zend_ssa_rename(op_array, build_flags, ssa, var, 0) != SUCCESS) {
+ 		free_alloca(var, var_use_heap);
+ 		free_alloca(dfg.tmp, dfg_use_heap);
+ 		return FAILURE;
+@@ -1051,7 +1055,7 @@ ZEND_API zend_result zend_build_ssa(zend_arena **arena, const zend_script *scrip
+ }
+ /* }}} */
+ 
+-ZEND_API void zend_ssa_compute_use_def_chains(zend_arena **arena, const zend_op_array *op_array, zend_ssa *ssa) /* {{{ */
++ZEND_API int zend_ssa_compute_use_def_chains(zend_arena **arena, const zend_op_array *op_array, zend_ssa *ssa) /* {{{ */
+ {
+ 	zend_ssa_var *ssa_vars;
+ 	int i;
+@@ -1166,75 +1170,38 @@ ZEND_API void zend_ssa_compute_use_def_chains(zend_arena **arena, const zend_op_
+ 			ssa_vars[i].alias = ssa_vars[ssa_vars[i].var].alias;
+ 		}
+ 	}
+-}
+-/* }}} */
+-
+-void zend_ssa_unlink_use_chain(zend_ssa *ssa, int op, int var) /* {{{ */
+-{
+-	if (ssa->vars[var].use_chain == op) {
+-		ssa->vars[var].use_chain = zend_ssa_next_use(ssa->ops, var, op);
+-		return;
+-	}
+-	int use = ssa->vars[var].use_chain;
+ 
+-	while (use >= 0) {
+-		if (ssa->ops[use].result_use == var) {
+-			if (ssa->ops[use].res_use_chain == op) {
+-				ssa->ops[use].res_use_chain = zend_ssa_next_use(ssa->ops, var, op);
+-				return;
+-			} else {
+-				use = ssa->ops[use].res_use_chain;
+-			}
+-		} else if (ssa->ops[use].op1_use == var) {
+-			if (ssa->ops[use].op1_use_chain == op) {
+-				ssa->ops[use].op1_use_chain = zend_ssa_next_use(ssa->ops, var, op);
+-				return;
+-			} else {
+-				use = ssa->ops[use].op1_use_chain;
+-			}
+-		} else if (ssa->ops[use].op2_use == var) {
+-			if (ssa->ops[use].op2_use_chain == op) {
+-				ssa->ops[use].op2_use_chain = zend_ssa_next_use(ssa->ops, var, op);
+-				return;
+-			} else {
+-				use = ssa->ops[use].op2_use_chain;
+-			}
+-		} else {
+-			break;
+-		}
+-	}
+-	/* something wrong */
+-	ZEND_UNREACHABLE();
++	return SUCCESS;
+ }
+ /* }}} */
+ 
+-void zend_ssa_replace_use_chain(zend_ssa *ssa, int op, int new_op, int var) /* {{{ */
++int zend_ssa_unlink_use_chain(zend_ssa *ssa, int op, int var) /* {{{ */
+ {
+ 	if (ssa->vars[var].use_chain == op) {
+-		ssa->vars[var].use_chain = new_op;
+-		return;
++		ssa->vars[var].use_chain = zend_ssa_next_use(ssa->ops, var, op);
++		return 1;
+ 	} else {
+ 		int use = ssa->vars[var].use_chain;
+ 
+ 		while (use >= 0) {
+ 			if (ssa->ops[use].result_use == var) {
+ 				if (ssa->ops[use].res_use_chain == op) {
+-					ssa->ops[use].res_use_chain = new_op;
+-					return;
++					ssa->ops[use].res_use_chain = zend_ssa_next_use(ssa->ops, var, op);
++					return 1;
+ 				} else {
+ 					use = ssa->ops[use].res_use_chain;
+ 				}
+ 			} else if (ssa->ops[use].op1_use == var) {
+ 				if (ssa->ops[use].op1_use_chain == op) {
+-					ssa->ops[use].op1_use_chain = new_op;
+-					return;
++					ssa->ops[use].op1_use_chain = zend_ssa_next_use(ssa->ops, var, op);
++					return 1;
+ 				} else {
+ 					use = ssa->ops[use].op1_use_chain;
+ 				}
+ 			} else if (ssa->ops[use].op2_use == var) {
+ 				if (ssa->ops[use].op2_use_chain == op) {
+-					ssa->ops[use].op2_use_chain = new_op;
+-					return;
++					ssa->ops[use].op2_use_chain = zend_ssa_next_use(ssa->ops, var, op);
++					return 1;
+ 				} else {
+ 					use = ssa->ops[use].op2_use_chain;
+ 				}
+@@ -1242,9 +1209,10 @@ void zend_ssa_replace_use_chain(zend_ssa *ssa, int op, int new_op, int var) /* {
+ 				break;
+ 			}
+ 		}
++		/* something wrong */
++		ZEND_UNREACHABLE();
++		return 0;
+ 	}
+-	/* something wrong */
+-	ZEND_UNREACHABLE();
+ }
+ /* }}} */
+ 
+diff --git a/Zend/Optimizer/zend_ssa.h b/Zend/Optimizer/zend_ssa.h
+index 9fde352c..8ff2343d 100644
+--- a/Zend/Optimizer/zend_ssa.h
++++ b/Zend/Optimizer/zend_ssa.h
+@@ -145,11 +145,10 @@ typedef struct _zend_ssa {
+ 
+ BEGIN_EXTERN_C()
+ 
+-ZEND_API zend_result zend_build_ssa(zend_arena **arena, const zend_script *script, const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa);
+-ZEND_API void zend_ssa_compute_use_def_chains(zend_arena **arena, const zend_op_array *op_array, zend_ssa *ssa);
++ZEND_API int zend_build_ssa(zend_arena **arena, const zend_script *script, const zend_op_array *op_array, uint32_t build_flags, zend_ssa *ssa);
++ZEND_API int zend_ssa_compute_use_def_chains(zend_arena **arena, const zend_op_array *op_array, zend_ssa *ssa);
+ ZEND_API int zend_ssa_rename_op(const zend_op_array *op_array, const zend_op *opline, uint32_t k, uint32_t build_flags, int ssa_vars_count, zend_ssa_op *ssa_ops, int *var);
+-void zend_ssa_unlink_use_chain(zend_ssa *ssa, int op, int var);
+-void zend_ssa_replace_use_chain(zend_ssa *ssa, int op, int new_op, int var);
++int zend_ssa_unlink_use_chain(zend_ssa *ssa, int op, int var);
+ 
+ void zend_ssa_remove_predecessor(zend_ssa *ssa, int from, int to);
+ void zend_ssa_remove_defs_of_instr(zend_ssa *ssa, zend_ssa_op *ssa_op);
+diff --git a/Zend/Optimizer/zend_worklist.h b/Zend/Optimizer/zend_worklist.h
+index 69cc41c4..7dfb65eb 100644
+--- a/Zend/Optimizer/zend_worklist.h
++++ b/Zend/Optimizer/zend_worklist.h
+@@ -37,13 +37,15 @@ typedef struct _zend_worklist_stack {
+ #define ZEND_WORKLIST_STACK_FREE_ALLOCA(s, use_heap) \
+ 	free_alloca((s)->buf, use_heap)
+ 
+-static inline void zend_worklist_stack_prepare(zend_arena **arena, zend_worklist_stack *stack, int len)
++static inline int zend_worklist_stack_prepare(zend_arena **arena, zend_worklist_stack *stack, int len)
+ {
+ 	ZEND_ASSERT(len >= 0);
+ 
+ 	stack->buf = (int*)zend_arena_calloc(arena, sizeof(*stack->buf), len);
+ 	stack->len = 0;
+ 	stack->capacity = len;
++
++	return SUCCESS;
+ }
+ 
+ static inline void zend_worklist_stack_push(zend_worklist_stack *stack, int i)
+@@ -80,11 +82,11 @@ typedef struct _zend_worklist {
+ #define ZEND_WORKLIST_FREE_ALLOCA(w, use_heap) \
+ 	free_alloca((w)->stack.buf, use_heap)
+ 
+-static inline void zend_worklist_prepare(zend_arena **arena, zend_worklist *worklist, int len)
++static inline int zend_worklist_prepare(zend_arena **arena, zend_worklist *worklist, int len)
+ {
+ 	ZEND_ASSERT(len >= 0);
+ 	worklist->visited = (zend_bitset)zend_arena_calloc(arena, sizeof(zend_ulong), zend_bitset_len(len));
+-	zend_worklist_stack_prepare(arena, &worklist->stack, len);
++	return zend_worklist_stack_prepare(arena, &worklist->stack, len);
+ }
+ 
+ static inline int zend_worklist_len(zend_worklist *worklist)
+@@ -92,7 +94,7 @@ static inline int zend_worklist_len(zend_worklist *worklist)
+ 	return worklist->stack.len;
+ }
+ 
+-static inline bool zend_worklist_push(zend_worklist *worklist, int i)
++static inline int zend_worklist_push(zend_worklist *worklist, int i)
+ {
+ 	ZEND_ASSERT(i >= 0 && i < worklist->stack.capacity);
+ 
+diff --git a/Zend/README.md b/Zend/README.md
+index 26f3613c..cf1f1546 100644
+--- a/Zend/README.md
++++ b/Zend/README.md
+@@ -119,21 +119,21 @@ ZEND_VM_HELPER_EX(<HELPER-NAME>, <OP1_TYPES>, <OP2_TYPES>, <PARAM_SPEC>)
+ }
+ ```
+ 
+-The executors code is generated by the PHP script `zend_vm_gen.php`. It uses
++Executor's code is generated by PHP script zend_vm_gen.php it uses
+ `zend_vm_def.h` and `zend_vm_execute.skl` as input and produces
+ `zend_vm_opcodes.h` and `zend_vm_execute.h`. The first file is a list of opcode
+ definitions. It is included from `zend_compile.h`. The second one is an executor
+ code itself. It is included from `zend_execute.c`.
+ 
+-`zend_vm_gen.php` can produce different kind of executors. You can select a
+-different opcode threading model using `--with-vm-kind=CALL|SWITCH|GOTO|HYBRID`.
+-You can disable opcode specialization using `--without-specializer`.
+-At last you can debug the executor using the original `zend_vm_def.h` or the
+-generated `zend_vm_execute.h` file. Debugging with the original file requires
+-the `--with-lines` option. By default, Zend Engine uses the following
+-command to generate the executor:
++`zend_vm_gen.php` can produce different kind of executors. You can select
++different opcode threading model using `--with-vm-kind=CALL|SWITCH|GOTO`. You
++can disable opcode specialization using `--without-specializer`. You can include
++or exclude old executor together with specialized one using
++`--without-old-executor`. At last you can debug executor using original
++`zend_vm_def.h` or generated file `zend_vm_execute.h`. Debugging with original
++file requires `--with-lines` option. By default ZE2 uses the following command
++to generate executor:
+ 
+ ```bash
+-# Default VM kind is HYBRID
+-php zend_vm_gen.php --with-vm-kind=HYBRID
++php zend_vm_gen.php --with-vm-kind=CALL
+ ```
+diff --git a/Zend/Zend.m4 b/Zend/Zend.m4
+index 06b19c85..475355a7 100644
+--- a/Zend/Zend.m4
++++ b/Zend/Zend.m4
+@@ -222,7 +222,7 @@ typedef union _mm_align_test {
+ 
+ int main()
+ {
+-  size_t i = ZEND_MM_ALIGNMENT;
++  int i = ZEND_MM_ALIGNMENT;
+   int zeros = 0;
+   FILE *fp;
+ 
+@@ -232,7 +232,7 @@ int main()
+   }
+ 
+   fp = fopen("conftest.zend", "w");
+-  fprintf(fp, "(size_t)%zu (size_t)%d %d\n", ZEND_MM_ALIGNMENT, zeros, ZEND_MM_ALIGNMENT < 4);
++  fprintf(fp, "%d %d\n", ZEND_MM_ALIGNMENT, zeros);
+   fclose(fp);
+ 
+   return 0;
+@@ -240,15 +240,12 @@ int main()
+ ]])], [
+   LIBZEND_MM_ALIGN=`cat conftest.zend | cut -d ' ' -f 1`
+   LIBZEND_MM_ALIGN_LOG2=`cat conftest.zend | cut -d ' ' -f 2`
+-  LIBZEND_MM_NEED_EIGHT_BYTE_REALIGNMENT=`cat conftest.zend | cut -d ' ' -f 3`
+   AC_DEFINE_UNQUOTED(ZEND_MM_ALIGNMENT, $LIBZEND_MM_ALIGN, [ ])
+   AC_DEFINE_UNQUOTED(ZEND_MM_ALIGNMENT_LOG2, $LIBZEND_MM_ALIGN_LOG2, [ ])
+-  AC_DEFINE_UNQUOTED(ZEND_MM_NEED_EIGHT_BYTE_REALIGNMENT, $LIBZEND_MM_NEED_EIGHT_BYTE_REALIGNMENT, [ ])
+ ], [], [
+   dnl Cross compilation needs something here.
+-  AC_DEFINE(ZEND_MM_ALIGNMENT, 8, [ ])
+-  AC_DEFINE(ZEND_MM_ALIGNMENT_LOG2, 3, [ ])
+-  AC_DEFINE(ZEND_MM_NEED_EIGHT_BYTE_REALIGNMENT, 0, [ ])
++  AC_DEFINE_UNQUOTED(ZEND_MM_ALIGNMENT, 8, [ ])
++  AC_DEFINE_UNQUOTED(ZEND_MM_ALIGNMENT_LOG2, 3, [ ])
+ ])
+ 
+ AC_MSG_RESULT(done)
+diff --git a/Zend/asm/jump_arm64_aapcs_pe_armasm.asm b/Zend/asm/jump_arm64_aapcs_pe_armasm.asm
+deleted file mode 100644
+index d2e7d221..00000000
+--- a/Zend/asm/jump_arm64_aapcs_pe_armasm.asm
++++ /dev/null
+@@ -1,133 +0,0 @@
+-;      Copyright Edward Nevill + Oliver Kowalke 2015
+-;  Distributed under the Boost Software License, Version 1.0.
+-;     (See accompanying file LICENSE_1_0.txt or copy at
+-;         http://www.boost.org/LICENSE_1_0.txt)
+-
+-;*******************************************************
+-;*                                                     *
+-;*  -------------------------------------------------  *
+-;*  |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  *
+-;*  -------------------------------------------------  *
+-;*  | 0x0 | 0x4 | 0x8 | 0xc | 0x10| 0x14| 0x18| 0x1c|  *
+-;*  -------------------------------------------------  *
+-;*  |    d8     |    d9     |    d10    |    d11    |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  8  |  9  |  10 |  11 |  12 |  13 |  14 |  15 |  *
+-;*  -------------------------------------------------  *
+-;*  | 0x20| 0x24| 0x28| 0x2c| 0x30| 0x34| 0x38| 0x3c|  *
+-;*  -------------------------------------------------  *
+-;*  |    d12    |    d13    |    d14    |    d15    |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  16 |  17 |  18 |  19 |  20 |  21 |  22 |  23 |  *
+-;*  -------------------------------------------------  *
+-;*  | 0x40| 0x44| 0x48| 0x4c| 0x50| 0x54| 0x58| 0x5c|  *
+-;*  -------------------------------------------------  *
+-;*  |    x19    |    x20    |    x21    |    x22    |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  24 |  25 |  26 |  27 |  28 |  29 |  30 |  31 |  *
+-;*  -------------------------------------------------  *
+-;*  | 0x60| 0x64| 0x68| 0x6c| 0x70| 0x74| 0x78| 0x7c|  *
+-;*  -------------------------------------------------  *
+-;*  |    x23    |    x24    |    x25    |    x26    |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  32 |  33 |  34 |  35 |  36 |  37 |  38 |  39 |  *
+-;*  -------------------------------------------------  *
+-;*  | 0x80| 0x84| 0x88| 0x8c| 0x90| 0x94| 0x98| 0x9c|  *
+-;*  -------------------------------------------------  *
+-;*  |    x27    |    x28    |    FP     |     LR    |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  40 |  41 |  42 |  43 |  44 |  45 |  46 |  47 |  *
+-;*  -------------------------------------------------  *
+-;*  | 0xa0| 0xa4| 0xa8| 0xac| 0xb0| 0xb4| 0xb8| 0xbc|  *
+-;*  -------------------------------------------------  *
+-;*  | fiber data|   base    |   limit   |  dealloc  |  *
+-;*  -------------------------------------------------  *
+-;*  -------------------------------------------------  *
+-;*  |  48 |  49 |  50 | 51  |           |           |  *
+-;*  -------------------------------------------------  *
+-;*  | 0xc0| 0xc4| 0xc8| 0xcc|           |           |  *
+-;*  -------------------------------------------------  *
+-;*  |     PC    |   align   |           |           |  *
+-;*  -------------------------------------------------  *
+-;*                                                     *
+-;*******************************************************
+-
+-    AREA |.text|, CODE, READONLY, ALIGN=4, CODEALIGN
+-    EXPORT jump_fcontext
+-
+-jump_fcontext proc
+-    ; prepare stack for GP + FPU
+-    sub  sp, sp, #0xd0
+-
+-    ; save d8 - d15
+-    stp  d8,  d9,  [sp, #0x00]
+-    stp  d10, d11, [sp, #0x10]
+-    stp  d12, d13, [sp, #0x20]
+-    stp  d14, d15, [sp, #0x30]
+-
+-    ; save x19-x30
+-    stp  x19, x20, [sp, #0x40]
+-    stp  x21, x22, [sp, #0x50]
+-    stp  x23, x24, [sp, #0x60]
+-    stp  x25, x26, [sp, #0x70]
+-    stp  x27, x28, [sp, #0x80]
+-    stp  x29, x30, [sp, #0x90]
+-
+-    ; save LR as PC
+-    str  x30, [sp, #0xc0]
+-
+-    ; save current stack base and limit
+-    ldp  x5,  x6,  [x18, #0x08] ; TeStackBase and TeStackLimit at ksarm64.h
+-    stp  x5,  x6,  [sp, #0xa0]
+-    ; save current fiber data and deallocation stack
+-    ldr  x5, [x18, #0x1478] ; TeDeallocationStack at ksarm64.h
+-    ldr  x6, [x18, #0x20] ; TeFiberData at ksarm64.h
+-    stp  x5,  x6,  [sp, #0xb0]
+-
+-    ; store RSP (pointing to context-data) in X0
+-    mov  x4, sp
+-
+-    ; restore RSP (pointing to context-data) from X1
+-    mov  sp, x0
+-
+-    ; restore stack base and limit
+-    ldp  x5,  x6,  [sp, #0xa0]
+-    stp  x5,  x6,  [x18, #0x08] ; TeStackBase and TeStackLimit at ksarm64.h
+-    ; restore fiber data and deallocation stack
+-    ldp  x5,  x6,  [sp, #0xb0]
+-    str  x5, [x18, #0x1478] ; TeDeallocationStack at ksarm64.h
+-    str  x6, [x18, #0x20] ; TeFiberData at ksarm64.h
+-
+-    ; load d8 - d15
+-    ldp  d8,  d9,  [sp, #0x00]
+-    ldp  d10, d11, [sp, #0x10]
+-    ldp  d12, d13, [sp, #0x20]
+-    ldp  d14, d15, [sp, #0x30]
+-
+-    ; load x19-x30
+-    ldp  x19, x20, [sp, #0x40]
+-    ldp  x21, x22, [sp, #0x50]
+-    ldp  x23, x24, [sp, #0x60]
+-    ldp  x25, x26, [sp, #0x70]
+-    ldp  x27, x28, [sp, #0x80]
+-    ldp  x29, x30, [sp, #0x90]
+-
+-    ; return transfer_t from jump
+-    ; pass transfer_t as first arg in context function
+-    ; X0 == FCTX, X1 == DATA
+-    mov x0, x4
+-
+-    ; load pc
+-    ldr  x4, [sp, #0xc0]
+-
+-    ; restore stack from GP + FPU
+-    add  sp, sp, #0xd0
+-
+-    ret x4
+-    ENDP
+-    END
+\ No newline at end of file

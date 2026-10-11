@@ -1,0 +1,445 @@
+diff --git a/ext/zend_test/tests/observer_fiber_functions_01.phpt b/ext/zend_test/tests/observer_fiber_functions_01.phpt
+deleted file mode 100644
+index d3d395bd..00000000
+--- a/ext/zend_test/tests/observer_fiber_functions_01.phpt
++++ /dev/null
+@@ -1,59 +0,0 @@
+---TEST--
+-Observer: Basic function observing in fibers
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.fiber_init=1
+-zend_test.observer.fiber_switch=1
+-zend_test.observer.fiber_destroy=1
+---FILE--
+-<?php
+-
+-$fiber = new Fiber(function (): void {
+-    var_dump(1);
+-    Fiber::suspend();
+-    var_dump(2);
+-});
+-
+-$fiber->start();
+-$fiber->resume();
+-
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Fiber::__construct() -->
+-  <Fiber::__construct>
+-  </Fiber::__construct>
+-  <!-- init Fiber::start() -->
+-  <Fiber::start>
+-<!-- alloc: %s -->
+-<!-- switching from fiber %s to %s -->
+-<init '%s'>
+-    <!-- init {closure}() -->
+-    <{closure}>
+-      <!-- init var_dump() -->
+-      <var_dump>
+-int(1)
+-      </var_dump>
+-      <!-- init Fiber::suspend() -->
+-      <Fiber::suspend>
+-<!-- switching from fiber %s to %s -->
+-<suspend '%s'>
+-      </Fiber::start>
+-      <!-- init Fiber::resume() -->
+-      <Fiber::resume>
+-<!-- switching from fiber %s to %s -->
+-<resume '%s'>
+-      </Fiber::suspend>
+-      <var_dump>
+-int(2)
+-      </var_dump>
+-    </{closure}>
+-<!-- switching from fiber %s to %s -->
+-<returned '%s'>
+-<!-- destroy: %s -->
+-  </Fiber::resume>
+-</file '%s'>
+\ No newline at end of file
+diff --git a/ext/zend_test/tests/observer_fiber_functions_02.phpt b/ext/zend_test/tests/observer_fiber_functions_02.phpt
+deleted file mode 100644
+index c2b7eb00..00000000
+--- a/ext/zend_test/tests/observer_fiber_functions_02.phpt
++++ /dev/null
+@@ -1,54 +0,0 @@
+---TEST--
+-Observer: Function observing in fibers with unfinished fiber
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.fiber_init=1
+-zend_test.observer.fiber_switch=1
+-zend_test.observer.fiber_destroy=1
+---FILE--
+-<?php
+-
+-$fiber = new Fiber(function (): void {
+-    var_dump(1);
+-    Fiber::suspend();
+-    var_dump(2);
+-});
+-
+-$fiber->start();
+-
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Fiber::__construct() -->
+-  <Fiber::__construct>
+-  </Fiber::__construct>
+-  <!-- init Fiber::start() -->
+-  <Fiber::start>
+-<!-- alloc: %s -->
+-<!-- switching from fiber %s to %s -->
+-<init '%s'>
+-    <!-- init {closure}() -->
+-    <{closure}>
+-      <!-- init var_dump() -->
+-      <var_dump>
+-int(1)
+-      </var_dump>
+-      <!-- init Fiber::suspend() -->
+-      <Fiber::suspend>
+-<!-- switching from fiber %s to %s -->
+-<suspend '%s'>
+-      </Fiber::start>
+-    </file '%s'>
+-<!-- switching from fiber %s to %s -->
+-<destroying '%s'>
+-    <!-- Exception: GracefulExit -->
+-  </Fiber::suspend>
+-  <!-- Exception: GracefulExit -->
+-</{closure}>
+-<!-- switching from fiber %s to %s -->
+-<destroyed '%s'>
+-<!-- destroy: %s -->
+\ No newline at end of file
+diff --git a/ext/zend_test/tests/observer_fiber_functions_03.phpt b/ext/zend_test/tests/observer_fiber_functions_03.phpt
+deleted file mode 100644
+index d9639006..00000000
+--- a/ext/zend_test/tests/observer_fiber_functions_03.phpt
++++ /dev/null
+@@ -1,84 +0,0 @@
+---TEST--
+-Observer: Function observing in fibers with bailout in fiber
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.fiber_init=1
+-zend_test.observer.fiber_switch=1
+-zend_test.observer.fiber_destroy=1
+-memory_limit=100M
+---FILE--
+-<?php
+-
+-$notBailedOutFiber = new Fiber(function (): void {
+-    var_dump(1);
+-    Fiber::suspend();
+-});
+-
+-$notBailedOutFiber->start();
+-
+-$fiber = new Fiber(function (): void {
+-    var_dump(2);
+-    Fiber::suspend();
+-    str_repeat('A', 200_000_000);
+-});
+-
+-$fiber->start();
+-$fiber->resume();
+-
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Fiber::__construct() -->
+-  <Fiber::__construct>
+-  </Fiber::__construct>
+-  <!-- init Fiber::start() -->
+-  <Fiber::start>
+-<!-- alloc: %s -->
+-<!-- switching from fiber %s to %s -->
+-<init '%s'>
+-    <!-- init {closure}() -->
+-    <{closure}>
+-      <!-- init var_dump() -->
+-      <var_dump>
+-int(1)
+-      </var_dump>
+-      <!-- init Fiber::suspend() -->
+-      <Fiber::suspend>
+-<!-- switching from fiber %s to %s -->
+-<suspend '%s'>
+-      </Fiber::start>
+-      <Fiber::__construct>
+-      </Fiber::__construct>
+-      <Fiber::start>
+-<!-- alloc: %s -->
+-<!-- switching from fiber %s to %s -->
+-<init '%s'>
+-        <!-- init {closure}() -->
+-        <{closure}>
+-          <var_dump>
+-int(2)
+-          </var_dump>
+-          <Fiber::suspend>
+-<!-- switching from fiber %s to %s -->
+-<suspend '%s'>
+-          </Fiber::start>
+-          <!-- init Fiber::resume() -->
+-          <Fiber::resume>
+-<!-- switching from fiber %s to %s -->
+-<resume '%s'>
+-          </Fiber::suspend>
+-          <!-- init str_repeat() -->
+-          <str_repeat>
+-
+-Fatal error: Allowed memory size of 104857600 bytes exhausted %s on line %d
+-          </str_repeat>
+-        </{closure}>
+-<!-- switching from fiber %s to %s -->
+-<returned '%s'>
+-<!-- destroy: %s -->
+-      </Fiber::resume>
+-    </file '%s'>
+\ No newline at end of file
+diff --git a/ext/zend_test/tests/observer_generator_02.phpt b/ext/zend_test/tests/observer_generator_02.phpt
+index 08c0992e..289cfa1f 100644
+--- a/ext/zend_test/tests/observer_generator_02.phpt
++++ b/ext/zend_test/tests/observer_generator_02.phpt
+@@ -28,8 +28,8 @@ function doSomething() {
+ echo doSomething() . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_generator_%d.php' -->
++<file '%s%eobserver_generator_%d.php'>
+   <!-- init doSomething() -->
+   <doSomething>
+     <!-- init getResults() -->
+@@ -44,10 +44,7 @@ echo doSomething() . PHP_EOL;
+ 12
+     <getResults>
+     </getResults:1337>
+-    <!-- init Generator::getReturn() -->
+-    <Generator::getReturn>
+-    </Generator::getReturn:1337>
+ 1337
+   </doSomething:'Done'>
+ Done
+-</file '%s'>
++</file '%s%eobserver_generator_%d.php'>
+diff --git a/ext/zend_test/tests/observer_generator_04.phpt b/ext/zend_test/tests/observer_generator_04.phpt
+index 00cc999a..46fb2721 100644
+--- a/ext/zend_test/tests/observer_generator_04.phpt
++++ b/ext/zend_test/tests/observer_generator_04.phpt
+@@ -33,87 +33,32 @@ function doSomething() {
+ echo doSomething() . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_generator_%d.php' -->
++<file '%s%eobserver_generator_%d.php'>
+   <!-- init doSomething() -->
+   <doSomething>
+-    <!-- init Generator::current() -->
+-    <Generator::current>
+-      <!-- init fooResults() -->
+-      <fooResults>
++    <!-- init fooResults() -->
++    <fooResults>
+ Starting generator
+-      </fooResults:0>
+-    </Generator::current:0>
+-    <Generator::current>
+-    </Generator::current:0>
++    </fooResults:0>
+ 0
+-    <Generator::current>
+-    </Generator::current:0>
+-    <!-- init Generator::next() -->
+-    <Generator::next>
+-      <fooResults>
+-      </fooResults:1>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:1>
+-    <Generator::current>
+-    </Generator::current:1>
++    <fooResults>
++    </fooResults:1>
+ 1
+-    <Generator::current>
+-    </Generator::current:1>
+-    <Generator::next>
+-      <fooResults>
+-      </fooResults:2>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:2>
+-    <Generator::current>
+-    </Generator::current:2>
++    <fooResults>
++    </fooResults:2>
+ 2
+-    <Generator::current>
+-    </Generator::current:2>
+-    <Generator::next>
+-      <fooResults>
+-      </fooResults:3>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:3>
+-    <Generator::current>
+-    </Generator::current:3>
++    <fooResults>
++    </fooResults:3>
+ 3
+-    <Generator::current>
+-    </Generator::current:3>
+-    <Generator::next>
+-      <fooResults>
+-      </fooResults:4>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:4>
+-    <Generator::current>
+-    </Generator::current:4>
++    <fooResults>
++    </fooResults:4>
+ 4
+-    <Generator::current>
+-    </Generator::current:4>
+-    <Generator::next>
+-      <fooResults>
+-      </fooResults:5>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:5>
+-    <Generator::current>
+-    </Generator::current:5>
++    <fooResults>
++    </fooResults:5>
+ 5
+-    <Generator::current>
+-    </Generator::current:5>
+-    <!-- init Generator::send() -->
+-    <Generator::send>
+-      <fooResults>
+-      </fooResults:NULL>
+-    </Generator::send:NULL>
+-    <Generator::next>
+-    </Generator::next:NULL>
+-    <Generator::current>
+-    </Generator::current:NULL>
++    <fooResults>
++    </fooResults:NULL>
+   </doSomething:'Done'>
+ Done
+-</file '%s'>
++</file '%s%eobserver_generator_%d.php'>
+diff --git a/ext/zend_test/tests/observer_generator_05.phpt b/ext/zend_test/tests/observer_generator_05.phpt
+index dc750bf3..d106be2b 100644
+--- a/ext/zend_test/tests/observer_generator_05.phpt
++++ b/ext/zend_test/tests/observer_generator_05.phpt
+@@ -26,8 +26,8 @@ function doSomething() {
+ echo doSomething() . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_generator_%d.php' -->
++<file '%s%eobserver_generator_%d.php'>
+   <!-- init doSomething() -->
+   <doSomething>
+     <!-- init fooResults() -->
+@@ -38,27 +38,12 @@ echo doSomething() . PHP_EOL;
+     </fooResults:1>
+ 1
+     <fooResults>
+-      <!-- init Exception::__construct() -->
+-      <Exception::__construct>
+-      </Exception::__construct:NULL>
+       <!-- Exception: RuntimeException -->
+     </fooResults:NULL>
+     <!-- Exception: RuntimeException -->
+   </doSomething:NULL>
+   <!-- Exception: RuntimeException -->
+-</file '%s'>
+-<!-- init Exception::__toString() -->
+-<Exception::__toString>
+-  <!-- init Exception::getTraceAsString() -->
+-  <Exception::getTraceAsString>
+-  </Exception::getTraceAsString:'#0 %s(%d): fooResults()
+-#1 %s(%d): doSomething()
+-#2 {main}'>
+-</Exception::__toString:'RuntimeException: Oops! in %s%eobserver_generator_%d.php:%d
+-Stack trace:
+-#0 %s%eobserver_generator_%d.php(%d): fooResults()
+-#1 %s%eobserver_generator_%d.php(%d): doSomething()
+-#2 {main}'>
++</file '%s%eobserver_generator_%d.php'>
+ 
+ Fatal error: Uncaught RuntimeException: Oops! in %s%eobserver_generator_%d.php:%d
+ Stack trace:
+diff --git a/ext/zend_test/tests/observer_opline_01.phpt b/ext/zend_test/tests/observer_opline_01.phpt
+index 6798d39d..35727349 100644
+--- a/ext/zend_test/tests/observer_opline_01.phpt
++++ b/ext/zend_test/tests/observer_opline_01.phpt
+@@ -20,9 +20,9 @@ echo array_sum([1,2,3]) . PHP_EOL;
+ foo();
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
++<!-- init '%s%eobserver_opline_%d.php' -->
+ <!-- opcode: 'ZEND_INIT_FCALL' -->
+-<file '%s'>
++<file '%s%eobserver_opline_%d.php'>
+   <!-- opcode: 'ZEND_INIT_FCALL' -->
+   <!-- init foo() -->
+   <!-- opcode: 'ZEND_ECHO' -->
+@@ -31,9 +31,9 @@ foo();
+ Foo
+     <!-- opcode: 'ZEND_RETURN' -->
+   </foo>
+-  <!-- init '%s' -->
++  <!-- init '%s%eobserver.inc' -->
+   <!-- opcode: 'ZEND_INIT_FCALL' -->
+-  <file '%s'>
++  <file '%s%eobserver.inc'>
+     <!-- opcode: 'ZEND_INIT_FCALL' -->
+     <!-- init foo_observer_test() -->
+     <!-- opcode: 'ZEND_ECHO' -->
+@@ -43,10 +43,7 @@ foo_observer_test
+       <!-- opcode: 'ZEND_RETURN' -->
+     </foo_observer_test>
+     <!-- opcode: 'ZEND_RETURN' -->
+-  </file '%s'>
+-  <!-- init array_sum() -->
+-  <array_sum>
+-  </array_sum>
++  </file '%s%eobserver.inc'>
+ 6
+   <foo>
+     <!-- opcode: 'ZEND_ECHO' -->
+@@ -54,4 +51,4 @@ Foo
+     <!-- opcode: 'ZEND_RETURN' -->
+   </foo>
+   <!-- opcode: 'ZEND_RETURN' -->
+-</file '%s'>
++</file '%s%eobserver_opline_%d.php'>

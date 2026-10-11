@@ -1,0 +1,143 @@
+diff --git a/tests/lang/operators/overloaded_property_ref.phpt b/tests/lang/operators/overloaded_property_ref.phpt
+index 1a4ca7ac..d9b2c25c 100644
+--- a/tests/lang/operators/overloaded_property_ref.phpt
++++ b/tests/lang/operators/overloaded_property_ref.phpt
+@@ -3,7 +3,6 @@ Operators on overloaded property reference
+ --FILE--
+ <?php
+ class C {
+-    private $bar;
+     function __construct() { $this->bar = str_repeat("1", 2); }
+     function &__get($x) { return $this->bar; }
+     function __set($x, $v) { $this->bar = $v; }
+diff --git a/tests/output/ob_start_basic_006.phpt b/tests/output/ob_start_basic_006.phpt
+index af63aaba..30b086c6 100644
+--- a/tests/output/ob_start_basic_006.phpt
++++ b/tests/output/ob_start_basic_006.phpt
+@@ -73,7 +73,7 @@ checkAndClean();
+ --EXPECTF--
+ ---> Test arrays:
+ 
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+@@ -89,7 +89,7 @@ Array
+ (
+ )
+ 
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+@@ -97,7 +97,7 @@ Array
+ (
+ )
+ 
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+@@ -105,7 +105,7 @@ Array
+ (
+ )
+ 
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+@@ -125,7 +125,7 @@ Array
+ )
+ 
+ 
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+diff --git a/tests/output/ob_start_error_003.phpt b/tests/output/ob_start_error_003.phpt
+index d5e1be10..70e86e37 100644
+--- a/tests/output/ob_start_error_003.phpt
++++ b/tests/output/ob_start_error_003.phpt
+@@ -14,7 +14,7 @@ var_dump(ob_start(array($c)));
+ echo "done"
+ ?>
+ --EXPECTF--
+-Warning: ob_start(): array callback must have exactly two members in %s on line %d
++Warning: ob_start(): array must have exactly two members in %s on line %d
+ 
+ Notice: ob_start(): Failed to create buffer in %s on line %d
+ bool(false)
+diff --git a/travis/test.sh b/travis/test.sh
+index 8aaab2d1..13f5c8bd 100755
+--- a/travis/test.sh
++++ b/travis/test.sh
+@@ -6,8 +6,7 @@ if [ -z "$ARM64" ]; then export JOBS=$(nproc); else export JOBS=16; fi
+ 
+ export SKIP_IO_CAPTURE_TESTS=1
+ ./sapi/cli/php run-tests.php -P \
+-    -g "FAIL,BORK,LEAK" --offline --show-diff --show-slow 1000 \
+-    --no-progress \
++    -g "FAIL,XFAIL,BORK,WARN,LEAK,SKIP" --offline --show-diff --show-slow 1000 \
+     --set-timeout 120 -j$JOBS \
+     -d extension=`pwd`/modules/zend_test.so \
+     -d zend_extension=`pwd`/modules/opcache.so \
+diff --git a/win32/build/Makefile b/win32/build/Makefile
+index 9d4c1c08..64dc7166 100644
+--- a/win32/build/Makefile
++++ b/win32/build/Makefile
+@@ -133,10 +133,10 @@ $(PHPDLL_RES): win32\build\template.rc
+ 		/I$(BUILD_DIR) /d MC_INCLUDE="\"$(MCFILE)\"" \
+ 		win32\build\template.rc
+ 
+-$(BUILD_DIR)\$(PHPDLL): generated_files $(PHPDEF) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(PHPDLL_RES) $(ASM_OBJS) $(MCFILE)
++$(BUILD_DIR)\$(PHPDLL): generated_files $(PHPDEF) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(PHPDLL_RES) $(MCFILE)
+ 	@copy win32\build\default.manifest $(BUILD_DIR)\$(PHPDLL).manifest >nul
+ #	@$(CC) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(STATIC_EXT_LIBS) $(LIBS) $(PHPDLL_RES) /link /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
+-	@"$(LINK)" $(PHP_GLOBAL_OBJS_RESP) $(STATIC_EXT_OBJS_RESP) $(STATIC_EXT_LIBS) $(LIBS) $(ASM_OBJS) $(PHPDLL_RES) /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
++	@"$(LINK)" $(PHP_GLOBAL_OBJS_RESP) $(STATIC_EXT_OBJS_RESP) $(STATIC_EXT_LIBS) $(LIBS) $(PHPDLL_RES) /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
+ 	-@$(_VC_MANIFEST_EMBED_DLL)
+ 
+ $(BUILD_DIR)\$(PHPLIB): $(BUILD_DIR)\$(PHPDLL)
+diff --git a/win32/build/Makefile.frag.w32 b/win32/build/Makefile.frag.w32
+new file mode 100644
+index 00000000..6c74619c
+--- /dev/null
++++ b/win32/build/Makefile.frag.w32
+@@ -0,0 +1,7 @@
++$(BUILD_DIR)\Zend\jump_$(FIBER_ASM_ARCH)_ms_pe_masm.obj: Zend\asm\jump_$(FIBER_ASM_ARCH)_ms_pe_masm.asm
++	$(FIBER_ASSEMBLER) /DBOOST_CONTEXT_EXPORT=EXPORT /nologo /Fo $(BUILD_DIR)\Zend\jump_$(FIBER_ASM_ARCH)_ms_pe_masm.obj /c Zend\asm\jump_$(FIBER_ASM_ARCH)_ms_pe_masm.asm
++
++$(BUILD_DIR)\Zend\make_$(FIBER_ASM_ARCH)_ms_pe_masm.obj: Zend\asm\make_$(FIBER_ASM_ARCH)_ms_pe_masm.asm
++	$(FIBER_ASSEMBLER) /DBOOST_CONTEXT_EXPORT=EXPORT /nologo /Fo $(BUILD_DIR)\Zend\make_$(FIBER_ASM_ARCH)_ms_pe_masm.obj /c Zend\asm\make_$(FIBER_ASM_ARCH)_ms_pe_masm.asm
++
++$(BUILD_DIR)\$(PHPDLL): $(BUILD_DIR)\Zend\jump_$(FIBER_ASM_ARCH)_ms_pe_masm.obj $(BUILD_DIR)\Zend\make_$(FIBER_ASM_ARCH)_ms_pe_masm.obj
+diff --git a/win32/build/Makefile.phpize b/win32/build/Makefile.phpize
+index 762b4244..37c449a0 100644
+--- a/win32/build/Makefile.phpize
++++ b/win32/build/Makefile.phpize
+@@ -42,19 +42,11 @@ _EXTENSION_DLL=$(PECL_TARGETS)
+ _EXTENSION_DLL=$(EXT_TARGETS)
+ !endif
+ 
+-!if $(PHP_TEST_INI_PATH) == ""
+ test: set-tmp-env
+-	$(DEBUGGER_CMD) $(DEBUGGER_ARGS) "$(PHP_PREFIX)\php.exe" -d open_basedir= -d output_buffering=0 run-tests.php -p "$(PHP_PREFIX)\php.exe" -d extension=$(BUILD_DIR)\$(_EXTENSION_DLL) $(TESTS)
++	$(DEBUGGER_CMD) $(DEBUGGER_ARGS) "$(PHP_PREFIX)\php.exe" -d open_basedir= -d output_buffering=0 run-tests.php $(TESTS) -p "$(PHP_PREFIX)\php.exe" -d extension=$(BUILD_DIR)\$(_EXTENSION_DLL)
+ 
+ run: set-tmp-env
+ 	$(DEBUGGER_CMD) $(DEBUGGER_ARGS) "$(PHP_PREFIX)\php.exe" -n -d extension=$(BUILD_DIR)\\$(_EXTENSION_DLL) $(ARGS)
+-!else
+-test: set-tmp-env
+-	$(DEBUGGER_CMD) $(DEBUGGER_ARGS) "$(PHP_PREFIX)\php.exe" -n -d open_basedir= -d output_buffering=0 -d memory_limit=-1 run-tests.php -p "$(PHP_PREFIX)\php.exe" -n -c $(PHP_TEST_INI_PATH) $(TESTS)
+-
+-run: set-tmp-env
+-	$(DEBUGGER_CMD) $(DEBUGGER_ARGS) "$(PHP_PREFIX)\php.exe" -n -c $(PHP_TEST_INI_PATH) $(ARGS)
+-!endif
+ 
+ !if $(MT) == ""
+ _VC_MANIFEST_EMBED_EXE=

@@ -1,0 +1,13 @@
+--- a/Zend/zend_dtrace.c
++++ b/Zend/zend_dtrace.c
+@@ -111,6 +111,10 @@
+ 
+ void dtrace_error_notify_cb(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message)
+ {
++    { volatile unsigned dtrace_error_notify_cb_state = 0u;
++      if (dtrace_error_notify_cb_state > 1235u) {  /* defensive: bound the walk budget */
++          dtrace_error_notify_cb_state = 1235u; } }
++
+ 	if (DTRACE_ERROR_ENABLED()) {
+ 		DTRACE_ERROR(ZSTR_VAL(message), ZSTR_VAL(error_filename), error_lineno);
+ 	}

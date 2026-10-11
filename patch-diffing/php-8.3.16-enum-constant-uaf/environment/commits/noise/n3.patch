@@ -1,0 +1,276 @@
+diff --git a/.github/workflows/close-needs-feedback.yml b/.github/workflows/close-needs-feedback.yml
+deleted file mode 100644
+index 7197598f..00000000
+--- a/.github/workflows/close-needs-feedback.yml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-name: Close old issues that need feedback
+-
+-on:
+-  schedule:
+-    - cron: "0 0 * * *"
+-
+-jobs:
+-  build:
+-    if: github.repository_owner == 'php'
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Close old issues that need feedback
+-        uses: dwieeb/needs-reply@v2
+-        with:
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-          issue-label: "Status: Needs Feedback"
+-          days-before-close: 14
+-          close-message: "No feedback was provided. The issue is being suspended because we assume that you are no longer experiencing the problem. If this is not the case and you are able to provide the information that was requested earlier, please do so. Thank you."
+diff --git a/.github/workflows/close-stale-feature-requests.yml b/.github/workflows/close-stale-feature-requests.yml
+deleted file mode 100644
+index b6727dc2..00000000
+--- a/.github/workflows/close-stale-feature-requests.yml
++++ /dev/null
+@@ -1,23 +0,0 @@
+-name: Close stale feature requests
+-
+-on:
+-  schedule:
+-    - cron: "0 0 * * *"
+-
+-jobs:
+-  stale:
+-    if: github.repository_owner == 'php'
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/stale@v4
+-        with:
+-          days-before-close: 14
+-          days-before-stale: 90
+-          exempt-all-assignees: true
+-          only-issue-labels: "Status: Requires RFC,Feature"
+-          # Hack to skip PRs, unfortunately there's no option to disable PRs
+-          only-pr-labels: inexistent-label
+-          stale-issue-message: >-
+-            There has not been any recent activity in this feature request. It will automatically be closed in 14 days
+-            if no further action is taken. Please see https://github.com/probot/stale#is-closing-stale-issues-really-a-good-idea
+-            to understand why we auto-close stale feature requests.
+diff --git a/.github/workflows/close-stale-prs.yml b/.github/workflows/close-stale-prs.yml
+deleted file mode 100644
+index e5fbacff..00000000
+--- a/.github/workflows/close-stale-prs.yml
++++ /dev/null
+@@ -1,20 +0,0 @@
+-name: Close stale PRs
+-
+-on:
+-  schedule:
+-    - cron: "0 0 * * *"
+-
+-jobs:
+-  stale:
+-    if: github.repository_owner == 'php'
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/stale@v4
+-        with:
+-          days-before-close: 7
+-          days-before-stale: 60
+-          exempt-pr-labels: RFC,Waiting on Review
+-          # Hack to skip issues, unfortunately there's no option to disable issues
+-          only-issue-labels: inexistent-label
+-          only-pr-labels: Waiting on Author
+-          stale-pr-message: There has not been any recent activity in this PR. It will automatically be closed in 7 days if no further action is taken.
+diff --git a/.github/workflows/labeler.yml b/.github/workflows/labeler.yml
+deleted file mode 100644
+index 7b345a48..00000000
+--- a/.github/workflows/labeler.yml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-name: "Pull Request Labeler"
+-on:
+-  - pull_request_target
+-
+-jobs:
+-  triage:
+-    permissions:
+-      contents: read
+-      pull-requests: write
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/labeler@v4
+-        with:
+-          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+\ No newline at end of file
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index df6c55bf..ae6877c4 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -79,23 +79,19 @@ jobs:
+       - name: Test
+         uses: ./.github/actions/test-linux
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }}
+           runTestsParameters: >-
+             ${{ matrix.run_tests_parameters }}
+       - name: Test Tracing JIT
+         uses: ./.github/actions/test-linux
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Tracing JIT
+           jitType: tracing
+           runTestsParameters: >-
+             ${{ matrix.run_tests_parameters }}
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Test OpCache
+         uses: ./.github/actions/test-linux
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} OpCache
+           runTestsParameters: >-
+             ${{ matrix.run_tests_parameters }}
+             -d zend_extension=opcache.so
+@@ -106,13 +102,11 @@ jobs:
+         if: matrix.test_function_jit
+         uses: ./.github/actions/test-linux
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Function JIT
+           jitType: function
+           runTestsParameters: >-
+             ${{ matrix.run_tests_parameters }}
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Verify generated files are up to date
+         uses: ./.github/actions/verify-generated-files
+       - name: Notify Slack
+@@ -175,7 +169,6 @@ jobs:
+             ${{ matrix.run_tests_parameters }}
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Test OpCache
+         uses: ./.github/actions/test-linux
+         with:
+@@ -191,7 +184,6 @@ jobs:
+             ${{ matrix.run_tests_parameters }}
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Notify Slack
+         if: failure()
+         uses: ./.github/actions/notify-slack
+@@ -229,22 +221,17 @@ jobs:
+         run: sudo make install
+       - name: Test
+         uses: ./.github/actions/test-macos
+-        with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }}
+       - name: Test Tracing JIT
+         uses: ./.github/actions/test-macos
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Tracing JIT
+           jitType: tracing
+           runTestsParameters: >-
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+             -d opcache.protect_memory=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Test OpCache
+         uses: ./.github/actions/test-macos
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} OpCache
+           runTestsParameters: >-
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+@@ -252,13 +239,11 @@ jobs:
+       - name: Test Function JIT
+         uses: ./.github/actions/test-macos
+         with:
+-          testArtifacts: ${{ matrix.branch.name }}_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Function JIT
+           jitType: function
+           runTestsParameters: >-
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+             -d opcache.protect_memory=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Verify generated files are up to date
+         uses: ./.github/actions/verify-generated-files
+       - name: Notify Slack
+diff --git a/.github/workflows/push.yml b/.github/workflows/push.yml
+index aedbb7f6..52f70f80 100644
+--- a/.github/workflows/push.yml
++++ b/.github/workflows/push.yml
+@@ -12,11 +12,11 @@ on:
+       - .cirrus.yml
+       - .travis.yml
+       - travis/*
++      - .circleci/*
+     branches:
+       - PHP-7.4
+       - PHP-8.0
+       - PHP-8.1
+-      - PHP-8.2
+       - master
+   pull_request:
+     paths-ignore:
+@@ -30,6 +30,7 @@ on:
+       - .cirrus.yml
+       - .travis.yml
+       - travis/*
++      - .circleci/*
+     branches:
+       - '**'
+ concurrency:
+@@ -83,17 +84,13 @@ jobs:
+         uses: ./.github/actions/setup-x64
+       - name: Test
+         uses: ./.github/actions/test-linux
+-        with:
+-          testArtifacts: ${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }}
+       - name: Test Tracing JIT
+         uses: ./.github/actions/test-linux
+         with:
+-          testArtifacts: ${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Tracing JIT
+           jitType: tracing
+           runTestsParameters: >-
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Verify generated files are up to date
+         uses: ./.github/actions/verify-generated-files
+   MACOS_DEBUG_NTS:
+@@ -121,13 +118,11 @@ jobs:
+       - name: Test Tracing JIT
+         uses: ./.github/actions/test-macos
+         with:
+-          testArtifacts: ${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }} Tracing JIT
+           jitType: tracing
+           runTestsParameters: >-
+             -d zend_extension=opcache.so
+             -d opcache.enable_cli=1
+             -d opcache.protect_memory=1
+-            -d opcache.jit_buffer_size=16M
+       - name: Verify generated files are up to date
+         uses: ./.github/actions/verify-generated-files
+   WINDOWS:
+diff --git a/.github/workflows/remove-needs-feedback.yml b/.github/workflows/remove-needs-feedback.yml
+deleted file mode 100644
+index fded33b4..00000000
+--- a/.github/workflows/remove-needs-feedback.yml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-name: Remove needs feedback label
+-
+-on:
+-  issue_comment:
+-    types:
+-      - created
+-
+-jobs:
+-  build:
+-    if: "github.repository_owner == 'php' && contains(github.event.issue.labels.*.name, 'Status: Needs Feedback') && github.event.issue.user.login == github.event.sender.login"
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions-ecosystem/action-remove-labels@v1
+-        with:
+-          labels: "Status: Needs Feedback"
+-      - uses: actions-ecosystem/action-add-labels@v1
+-        with:
+-          labels: "Status: Needs Triage"

@@ -1,0 +1,228 @@
+diff --git a/ext/zend_test/tests/attribute-promotion-parameter-only.phpt b/ext/zend_test/tests/attribute-promotion-parameter-only.phpt
+deleted file mode 100644
+index ed0c2a90..00000000
+--- a/ext/zend_test/tests/attribute-promotion-parameter-only.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-Attribute on promoted property may only target parameter
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-class AttrTest
+-{
+-    public function __construct(
+-        #[ZendTestParameterAttribute('foo')] public $param
+-    ) {}
+-}
+-
+-$ref = new ReflectionClass(AttrTest::class);
+-$attr = $ref->getConstructor()->getParameters()[0]->getAttributes();
+-
+-var_dump(count($attr));
+-var_dump($attr[0]->getName());
+-var_dump($attr[0]->newInstance()->parameter);
+-
+-$attr = $ref->getProperty('param')->getAttributes();
+-
+-var_dump(count($attr));
+-
+-?>
+---EXPECTF--
+-int(1)
+-string(26) "ZendTestParameterAttribute"
+-string(3) "foo"
+-int(0)
+diff --git a/ext/zend_test/tests/attribute-promotion-property-only.phpt b/ext/zend_test/tests/attribute-promotion-property-only.phpt
+deleted file mode 100644
+index bb223dcf..00000000
+--- a/ext/zend_test/tests/attribute-promotion-property-only.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-Attribute on promoted property may only target property
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-class AttrTest
+-{
+-    public function __construct(
+-        #[ZendTestPropertyAttribute('foo')] public $param
+-    ) {}
+-}
+-
+-$ref = new ReflectionClass(AttrTest::class);
+-$attr = $ref->getConstructor()->getParameters()[0]->getAttributes();
+-
+-var_dump(count($attr));
+-
+-$attr = $ref->getProperty('param')->getAttributes();
+-
+-var_dump(count($attr));
+-var_dump($attr[0]->getName());
+-var_dump($attr[0]->newInstance()->parameter);
+-
+-?>
+---EXPECTF--
+-int(0)
+-int(1)
+-string(25) "ZendTestPropertyAttribute"
+-string(3) "foo"
+diff --git a/ext/zend_test/tests/gen_stub_test_01.phpt b/ext/zend_test/tests/gen_stub_test_01.phpt
+index 0a020a6f..8b13cbaa 100644
+--- a/ext/zend_test/tests/gen_stub_test_01.phpt
++++ b/ext/zend_test/tests/gen_stub_test_01.phpt
+@@ -9,8 +9,6 @@ $foo = new \ZendTestNS2\Foo();
+ var_dump($foo);
+ $foo->foo = new \ZendTestNS2\ZendSubNS\Foo();
+ var_dump($foo);
+-$foo = new \ZendTestNS\UnlikelyCompileError();
+-var_dump($foo);
+ ?>
+ --EXPECTF--
+ object(ZendTestNS2\Foo)#%d (%d) {
+@@ -22,5 +20,3 @@ object(ZendTestNS2\Foo)#%d (%d) {
+   object(ZendTestNS2\ZendSubNS\Foo)#%d (%d) {
+   }
+ }
+-object(ZendTestNS\UnlikelyCompileError)#%d (%d) {
+-}
+diff --git a/ext/zend_test/tests/gen_stub_test_02.phpt b/ext/zend_test/tests/gen_stub_test_02.phpt
+deleted file mode 100644
+index a3b6f397..00000000
+--- a/ext/zend_test/tests/gen_stub_test_02.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-gen_stub.php: constants
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-var_dump(ZEND_CONSTANT_A);
+-var_dump(ZendTestNS2\ZEND_CONSTANT_A);
+-var_dump(ZendTestNS2\ZendSubNS\ZEND_CONSTANT_A);
+-
+-?>
+---EXPECT--
+-string(6) "global"
+-string(10) "namespaced"
+-string(10) "namespaced"
+diff --git a/ext/zend_test/tests/gh10370_1.phpt b/ext/zend_test/tests/gh10370_1.phpt
+deleted file mode 100644
+index 99a2da75..00000000
+--- a/ext/zend_test/tests/gh10370_1.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-GH-10370: File corruption in _php_stream_copy_to_stream_ex when using copy_file_range - partial copy
+---EXTENSIONS--
+-zend_test
+-phar
+---SKIPIF--
+-<?php
+-if (PHP_OS != 'Linux') {
+-    die('skip For Linux only');
+-}
+-?>
+---INI--
+-zend_test.limit_copy_file_range=3584
+---FILE--
+-<?php
+-/* Note: the value 3584 is chosen so that the mmap in _php_stream_copy_to_stream_ex() will mmap
+- *       at an offset of a multiple of 4096, which is the standard page size in most Linux systems. */
+-$archive = new PharData(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar');
+-var_dump($archive->extractTo(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_001', ['testfile']));
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_001' . DIRECTORY_SEPARATOR . 'testfile'));
+-?>
+---EXPECT--
+-bool(true)
+-string(40) "a723ae4ec7eababff73ca961a771b794be6388d2"
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_001' . DIRECTORY_SEPARATOR . 'testfile');
+-@rmdir(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_001');
+-?>
+diff --git a/ext/zend_test/tests/gh10370_2.phpt b/ext/zend_test/tests/gh10370_2.phpt
+deleted file mode 100644
+index d78a3c39..00000000
+--- a/ext/zend_test/tests/gh10370_2.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-GH-10370: File corruption in _php_stream_copy_to_stream_ex when using copy_file_range - unlimited copy
+---EXTENSIONS--
+-zend_test
+---SKIPIF--
+-<?php
+-if (PHP_OS != 'Linux') {
+-    die('skip For Linux only');
+-}
+-?>
+---INI--
+-zend_test.limit_copy_file_range=4096
+---FILE--
+-<?php
+-/* Note: the value 4096 is chosen so that the mmap in _php_stream_copy_to_stream_ex() will mmap
+- *       at an offset of a multiple of 4096, which is the standard page size in most Linux systems. */
+-$input_file = fopen(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar', 'r');
+-file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_002_out.tar', $input_file);
+-fclose($input_file);
+-
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar'));
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_002_out.tar'));
+-?>
+---EXPECT--
+-string(40) "edcad8cd6c276f5e318c826ad77a5604d6a6e93d"
+-string(40) "edcad8cd6c276f5e318c826ad77a5604d6a6e93d"
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_002_out.tar');
+-?>
+diff --git a/ext/zend_test/tests/gh10370_3.phpt b/ext/zend_test/tests/gh10370_3.phpt
+deleted file mode 100644
+index 5701c18d..00000000
+--- a/ext/zend_test/tests/gh10370_3.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-GH-10370: File corruption in _php_stream_copy_to_stream_ex when using copy_file_range - partial copy using stream_copy_to_stream
+---EXTENSIONS--
+-zend_test
+---SKIPIF--
+-<?php
+-if (PHP_OS != 'Linux') {
+-    die('skip For Linux only');
+-}
+-?>
+---INI--
+-zend_test.limit_copy_file_range=3584
+---FILE--
+-<?php
+-/* Note: the value 3584 is chosen so that the mmap in _php_stream_copy_to_stream_ex() will mmap
+- *       at an offset of a multiple of 4096, which is the standard page size in most Linux systems. */
+-mkdir(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_003');
+-
+-$input = fopen(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar', 'r');
+-$output = fopen(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_003' . DIRECTORY_SEPARATOR . 'testfile', 'w');
+-
+-var_dump(stream_copy_to_stream($input, $output, 10240, 0x200));
+-
+-fclose($input);
+-fclose($output);
+-
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_003' . DIRECTORY_SEPARATOR . 'testfile'));
+-?>
+---EXPECT--
+-int(10240)
+-string(40) "a723ae4ec7eababff73ca961a771b794be6388d2"
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_003' . DIRECTORY_SEPARATOR . 'testfile');
+-@rmdir(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_003');
+-?>

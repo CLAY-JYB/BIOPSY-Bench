@@ -1,0 +1,258 @@
+diff --git a/ext/spl/tests/SplFileObject_setCsvControl_error003.phpt b/ext/spl/tests/SplFileObject_setCsvControl_error003.phpt
+new file mode 100644
+index 00000000..35934f5e
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_setCsvControl_error003.phpt
+@@ -0,0 +1,29 @@
++--TEST--
++SPL: SplFileObject::setCsvControl error 003
++--CREDITS--
++Erwin Poeze <erwin.poeze at gmail.com>
++--INI--
++include_path=.
++--FILE--
++<?php
++file_put_contents('csv_control_data_error003.csv',
++<<<CDATA
++'groene appelen'|10
++'gele bananen'|20
++'rode kersen'|30
++CDATA
++);
++$s = new SplFileObject('csv_control_data_error003.csv');
++$s->setFlags(SplFileObject::READ_CSV);
++try {
++    $s->setCsvControl('|', '\'', 'three');
++} catch (ValueError $e) {
++    echo $e->getMessage(), "\n";
++}
++?>
++--CLEAN--
++<?php
++unlink('csv_control_data_error003.csv');
++?>
++--EXPECT--
++SplFileObject::setCsvControl(): Argument #3 ($escape) must be empty or a single character
+diff --git a/ext/spl/tests/SplFileObject_setCsvControl_variation001.phpt b/ext/spl/tests/SplFileObject_setCsvControl_variation001.phpt
+new file mode 100644
+index 00000000..f54f8eea
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_setCsvControl_variation001.phpt
+@@ -0,0 +1,29 @@
++--TEST--
++SPL: SplFileObject::setCsvControl variation 001
++--CREDITS--
++Erwin Poeze <erwin.poeze at gmail.com>
++--FILE--
++<?php
++file_put_contents('csv_control_data_variation001.csv',
++<<<CDATA
++"groene appelen",10
++"gele bananen",20
++"rode kersen",30
++CDATA
++);
++$s = new SplFileObject('csv_control_data_variation001.csv');
++$s->setFlags(SplFileObject::READ_CSV);
++$s->setCsvControl();
++foreach ($s as $row) {
++    list($fruit, $quantity) = $row;
++    echo "$fruit : $quantity\n";
++}
++?>
++--CLEAN--
++<?php
++unlink('csv_control_data_variation001.csv');
++?>
++--EXPECT--
++groene appelen : 10
++gele bananen : 20
++rode kersen : 30
+diff --git a/ext/spl/tests/SplFileObject_setCsvControl_variation002.phpt b/ext/spl/tests/SplFileObject_setCsvControl_variation002.phpt
+new file mode 100644
+index 00000000..39b526a8
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_setCsvControl_variation002.phpt
+@@ -0,0 +1,17 @@
++--TEST--
++SplFileObject::setCsvControl() and ::getCsvControl() with empty $escape
++--FILE--
++<?php
++$file = new SplTempFileObject;
++$file->setCsvControl(',', '"', '');
++var_dump($file->getCsvControl());
++?>
++--EXPECT--
++array(3) {
++  [0]=>
++  string(1) ","
++  [1]=>
++  string(1) """
++  [2]=>
++  string(0) ""
++}
+diff --git a/ext/spl/tests/SplFileObject_testinput.csv b/ext/spl/tests/SplFileObject_testinput.csv
+new file mode 100644
+index 00000000..41a9e31c
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_testinput.csv
+@@ -0,0 +1,5 @@
++first,second,third
++1,2,3
++4,5,6
++7,8,9
++0,0,0
+diff --git a/ext/spl/tests/SplFileinfo_debugInfo_basic.phpt b/ext/spl/tests/SplFileinfo_debugInfo_basic.phpt
+deleted file mode 100644
+index 75bf1d9d..00000000
+--- a/ext/spl/tests/SplFileinfo_debugInfo_basic.phpt
++++ /dev/null
+@@ -1,86 +0,0 @@
+---TEST--
+-SPL: SplFileInfo::_debugInfo() basic test
+---FILE--
+-<?php
+-// without $suffix
+-var_dump(new \SplFileInfo('/path/to/a.txt'));
+-var_dump(new \SplFileInfo('path/to/b'));
+-var_dump(new \SplFileInfo('c.txt'));
+-var_dump(new \SplFileInfo('d'));
+-var_dump(new \SplFileInfo('~/path/to//e'));
+-
+-// with $suffix
+-var_dump(new \SplFileInfo('path/to/a.txt'));
+-var_dump(new \SplFileInfo('path/to/bbb.txt'));
+-var_dump(new \SplFileInfo('path/to/ccc.txt'));
+-var_dump(new \SplFileInfo('d.txt'));
+-var_dump(new \SplFileInfo('e.txt'));
+-var_dump(new \SplFileInfo('f'));
+-?>
+---EXPECT--
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(14) "/path/to/a.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(5) "a.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(9) "path/to/b"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(1) "b"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(5) "c.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(5) "c.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(1) "d"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(1) "d"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(12) "~/path/to//e"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(1) "e"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(13) "path/to/a.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(5) "a.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(15) "path/to/bbb.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(7) "bbb.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(15) "path/to/ccc.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(7) "ccc.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(5) "d.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(5) "d.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(5) "e.txt"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(5) "e.txt"
+-}
+-object(SplFileInfo)#1 (2) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(1) "f"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(1) "f"
+-}
+diff --git a/ext/spl/tests/SplFileinfo_getBasename_basic.phpt b/ext/spl/tests/SplFileinfo_getBasename_basic.phpt
+deleted file mode 100644
+index 554a3856..00000000
+--- a/ext/spl/tests/SplFileinfo_getBasename_basic.phpt
++++ /dev/null
+@@ -1,32 +0,0 @@
+---TEST--
+-SPL: SplFileInfo::getBasename() basic test
+---FILE--
+-<?php
+-// without $suffix
+-echo (new \SplFileInfo('/path/to/a.txt'))->getBasename() . PHP_EOL;
+-echo (new \SplFileInfo('path/to/b'))->getBasename() . PHP_EOL;
+-echo (new \SplFileInfo('c.txt'))->getBasename() . PHP_EOL;
+-echo (new \SplFileInfo('d'))->getBasename() . PHP_EOL;
+-echo (new \SplFileInfo('~/path/to//e'))->getBasename() . PHP_EOL . PHP_EOL;
+-
+-// with $suffix
+-echo (new \SplFileInfo('path/to/a.txt'))->getBasename('.txt') . PHP_EOL;
+-echo (new \SplFileInfo('path/to/bbb.txt'))->getBasename('b.txt') . PHP_EOL;
+-echo (new \SplFileInfo('path/to/ccc.txt'))->getBasename('to/ccc.txt') . PHP_EOL;
+-echo (new \SplFileInfo('d.txt'))->getBasename('txt') . PHP_EOL;
+-echo (new \SplFileInfo('e.txt'))->getBasename('e.txt') . PHP_EOL;
+-echo (new \SplFileInfo('f'))->getBasename('.txt');
+-?>
+---EXPECT--
+-a.txt
+-b
+-c.txt
+-d
+-e
+-
+-a
+-bb
+-ccc.txt
+-d.
+-e.txt
+-f
+diff --git a/ext/spl/tests/SplFileinfo_getFilename_basic.phpt b/ext/spl/tests/SplFileinfo_getFilename_basic.phpt
+deleted file mode 100644
+index 77d08fb2..00000000
+--- a/ext/spl/tests/SplFileinfo_getFilename_basic.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-SPL: SplFileInfo::getFilename() basic test
+---FILE--
+-<?php
+-
+-echo (new \SplFileInfo('/path/to/a.txt'))->getFilename() . PHP_EOL;
+-echo (new \SplFileInfo('path/to/b'))->getFilename() . PHP_EOL;
+-echo (new \SplFileInfo('c.txt'))->getFilename() . PHP_EOL;
+-echo (new \SplFileInfo('d'))->getFilename() . PHP_EOL;
+-echo (new \SplFileInfo('~/path/to//e'))->getFilename() . PHP_EOL . PHP_EOL;
+-
+-?>
+---EXPECT--
+-a.txt
+-b
+-c.txt
+-d
+-e

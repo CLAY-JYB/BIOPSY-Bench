@@ -1,0 +1,191 @@
+diff --git a/ext/session/tests/session_save_path_variation4.phpt b/ext/session/tests/session_save_path_variation4.phpt
+index 673fe243..dd689888 100644
+--- a/ext/session/tests/session_save_path_variation4.phpt
++++ b/ext/session/tests/session_save_path_variation4.phpt
+@@ -41,7 +41,7 @@ ob_end_flush();
+ <?php
+ $initdir = __DIR__;
+ $sessions = ($initdir."/session_save_path_variation4");
+-rmdir($sessions);
++var_dump(rmdir($sessions));
+ ?>
+ --EXPECTF--
+ *** Testing session_save_path() : variation ***
+diff --git a/ext/session/tests/session_save_path_variation5.phpt b/ext/session/tests/session_save_path_variation5.phpt
+index 1ea8afc6..5863441f 100644
+--- a/ext/session/tests/session_save_path_variation5.phpt
++++ b/ext/session/tests/session_save_path_variation5.phpt
+@@ -30,6 +30,7 @@ var_dump(mkdir($sessions));
+ var_dump(chdir($sessions));
+ ini_set("session.save_path", $directory);
+ var_dump(session_save_path());
++var_dump(rmdir($sessions));
+ 
+ echo "Done";
+ ob_end_flush();
+@@ -38,7 +39,7 @@ ob_end_flush();
+ <?php
+ $directory = __DIR__;
+ $sessions = ($directory."/session_save_path_variation5");
+-rmdir($sessions);
++var_dump(rmdir($sessions));
+ ?>
+ --EXPECTF--
+ *** Testing session_save_path() : variation ***
+@@ -47,4 +48,5 @@ bool(true)
+ 
+ Warning: ini_set(): open_basedir restriction in effect. File(%s) is not within the allowed path(s): (.) in %s on line %d
+ string(0) ""
++bool(true)
+ Done
+diff --git a/ext/session/tests/session_set_cookie_params_variation8.phpt b/ext/session/tests/session_set_cookie_params_variation8.phpt
+deleted file mode 100644
+index 891133b5..00000000
+--- a/ext/session/tests/session_set_cookie_params_variation8.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-Test session_set_cookie_params() function : negative and 0 lifetime
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---FILE--
+-<?php
+-
+-ob_start();
+-
+-var_dump(ini_get("session.cookie_lifetime"));
+-var_dump(session_set_cookie_params(["lifetime" => 0]));
+-var_dump(ini_get("session.cookie_lifetime"));
+-
+-var_dump(ini_get("session.cookie_lifetime"));
+-var_dump(session_set_cookie_params(["lifetime" => -10]));
+-var_dump(ini_get("session.cookie_lifetime"));
+-echo "Done";
+-ob_end_flush();
+-?>
+---EXPECTF--
+-string(1) "0"
+-bool(true)
+-string(1) "0"
+-string(1) "0"
+-
+-Warning: session_set_cookie_params(): CookieLifetime cannot be negative in %s on line %d
+-bool(false)
+-string(1) "0"
+-Done
+diff --git a/ext/session/tests/session_set_save_handler_iface_002.phpt b/ext/session/tests/session_set_save_handler_iface_002.phpt
+index 379b6138..7f826190 100644
+--- a/ext/session/tests/session_set_save_handler_iface_002.phpt
++++ b/ext/session/tests/session_set_save_handler_iface_002.phpt
+@@ -89,4 +89,4 @@ bool(true)
+ session_set_save_handler(): Argument #1 ($open) must be of type SessionHandlerInterface, MySession2 given
+ good handler writing
+ 
+-Deprecated: PHP Request Shutdown: Session callback must have a return value of type bool, int returned in Unknown on line 0
++Deprecated: Unknown: Session callback must have a return value of type bool, int returned in Unknown on line 0
+diff --git a/ext/simplexml/simplexml.c b/ext/simplexml/simplexml.c
+index 37c6aa8f..9bcfe1e6 100644
+--- a/ext/simplexml/simplexml.c
++++ b/ext/simplexml/simplexml.c
+@@ -53,7 +53,7 @@ static zval *php_sxe_iterator_current_data(zend_object_iterator *iter);
+ static void php_sxe_iterator_current_key(zend_object_iterator *iter, zval *key);
+ static void php_sxe_iterator_move_forward(zend_object_iterator *iter);
+ static void php_sxe_iterator_rewind(zend_object_iterator *iter);
+-static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type);
++static int sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type);
+ 
+ /* {{{ _node_as_zval() */
+ static void _node_as_zval(php_sxe_object *sxe, xmlNodePtr node, zval *value, SXE_ITER itertype, char *name, const xmlChar *nsprefix, int isprefix)
+@@ -1799,7 +1799,7 @@ PHP_METHOD(SimpleXMLElement, addAttribute)
+ /* }}} */
+ 
+ /* {{{ cast_object() */
+-static zend_result cast_object(zval *object, int type, char *contents)
++static int cast_object(zval *object, int type, char *contents)
+ {
+ 	if (contents) {
+ 		ZVAL_STRINGL(object, contents, strlen(contents));
+@@ -1831,13 +1831,13 @@ static zend_result cast_object(zval *object, int type, char *contents)
+ /* }}} */
+ 
+ /* {{{ sxe_object_cast() */
+-static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type)
++static int sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int type)
+ {
+ 	php_sxe_object *sxe;
+ 	xmlChar        *contents = NULL;
+ 	bool            free_contents = true;
+ 	xmlNodePtr	    node;
+-	zend_result rv;
++	int rv;
+ 
+ 	sxe = php_sxe_fetch_object(readobj);
+ 
+@@ -1884,7 +1884,7 @@ static zend_result sxe_object_cast_ex(zend_object *readobj, zval *writeobj, int
+ /* }}} */
+ 
+ /*  {{{ Variant of sxe_object_cast_ex that handles overwritten __toString() method */
+-static zend_result sxe_object_cast(zend_object *readobj, zval *writeobj, int type)
++static int sxe_object_cast(zend_object *readobj, zval *writeobj, int type)
+ {
+ 	if (type == IS_STRING
+ 		&& zend_std_cast_object_tostring(readobj, writeobj, IS_STRING) == SUCCESS
+@@ -1910,7 +1910,7 @@ PHP_METHOD(SimpleXMLElement, __toString)
+ }
+ /* }}} */
+ 
+-static zend_result php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long *count) /* {{{ */
++static int php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long *count) /* {{{ */
+ {
+ 	xmlNodePtr      node;
+ 	zval            data;
+@@ -1937,7 +1937,7 @@ static zend_result php_sxe_count_elements_helper(php_sxe_object *sxe, zend_long
+ }
+ /* }}} */
+ 
+-static zend_result sxe_count_elements(zend_object *object, zend_long *count) /* {{{ */
++static int sxe_count_elements(zend_object *object, zend_long *count) /* {{{ */
+ {
+ 	php_sxe_object  *intern;
+ 	intern = php_sxe_fetch_object(object);
+diff --git a/ext/simplexml/tests/bug26976.phpt b/ext/simplexml/tests/bug26976.phpt
+index 7c8dcd41..c539e735 100644
+--- a/ext/simplexml/tests/bug26976.phpt
++++ b/ext/simplexml/tests/bug26976.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #26976 (Cannot access array elements using array indices)
++Bug #26976 (Can not access array elements using array indices)
+ --EXTENSIONS--
+ simplexml
+ --FILE--
+diff --git a/ext/simplexml/tests/gh10200.phpt b/ext/simplexml/tests/gh10200.phpt
+deleted file mode 100644
+index ad02d45b..00000000
+--- a/ext/simplexml/tests/gh10200.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-GH-10200 (zif_get_object_vars: Assertion `!(((__ht)->u.flags & (1<<2)) != 0)' failed.)
+---EXTENSIONS--
+-simplexml
+---FILE--
+-<?php
+-
+-$xmlData = <<<EOF
+-<?xml version="1.0" encoding="utf-8"?>
+-<document>https://github.com/php/php-src/issues/10200 not encountered</document>
+-EOF;
+-
+-$xml = simplexml_load_string($xmlData);
+-$output = get_object_vars($xml);
+-var_dump($output);
+-
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  string(59) "https://github.com/php/php-src/issues/10200 not encountered"
+-}

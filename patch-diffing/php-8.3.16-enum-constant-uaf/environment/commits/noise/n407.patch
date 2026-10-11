@@ -1,0 +1,261 @@
+diff --git a/ext/zend_test/tests/observer_preload.inc b/ext/zend_test/tests/observer_preload.inc
+deleted file mode 100644
+index 7652014f..00000000
+--- a/ext/zend_test/tests/observer_preload.inc
++++ /dev/null
+@@ -1,13 +0,0 @@
+-<?php
+-
+-class Foo {
+-    public static function test() {
+-        return "foo::test";
+-    }
+-}
+-
+-if (true) {
+-    function foo() {
+-        return 'I should be observable';
+-    }
+-}
+\ No newline at end of file
+diff --git a/ext/zend_test/tests/observer_preload.phpt b/ext/zend_test/tests/observer_preload.phpt
+deleted file mode 100644
+index f5dba62b..00000000
+--- a/ext/zend_test/tests/observer_preload.phpt
++++ /dev/null
+@@ -1,44 +0,0 @@
+---TEST--
+-Observer: Test with basic preloading
+---EXTENSIONS--
+-zend_test
+-opcache
+---SKIPIF--
+-<?php
+-if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows');
+-?>
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+-opcache.preload={PWD}/observer_preload.inc
+-opcache.file_cache=
+-opcache.file_cache_only=0
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.observe_declaring=1
+-zend_test.observer.show_return_value=1
+---FILE--
+-<?php
+-
+-Foo::test();
+-foo();
+-
+-echo 'Done' . PHP_EOL;
+-?>
+---EXPECTF--
+-<!-- declared class 'foo' -->
+-<!-- init '%sobserver_preload.inc' -->
+-<file '%sobserver_preload.inc'>
+-  <!-- declared function 'foo' -->
+-</file '%sobserver_preload.inc'>
+-<!-- init '%sobserver_preload.php' -->
+-<file '%sobserver_preload.php'>
+-  <!-- init Foo::test() -->
+-  <Foo::test>
+-  </Foo::test:'foo::test'>
+-  <!-- init foo() -->
+-  <foo>
+-  </foo:'I should be observable'>
+-Done
+-</file '%sobserver_preload.php'>
+\ No newline at end of file
+diff --git a/ext/zend_test/tests/observer_retval_02.phpt b/ext/zend_test/tests/observer_retval_02.phpt
+index 4f037782..73992aa5 100644
+--- a/ext/zend_test/tests/observer_retval_02.phpt
++++ b/ext/zend_test/tests/observer_retval_02.phpt
+@@ -21,20 +21,12 @@ $gen->current();
+ echo 'Done' . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Generator::current() -->
+-  <Generator::current>
+-    <!-- init foo() -->
+-    <foo>
+-    </foo:'I should be observable'>
+-  </Generator::current:'I should be observable'>
+-  <!-- init Generator::next() -->
+-  <Generator::next>
+-    <foo>
+-    </foo:'Me too!'>
+-  </Generator::next:NULL>
+-  <Generator::current>
+-  </Generator::current:'Me too!'>
++<!-- init '%s%eobserver_retval_%d.php' -->
++<file '%s%eobserver_retval_%d.php'>
++  <!-- init foo() -->
++  <foo>
++  </foo:'I should be observable'>
++  <foo>
++  </foo:'Me too!'>
+ Done
+-</file '%s'>
++</file '%s%eobserver_retval_%d.php'>
+diff --git a/ext/zend_test/tests/observer_shutdown_01.phpt b/ext/zend_test/tests/observer_shutdown_01.phpt
+index b0ee1bd1..837d0f7f 100644
+--- a/ext/zend_test/tests/observer_shutdown_01.phpt
++++ b/ext/zend_test/tests/observer_shutdown_01.phpt
+@@ -24,16 +24,13 @@ function foo() {
+ echo 'Done: ' . bar(40) . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init register_shutdown_function() -->
+-  <register_shutdown_function>
+-  </register_shutdown_function:NULL>
++<!-- init '%s%eobserver_shutdown_%d.php' -->
++<file '%s%eobserver_shutdown_%d.php'>
+   <!-- init bar() -->
+   <bar>
+   </bar:40>
+ Done: 40
+-</file '%s'>
++</file '%s%eobserver_shutdown_%d.php'>
+ <!-- init {closure}() -->
+ <{closure}>
+   <!-- init foo() -->
+diff --git a/ext/zend_test/tests/observer_sqlite_create_function.phpt b/ext/zend_test/tests/observer_sqlite_create_function.phpt
+deleted file mode 100644
+index 85d269c9..00000000
+--- a/ext/zend_test/tests/observer_sqlite_create_function.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-Observer: PDO::sqliteCreateFunction() can be observed
+---EXTENSIONS--
+-zend_test
+-PDO
+-pdo_sqlite
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+---FILE--
+-<?php
+-
+-function returnOne() {
+-    return 1;
+-}
+-
+-$db = new PDO('sqlite::memory:');
+-$db->sqliteCreateFunction('returnOne', 'returnOne', 0);
+-
+-foreach ($db->query('SELECT returnOne()') as $row) {
+-    var_dump($row);
+-}
+-
+-echo 'Done' . PHP_EOL;
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init PDO::__construct() -->
+-  <PDO::__construct>
+-  </PDO::__construct>
+-  <!-- init PDO::sqliteCreateFunction() -->
+-  <PDO::sqliteCreateFunction>
+-  </PDO::sqliteCreateFunction>
+-  <!-- init PDO::query() -->
+-  <PDO::query>
+-    <!-- init returnOne() -->
+-    <returnOne>
+-    </returnOne>
+-  </PDO::query>
+-  <!-- init var_dump() -->
+-  <var_dump>
+-array(2) {
+-  ["returnOne()"]=>
+-  int(1)
+-  [0]=>
+-  int(1)
+-}
+-  </var_dump>
+-Done
+-</file '%s'>
+diff --git a/ext/zend_test/tests/observer_types_01.phpt b/ext/zend_test/tests/observer_types_01.phpt
+index de03b355..7176ab32 100644
+--- a/ext/zend_test/tests/observer_types_01.phpt
++++ b/ext/zend_test/tests/observer_types_01.phpt
+@@ -12,24 +12,14 @@ function foo(array $a) { return 1; }
+ foo(42);
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_types_%d.php' -->
++<file '%s%eobserver_types_%d.php'>
+   <!-- init foo() -->
+   <foo>
+     <!-- Exception: TypeError -->
+   </foo:NULL>
+   <!-- Exception: TypeError -->
+-</file '%s'>
+-<!-- init Error::__toString() -->
+-<Error::__toString>
+-  <!-- init Error::getTraceAsString() -->
+-  <Error::getTraceAsString>
+-  </Error::getTraceAsString:'#0 %s(%d): foo(42)
+-#1 {main}'>
+-</Error::__toString:'TypeError: foo(): Argument #1 ($a) must be of type array, int given, called in %s:%d
+-Stack trace:
+-#0 %s%eobserver_types_%d.php(%d): foo(42)
+-#1 {main}'>
++</file '%s%eobserver_types_%d.php'>
+ 
+ Fatal error: Uncaught TypeError: foo(): Argument #1 ($a) must be of type array, int given, called in %s:%d
+ Stack trace:
+diff --git a/ext/zend_test/tests/observer_zend_call_function_01.phpt b/ext/zend_test/tests/observer_zend_call_function_01.phpt
+index aed1541f..e148c9b2 100644
+--- a/ext/zend_test/tests/observer_zend_call_function_01.phpt
++++ b/ext/zend_test/tests/observer_zend_call_function_01.phpt
+@@ -18,25 +18,19 @@ var_dump(array_reduce($a, 'sum'));
+ echo 'Done' . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init array_reduce() -->
+-  <array_reduce>
+-    <!-- init sum() -->
+-    <sum>
+-    </sum>
+-    <sum>
+-    </sum>
+-    <sum>
+-    </sum>
+-    <sum>
+-    </sum>
+-    <sum>
+-    </sum>
+-  </array_reduce>
+-  <!-- init var_dump() -->
+-  <var_dump>
++<!-- init '%s%eobserver_zend_call_function_%d.php' -->
++<file '%s%eobserver_zend_call_function_%d.php'>
++  <!-- init sum() -->
++  <sum>
++  </sum>
++  <sum>
++  </sum>
++  <sum>
++  </sum>
++  <sum>
++  </sum>
++  <sum>
++  </sum>
+ int(15)
+-  </var_dump>
+ Done
+-</file '%s'>
++</file '%s%eobserver_zend_call_function_%d.php'>

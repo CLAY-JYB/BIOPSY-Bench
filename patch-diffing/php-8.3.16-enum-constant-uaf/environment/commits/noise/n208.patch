@@ -1,0 +1,164 @@
+diff --git a/ext/opcache/tests/opt/coalesce_002.phpt b/ext/opcache/tests/opt/coalesce_002.phpt
+deleted file mode 100644
+index c3a05d22..00000000
+--- a/ext/opcache/tests/opt/coalesce_002.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-COALESCE optimization
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function t() {
+-    $y[" $a "] ??= var_dump();
+-}
+-t();
+-?>
+---EXPECTF--
+-Warning: Undefined variable $a in %scoalesce_002.php on line 3
+-
+-Fatal error: Uncaught ArgumentCountError: var_dump() expects at least 1 argument, 0 given in %scoalesce_002.php:3
+-Stack trace:
+-#0 %scoalesce_002.php(3): var_dump()
+-#1 %scoalesce_002.php(5): t()
+-#2 {main}
+-  thrown in %scoalesce_002.php on line 3
+\ No newline at end of file
+diff --git a/ext/opcache/tests/opt/dce_005.phpt b/ext/opcache/tests/opt/dce_005.phpt
+index add703e9..7c90a971 100644
+--- a/ext/opcache/tests/opt/dce_005.phpt
++++ b/ext/opcache/tests/opt/dce_005.phpt
+@@ -10,7 +10,6 @@ opcache.preload=
+ opcache
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class A {
+ }
+ function foo(int $x) {
+@@ -22,12 +21,12 @@ function foo(int $x) {
+ $_main:
+      ; (lines=1, args=0, vars=0, tmps=0)
+      ; (after optimizer)
+-     ; %s
++     ; %sdce_005.php:1-9
+ 0000 RETURN int(1)
+ 
+ foo:
+      ; (lines=2, args=1, vars=1, tmps=0)
+      ; (after optimizer)
+-     ; %s
++     ; %sdce_005.php:4-7
+ 0000 CV0($x) = RECV 1
+ 0001 RETURN null
+diff --git a/ext/opcache/tests/opt/gh8140a.phpt b/ext/opcache/tests/opt/gh8140a.phpt
+index 998b33e7..03f097c7 100644
+--- a/ext/opcache/tests/opt/gh8140a.phpt
++++ b/ext/opcache/tests/opt/gh8140a.phpt
+@@ -5,7 +5,7 @@ GH-8140 (Wrong first class callable by name optimization)
+ namespace Test;
+ 
+ function greeter(string $name) {
+-  echo "Hello, {$name}!";
++  echo "Hello, ${name}!";
+ }
+ 
+ $mycallable = greeter(...);
+diff --git a/ext/opcache/tests/opt/gh8140b.phpt b/ext/opcache/tests/opt/gh8140b.phpt
+index cdffab44..60da3a79 100644
+--- a/ext/opcache/tests/opt/gh8140b.phpt
++++ b/ext/opcache/tests/opt/gh8140b.phpt
+@@ -5,7 +5,7 @@ GH-8140 (Wrong first class callable by name optimization)
+ $mycallable = greeter(...);
+ 
+ function greeter(string $name) {
+-    echo "Hello, {$name}!";
++    echo "Hello, ${name}!";
+ }
+   
+ $mycallable("world");
+diff --git a/ext/opcache/tests/opt/inference_003.phpt b/ext/opcache/tests/opt/inference_003.phpt
+deleted file mode 100644
+index 046396f2..00000000
+--- a/ext/opcache/tests/opt/inference_003.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Type inference 003: instanceof with unlinked class
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-class C implements I {
+-    public static function wrap(\Throwable $e): C {
+-        return $e instanceof C ? $e : new C($e->getMessage());
+-    }
+-}
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Interface "I" not found in %sinference_003.php:2
+-Stack trace:
+-#0 {main}
+-  thrown in %sinference_003.php on line 2
+-
+diff --git a/ext/opcache/tests/opt/inference_016.phpt b/ext/opcache/tests/opt/inference_016.phpt
+deleted file mode 100644
+index 6ce2488b..00000000
+--- a/ext/opcache/tests/opt/inference_016.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Range inference 016:
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function test() {
+-    $a = $y = null;
+-    for(;;$a-- + $a % $a = $y + $a) {
+-        var_dump($a);
+-    }
+-}
+-try {
+-    @test();
+-} catch (Throwable $e) {
+-	echo $e->getMessage(), "\n";
+-}
+-?>
+---EXPECT--
+-NULL
+-Modulo by zero
+diff --git a/ext/opcache/tests/opt/inference_017.phpt b/ext/opcache/tests/opt/inference_017.phpt
+deleted file mode 100644
+index 2c9255e3..00000000
+--- a/ext/opcache/tests/opt/inference_017.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Range inference 017:
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function test() {
+-    for(;;) {
+-        $a = $a-- + 0 / $a;
+-    }
+-}
+-try {
+-    @test();
+-} catch (Throwable $e) {
+-	echo $e->getMessage(), "\n";
+-}
+-?>
+---EXPECT--
+-Division by zero

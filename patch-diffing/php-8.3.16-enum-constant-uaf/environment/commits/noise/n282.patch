@@ -1,0 +1,794 @@
+diff --git a/ext/sockets/tests/socket_cmsg_credentials_fbsd.phpt b/ext/sockets/tests/socket_cmsg_credentials_fbsd.phpt
+deleted file mode 100644
+index 3a4984f9..00000000
+--- a/ext/sockets/tests/socket_cmsg_credentials_fbsd.phpt
++++ /dev/null
+@@ -1,92 +0,0 @@
+---TEST--
+-recvmsg(): receive SCM_CREDS messages
+---EXTENSIONS--
+-sockets
+---SKIPIF--
+-<?php
+-
+-if (!str_contains(PHP_OS, 'FreeBSD')) {
+-    die('skipped supported only on FreeBSD');
+-}
+---FILE--
+-<?php
+-include __DIR__."/mcast_helpers.php.inc";
+-$path = __DIR__ . "/socket_cmsg_credentials_fbsd.sock";
+-
+-@unlink($path);
+-
+-echo "creating send socket\n";
+-$sends1 = socket_create(AF_UNIX, SOCK_DGRAM, 0) or die("err");
+-var_dump($sends1);
+-socket_set_nonblock($sends1) or die("Could not put in non-blocking mode");
+-
+-echo "creating receive socket\n";
+-$s = socket_create(AF_UNIX, SOCK_DGRAM, 0) or die("err");
+-var_dump($s);
+-$br = socket_bind($s, $path) or die("err");
+-var_dump($br);
+-socket_set_nonblock($s) or die("Could not put in non-blocking mode");
+-socket_set_option($s, SOL_LOCAL, LOCAL_CREDS_PERSISTENT, 1) or die("could not set LOCAL_CREDS");
+-
+-
+-$r = socket_sendto($sends1, $msg = "dread", strlen($msg), 0, $path);
+-var_dump($r);
+-checktimeout($s, 500);
+-
+-$data = [
+-    "name" => [],
+-    "buffer_size" => 2000,
+-    "controllen" => socket_cmsg_space(SOL_SOCKET, SCM_CREDS2, 1)
+-];
+-if (!socket_recvmsg($s, $data, 0)) die("recvmsg");
+-print_r($data);
+-
+-$pid = getmypid();
+-var_dump($data['control'][0]['data']['pid'] === $pid);
+-?>
+---CLEAN--
+-<?php
+-$path = __DIR__ . "/socket_cmsg_credentials_fbsd.sock";
+-@unlink($path);
+---EXPECTF--
+-creating send socket
+-object(Socket)#%d (0) {
+-}
+-creating receive socket
+-object(Socket)#%d (0) {
+-}
+-bool(true)
+-int(5)
+-Array
+-(
+-    [name] => Array
+-        (
+-            [family] => %d
+-            [path] => 
+-        )
+-
+-    [control] => Array
+-        (
+-            [0] => Array
+-                (
+-                    [level] => %d
+-                    [type] => %d
+-                    [data] => Array
+-                        (
+-                            [pid] => %d
+-                            [uid] => %d
+-                            [gid] => %d
+-                        )
+-
+-                )
+-
+-        )
+-
+-    [iov] => Array
+-        (
+-            [0] => dread
+-        )
+-
+-    [flags] => 0
+-)
+-bool(true)
+diff --git a/ext/sockets/tests/socket_getopt.phpt b/ext/sockets/tests/socket_getopt.phpt
+index 3d3e62ac..dd6e405e 100644
+--- a/ext/sockets/tests/socket_getopt.phpt
++++ b/ext/sockets/tests/socket_getopt.phpt
+@@ -41,6 +41,14 @@ $r = socket_getopt($s, $level, IP_MULTICAST_IF);
+ var_dump($r);
+ echo "\n";
+ ?>
++--CLEAN--
++<?php
++unset($domain);
++unset($level);
++socket_close($s);
++unset($s);
++unset($r");
++?>
+ --EXPECT--
+ Setting IP_MULTICAST_TTL
+ bool(true)
+diff --git a/ext/sockets/tests/socket_meminfo.phpt b/ext/sockets/tests/socket_meminfo.phpt
+deleted file mode 100644
+index 924e263c..00000000
+--- a/ext/sockets/tests/socket_meminfo.phpt
++++ /dev/null
+@@ -1,71 +0,0 @@
+---TEST--
+-socket_get_option MEMINFO;
+---EXTENSIONS--
+-sockets
+---SKIPIF--
+-<?php
+-if (!defined("SO_MEMINFO")) die('skip SO_MEMINFO test');
+-?>
+---FILE--
+-<?php
+-$server = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+-if (!$server) {
+-    die('Unable to create AF_INET socket [server]');
+-}
+-
+-if (!socket_bind($server, '127.0.0.1', 0)) {
+-    die("Unable to bind to 127.0.0.1");
+-}
+-
+-if (!socket_listen($server, 2)) {
+-    die('Unable to listen on socket');
+-}
+-
+-socket_getsockname($server, $unused, $port);
+-
+-/* Connect to it */
+-$client = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+-if (!$client) {
+-    die('Unable to create AF_INET socket [client]');
+-}
+-if (!socket_connect($client, '127.0.0.1', $port)) {
+-    die('Unable to connect to server socket');
+-}
+-
+-/* Accept that connection */
+-$socket = socket_accept($server);
+-if (!$socket) {
+-    die('Unable to accept connection');
+-}
+-
+-socket_write($client, "SO_MEMINFO\n");
+-
+-socket_read($socket, strlen("SO_MEMINFO"), PHP_BINARY_READ);
+-$data = socket_get_option($socket, SOL_SOCKET, SO_MEMINFO);
+-var_dump($data);
+-
+-socket_close($client);
+-socket_close($socket);
+-socket_close($server);
+-?>
+---EXPECTF--
+-array(9) {
+-  ["rmem_alloc"]=>
+-  int(%d)
+-  ["rcvbuf"]=>
+-  int(%d)
+-  ["wmem_alloc"]=>
+-  int(%d)
+-  ["sndbuf"]=>
+-  int(%d)
+-  ["fwd_alloc"]=>
+-  int(%d)
+-  ["wmem_queued"]=>
+-  int(%d)
+-  ["optmem"]=>
+-  int(%d)
+-  ["backlog"]=>
+-  int(%d)
+-  ["drops"]=>
+-  int(%d)
+-}
+diff --git a/ext/sockets/tests/socket_sendto_zerocopy.phpt b/ext/sockets/tests/socket_sendto_zerocopy.phpt
+deleted file mode 100644
+index 8542038d..00000000
+--- a/ext/sockets/tests/socket_sendto_zerocopy.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Test socket_sendto with MSG_ZEROCOPY
+---EXTENSIONS--
+-sockets
+---SKIPIF--
+-<?php
+-$arch = php_uname('m');
+-if (!defined("SO_ZEROCOPY")) {
+-    die('skip SO_ZEROCOPY');
+-}
+-if (strpos($arch, 'ppc') !== false || strpos($arch, 'powerpc') !== false) {
+-    die('skip not for powerpc arch');
+-}
+-if (getenv('CIRRUS_CI') && strpos($arch, 'aarch64') !== false) {
+-    die('xfail Broken on Cirrus + arm');
+-}
+-?>
+---FILE--
+-<?php
+-$socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+-if (!$socket) {
+-    die('Unable to create AF_UNIX socket');
+-}
+-$s = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+-if (!$s) {
+-    die('Unable to create AF_UNIX socket');
+-}
+-if (!socket_set_option($socket, SOL_SOCKET, SO_ZEROCOPY, 1)) {
+-    die("Unable to set the socket option to SO_ZEROCOPY");
+-}
+-if (!socket_set_nonblock($s)) {
+-    die('Unable to set nonblocking mode for socket');
+-}
+-$address = '127.0.0.1';
+-$port = 3001;
+-if (!socket_bind($s, $address, $port)) {
+-    die("Unable to bind to $address");
+-}
+-
+-$msg = str_repeat("0123456789abcdef", 1024);
+-$len = strlen($msg);
+-$bytes_recv = 0;
+-$bytes_sent = socket_sendto($socket, $msg, $len, MSG_ZEROCOPY, $address, $port);
+-if (socket_recvfrom($s, $resp, 0, MSG_ERRQUEUE, $address, $port) == -1) die ("recvfrom MSG_ERRQUEUE");
+-$bytes_recv = socket_recvfrom($s, $resp, 16, 0, $address, $port);
+-echo "$bytes_sent sent!\n";
+-echo "$bytes_recv received!\n";
+-echo "Received $resp!";
+-socket_close($s);
+-socket_close($socket);
+-?>
+---EXPECTF--
+-16384 sent!
+-16 received!
+-Received 0123456789abcdef!
+diff --git a/ext/sockets/tests/socket_tcp_congestion.phpt b/ext/sockets/tests/socket_tcp_congestion.phpt
+deleted file mode 100644
+index 2dade02f..00000000
+--- a/ext/sockets/tests/socket_tcp_congestion.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-Test TCP_CONGESTION constant with allowed algos for unprivileged accounts.
+---EXTENSIONS--
+-sockets
+---SKIPIF--
+-<?php
+-if (!defined('TCP_CONGESTION')) {
+-    die('skip TCP_CONGESTION test');
+-}
+---FILE--
+-<?php
+-
+-if (str_contains(PHP_OS, 'Linux')) {
+-	$algo = 'cubic';
+-} else {
+-	$algo = 'newreno';
+-}
+-$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+-if (!$socket) die ("socket failed");
+-$r = socket_get_option($socket, SOL_TCP, TCP_CONGESTION);
+-echo "current tcp congestion algo " . $r['name'] . "\n";
+-var_dump(socket_set_option($socket, SOL_TCP, TCP_CONGESTION, $algo));
+-$r = socket_get_option($socket, SOL_TCP, TCP_CONGESTION);
+-echo "new tcp congestion algo " . $r['name'];
+-?>
+---EXPECTF--
+-current tcp congestion algo %s
+-bool(true)
+-new tcp congestion algo %s
+diff --git a/ext/sockets/unix_socket_constants.h b/ext/sockets/unix_socket_constants.h
+new file mode 100644
+index 00000000..27b51ae0
+--- /dev/null
++++ b/ext/sockets/unix_socket_constants.h
+@@ -0,0 +1,422 @@
++/*
++  +----------------------------------------------------------------------+
++  | Copyright (c) The PHP Group                                          |
++  +----------------------------------------------------------------------+
++  | This source file is subject to version 3.01 of the PHP license,      |
++  | that is bundled with this package in the file LICENSE, and is        |
++  | available through the world-wide-web at the following url:           |
++  | https://www.php.net/license/3_01.txt                                 |
++  | If you did not receive a copy of the PHP license and are unable to   |
++  | obtain it through the world-wide-web, please send a note to          |
++  | license@php.net so we can mail you a copy immediately.               |
++  +----------------------------------------------------------------------+
++  | Author: Jason Greene <jason@php.net>                                 |
++  +----------------------------------------------------------------------+
++*/
++
++/* This file is to be included by sockets.c */
++
++#ifdef EPERM
++	/* Operation not permitted */
++	REGISTER_LONG_CONSTANT("SOCKET_EPERM", EPERM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOENT
++	/* No such file or directory */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOENT", ENOENT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EINTR
++	/* Interrupted system call */
++	REGISTER_LONG_CONSTANT("SOCKET_EINTR", EINTR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EIO
++	/* I/O error */
++	REGISTER_LONG_CONSTANT("SOCKET_EIO", EIO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENXIO
++	/* No such device or address */
++	REGISTER_LONG_CONSTANT("SOCKET_ENXIO", ENXIO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef E2BIG
++	/* Arg list too long */
++	REGISTER_LONG_CONSTANT("SOCKET_E2BIG", E2BIG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADF
++	/* Bad file number */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADF", EBADF, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EAGAIN
++	/* Try again */
++	REGISTER_LONG_CONSTANT("SOCKET_EAGAIN", EAGAIN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOMEM
++	/* Out of memory */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOMEM", ENOMEM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EACCES
++	/* Permission denied */
++	REGISTER_LONG_CONSTANT("SOCKET_EACCES", EACCES, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EFAULT
++	/* Bad address */
++	REGISTER_LONG_CONSTANT("SOCKET_EFAULT", EFAULT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTBLK
++	/* Block device required */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTBLK", ENOTBLK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBUSY
++	/* Device or resource busy */
++	REGISTER_LONG_CONSTANT("SOCKET_EBUSY", EBUSY, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EEXIST
++	/* File exists */
++	REGISTER_LONG_CONSTANT("SOCKET_EEXIST", EEXIST, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EXDEV
++	/* Cross-device link */
++	REGISTER_LONG_CONSTANT("SOCKET_EXDEV", EXDEV, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENODEV
++	/* No such device */
++	REGISTER_LONG_CONSTANT("SOCKET_ENODEV", ENODEV, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTDIR
++	/* Not a directory */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTDIR", ENOTDIR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EISDIR
++	/* Is a directory */
++	REGISTER_LONG_CONSTANT("SOCKET_EISDIR", EISDIR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EINVAL
++	/* Invalid argument */
++	REGISTER_LONG_CONSTANT("SOCKET_EINVAL", EINVAL, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENFILE
++	/* File table overflow */
++	REGISTER_LONG_CONSTANT("SOCKET_ENFILE", ENFILE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EMFILE
++	/* Too many open files */
++	REGISTER_LONG_CONSTANT("SOCKET_EMFILE", EMFILE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTTY
++	/* Not a typewriter */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTTY", ENOTTY, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOSPC
++	/* No space left on device */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOSPC", ENOSPC, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ESPIPE
++	/* Illegal seek */
++	REGISTER_LONG_CONSTANT("SOCKET_ESPIPE", ESPIPE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EROFS
++	/* Read-only file system */
++	REGISTER_LONG_CONSTANT("SOCKET_EROFS", EROFS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EMLINK
++	/* Too many links */
++	REGISTER_LONG_CONSTANT("SOCKET_EMLINK", EMLINK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EPIPE
++	/* Broken pipe */
++	REGISTER_LONG_CONSTANT("SOCKET_EPIPE", EPIPE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENAMETOOLONG
++	/* File name too long */
++	REGISTER_LONG_CONSTANT("SOCKET_ENAMETOOLONG", ENAMETOOLONG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOLCK
++	/* No record locks available */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOLCK", ENOLCK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOSYS
++	/* Function not implemented */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOSYS", ENOSYS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTEMPTY
++	/* Directory not empty */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTEMPTY", ENOTEMPTY, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ELOOP
++	/* Too many symbolic links encountered */
++	REGISTER_LONG_CONSTANT("SOCKET_ELOOP", ELOOP, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EWOULDBLOCK
++	/* Operation would block */
++	REGISTER_LONG_CONSTANT("SOCKET_EWOULDBLOCK", EWOULDBLOCK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOMSG
++	/* No message of desired type */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOMSG", ENOMSG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EIDRM
++	/* Identifier removed */
++	REGISTER_LONG_CONSTANT("SOCKET_EIDRM", EIDRM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ECHRNG
++	/* Channel number out of range */
++	REGISTER_LONG_CONSTANT("SOCKET_ECHRNG", ECHRNG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EL2NSYNC
++	/* Level 2 not synchronized */
++	REGISTER_LONG_CONSTANT("SOCKET_EL2NSYNC", EL2NSYNC, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EL3HLT
++	/* Level 3 halted */
++	REGISTER_LONG_CONSTANT("SOCKET_EL3HLT", EL3HLT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EL3RST
++	/* Level 3 reset */
++	REGISTER_LONG_CONSTANT("SOCKET_EL3RST", EL3RST, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ELNRNG
++	/* Link number out of range */
++	REGISTER_LONG_CONSTANT("SOCKET_ELNRNG", ELNRNG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EUNATCH
++	/* Protocol driver not attached */
++	REGISTER_LONG_CONSTANT("SOCKET_EUNATCH", EUNATCH, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOCSI
++	/* No CSI structure available */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOCSI", ENOCSI, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EL2HLT
++	/* Level 2 halted */
++	REGISTER_LONG_CONSTANT("SOCKET_EL2HLT", EL2HLT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADE
++	/* Invalid exchange */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADE", EBADE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADR
++	/* Invalid request descriptor */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADR", EBADR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EXFULL
++	/* Exchange full */
++	REGISTER_LONG_CONSTANT("SOCKET_EXFULL", EXFULL, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOANO
++	/* No anode */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOANO", ENOANO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADRQC
++	/* Invalid request code */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADRQC", EBADRQC, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADSLT
++	/* Invalid slot */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADSLT", EBADSLT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOSTR
++	/* Device not a stream */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOSTR", ENOSTR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENODATA
++	/* No data available */
++	REGISTER_LONG_CONSTANT("SOCKET_ENODATA", ENODATA, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ETIME
++	/* Timer expired */
++	REGISTER_LONG_CONSTANT("SOCKET_ETIME", ETIME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOSR
++	/* Out of streams resources */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOSR", ENOSR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENONET
++	/* Machine is not on the network */
++	REGISTER_LONG_CONSTANT("SOCKET_ENONET", ENONET, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EREMOTE
++	/* Object is remote */
++	REGISTER_LONG_CONSTANT("SOCKET_EREMOTE", EREMOTE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOLINK
++	/* Link has been severed */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOLINK", ENOLINK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EADV
++	/* Advertise error */
++	REGISTER_LONG_CONSTANT("SOCKET_EADV", EADV, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ESRMNT
++	/* Srmount error */
++	REGISTER_LONG_CONSTANT("SOCKET_ESRMNT", ESRMNT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ECOMM
++	/* Communication error on send */
++	REGISTER_LONG_CONSTANT("SOCKET_ECOMM", ECOMM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EPROTO
++	/* Protocol error */
++	REGISTER_LONG_CONSTANT("SOCKET_EPROTO", EPROTO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EMULTIHOP
++	/* Multihop attempted */
++	REGISTER_LONG_CONSTANT("SOCKET_EMULTIHOP", EMULTIHOP, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADMSG
++	/* Not a data message */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADMSG", EBADMSG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTUNIQ
++	/* Name not unique on network */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTUNIQ", ENOTUNIQ, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EBADFD
++	/* File descriptor in bad state */
++	REGISTER_LONG_CONSTANT("SOCKET_EBADFD", EBADFD, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EREMCHG
++	/* Remote address changed */
++	REGISTER_LONG_CONSTANT("SOCKET_EREMCHG", EREMCHG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ERESTART
++	/* Interrupted system call should be restarted */
++	REGISTER_LONG_CONSTANT("SOCKET_ERESTART", ERESTART, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ESTRPIPE
++	/* Streams pipe error */
++	REGISTER_LONG_CONSTANT("SOCKET_ESTRPIPE", ESTRPIPE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EUSERS
++	/* Too many users */
++	REGISTER_LONG_CONSTANT("SOCKET_EUSERS", EUSERS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTSOCK
++	/* Socket operation on non-socket */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTSOCK", ENOTSOCK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EDESTADDRREQ
++	/* Destination address required */
++	REGISTER_LONG_CONSTANT("SOCKET_EDESTADDRREQ", EDESTADDRREQ, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EMSGSIZE
++	/* Message too long */
++	REGISTER_LONG_CONSTANT("SOCKET_EMSGSIZE", EMSGSIZE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EPROTOTYPE
++	/* Protocol wrong type for socket */
++	REGISTER_LONG_CONSTANT("SOCKET_EPROTOTYPE", EPROTOTYPE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOPROTOOPT
++	/* Protocol not available */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOPROTOOPT", ENOPROTOOPT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EPROTONOSUPPORT
++	/* Protocol not supported */
++	REGISTER_LONG_CONSTANT("SOCKET_EPROTONOSUPPORT", EPROTONOSUPPORT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ESOCKTNOSUPPORT
++	/* Socket type not supported */
++	REGISTER_LONG_CONSTANT("SOCKET_ESOCKTNOSUPPORT", ESOCKTNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EOPNOTSUPP
++	/* Operation not supported on transport endpoint */
++	REGISTER_LONG_CONSTANT("SOCKET_EOPNOTSUPP", EOPNOTSUPP, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EPFNOSUPPORT
++	/* Protocol family not supported */
++	REGISTER_LONG_CONSTANT("SOCKET_EPFNOSUPPORT", EPFNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EAFNOSUPPORT
++	/* Address family not supported by protocol */
++	REGISTER_LONG_CONSTANT("SOCKET_EAFNOSUPPORT", EAFNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EADDRINUSE
++	/* Address already in use */
++	REGISTER_LONG_CONSTANT("SOCKET_EADDRINUSE", EADDRINUSE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EADDRNOTAVAIL
++	/* Cannot assign requested address */
++	REGISTER_LONG_CONSTANT("SOCKET_EADDRNOTAVAIL", EADDRNOTAVAIL, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENETDOWN
++	/* Network is down */
++	REGISTER_LONG_CONSTANT("SOCKET_ENETDOWN", ENETDOWN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENETUNREACH
++	/* Network is unreachable */
++	REGISTER_LONG_CONSTANT("SOCKET_ENETUNREACH", ENETUNREACH, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENETRESET
++	/* Network dropped connection because of reset */
++	REGISTER_LONG_CONSTANT("SOCKET_ENETRESET", ENETRESET, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ECONNABORTED
++	/* Software caused connection abort */
++	REGISTER_LONG_CONSTANT("SOCKET_ECONNABORTED", ECONNABORTED, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ECONNRESET
++	/* Connection reset by peer */
++	REGISTER_LONG_CONSTANT("SOCKET_ECONNRESET", ECONNRESET, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOBUFS
++	/* No buffer space available */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOBUFS", ENOBUFS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EISCONN
++	/* Transport endpoint is already connected */
++	REGISTER_LONG_CONSTANT("SOCKET_EISCONN", EISCONN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOTCONN
++	/* Transport endpoint is not connected */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOTCONN", ENOTCONN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ESHUTDOWN
++	/* Cannot send after transport endpoint shutdown */
++	REGISTER_LONG_CONSTANT("SOCKET_ESHUTDOWN", ESHUTDOWN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ETOOMANYREFS
++	/* Too many references: cannot splice */
++	REGISTER_LONG_CONSTANT("SOCKET_ETOOMANYREFS", ETOOMANYREFS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ETIMEDOUT
++	/* Connection timed out */
++	REGISTER_LONG_CONSTANT("SOCKET_ETIMEDOUT", ETIMEDOUT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ECONNREFUSED
++	/* Connection refused */
++	REGISTER_LONG_CONSTANT("SOCKET_ECONNREFUSED", ECONNREFUSED, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EHOSTDOWN
++	/* Host is down */
++	REGISTER_LONG_CONSTANT("SOCKET_EHOSTDOWN", EHOSTDOWN, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EHOSTUNREACH
++	/* No route to host */
++	REGISTER_LONG_CONSTANT("SOCKET_EHOSTUNREACH", EHOSTUNREACH, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EALREADY
++	/* Operation already in progress */
++	REGISTER_LONG_CONSTANT("SOCKET_EALREADY", EALREADY, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EINPROGRESS
++	/* Operation now in progress */
++	REGISTER_LONG_CONSTANT("SOCKET_EINPROGRESS", EINPROGRESS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EISNAM
++	/* Is a named type file */
++	REGISTER_LONG_CONSTANT("SOCKET_EISNAM", EISNAM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EREMOTEIO
++	/* Remote I/O error */
++	REGISTER_LONG_CONSTANT("SOCKET_EREMOTEIO", EREMOTEIO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EDQUOT
++	/* Quota exceeded */
++	REGISTER_LONG_CONSTANT("SOCKET_EDQUOT", EDQUOT, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef ENOMEDIUM
++	/* No medium found */
++	REGISTER_LONG_CONSTANT("SOCKET_ENOMEDIUM", ENOMEDIUM, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef EMEDIUMTYPE
++	/* Wrong medium type */
++	REGISTER_LONG_CONSTANT("SOCKET_EMEDIUMTYPE", EMEDIUMTYPE, CONST_CS | CONST_PERSISTENT);
++#endif
+diff --git a/ext/sockets/win32_socket_constants.h b/ext/sockets/win32_socket_constants.h
+new file mode 100644
+index 00000000..bb8a1071
+--- /dev/null
++++ b/ext/sockets/win32_socket_constants.h
+@@ -0,0 +1,70 @@
++/*
++  +----------------------------------------------------------------------+
++  | Copyright (c) The PHP Group                                          |
++  +----------------------------------------------------------------------+
++  | This source file is subject to version 3.01 of the PHP license,      |
++  | that is bundled with this package in the file LICENSE, and is        |
++  | available through the world-wide-web at the following url:           |
++  | https://www.php.net/license/3_01.txt                                 |
++  | If you did not receive a copy of the PHP license and are unable to   |
++  | obtain it through the world-wide-web, please send a note to          |
++  | license@php.net so we can mail you a copy immediately.               |
++  +----------------------------------------------------------------------+
++  | Author: Jason Greene <jason@php.net>                                 |
++  +----------------------------------------------------------------------+
++*/
++
++/* This file is to be included by sockets.c */
++
++REGISTER_LONG_CONSTANT("SOCKET_EINTR", WSAEINTR, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EBADF", WSAEBADF, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EACCES", WSAEACCES, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EFAULT", WSAEFAULT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EINVAL", WSAEINVAL, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EMFILE", WSAEMFILE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EWOULDBLOCK", WSAEWOULDBLOCK, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EINPROGRESS", WSAEINPROGRESS, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EALREADY", WSAEALREADY, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENOTSOCK", WSAENOTSOCK, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EDESTADDRREQ", WSAEDESTADDRREQ, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EMSGSIZE", WSAEMSGSIZE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EPROTOTYPE", WSAEPROTOTYPE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENOPROTOOPT", WSAENOPROTOOPT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EPROTONOSUPPORT", WSAEPROTONOSUPPORT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ESOCKTNOSUPPORT", WSAESOCKTNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EOPNOTSUPP", WSAEOPNOTSUPP, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EPFNOSUPPORT", WSAEPFNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EAFNOSUPPORT", WSAEAFNOSUPPORT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EADDRINUSE", WSAEADDRINUSE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EADDRNOTAVAIL", WSAEADDRNOTAVAIL, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENETDOWN", WSAENETDOWN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENETUNREACH", WSAENETUNREACH, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENETRESET", WSAENETRESET, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ECONNABORTED", WSAECONNABORTED, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ECONNRESET", WSAECONNRESET, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENOBUFS", WSAENOBUFS, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EISCONN", WSAEISCONN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENOTCONN", WSAENOTCONN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ESHUTDOWN", WSAESHUTDOWN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ETOOMANYREFS", WSAETOOMANYREFS, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ETIMEDOUT", WSAETIMEDOUT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ECONNREFUSED", WSAECONNREFUSED, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ELOOP", WSAELOOP, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENAMETOOLONG", WSAENAMETOOLONG, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EHOSTDOWN", WSAEHOSTDOWN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EHOSTUNREACH", WSAEHOSTUNREACH, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ENOTEMPTY", WSAENOTEMPTY, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EPROCLIM", WSAEPROCLIM, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EUSERS", WSAEUSERS, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EDQUOT", WSAEDQUOT, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_ESTALE", WSAESTALE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EREMOTE", WSAEREMOTE, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_EDISCON", WSAEDISCON, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_SYSNOTREADY", WSASYSNOTREADY, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_VERNOTSUPPORTED", WSAVERNOTSUPPORTED, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_NOTINITIALISED", WSANOTINITIALISED, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_HOST_NOT_FOUND", WSAHOST_NOT_FOUND, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_TRY_AGAIN", WSATRY_AGAIN, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_NO_RECOVERY", WSANO_RECOVERY, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_NO_DATA", WSANO_DATA, CONST_CS | CONST_PERSISTENT);
++REGISTER_LONG_CONSTANT("SOCKET_NO_ADDRESS", WSANO_ADDRESS, CONST_CS | CONST_PERSISTENT);

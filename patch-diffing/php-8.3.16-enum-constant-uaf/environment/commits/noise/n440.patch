@@ -1,0 +1,158 @@
+diff --git a/tests/basic/consistent_float_string_casts.phpt b/tests/basic/consistent_float_string_casts.phpt
+index f4a80a71..adbc1b23 100644
+--- a/tests/basic/consistent_float_string_casts.phpt
++++ b/tests/basic/consistent_float_string_casts.phpt
+@@ -2,7 +2,6 @@
+ Test that float to string and string to float casts are consistent
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (!setlocale(
+     LC_ALL,
+     "german", "de", "de_DE", "de_DE.ISO8859-1", "de_DE.ISO_8859-1", "de_DE.UTF-8",
+diff --git a/tests/basic/errorlog_permission.phpt b/tests/basic/errorlog_permission.phpt
+deleted file mode 100644
+index e49c1931..00000000
+--- a/tests/basic/errorlog_permission.phpt
++++ /dev/null
+@@ -1,38 +0,0 @@
+---TEST--
+-Check permissions for created errorlog file
+---SKIPIF--
+-<?php 
+-if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+-    die("skip this test on windows");
+-}
+-?>
+---INI--
+-error_log=error_permissions_test.log
+-error_log_mode=0600
+---FILE--
+-<?php
+-
+-const LOG_FILENAME='error_permissions_test.log';
+-
+-try {
+-    if (file_exists(LOG_FILENAME)) {
+-        unlink(LOG_FILENAME);
+-    }
+-    $oldMask = umask(0000);
+-
+-    error_log("hello world");
+-
+-    assert(file_exists(LOG_FILENAME));
+-
+-    printf("got permissions=%o\n", fileperms(LOG_FILENAME) & 0777);
+-    printf("errorlog contents\n%s", file_get_contents(LOG_FILENAME));
+-    
+-    umask($oldMask);
+-} finally {
+-    unlink(LOG_FILENAME);
+-}
+-?>
+---EXPECTF--
+-got permissions=600
+-errorlog contents
+-[%d-%s-%d %d:%d:%d %s] hello world
+diff --git a/tests/basic/ini_parse_quantity_basic.phpt b/tests/basic/ini_parse_quantity_basic.phpt
+deleted file mode 100644
+index af9a2776..00000000
+--- a/tests/basic/ini_parse_quantity_basic.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-ini_parse_quantity() function - basic test for ini_parse_quantity()
+---INI--
+-error_reporting = E_ALL ^ E_WARNING
+---FILE--
+-<?php
+-foreach (array(
+-    '-1',
+-    '-0x412',
+-    '0',
+-    '1',
+-    '1b',
+-    '1k',
+-    '1m',
+-    '1g',
+-    '1gb',
+-    '14.2mb',
+-    '14.2bm',
+-    'boat'
+-) as $input) {
+-    echo ini_parse_quantity( $input ) . PHP_EOL;
+-}
+-?>
+---EXPECT--
+--1
+--1042
+-0
+-1
+-1
+-1024
+-1048576
+-1073741824
+-1
+-14
+-14680064
+-0
+diff --git a/tests/basic/ini_parse_quantity_warnings.phpt b/tests/basic/ini_parse_quantity_warnings.phpt
+deleted file mode 100644
+index a5615583..00000000
+--- a/tests/basic/ini_parse_quantity_warnings.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-ini_parse_quantity() function - warns when given inappropriate values
+---INI--
+-error_reporting = E_ALL
+---FILE--
+-<?php
+-ini_parse_quantity('-1');
+-ini_parse_quantity('1mb');
+-ini_parse_quantity('256 then skip a few then g')
+-?>
+---EXPECTF--
+-Warning: Invalid quantity "1mb": unknown multiplier "b", interpreting as "1" for backwards compatibility in %sini_parse_quantity_warnings.php on line 3
+-
+-Warning: Invalid quantity "256 then skip a few then g", interpreting as "256 g" for backwards compatibility in %sini_parse_quantity_warnings.php on line 4
+diff --git a/tests/classes/abstract_user_call.phpt b/tests/classes/abstract_user_call.phpt
+index a3e91967..312b43d4 100644
+--- a/tests/classes/abstract_user_call.phpt
++++ b/tests/classes/abstract_user_call.phpt
+@@ -27,8 +27,6 @@ try {
+ }
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ test::func()
+-
+-Deprecated: Callables of the form ["test", "test_base::func"] are deprecated in %s on line %d
+ call_user_func(): Argument #1 ($callback) must be a valid callback, cannot call abstract method test_base::func()
+diff --git a/tests/classes/dereferencing_001.phpt b/tests/classes/dereferencing_001.phpt
+index d1af58b0..4ec2a876 100644
+--- a/tests/classes/dereferencing_001.phpt
++++ b/tests/classes/dereferencing_001.phpt
+@@ -4,7 +4,9 @@ ZE2 dereferencing of objects from methods
+ <?php
+ 
+ class Name {
+-    function __construct(public $name) {}
++    function __construct($_name) {
++        $this->name = $_name;
++    }
+ 
+     function display() {
+         echo $this->name . "\n";
+diff --git a/tests/classes/interface_constant_inheritance_006.phpt b/tests/classes/interface_constant_inheritance_006.phpt
+index caafec20..dabec2cc 100644
+--- a/tests/classes/interface_constant_inheritance_006.phpt
++++ b/tests/classes/interface_constant_inheritance_006.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Ensure an interface cannot have protected constants
++Ensure a interface can not have protected constants
+ --FILE--
+ <?php
+ interface A {

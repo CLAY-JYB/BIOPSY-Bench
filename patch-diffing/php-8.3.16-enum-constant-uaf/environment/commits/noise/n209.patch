@@ -1,0 +1,172 @@
+diff --git a/ext/opcache/tests/opt/inference_018.phpt b/ext/opcache/tests/opt/inference_018.phpt
+deleted file mode 100644
+index 123cb3b9..00000000
+--- a/ext/opcache/tests/opt/inference_018.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Range inference 018:
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function test() {
+-    for(;;) {
+-        $a--;
+-        $a &= $a / $a;
+-        $a--;
+-    }
+-}
+-try {
+-    @test();
+-} catch (Throwable $e) {
+-	echo $e->getMessage(), "\n";
+-}
+-?>
+---EXPECT--
+-Division by zero
+diff --git a/ext/opcache/tests/opt/inference_019.phpt b/ext/opcache/tests/opt/inference_019.phpt
+deleted file mode 100644
+index f7b951a3..00000000
+--- a/ext/opcache/tests/opt/inference_019.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Range inference 019:
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function test() {
+-    $a = $y = null;
+-    for($cnt = 0; $cnt < 6; $cnt++) {
+-        $e = $a-- + $a *= $a;
+-        $a-- + $y -= $e;
+-        $a-- + $a *= $a;
+-        $a-- + $a *= $a;
+-    }
+-}
+-test();
+-?>
+-DONE
+---EXPECT--
+-DONE
+diff --git a/ext/opcache/tests/opt/inference_020.phpt b/ext/opcache/tests/opt/inference_020.phpt
+deleted file mode 100644
+index bacb244d..00000000
+--- a/ext/opcache/tests/opt/inference_020.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Type inference 020;
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function y() {
+-    for(;;) {
+-        $y = $y[] += 3/6 - ~$y;
+-    }
+-}
+-?>
+-DONE
+---EXPECT--
+-DONE
+diff --git a/ext/opcache/tests/opt/inference_021.phpt b/ext/opcache/tests/opt/inference_021.phpt
+deleted file mode 100644
+index 1c4d4fd9..00000000
+--- a/ext/opcache/tests/opt/inference_021.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Type inference 021;
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-function foo() {
+-    for(;;){
+-        $b->y++;
+-        $b *= $a;
+-        $a++;
+-    }
+-}
+-?>
+-DONE
+---EXPECT--
+-DONE
+diff --git a/ext/opcache/tests/opt/match_001.phpt b/ext/opcache/tests/opt/match_001.phpt
+deleted file mode 100644
+index f244f262..00000000
+--- a/ext/opcache/tests/opt/match_001.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Match 001: memory leak because of live range lose
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-+$y . +$y . match(y) {}
+-?>
+---EXPECTF--
+-Warning: Undefined variable $y in %smatch_001.php on line 2
+-
+-Warning: Undefined variable $y in %smatch_001.php on line 2
+-
+-Fatal error: Uncaught Error: Undefined constant "y" in %smatch_001.php:2
+-Stack trace:
+-#0 {main}
+-  thrown in %smatch_001.php on line 2
+diff --git a/ext/opcache/tests/opt/match_002.phpt b/ext/opcache/tests/opt/match_002.phpt
+deleted file mode 100644
+index ecda31ee..00000000
+--- a/ext/opcache/tests/opt/match_002.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Match 002: memory leak because of incorrect optimization
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-match($y=y){};
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Undefined constant "y" in %smatch_002.php:2
+-Stack trace:
+-#0 {main}
+-  thrown in %smatch_002.php on line 2
+diff --git a/ext/opcache/tests/opt/match_003.phpt b/ext/opcache/tests/opt/match_003.phpt
+deleted file mode 100644
+index 1d55d01b..00000000
+--- a/ext/opcache/tests/opt/match_003.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Match 003: SSA integrity verification failed because of incorrect optimization
+---INI--
+-opcache.enable=1
+-opcache.enable_cli=1
+-opcache.optimization_level=-1
+---FILE--
+-<?php
+-match(y()){};
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Call to undefined function y() in %smatch_003.php:2
+-Stack trace:
+-#0 {main}
+-  thrown in %smatch_003.php on line 2

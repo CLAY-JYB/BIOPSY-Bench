@@ -1,0 +1,1452 @@
+diff --git a/ext/oci8/php_oci8.h b/ext/oci8/php_oci8.h
+index c87c2084..0d0da8d0 100644
+--- a/ext/oci8/php_oci8.h
++++ b/ext/oci8/php_oci8.h
+@@ -31,6 +31,7 @@
+ # include "TSRM.h"
+ #endif
+ 
++
+ /*
+  * The version of the OCI8 extension.
+  */
+@@ -40,7 +41,7 @@
+  */
+ #undef PHP_OCI8_VERSION
+ #endif
+-#define PHP_OCI8_VERSION "3.3.0"
++#define PHP_OCI8_VERSION "3.1.0"
+ 
+ extern zend_module_entry oci8_module_entry;
+ #define phpext_oci8_ptr &oci8_module_entry
+diff --git a/ext/oci8/php_oci8_int.h b/ext/oci8/php_oci8_int.h
+index f063843b..171edfa5 100644
+--- a/ext/oci8/php_oci8_int.h
++++ b/ext/oci8/php_oci8_int.h
+@@ -55,10 +55,6 @@
+ #include "ext/standard/php_string.h"
+ #include <oci.h>
+ 
+-#if !defined(OCI_MAJOR_VERSION) || OCI_MAJOR_VERSION < 11 || ((OCI_MAJOR_VERSION == 11) && (OCI_MINOR_VERSION < 2))
+-#error This version of PHP OCI8 requires Oracle Client libraries from 11.2 or later.
+-#endif
+-
+ extern int le_connection;
+ extern int le_pconnection;
+ extern int le_statement;
+@@ -239,8 +235,7 @@ typedef struct {
+ 	unsigned			 has_data:1;			/* statement has more data flag */
+ 	unsigned			 has_descr:1;			/* statement has at least one descriptor or cursor column */
+ 	ub2					 stmttype;				/* statement type */
+-	ub4                  prefetch_count;        /* row prefetch count */
+-	ub4                  prefetch_lob_size;     /* LOB prefetch size */
++	ub4                  prefetch_count;        /* current prefetch count */
+ } php_oci_statement;
+ /* }}} */
+ 
+@@ -524,9 +519,9 @@ ZEND_BEGIN_MODULE_GLOBALS(oci) /* {{{ Module globals */
+ 	zend_long		 persistent_timeout;			/* time period after which idle persistent connection is considered expired */
+ 	zend_long		 statement_cache_size;			/* statement cache size. used with 9i+ clients only*/
+ 	zend_long		 default_prefetch;				/* default prefetch setting */
+-	zend_long	 	 prefetch_lob_size;				/* amount of LOB data to read when initially getting a LOB locator */
+ 	bool	 privileged_connect;			/* privileged connect flag (On/Off) */
+ 	bool	 old_oci_close_semantics;		/* old_oci_close_semantics flag (to determine the way oci_close() should behave) */
++
+ 	int			 shutdown;						/* in shutdown flag */
+ 
+ 	OCIEnv		*env;							/* global environment handle */
+diff --git a/ext/oci8/tests/bind_char_1_11gR1.phpt b/ext/oci8/tests/bind_char_1_11gR1.phpt
+new file mode 100644
+index 00000000..2fea521b
+--- /dev/null
++++ b/ext/oci8/tests/bind_char_1_11gR1.phpt
+@@ -0,0 +1,294 @@
++--TEST--
++SELECT oci_bind_by_name with SQLT_AFC aka CHAR
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--ENV--
++NLS_LANG=.AL32UTF8
++--FILE--
++<?php
++
++// Output is for 32 bit client to 64bit 11.1.0.6
++
++require(__DIR__.'/connect.inc');
++
++// Initialization
++
++$stmtarray = array(
++    "drop table bind_char_tab",
++    "create table bind_char_tab (id number, c1 char(10), c2 varchar2(10))",
++    "insert into bind_char_tab values (1, 'abc', NULL)",
++    "insert into bind_char_tab values (2, NULL, 'abc')",
++    "insert into bind_char_tab values (3, NULL, 'abc       ')"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++// Run Test
++
++echo "*** Non-null Data Tests against CHAR***\n";
++
++$bv1 = 'abc';
++
++echo "Test 1.1: Type: default.  Length: default\n";
++$s = oci_parse($c, "select * from bind_char_tab where c1 = :bv");
++$r = oci_bind_by_name($s, ":bv", $bv1);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.2: Type: AFC.  Length: default\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, -1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.3: Type: AFC:  Length: 0\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, 0, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.4: Type: AFC:  Length: strlen\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.5: Type: AFC.  Length: strlen-1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.6: Type: AFC.  Length: strlen+1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "\n\n*** NULL data tests against CHAR ***\n";
++
++$bv1 = null;
++
++echo "Test 2.1: Type: default.  Length: default\n";
++$s = oci_parse($c, "select * from bind_char_tab where c1 = :bv");
++$r = oci_bind_by_name($s, ":bv", $bv1);
++if ($r)
++    do_e_q($s);
++
++echo "Test 2.2: Type: AFC.  Length: default\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, -1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 2.3: Type: AFC:  Length: 0\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, 0, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 2.4: Type: AFC:  Length: strlen\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 2.5: Type: AFC.  Length: strlen-1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 2.6: Type: AFC.  Length: strlen+1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++
++echo "\n\n*** Non-null Data Tests against VARCHAR2***\n";
++
++$bv1 = 'abc';
++
++echo "Test 3.1: Type: default.  Length: default\n";
++$s = oci_parse($c, "select * from bind_char_tab where c2 = :bv");
++$r = oci_bind_by_name($s, ":bv", $bv1);
++if ($r)
++    do_e_q($s);
++
++echo "Test 3.2: Type: AFC.  Length: default\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, -1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 3.3: Type: AFC:  Length: 0\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, 0, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 3.4: Type: AFC:  Length: strlen\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 3.5: Type: AFC.  Length: strlen-1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 3.6: Type: AFC.  Length: strlen+1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++
++echo "\n\n*** NULL data tests against VARCHAR2 ***\n";
++
++$bv1 = null;
++
++echo "Test 4.1: Type: default.  Length: default\n";
++$s = oci_parse($c, "select * from bind_char_tab where c2 = :bv");
++$r = oci_bind_by_name($s, ":bv", $bv1);
++if ($r)
++    do_e_q($s);
++
++echo "Test 4.2: Type: AFC.  Length: default\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, -1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 4.3: Type: AFC:  Length: 0\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, 0, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 4.4: Type: AFC:  Length: strlen\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 4.5: Type: AFC.  Length: strlen-1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 4.6: Type: AFC.  Length: strlen+1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++
++
++function do_e_q($s)
++{
++    echo "  Querying:\n";
++
++    $r = @oci_execute($s);
++    if (!$r) {
++        $m = oci_error($s);
++        echo "    Oci_execute error ORA-".$m['code']." Exiting Query\n";
++        return;
++    }
++    while ($row = oci_fetch_array($s, OCI_ASSOC+OCI_RETURN_NULLS)) {
++        foreach ($row as $item) {
++            echo "    :" . $item . ":\n";
++        }
++    }
++}
++
++// Cleanup
++$stmtarray = array(
++    "drop table bind_char_tab"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++
++?>
++--EXPECT--
++*** Non-null Data Tests against CHAR***
++Test 1.1: Type: default.  Length: default
++  Querying:
++Test 1.2: Type: AFC.  Length: default
++  Querying:
++    :1:
++    :abc       :
++    ::
++Test 1.3: Type: AFC:  Length: 0
++  Querying:
++    :1:
++    :abc       :
++    ::
++Test 1.4: Type: AFC:  Length: strlen
++  Querying:
++    :1:
++    :abc       :
++    ::
++Test 1.5: Type: AFC.  Length: strlen-1
++  Querying:
++Test 1.6: Type: AFC.  Length: strlen+1
++  Querying:
++    :1:
++    :abc       :
++    ::
++
++
++*** NULL data tests against CHAR ***
++Test 2.1: Type: default.  Length: default
++  Querying:
++Test 2.2: Type: AFC.  Length: default
++  Querying:
++Test 2.3: Type: AFC:  Length: 0
++  Querying:
++Test 2.4: Type: AFC:  Length: strlen
++  Querying:
++Test 2.5: Type: AFC.  Length: strlen-1
++  Querying:
++Test 2.6: Type: AFC.  Length: strlen+1
++  Querying:
++
++
++*** Non-null Data Tests against VARCHAR2***
++Test 3.1: Type: default.  Length: default
++  Querying:
++    :2:
++    ::
++    :abc:
++Test 3.2: Type: AFC.  Length: default
++  Querying:
++    :2:
++    ::
++    :abc:
++Test 3.3: Type: AFC:  Length: 0
++  Querying:
++    :2:
++    ::
++    :abc:
++Test 3.4: Type: AFC:  Length: strlen
++  Querying:
++    :2:
++    ::
++    :abc:
++Test 3.5: Type: AFC.  Length: strlen-1
++  Querying:
++Test 3.6: Type: AFC.  Length: strlen+1
++  Querying:
++    :2:
++    ::
++    :abc:
++
++
++*** NULL data tests against VARCHAR2 ***
++Test 4.1: Type: default.  Length: default
++  Querying:
++Test 4.2: Type: AFC.  Length: default
++  Querying:
++Test 4.3: Type: AFC:  Length: 0
++  Querying:
++Test 4.4: Type: AFC:  Length: strlen
++  Querying:
++Test 4.5: Type: AFC.  Length: strlen-1
++  Querying:
++Test 4.6: Type: AFC.  Length: strlen+1
++  Querying:
++Done
+diff --git a/ext/oci8/tests/bind_char_2_11gR1.phpt b/ext/oci8/tests/bind_char_2_11gR1.phpt
+new file mode 100644
+index 00000000..0f7c1634
+--- /dev/null
++++ b/ext/oci8/tests/bind_char_2_11gR1.phpt
+@@ -0,0 +1,118 @@
++--TEST--
++SELECT oci_bind_by_name with SQLT_AFC aka CHAR and dates
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--ENV--
++NLS_LANG=.AL32UTF8
++--FILE--
++<?php
++
++require(__DIR__.'/connect.inc');
++
++// Initialization
++
++$stmtarray = array(
++    "alter session set nls_date_format='YYYY-MM-DD'",
++    "drop table bind_char_tab",
++    "create table bind_char_tab (id number, c1 date)",
++    "insert into bind_char_tab values (1, '2008-04-20')",
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++// Run Test
++
++$bv1 = '2008-04-20';
++
++echo "Test 1.1: Type: default.  Length: default\n";
++$s = oci_parse($c, "select * from bind_char_tab where c1 = :bv");
++$r = oci_bind_by_name($s, ":bv", $bv1);
++if ($r)
++   do_e_q($s);
++
++echo "Test 1.2: Type: AFC.  Length: default\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, -1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.3: Type: AFC:  Length: 0\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, 0, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.4: Type: AFC:  Length: strlen\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.5: Type: AFC.  Length: strlen-1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++echo "Test 1.6: Type: AFC.  Length: strlen+1\n";
++$r = oci_bind_by_name($s, ":bv", $bv1, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e_q($s);
++
++
++function do_e_q($s)
++{
++    echo "  Querying:\n";
++
++    $r = @oci_execute($s);
++    if (!$r) {
++        $m = oci_error($s);
++        echo "    Oci_execute error ORA-".$m['code']." Exiting Query\n";
++        return;
++    }
++    while ($row = oci_fetch_array($s, OCI_ASSOC+OCI_RETURN_NULLS)) {
++        foreach ($row as $item) {
++            echo "    :" . $item . ":\n";
++        }
++    }
++}
++
++// Cleanup
++$stmtarray = array(
++    "drop table bind_char_tab"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++
++?>
++--EXPECT--
++Test 1.1: Type: default.  Length: default
++  Querying:
++    :1:
++    :2008-04-20:
++Test 1.2: Type: AFC.  Length: default
++  Querying:
++    :1:
++    :2008-04-20:
++Test 1.3: Type: AFC:  Length: 0
++  Querying:
++    :1:
++    :2008-04-20:
++Test 1.4: Type: AFC:  Length: strlen
++  Querying:
++    :1:
++    :2008-04-20:
++Test 1.5: Type: AFC.  Length: strlen-1
++  Querying:
++Test 1.6: Type: AFC.  Length: strlen+1
++  Querying:
++    :1:
++    :2008-04-20:
++Done
+diff --git a/ext/oci8/tests/bind_char_3_11gR1.phpt b/ext/oci8/tests/bind_char_3_11gR1.phpt
+new file mode 100644
+index 00000000..ab7f97b4
+--- /dev/null
++++ b/ext/oci8/tests/bind_char_3_11gR1.phpt
+@@ -0,0 +1,337 @@
++--TEST--
++PL/SQL oci_bind_by_name with SQLT_AFC aka CHAR to CHAR parameter
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--ENV--
++NLS_LANG=.AL32UTF8
++--FILE--
++<?php
++
++require(__DIR__.'/connect.inc');
++
++// Initialization
++
++$stmtarray = array(
++    "create or replace function bind_char_3_fn(p1 char) return char as begin return p1; end;",
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++// Run Test
++
++echo "Test 1.1 In Length: default.  In Type: default.  Out Length: default.          Out Type: default\n";
++
++$s = oci_parse($c, "begin :bv2 := bind_char_3_fn(:bv1); end;");
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++echo "Test 1.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 1.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.5 In Length: strlen.   In Type: AFC.      Out Length: strlen(input).    Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.6 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)-1.  Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.7 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)+1.  Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "\n\nTests with ''\n\n";
++
++echo "Test 2.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 2.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.6 In Length: 0.        In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, 0, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.7 In Length: 1.        In Type: AFC.      Out Length: 1.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, 1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "\n\nTests with NULL\n";
++
++echo "Test 3.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 3.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 3.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.6 In Length: -1.       In Type: AFC.      Out Length: 1.                Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++function do_e($s)
++{
++    echo "  Executing:\n";
++
++    $r = @oci_execute($s);
++    if (!$r) {
++        $m = oci_error($s);
++        echo "    Oci_execute error ORA-".$m['code']."\n";
++        return;
++    }
++}
++
++// Cleanup
++
++$stmtarray = array(
++    "drop function bind_char_3_fn"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++
++?>
++--EXPECT--
++Test 1.1 In Length: default.  In Type: default.  Out Length: default.          Out Type: default
++  Executing:
++    Oci_execute error ORA-6502
++string(3) "abc"
++NULL
++Test 1.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(3) "abc"
++string(10) "abc       "
++Test 1.5 In Length: strlen.   In Type: AFC.      Out Length: strlen(input).    Out Type: AFC
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.6 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)-1.  Out Type: AFC
++  Executing:
++    Oci_execute error ORA-6502
++string(3) "abc"
++string(3) "abc"
++Test 1.7 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)+1.  Out Type: AFC
++  Executing:
++string(3) "abc"
++string(4) "abc "
++
++
++Tests with ''
++
++Test 2.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++string(0) ""
++NULL
++Test 2.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++string(0) ""
++NULL
++Test 2.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.6 In Length: 0.        In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.7 In Length: 1.        In Type: AFC.      Out Length: 1.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++
++
++Tests with NULL
++Test 3.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++NULL
++NULL
++Test 3.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++NULL
++NULL
++Test 3.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.6 In Length: -1.       In Type: AFC.      Out Length: 1.                Out Type: AFC
++  Executing:
++NULL
++NULL
++Done
+diff --git a/ext/oci8/tests/bind_char_4_11gR1.phpt b/ext/oci8/tests/bind_char_4_11gR1.phpt
+new file mode 100644
+index 00000000..37afa0e0
+--- /dev/null
++++ b/ext/oci8/tests/bind_char_4_11gR1.phpt
+@@ -0,0 +1,339 @@
++--TEST--
++PL/SQL oci_bind_by_name with SQLT_AFC aka CHAR to VARCHAR2 parameter
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--ENV--
++NLS_LANG=.AL32UTF8
++--FILE--
++<?php
++
++// Same test as bind_char_3 but the PL/SQL function uses VARCHAR2 instead of CHAR
++
++require(__DIR__.'/connect.inc');
++
++// Initialization
++
++$stmtarray = array(
++    "create or replace function bind_char_3_fn(p1 varchar2) return varchar2 as begin return p1; end;",
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++// Run Test
++
++echo "Test 1.1 In Length: default.  In Type: default.  Out Length: default.          Out Type: default\n";
++
++$s = oci_parse($c, "begin :bv2 := bind_char_3_fn(:bv1); end;");
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++echo "Test 1.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 1.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.5 In Length: strlen.   In Type: AFC.      Out Length: strlen(input).    Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1), SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.6 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)-1.  Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1)-1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 1.7 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)+1.  Out Type: AFC\n";
++
++$bv1 = 'abc';
++$r = oci_bind_by_name($s, ':bv1', $bv1, strlen($bv1), SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, strlen($bv1)+1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "\n\nTests with ''\n\n";
++
++echo "Test 2.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 2.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.6 In Length: 0.        In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, 0, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 2.7 In Length: 1.        In Type: AFC.      Out Length: 1.                Out Type: AFC\n";
++
++$bv1 = '';
++$r = oci_bind_by_name($s, ':bv1', $bv1, 1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "\n\nTests with NULL\n";
++
++echo "Test 3.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 3.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 10, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++echo "Test 3.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 0, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++
++echo "Test 3.6 In Length: -1.       In Type: AFC.      Out Length: 1.                Out Type: AFC\n";
++
++$bv1 = null;
++$r = oci_bind_by_name($s, ':bv1', $bv1, -1, SQLT_AFC) && oci_bind_by_name($s, ':bv2', $bv2, 1, SQLT_AFC);
++if ($r)
++    do_e($s);
++var_dump($bv1, $bv2);
++
++
++function do_e($s)
++{
++    echo "  Executing:\n";
++
++    $r = @oci_execute($s);
++    if (!$r) {
++        $m = oci_error($s);
++        echo "    Oci_execute error ORA-".$m['code']."\n";
++        return;
++    }
++}
++
++// Cleanup
++
++$stmtarray = array(
++    "drop function bind_char_3_fn"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++
++?>
++--EXPECT--
++Test 1.1 In Length: default.  In Type: default.  Out Length: default.          Out Type: default
++  Executing:
++    Oci_execute error ORA-6502
++string(3) "abc"
++NULL
++Test 1.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(3) "abc"
++string(10) "abc       "
++Test 1.5 In Length: strlen.   In Type: AFC.      Out Length: strlen(input).    Out Type: AFC
++  Executing:
++string(3) "abc"
++string(3) "abc"
++Test 1.6 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)-1.  Out Type: AFC
++  Executing:
++    Oci_execute error ORA-6502
++string(3) "abc"
++string(3) "abc"
++Test 1.7 In Length: strlen.   In Type: AFC.      Out Length: strlen(input)+1.  Out Type: AFC
++  Executing:
++string(3) "abc"
++string(4) "abc "
++
++
++Tests with ''
++
++Test 2.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++string(0) ""
++NULL
++Test 2.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++string(0) ""
++NULL
++Test 2.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.6 In Length: 0.        In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++Test 2.7 In Length: 1.        In Type: AFC.      Out Length: 1.                Out Type: AFC
++  Executing:
++string(0) ""
++NULL
++
++
++Tests with NULL
++Test 3.1 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.2 In Length: default.  In Type: default.  Out Length: 10.               Out Type: default
++  Executing:
++NULL
++NULL
++Test 3.3 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: default
++  Executing:
++NULL
++NULL
++Test 3.4 In Length: -1.       In Type: AFC.      Out Length: 10.               Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.5 In Length: -1.       In Type: AFC.      Out Length: 0.                Out Type: AFC
++  Executing:
++NULL
++NULL
++Test 3.6 In Length: -1.       In Type: AFC.      Out Length: 1.                Out Type: AFC
++  Executing:
++NULL
++NULL
++Done
+diff --git a/ext/oci8/tests/bind_sqltnum_11g.phpt b/ext/oci8/tests/bind_sqltnum_11g.phpt
+new file mode 100644
+index 00000000..45bb25ed
+--- /dev/null
++++ b/ext/oci8/tests/bind_sqltnum_11g.phpt
+@@ -0,0 +1,277 @@
++--TEST--
++Bind with SQLT_NUM
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++preg_match('/^[[:digit:]]+/', oci_client_version(), $matches);
++if (!(isset($matches[0]) && $matches[0] <= 11)) {
++    die("skip works only with Oracle 11 or earlier version of Oracle client libraries");
++}
++?>
++--FILE--
++<?php
++
++require(__DIR__.'/connect.inc');
++
++// Initialization
++
++$stmtarray = array(
++    "drop table bind_sqltnum_tab",
++
++    "create table bind_sqltnum_tab (
++        id                number,
++        varchar2_t10      varchar2(10),
++        number_t          number,
++        number_t92        number(9,2))"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++function check_col($c, $colname, $id)
++{
++    $s = oci_parse($c, "select $colname from bind_sqltnum_tab where id = :id");
++    oci_bind_by_name($s, ":id", $id);
++    oci_execute($s);
++    oci_fetch_all($s, $r);
++    var_dump($r);
++}
++
++
++// Run Test
++
++echo "Test 1 - baseline test\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, varchar2_t10) VALUES (100, :c2)");
++$c2 = "Hood";
++$r = oci_bind_by_name($s, ":c2", $c2, -1);
++if (!$r) {
++    $e = oci_error($s);
++    var_dump($e);
++}
++$r = oci_execute($s, OCI_DEFAULT);
++if (!$r) {
++    $e = oci_error($s);
++    var_dump($e);
++}
++
++$s = oci_parse($c, "select id, varchar2_t10 from bind_sqltnum_tab");
++oci_execute($s);
++oci_fetch_all($s, $data);
++var_dump($data);
++
++echo "Test 2 - SQLT_NUM to a VARCHAR2 column\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, varchar2_t10) VALUES (100, :c2)");
++$c2 = "Hood";
++$r = oci_bind_by_name($s, ":c2", $c2, -1, SQLT_NUM);
++if (!$r) {
++    $e = oci_error($s);
++    var_dump($e['message']);
++}
++$r = oci_execute($s, OCI_DEFAULT);
++if (!$r) {
++    $e = oci_error($s);
++    var_dump($e['message']);
++}
++
++echo "\nTEST41 wrong bind type SQLT_NUM\n";
++
++$c2 = "Hood41";
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, varchar2_t10) VALUES (41, :c2)");
++oci_bind_by_name($s, ":c2", $c2, -1, SQLT_NUM);
++oci_execute($s);
++
++echo "\nTEST42 insert numbers SQLT_NUM\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (42, :n1)");
++$n1 = 42;
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 42);
++
++echo "\nTEST43 insert numbers SQLT_NUM\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (43, :n1)");
++$n1 = 42.69;
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 43);
++
++echo "\nTEST44\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (44, :n1)");
++$n1 = 0;
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 44);
++
++echo "\nTEST45\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (45, :n1)");
++$n1 = -23;
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 45);
++
++echo "\nTEST46 insert numbers\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (46, :n1)");
++$n1 = "-23";
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 46);
++
++echo "\nTEST47\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t) VALUES (47, :n1)");
++$n1 = "23";
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t', 47);
++
++echo "\nTEST48\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t92) VALUES (48, :n1)");
++$n1 = 123.56;
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t92', 48);
++
++echo "\nTEST49\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t92) VALUES (49, :n1)");
++$n1 = "123.56";
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t92', 49);
++
++echo "\nTEST50\n";
++
++$s = oci_parse($c, "INSERT INTO bind_sqltnum_tab (id, number_t92) VALUES (50, :n1)");
++$n1 = "";
++oci_bind_by_name($s, ":n1", $n1, -1, SQLT_NUM);
++oci_execute($s);
++
++check_col($c, 'number_t92', 50);
++
++// Clean up
++
++$stmtarray = array(
++    "drop table bind_sqltnum_tab"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++?>
++--EXPECTF--
++Test 1 - baseline test
++array(2) {
++  ["ID"]=>
++  array(1) {
++    [0]=>
++    string(3) "100"
++  }
++  ["VARCHAR2_T10"]=>
++  array(1) {
++    [0]=>
++    string(4) "Hood"
++  }
++}
++Test 2 - SQLT_NUM to a VARCHAR2 column
++
++Warning: oci_execute(): ORA-12899: %s (%s: 40, %s: 10) in %sbind_sqltnum_11g.php on line %d
++string(%d) "ORA-12899: %s"
++
++TEST41 wrong bind type SQLT_NUM
++
++Warning: oci_execute(): ORA-12899: %s "%s"."BIND_SQLTNUM_TAB"."VARCHAR2_T10" (%s: 40, %s: 10) in %sbind_sqltnum_11g.php on line %d
++
++TEST42 insert numbers SQLT_NUM
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    NULL
++  }
++}
++
++TEST43 insert numbers SQLT_NUM
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    NULL
++  }
++}
++
++TEST44
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    string(127) "-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
++  }
++}
++
++TEST45
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    NULL
++  }
++}
++
++TEST46 insert numbers
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    NULL
++  }
++}
++
++TEST47
++array(1) {
++  ["NUMBER_T"]=>
++  array(1) {
++    [0]=>
++    NULL
++  }
++}
++
++TEST48
++array(1) {
++  ["NUMBER_T92"]=>
++  array(1) {
++    [0]=>
++    string(1) "0"
++  }
++}
++
++TEST49
++array(1) {
++  ["NUMBER_T92"]=>
++  array(1) {
++    [0]=>
++    string(1) "0"
++  }
++}
++
++TEST50
++
++Warning: oci_execute(): ORA-01438: %s in %sbind_sqltnum_11g.php on line %d
++array(1) {
++  ["NUMBER_T92"]=>
++  array(0) {
++  }
++}

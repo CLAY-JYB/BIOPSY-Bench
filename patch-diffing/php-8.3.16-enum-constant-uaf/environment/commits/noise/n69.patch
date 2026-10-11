@@ -1,0 +1,800 @@
+diff --git a/Zend/zend_ast.c b/Zend/zend_ast.c
+index 2e4edeee..409993c8 100644
+--- a/Zend/zend_ast.c
++++ b/Zend/zend_ast.c
+@@ -420,19 +420,6 @@ ZEND_API zend_ast *zend_ast_create_list(uint32_t init_children, zend_ast_kind ki
+ }
+ #endif
+ 
+-zend_ast *zend_ast_create_concat_op(zend_ast *op0, zend_ast *op1) {
+-	if (op0->kind == ZEND_AST_ZVAL && op1->kind == ZEND_AST_ZVAL) {
+-		zval *zv0 = zend_ast_get_zval(op0);
+-		zval *zv1 = zend_ast_get_zval(op1);
+-		if (!zend_binary_op_produces_error(ZEND_CONCAT, zv0, zv1) &&
+-				concat_function(zv0, zv0, zv1) == SUCCESS) {
+-			zval_ptr_dtor_nogc(zv1);
+-			return zend_ast_create_zval(zv0);
+-		}
+-	}
+-	return zend_ast_create_binary_op(ZEND_CONCAT, op0, op1);
+-}
+-
+ static inline bool is_power_of_two(uint32_t n) {
+ 	return ((n != 0) && (n == (n & (~n + 1))));
+ }
+@@ -497,11 +484,10 @@ zend_class_entry *zend_ast_fetch_class(zend_ast *ast, zend_class_entry *scope)
+ 	return zend_fetch_class_with_scope(zend_ast_get_str(ast), (ast->attr >> ZEND_CONST_EXPR_NEW_FETCH_TYPE_SHIFT) | ZEND_FETCH_CLASS_EXCEPTION, scope);
+ }
+ 
+-static zend_result ZEND_FASTCALL zend_ast_evaluate_ex(zval *result, zend_ast *ast, zend_class_entry *scope, bool *short_circuited_ptr)
++ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate(zval *result, zend_ast *ast, zend_class_entry *scope)
+ {
+ 	zval op1, op2;
+ 	zend_result ret = SUCCESS;
+-	*short_circuited_ptr = false;
+ 
+ 	switch (ast->kind) {
+ 		case ZEND_AST_BINARY_OP:
+@@ -733,16 +719,10 @@ static zend_result ZEND_FASTCALL zend_ast_evaluate_ex(zval *result, zend_ast *as
+ 				zend_error_noreturn(E_COMPILE_ERROR, "Cannot use [] for reading");
+ 			}
+ 
+-			bool short_circuited;
+-			if (UNEXPECTED(zend_ast_evaluate_ex(&op1, ast->child[0], scope, &short_circuited) != SUCCESS)) {
++			if (UNEXPECTED(zend_ast_evaluate(&op1, ast->child[0], scope) != SUCCESS)) {
+ 				ret = FAILURE;
+ 				break;
+ 			}
+-			if (short_circuited) {
+-				*short_circuited_ptr = true;
+-				ZVAL_NULL(result);
+-				return SUCCESS;
+-			}
+ 
+ 			// DIM on objects is disallowed because it allows executing arbitrary expressions
+ 			if (Z_TYPE(op1) == IS_OBJECT) {
+@@ -782,38 +762,19 @@ static zend_result ZEND_FASTCALL zend_ast_evaluate_ex(zval *result, zend_ast *as
+ 			zend_string *case_name = zend_ast_get_str(case_name_ast);
+ 
+ 			zend_ast *case_value_ast = ast->child[2];
+-
+-			zval case_value_zv;
+-			ZVAL_UNDEF(&case_value_zv);
+-			if (case_value_ast != NULL) {
+-				if (UNEXPECTED(zend_ast_evaluate(&case_value_zv, case_value_ast, scope) != SUCCESS)) {
+-					return FAILURE;
+-				}
+-			}
++			zval *case_value_zv = case_value_ast != NULL
++				? zend_ast_get_zval(case_value_ast)
++				: NULL;
+ 
+ 			zend_class_entry *ce = zend_lookup_class(class_name);
+-			zend_enum_new(result, ce, case_name, case_value_ast != NULL ? &case_value_zv : NULL);
+-			zval_ptr_dtor_nogc(&case_value_zv);
++			zend_enum_new(result, ce, case_name, case_value_zv);
+ 			break;
+ 		}
+ 		case ZEND_AST_CLASS_CONST:
+ 		{
+ 			zend_string *class_name = zend_ast_get_str(ast->child[0]);
+ 			zend_string *const_name = zend_ast_get_str(ast->child[1]);
+-
+-			zend_string *previous_filename;
+-			zend_long previous_lineno;
+-			if (scope) {
+-				previous_filename = EG(filename_override);
+-				previous_lineno = EG(lineno_override);
+-				EG(filename_override) = scope->info.user.filename;
+-				EG(lineno_override) = zend_ast_get_lineno(ast);
+-			}
+ 			zval *zv = zend_get_class_constant_ex(class_name, const_name, scope, ast->attr);
+-			if (scope) {
+-				EG(filename_override) = previous_filename;
+-				EG(lineno_override) = previous_lineno;
+-			}
+ 
+ 			if (UNEXPECTED(zv == NULL)) {
+ 				ZVAL_UNDEF(result);
+@@ -904,68 +865,6 @@ static zend_result ZEND_FASTCALL zend_ast_evaluate_ex(zval *result, zend_ast *as
+ 			}
+ 			return SUCCESS;
+ 		}
+-		case ZEND_AST_PROP:
+-		case ZEND_AST_NULLSAFE_PROP:
+-		{
+-			bool short_circuited;
+-			if (UNEXPECTED(zend_ast_evaluate_ex(&op1, ast->child[0], scope, &short_circuited) != SUCCESS)) {
+-				return FAILURE;
+-			}
+-			if (short_circuited) {
+-				*short_circuited_ptr = true;
+-				ZVAL_NULL(result);
+-				return SUCCESS;
+-			}
+-			if (ast->kind == ZEND_AST_NULLSAFE_PROP && Z_TYPE(op1) == IS_NULL) {
+-				*short_circuited_ptr = true;
+-				ZVAL_NULL(result);
+-				return SUCCESS;
+-			}
+-
+-			if (UNEXPECTED(zend_ast_evaluate(&op2, ast->child[1], scope) != SUCCESS)) {
+-				zval_ptr_dtor_nogc(&op1);
+-				return FAILURE;
+-			}
+-
+-			if (!try_convert_to_string(&op2)) {
+-				zval_ptr_dtor_nogc(&op1);
+-				zval_ptr_dtor_nogc(&op2);
+-				return FAILURE;
+-			}
+-
+-			if (Z_TYPE(op1) != IS_OBJECT) {
+-				zend_wrong_property_read(&op1, &op2);
+-
+-				zval_ptr_dtor_nogc(&op1);
+-				zval_ptr_dtor_nogc(&op2);
+-
+-				ZVAL_NULL(result);
+-				return SUCCESS;
+-			}
+-
+-			zend_object *zobj = Z_OBJ(op1);
+-			if (!(zobj->ce->ce_flags & ZEND_ACC_ENUM)) {
+-				zend_throw_error(NULL, "Fetching properties on non-enums in constant expressions is not allowed");
+-				zval_ptr_dtor_nogc(&op1);
+-				zval_ptr_dtor_nogc(&op2);
+-				return FAILURE;
+-			}
+-
+-			zend_string *name = Z_STR(op2);
+-			zval *property_result = zend_read_property_ex(scope, zobj, name, 0, result);
+-			if (EG(exception)) {
+-				zval_ptr_dtor_nogc(&op1);
+-				zval_ptr_dtor_nogc(&op2);
+-				return FAILURE;
+-			}
+-
+-			if (result != property_result) {
+-				ZVAL_COPY(result, property_result);
+-			}
+-			zval_ptr_dtor_nogc(&op1);
+-			zval_ptr_dtor_nogc(&op2);
+-			return SUCCESS;
+-		}
+ 		default:
+ 			zend_throw_error(NULL, "Unsupported constant expression");
+ 			ret = FAILURE;
+@@ -973,12 +872,6 @@ static zend_result ZEND_FASTCALL zend_ast_evaluate_ex(zval *result, zend_ast *as
+ 	return ret;
+ }
+ 
+-ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate(zval *result, zend_ast *ast, zend_class_entry *scope)
+-{
+-	bool short_circuited;
+-	return zend_ast_evaluate_ex(result, ast, scope, &short_circuited);
+-}
+-
+ static size_t ZEND_FASTCALL zend_ast_tree_size(zend_ast *ast)
+ {
+ 	size_t size;
+@@ -1043,7 +936,6 @@ static void* ZEND_FASTCALL zend_ast_tree_copy(zend_ast *ast, void *buf)
+ 		zend_ast *new = (zend_ast*)buf;
+ 		new->kind = ast->kind;
+ 		new->attr = ast->attr;
+-		new->lineno = ast->lineno;
+ 		buf = (void*)((char*)buf + zend_ast_size(children));
+ 		for (i = 0; i < children; i++) {
+ 			if (ast->child[i]) {
+@@ -1751,12 +1643,9 @@ tail_call:
+ 			}
+ 			if (decl->child[2]) {
+ 				if (decl->kind == ZEND_AST_ARROW_FUNC) {
+-					zend_ast *body = decl->child[2];
+-					if (body->kind == ZEND_AST_RETURN) {
+-						body = body->child[0];
+-					}
++					ZEND_ASSERT(decl->child[2]->kind == ZEND_AST_RETURN);
+ 					smart_str_appends(str, " => ");
+-					zend_ast_export_ex(str, body, 0, indent);
++					zend_ast_export_ex(str, decl->child[2]->child[0], 0, indent);
+ 					break;
+ 				}
+ 
+@@ -1789,9 +1678,6 @@ tail_call:
+ 				if (decl->flags & ZEND_ACC_FINAL) {
+ 					smart_str_appends(str, "final ");
+ 				}
+-				if (decl->flags & ZEND_ACC_READONLY_CLASS) {
+-					smart_str_appends(str, "readonly ");
+-				}
+ 				smart_str_appends(str, "class ");
+ 			}
+ 			smart_str_appendl(str, ZSTR_VAL(decl->name), ZSTR_LEN(decl->name));
+diff --git a/Zend/zend_ast.h b/Zend/zend_ast.h
+index d2940bbe..86f15358 100644
+--- a/Zend/zend_ast.h
++++ b/Zend/zend_ast.h
+@@ -355,9 +355,6 @@ static zend_always_inline uint32_t zend_ast_get_lineno(zend_ast *ast) {
+ static zend_always_inline zend_ast *zend_ast_create_binary_op(uint32_t opcode, zend_ast *op0, zend_ast *op1) {
+ 	return zend_ast_create_ex(ZEND_AST_BINARY_OP, opcode, op0, op1);
+ }
+-
+-zend_ast *zend_ast_create_concat_op(zend_ast *op0, zend_ast *op1);
+-
+ static zend_always_inline zend_ast *zend_ast_create_assign_op(uint32_t opcode, zend_ast *op0, zend_ast *op1) {
+ 	return zend_ast_create_ex(ZEND_AST_ASSIGN_OP, opcode, op0, op1);
+ }
+diff --git a/Zend/zend_atomic.c b/Zend/zend_atomic.c
+deleted file mode 100644
+index fa6aa05e..00000000
+--- a/Zend/zend_atomic.c
++++ /dev/null
+@@ -1,47 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Levi Morrison <morrison.levi@gmail.com>                     |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include "zend_atomic.h"
+-
+-/* This file contains the non-inline copy of atomic functions. This is useful
+- * for extensions written in languages such as Rust. C and C++ compilers are
+- * probably going to inline these functions, but in the case they don't, this
+- * is also where the code will go.
+- */
+-
+-/* Defined for FFI users; everyone else use ZEND_ATOMIC_BOOL_INIT.
+- * This is NOT ATOMIC as it is meant for initialization.
+- */
+-ZEND_API void zend_atomic_bool_init(zend_atomic_bool *obj, bool desired) {
+-	ZEND_ATOMIC_BOOL_INIT(obj, desired);
+-}
+-
+-ZEND_API bool zend_atomic_bool_exchange(zend_atomic_bool *obj, bool desired) {
+-	return zend_atomic_bool_exchange_ex(obj, desired);
+-}
+-
+-ZEND_API void zend_atomic_bool_store(zend_atomic_bool *obj, bool desired) {
+-	zend_atomic_bool_store_ex(obj, desired);
+-}
+-
+-#if defined(ZEND_WIN32) || defined(HAVE_SYNC_ATOMICS)
+-/* On these platforms it is non-const due to underlying APIs. */
+-ZEND_API bool zend_atomic_bool_load(zend_atomic_bool *obj) {
+-	return zend_atomic_bool_load_ex(obj);
+-}
+-#else
+-ZEND_API bool zend_atomic_bool_load(const zend_atomic_bool *obj) {
+-	return zend_atomic_bool_load_ex(obj);
+-}
+-#endif
+diff --git a/Zend/zend_atomic.h b/Zend/zend_atomic.h
+deleted file mode 100644
+index 617cde0e..00000000
+--- a/Zend/zend_atomic.h
++++ /dev/null
+@@ -1,179 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Levi Morrison <morrison.levi@gmail.com>                     |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#ifndef ZEND_ATOMIC_H
+-#define ZEND_ATOMIC_H
+-
+-#include "zend_portability.h"
+-
+-#include <stdbool.h>
+-
+-#define ZEND_GCC_PREREQ(x, y) \
+-	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) || (__GNUC__ > (x)))
+-
+-/* Builtins are used to avoid library linkage */
+-#if __has_feature(c_atomic)
+-#define	HAVE_C11_ATOMICS 1
+-#elif ZEND_GCC_PREREQ(4, 7)
+-#define	HAVE_GNUC_ATOMICS 1
+-#elif defined(__GNUC__)
+-#define	HAVE_SYNC_ATOMICS 1
+-#elif !defined(ZEND_WIN32)
+-#define HAVE_NO_ATOMICS 1
+-#endif
+-
+-#undef ZEND_GCC_PREREQ
+-
+-/* Treat zend_atomic_* types as opaque. They have definitions only for size
+- * and alignment purposes.
+- */
+-
+-#if defined(ZEND_WIN32) || defined(HAVE_SYNC_ATOMICS)
+-typedef struct zend_atomic_bool_s {
+-	volatile char value;
+-} zend_atomic_bool;
+-#elif defined(HAVE_C11_ATOMICS)
+-typedef struct zend_atomic_bool_s {
+-	_Atomic(bool) value;
+-} zend_atomic_bool;
+-#else
+-typedef struct zend_atomic_bool_s {
+-	volatile bool value;
+-} zend_atomic_bool;
+-#endif
+-
+-BEGIN_EXTERN_C()
+-
+-#ifdef ZEND_WIN32
+-
+-#ifndef InterlockedExchange8
+-#define InterlockedExchange8 _InterlockedExchange8
+-#endif
+-#ifndef InterlockedOr8
+-#define InterlockedOr8 _InterlockedOr8
+-#endif
+-
+-#define ZEND_ATOMIC_BOOL_INIT(obj, desired) ((obj)->value = (desired))
+-
+-static zend_always_inline bool zend_atomic_bool_exchange_ex(zend_atomic_bool *obj, bool desired) {
+-	return InterlockedExchange8(&obj->value, desired);
+-}
+-
+-/* On this platform it is non-const due to Iterlocked API*/
+-static zend_always_inline bool zend_atomic_bool_load_ex(zend_atomic_bool *obj) {
+-	/* Or'ing with false won't change the value. */
+-	return InterlockedOr8(&obj->value, false);
+-}
+-
+-static zend_always_inline void zend_atomic_bool_store_ex(zend_atomic_bool *obj, bool desired) {
+-	(void)InterlockedExchange8(&obj->value, desired);
+-}
+-
+-#elif defined(HAVE_C11_ATOMICS)
+-
+-#define ZEND_ATOMIC_BOOL_INIT(obj, desired) __c11_atomic_init(&(obj)->value, (desired))
+-
+-static zend_always_inline bool zend_atomic_bool_exchange_ex(zend_atomic_bool *obj, bool desired) {
+-	return __c11_atomic_exchange(&obj->value, desired, __ATOMIC_SEQ_CST);
+-}
+-
+-static zend_always_inline bool zend_atomic_bool_load_ex(const zend_atomic_bool *obj) {
+-	return __c11_atomic_load(&obj->value, __ATOMIC_SEQ_CST);
+-}
+-
+-static zend_always_inline void zend_atomic_bool_store_ex(zend_atomic_bool *obj, bool desired) {
+-	__c11_atomic_store(&obj->value, desired, __ATOMIC_SEQ_CST);
+-}
+-
+-#elif defined(HAVE_GNUC_ATOMICS)
+-
+-#define ZEND_ATOMIC_BOOL_INIT(obj, desired) ((obj)->value = (desired))
+-
+-static zend_always_inline bool zend_atomic_bool_exchange_ex(zend_atomic_bool *obj, bool desired) {
+-	bool prev = false;
+-	__atomic_exchange(&obj->value, &desired, &prev, __ATOMIC_SEQ_CST);
+-	return prev;
+-}
+-
+-static zend_always_inline bool zend_atomic_bool_load_ex(const zend_atomic_bool *obj) {
+-	bool prev = false;
+-	__atomic_load(&obj->value, &prev, __ATOMIC_SEQ_CST);
+-	return prev;
+-}
+-
+-static zend_always_inline void zend_atomic_bool_store_ex(zend_atomic_bool *obj, bool desired) {
+-	__atomic_store(&obj->value, &desired, __ATOMIC_SEQ_CST);
+-}
+-
+-#elif defined(HAVE_SYNC_ATOMICS)
+-
+-#define ZEND_ATOMIC_BOOL_INIT(obj, desired) ((obj)->value = (desired))
+-
+-static zend_always_inline bool zend_atomic_bool_exchange_ex(zend_atomic_bool *obj, bool desired) {
+-	bool prev = __sync_lock_test_and_set(&obj->value, desired);
+-
+-	/* __sync_lock_test_and_set only does an acquire barrier, so sync
+-	 * immediately after.
+-	 */
+-	__sync_synchronize();
+-	return prev;
+-}
+-
+-static zend_always_inline bool zend_atomic_bool_load_ex(zend_atomic_bool *obj) {
+-	/* Or'ing false won't change the value */
+-	return __sync_fetch_and_or(&obj->value, false);
+-}
+-
+-static zend_always_inline void zend_atomic_bool_store_ex(zend_atomic_bool *obj, bool desired) {
+-	__sync_synchronize();
+-	obj->value = desired;
+-	__sync_synchronize();
+-}
+-
+-#elif defined(HAVE_NO_ATOMICS)
+-
+-#warning No atomics support detected. Please open an issue with platform details.
+-
+-#define ZEND_ATOMIC_BOOL_INIT(obj, desired) ((obj)->value = (desired))
+-
+-static zend_always_inline void zend_atomic_bool_store_ex(zend_atomic_bool *obj, bool desired) {
+-	obj->value = desired;
+-}
+-
+-static zend_always_inline bool zend_atomic_bool_load_ex(const zend_atomic_bool *obj) {
+-	return obj->value;
+-}
+-
+-static zend_always_inline bool zend_atomic_bool_exchange_ex(zend_atomic_bool *obj, bool desired) {
+-	bool prev = obj->value;
+-	obj->value = desired;
+-	return prev;
+-}
+-
+-#endif
+-
+-ZEND_API void zend_atomic_bool_init(zend_atomic_bool *obj, bool desired);
+-ZEND_API bool zend_atomic_bool_exchange(zend_atomic_bool *obj, bool desired);
+-ZEND_API void zend_atomic_bool_store(zend_atomic_bool *obj, bool desired);
+-
+-#if defined(ZEND_WIN32) || defined(HAVE_SYNC_ATOMICS)
+-/* On these platforms it is non-const due to underlying APIs. */
+-ZEND_API bool zend_atomic_bool_load(zend_atomic_bool *obj);
+-#else
+-ZEND_API bool zend_atomic_bool_load(const zend_atomic_bool *obj);
+-#endif
+-
+-END_EXTERN_C()
+-
+-#endif
+diff --git a/Zend/zend_attributes.c b/Zend/zend_attributes.c
+index 5a446c8c..a78434a4 100644
+--- a/Zend/zend_attributes.c
++++ b/Zend/zend_attributes.c
+@@ -21,16 +21,10 @@
+ #include "zend_API.h"
+ #include "zend_attributes.h"
+ #include "zend_attributes_arginfo.h"
+-#include "zend_exceptions.h"
+ #include "zend_smart_str.h"
+ 
+ ZEND_API zend_class_entry *zend_ce_attribute;
+ ZEND_API zend_class_entry *zend_ce_return_type_will_change_attribute;
+-ZEND_API zend_class_entry *zend_ce_allow_dynamic_properties;
+-ZEND_API zend_class_entry *zend_ce_sensitive_parameter;
+-ZEND_API zend_class_entry *zend_ce_sensitive_parameter_value;
+-
+-static zend_object_handlers attributes_object_handlers_sensitive_parameter_value;
+ 
+ static HashTable internal_attributes;
+ 
+@@ -62,23 +56,6 @@ void validate_attribute(zend_attribute *attr, uint32_t target, zend_class_entry
+ 	}
+ }
+ 
+-static void validate_allow_dynamic_properties(
+-		zend_attribute *attr, uint32_t target, zend_class_entry *scope)
+-{
+-	if (scope->ce_flags & ZEND_ACC_TRAIT) {
+-		zend_error_noreturn(E_ERROR, "Cannot apply #[AllowDynamicProperties] to trait");
+-	}
+-	if (scope->ce_flags & ZEND_ACC_INTERFACE) {
+-		zend_error_noreturn(E_ERROR, "Cannot apply #[AllowDynamicProperties] to interface");
+-	}
+-	if (scope->ce_flags & ZEND_ACC_READONLY_CLASS) {
+-		zend_error_noreturn(E_ERROR, "Cannot apply #[AllowDynamicProperties] to readonly class %s",
+-			ZSTR_VAL(scope->name)
+-		);
+-	}
+-	scope->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
+-}
+-
+ ZEND_METHOD(Attribute, __construct)
+ {
+ 	zend_long flags = ZEND_ATTRIBUTE_TARGET_ALL;
+@@ -96,64 +73,12 @@ ZEND_METHOD(ReturnTypeWillChange, __construct)
+ 	ZEND_PARSE_PARAMETERS_NONE();
+ }
+ 
+-ZEND_METHOD(AllowDynamicProperties, __construct)
+-{
+-	ZEND_PARSE_PARAMETERS_NONE();
+-}
+-
+-ZEND_METHOD(SensitiveParameter, __construct)
+-{
+-	ZEND_PARSE_PARAMETERS_NONE();
+-}
+-
+-ZEND_METHOD(SensitiveParameterValue, __construct)
+-{
+-	zval *value;
+-
+-	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_ZVAL(value)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	zend_update_property(zend_ce_sensitive_parameter_value, Z_OBJ_P(ZEND_THIS), "value", strlen("value"), value);
+-}
+-
+-ZEND_METHOD(SensitiveParameterValue, getValue)
+-{
+-	ZEND_PARSE_PARAMETERS_NONE();
+-
+-	ZVAL_COPY(return_value, OBJ_PROP_NUM(Z_OBJ_P(ZEND_THIS), 0));
+-}
+-
+-ZEND_METHOD(SensitiveParameterValue, __debugInfo)
+-{
+-	ZEND_PARSE_PARAMETERS_NONE();
+-
+-	RETURN_EMPTY_ARRAY();
+-}
+-
+-static zend_object *attributes_sensitive_parameter_value_new(zend_class_entry *ce)
+-{
+-	zend_object *object;
+-
+-	object = zend_objects_new(ce);
+-	object->handlers = &attributes_object_handlers_sensitive_parameter_value;
+-
+-	object_properties_init(object, ce);
+-
+-	return object;
+-}
+-
+-static HashTable *attributes_sensitive_parameter_value_get_properties_for(zend_object *zobj, zend_prop_purpose purpose)
+-{
+-	return NULL;
+-}
+-
+ static zend_attribute *get_attribute(HashTable *attributes, zend_string *lcname, uint32_t offset)
+ {
+ 	if (attributes) {
+ 		zend_attribute *attr;
+ 
+-		ZEND_HASH_PACKED_FOREACH_PTR(attributes, attr) {
++		ZEND_HASH_FOREACH_PTR(attributes, attr) {
+ 			if (attr->offset == offset && zend_string_equals(attr->lcname, lcname)) {
+ 				return attr;
+ 			}
+@@ -168,9 +93,11 @@ static zend_attribute *get_attribute_str(HashTable *attributes, const char *str,
+ 	if (attributes) {
+ 		zend_attribute *attr;
+ 
+-		ZEND_HASH_PACKED_FOREACH_PTR(attributes, attr) {
+-			if (attr->offset == offset && zend_string_equals_cstr(attr->lcname, str, len)) {
+-				return attr;
++		ZEND_HASH_FOREACH_PTR(attributes, attr) {
++			if (attr->offset == offset && ZSTR_LEN(attr->lcname) == len) {
++				if (0 == memcmp(ZSTR_VAL(attr->lcname), str, len)) {
++					return attr;
++				}
+ 			}
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+@@ -246,7 +173,7 @@ ZEND_API bool zend_is_attribute_repeated(HashTable *attributes, zend_attribute *
+ {
+ 	zend_attribute *other;
+ 
+-	ZEND_HASH_PACKED_FOREACH_PTR(attributes, other) {
++	ZEND_HASH_FOREACH_PTR(attributes, other) {
+ 		if (other != attr && other->offset == attr->offset) {
+ 			if (zend_string_equals(other->lcname, attr->lcname)) {
+ 				return 1;
+@@ -317,39 +244,27 @@ static void free_internal_attribute(zval *v)
+ 	pefree(Z_PTR_P(v), 1);
+ }
+ 
+-ZEND_API zend_internal_attribute *zend_mark_internal_attribute(zend_class_entry *ce)
++ZEND_API zend_internal_attribute *zend_internal_attribute_register(zend_class_entry *ce, uint32_t flags)
+ {
+ 	zend_internal_attribute *internal_attr;
+-	zend_attribute *attr;
+ 
+ 	if (ce->type != ZEND_INTERNAL_CLASS) {
+ 		zend_error_noreturn(E_ERROR, "Only internal classes can be registered as compiler attribute");
+ 	}
+ 
+-	ZEND_HASH_FOREACH_PTR(ce->attributes, attr) {
+-		if (zend_string_equals(attr->name, zend_ce_attribute->name)) {
+-			internal_attr = pemalloc(sizeof(zend_internal_attribute), 1);
+-			internal_attr->ce = ce;
+-			internal_attr->flags = Z_LVAL(attr->args[0].value);
+-			internal_attr->validator = NULL;
+-
+-			zend_string *lcname = zend_string_tolower_ex(ce->name, 1);
+-			zend_hash_update_ptr(&internal_attributes, lcname, internal_attr);
+-			zend_string_release(lcname);
++	internal_attr = pemalloc(sizeof(zend_internal_attribute), 1);
++	internal_attr->ce = ce;
++	internal_attr->flags = flags;
++	internal_attr->validator = NULL;
+ 
+-			return internal_attr;
+-		}
+-	} ZEND_HASH_FOREACH_END();
++	zend_string *lcname = zend_string_tolower_ex(ce->name, 1);
+ 
+-	zend_error_noreturn(E_ERROR, "Classes must be first marked as attribute before being able to be registered as internal attribute class");
+-}
+-
+-ZEND_API zend_internal_attribute *zend_internal_attribute_register(zend_class_entry *ce, uint32_t flags)
+-{
++	zend_hash_update_ptr(&internal_attributes, lcname, internal_attr);
+ 	zend_attribute *attr = zend_add_class_attribute(ce, zend_ce_attribute->name, 1);
+ 	ZVAL_LONG(&attr->args[0].value, flags);
++	zend_string_release(lcname);
+ 
+-	return zend_mark_internal_attribute(ce);
++	return internal_attr;
+ }
+ 
+ ZEND_API zend_internal_attribute *zend_internal_attribute_get(zend_string *lcname)
+@@ -364,25 +279,20 @@ void zend_register_attribute_ce(void)
+ 	zend_hash_init(&internal_attributes, 8, NULL, free_internal_attribute, 1);
+ 
+ 	zend_ce_attribute = register_class_Attribute();
+-	attr = zend_mark_internal_attribute(zend_ce_attribute);
++	attr = zend_internal_attribute_register(zend_ce_attribute, ZEND_ATTRIBUTE_TARGET_CLASS);
+ 	attr->validator = validate_attribute;
+ 
+-	zend_ce_return_type_will_change_attribute = register_class_ReturnTypeWillChange();
+-	zend_mark_internal_attribute(zend_ce_return_type_will_change_attribute);
+-
+-	zend_ce_allow_dynamic_properties = register_class_AllowDynamicProperties();
+-	attr = zend_mark_internal_attribute(zend_ce_allow_dynamic_properties);
+-	attr->validator = validate_allow_dynamic_properties;
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_CLASS"), ZEND_ATTRIBUTE_TARGET_CLASS);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_FUNCTION"), ZEND_ATTRIBUTE_TARGET_FUNCTION);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_METHOD"), ZEND_ATTRIBUTE_TARGET_METHOD);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_PROPERTY"), ZEND_ATTRIBUTE_TARGET_PROPERTY);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_CLASS_CONSTANT"), ZEND_ATTRIBUTE_TARGET_CLASS_CONST);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_PARAMETER"), ZEND_ATTRIBUTE_TARGET_PARAMETER);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("TARGET_ALL"), ZEND_ATTRIBUTE_TARGET_ALL);
++	zend_declare_class_constant_long(zend_ce_attribute, ZEND_STRL("IS_REPEATABLE"), ZEND_ATTRIBUTE_IS_REPEATABLE);
+ 
+-	zend_ce_sensitive_parameter = register_class_SensitiveParameter();
+-	zend_mark_internal_attribute(zend_ce_sensitive_parameter);
+-
+-	memcpy(&attributes_object_handlers_sensitive_parameter_value, &std_object_handlers, sizeof(zend_object_handlers));
+-	attributes_object_handlers_sensitive_parameter_value.get_properties_for = attributes_sensitive_parameter_value_get_properties_for;
+-
+-	/* This is not an actual attribute, thus the zend_mark_internal_attribute() call is missing. */
+-	zend_ce_sensitive_parameter_value = register_class_SensitiveParameterValue();
+-	zend_ce_sensitive_parameter_value->create_object = attributes_sensitive_parameter_value_new;
++	zend_ce_return_type_will_change_attribute = register_class_ReturnTypeWillChange();
++	zend_internal_attribute_register(zend_ce_return_type_will_change_attribute, ZEND_ATTRIBUTE_TARGET_METHOD);
+ }
+ 
+ void zend_attributes_shutdown(void)
+diff --git a/Zend/zend_attributes.h b/Zend/zend_attributes.h
+index fc02a7d6..fa218964 100644
+--- a/Zend/zend_attributes.h
++++ b/Zend/zend_attributes.h
+@@ -40,9 +40,6 @@
+ BEGIN_EXTERN_C()
+ 
+ extern ZEND_API zend_class_entry *zend_ce_attribute;
+-extern ZEND_API zend_class_entry *zend_ce_allow_dynamic_properties;
+-extern ZEND_API zend_class_entry *zend_ce_sensitive_parameter;
+-extern ZEND_API zend_class_entry *zend_ce_sensitive_parameter_value;
+ 
+ typedef struct {
+ 	zend_string *name;
+@@ -77,7 +74,6 @@ ZEND_API zend_result zend_get_attribute_value(zval *ret, zend_attribute *attr, u
+ ZEND_API zend_string *zend_get_attribute_target_names(uint32_t targets);
+ ZEND_API bool zend_is_attribute_repeated(HashTable *attributes, zend_attribute *attr);
+ 
+-ZEND_API zend_internal_attribute *zend_mark_internal_attribute(zend_class_entry *ce);
+ ZEND_API zend_internal_attribute *zend_internal_attribute_register(zend_class_entry *ce, uint32_t flags);
+ ZEND_API zend_internal_attribute *zend_internal_attribute_get(zend_string *lcname);
+ 
+diff --git a/Zend/zend_attributes.stub.php b/Zend/zend_attributes.stub.php
+index df13c9f8..70b0c49a 100644
+--- a/Zend/zend_attributes.stub.php
++++ b/Zend/zend_attributes.stub.php
+@@ -2,87 +2,14 @@
+ 
+ /** @generate-class-entries */
+ 
+-#[Attribute(Attribute::TARGET_CLASS)]
+ final class Attribute
+ {
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_CLASS
+-     */
+-    const TARGET_CLASS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_FUNCTION
+-     */
+-    const TARGET_FUNCTION = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_METHOD
+-     */
+-    const TARGET_METHOD = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_PROPERTY
+-     */
+-    const TARGET_PROPERTY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_CLASS_CONST
+-     */
+-    const TARGET_CLASS_CONSTANT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_PARAMETER
+-     */
+-    const TARGET_PARAMETER = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_TARGET_ALL
+-     */
+-    const TARGET_ALL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue ZEND_ATTRIBUTE_IS_REPEATABLE
+-     */
+-    const IS_REPEATABLE = UNKNOWN;
+-
+     public int $flags;
+ 
+     public function __construct(int $flags = Attribute::TARGET_ALL) {}
+ }
+ 
+-#[Attribute(Attribute::TARGET_METHOD)]
+ final class ReturnTypeWillChange
+ {
+     public function __construct() {}
+ }
+-
+-#[Attribute(Attribute::TARGET_CLASS)]
+-final class AllowDynamicProperties
+-{
+-    public function __construct() {}
+-}
+-
+-/**
+- * @strict-properties
+- */
+-#[Attribute(Attribute::TARGET_PARAMETER)]
+-final class SensitiveParameter
+-{
+-    public function __construct() {}
+-}
+-
+-/**
+- * @strict-properties
+- * @not-serializable
+- */
+-final class SensitiveParameterValue
+-{
+-    private readonly mixed $value;
+-
+-    public function __construct(mixed $value) {}
+-
+-    public function getValue(): mixed {}
+-
+-    public function __debugInfo(): array {}
+-}

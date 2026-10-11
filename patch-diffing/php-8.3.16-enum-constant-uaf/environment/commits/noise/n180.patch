@@ -1,0 +1,186 @@
+diff --git a/ext/mysqli/tests/gh7746.phpt b/ext/mysqli/tests/gh7746.phpt
+index 2419925e..18fdb034 100644
+--- a/ext/mysqli/tests/gh7746.phpt
++++ b/ext/mysqli/tests/gh7746.phpt
+@@ -4,6 +4,7 @@ Bug #GH-7746 mysqli_sql_exception->sqlstate is inaccessible
+ mysqli
+ --SKIPIF--
+ <?php
++require_once "connect.inc";
+ require_once 'skipifconnectfailure.inc';
+ ?>
+ --FILE--
+diff --git a/ext/mysqli/tests/gh7837.phpt b/ext/mysqli/tests/gh7837.phpt
+index 19787ced..710d1ef5 100644
+--- a/ext/mysqli/tests/gh7837.phpt
++++ b/ext/mysqli/tests/gh7837.phpt
+@@ -5,6 +5,9 @@ mysqli
+ --SKIPIF--
+ <?php
+ require_once 'skipifconnectfailure.inc';
++if (!$IS_MYSQLND) {
++    die("skip requires mysqlnd");
++}
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/mysqli/tests/gh9590.phpt b/ext/mysqli/tests/gh9590.phpt
+index 79f44c5d..eda5dbd8 100644
+--- a/ext/mysqli/tests/gh9590.phpt
++++ b/ext/mysqli/tests/gh9590.phpt
+@@ -7,6 +7,9 @@ posix
+ <?php
+ require_once('skipifconnectfailure.inc');
+ 
++if (!$IS_MYSQLND)
++    die("skip mysqlnd only feature, compile PHP using --with-mysqli=mysqlnd");
++
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+     die("skip cannot connect");
+ 
+diff --git a/ext/mysqli/tests/mysqli_allow_local_infile_overrides_local_infile_directory.phpt b/ext/mysqli/tests/mysqli_allow_local_infile_overrides_local_infile_directory.phpt
+index 627c76ec..eddf9fe8 100644
+--- a/ext/mysqli/tests/mysqli_allow_local_infile_overrides_local_infile_directory.phpt
++++ b/ext/mysqli/tests/mysqli_allow_local_infile_overrides_local_infile_directory.phpt
+@@ -4,17 +4,17 @@ mysqli.allow_local_infile overrides mysqli.local_infile_directory
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++	die("skip Cannot connect to MySQL");
+ 
+-include_once "local_infile_tools.inc";
++include_once("local_infile_tools.inc");
+ if ($msg = check_local_infile_allowed_by_server($link))
+-    die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
++	die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
+ 
+ mysqli_close($link);
++
+ ?>
+ --INI--
+ open_basedir={PWD}
+@@ -66,7 +66,7 @@ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+ 		$host, $user, $db, $port, $socket);
+ }
+ 
+-if (!$link->query('DROP TABLE IF EXISTS test')) {
++if (!$link->query($link, 'DROP TABLE IF EXISTS test')) {
+ 	printf("[clean] Failed to drop old test table: [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+ }
+ 
+diff --git a/ext/mysqli/tests/mysqli_autocommit.phpt b/ext/mysqli/tests/mysqli_autocommit.phpt
+index 0da4e488..0b410f1f 100644
+--- a/ext/mysqli/tests/mysqli_autocommit.phpt
++++ b/ext/mysqli/tests/mysqli_autocommit.phpt
+@@ -4,9 +4,10 @@ mysqli_autocommit()
+ mysqli
+ --SKIPIF--
+ <?php
+-    require_once 'connect.inc';
++    require_once('connect.inc');
++    require_once('skipifconnectfailure.inc');
+ 
+-    if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         die(sprintf("skip Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+             $host, $user, $db, $port, $socket));
+     }
+@@ -16,7 +17,7 @@ mysqli
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[004] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -128,10 +129,9 @@ mysqli
+     }
+ 
+     print "done!";
+-?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli object is already closed
+diff --git a/ext/mysqli/tests/mysqli_autocommit_oo.phpt b/ext/mysqli/tests/mysqli_autocommit_oo.phpt
+index 0c0dbee8..6510c62c 100644
+--- a/ext/mysqli/tests/mysqli_autocommit_oo.phpt
++++ b/ext/mysqli/tests/mysqli_autocommit_oo.phpt
+@@ -4,10 +4,13 @@ mysqli->autocommit()
+ mysqli
+ --SKIPIF--
+ <?php
+-    require_once 'connect.inc';
++    require_once('skipifconnectfailure.inc');
++    require_once('connect.inc');
+ 
+-    if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-        die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++    if (!$link = new my_mysqli($host, $user, $passwd, $db, $port, $socket)) {
++        printf("skip Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
++            $host, $user, $db, $port, $socket);
++        exit(1);
+     }
+ 
+     if (!have_innodb($link))
+@@ -15,7 +18,7 @@ mysqli
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$mysqli = new my_mysqli($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -131,7 +134,7 @@ mysqli
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ my_mysqli object is already closed
+diff --git a/ext/mysqli/tests/mysqli_change_user_insert_id.phpt b/ext/mysqli/tests/mysqli_change_user_insert_id.phpt
+index e220878c..c82b2c7f 100644
+--- a/ext/mysqli/tests/mysqli_change_user_insert_id.phpt
++++ b/ext/mysqli/tests/mysqli_change_user_insert_id.phpt
+@@ -4,11 +4,16 @@ mysqli_change_user() - LAST_INSERT_ID() - http://bugs.mysql.com/bug.php?id=45184
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++
++if (!$IS_MYSQLND) {
++    die("skip Might hit known and open bugs http://bugs.mysql.com/bug.php?id=30472, http://bugs.mysql.com/bug.php?id=45184");
++}
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require_once('connect.inc');
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+@@ -54,7 +59,7 @@ require_once 'skipifconnectfailure.inc';
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!

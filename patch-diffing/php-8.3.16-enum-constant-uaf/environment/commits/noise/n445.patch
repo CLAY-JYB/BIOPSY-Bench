@@ -1,0 +1,405 @@
+diff --git a/win32/codepage.c b/win32/codepage.c
+index 69b6a44a..34f775c8 100644
+--- a/win32/codepage.c
++++ b/win32/codepage.c
+@@ -18,11 +18,7 @@
+ 
+ #include "php.h"
+ #include "SAPI.h"
+-#ifdef _M_ARM64
+-# include <arm_neon.h>
+-#else
+-# include <emmintrin.h>
+-#endif // _M_ARM64
++#include <emmintrin.h>
+ 
+ #include "win32/console.h"
+ 
+@@ -138,18 +134,6 @@ PW32CP wchar_t *php_win32_cp_conv_ascii_to_w(const char* in, size_t in_len, size
+ 		}
+ 
+ 		/* Process aligned chunk. */
+-#ifdef _M_ARM64
+-		uint8x16_t ver_err = {0};
+-		while (end - idx > 15) {
+-			const uint8x16_t block = vld1q_u8((const void*)idx);
+-			ver_err = vorrq_u8(ver_err, block);
+-			idx += 16;
+-		}
+-		ver_err = vshrq_n_u8(ver_err, 7);
+-		if (vmaxvq_u8(ver_err)) {
+-			ASCII_FAIL_RETURN()
+-		}
+-#else
+ 		__m128i vec_err = _mm_setzero_si128();
+ 		while (end - idx > 15) {
+ 			const __m128i block = _mm_load_si128((__m128i *)idx);
+@@ -159,7 +143,6 @@ PW32CP wchar_t *php_win32_cp_conv_ascii_to_w(const char* in, size_t in_len, size
+ 		if (_mm_movemask_epi8(vec_err)) {
+ 			ASCII_FAIL_RETURN()
+ 		}
+-#endif // _M_ARM64
+ 	}
+ 
+ 	/* Process the trailing part, or otherwise process string < 16 bytes. */
+@@ -190,22 +173,6 @@ PW32CP wchar_t *php_win32_cp_conv_ascii_to_w(const char* in, size_t in_len, size
+ 
+ 		/* Process aligned chunk. */
+ 		if (end - idx > 15) {
+-#ifdef _M_ARM64
+-			while (end - idx > 15) {
+-				/*
+-				vst2q_u8 below will store interlaced vector by 8bits, so this will be little endian wchar
+-				at wrote time all windows arm64 is little endian
+-				 */
+-				uint8x16x2_t vec = {/* .val = */{
+-					vld1q_u8((const void*)idx),
+-					{0},
+-				}};
+-
+-				vst2q_u8((void*)ret_idx, vec);
+-				idx += 16;
+-				ret_idx += 16;
+-			}
+-#else
+ 			const __m128i mask = _mm_set1_epi32(0);
+ 			while (end - idx > 15) {
+ 				const __m128i block = _mm_load_si128((__m128i *)idx);
+@@ -220,7 +187,6 @@ PW32CP wchar_t *php_win32_cp_conv_ascii_to_w(const char* in, size_t in_len, size
+ 				idx += 16;
+ 				ret_idx += 8;
+ 			}
+-#endif // _M_ARM64
+ 		}
+ 	}
+ 
+diff --git a/win32/glob.c b/win32/glob.c
+index 5dd0f466..578284cb 100644
+--- a/win32/glob.c
++++ b/win32/glob.c
+@@ -157,9 +157,13 @@ static int	 match(Char *, Char *, Char *);
+ static void	 qprintf(const char *, Char *);
+ #endif
+ 
+-PHPAPI int glob(const char *pattern, int flags, int (*errfunc)(const char *, int), glob_t *pglob)
++PHPAPI int
++glob(pattern, flags, errfunc, pglob)
++	const char *pattern;
++	int flags, (*errfunc)(const char *, int);
++	glob_t *pglob;
+ {
+-	const uint8_t *patnext;
++	const u_char *patnext;
+ 	int c;
+ 	Char *bufnext, *bufend, patbuf[MAXPATHLEN];
+ 
+@@ -170,7 +174,7 @@ PHPAPI int glob(const char *pattern, int flags, int (*errfunc)(const char *, int
+ 	flags |= GLOB_NOESCAPE;
+ #endif
+ 
+-	patnext = (uint8_t *) pattern;
++	patnext = (u_char *) pattern;
+ 	if (!(flags & GLOB_APPEND)) {
+ 		pglob->gl_pathc = 0;
+ 		pglob->gl_pathv = NULL;
+@@ -211,7 +215,10 @@ PHPAPI int glob(const char *pattern, int flags, int (*errfunc)(const char *, int
+  * invoke the standard globbing routine to glob the rest of the magic
+  * characters
+  */
+-static int globexp1(const Char *pattern,glob_t *pglob)
++static int
++globexp1(pattern, pglob)
++	const Char *pattern;
++	glob_t *pglob;
+ {
+ 	const Char* ptr = pattern;
+ 	int rv;
+@@ -233,7 +240,11 @@ static int globexp1(const Char *pattern,glob_t *pglob)
+  * If it succeeds then it invokes globexp1 with the new pattern.
+  * If it fails then it tries to glob the rest of the pattern and returns.
+  */
+-static int globexp2(const Char *ptr, const Char *pattern, glob_t *pglob, int *rv)
++static int
++globexp2(ptr, pattern, pglob, rv)
++	const Char *ptr, *pattern;
++	glob_t *pglob;
++	int *rv;
+ {
+ 	int     i;
+ 	Char   *lm, *ls;
+@@ -339,7 +350,12 @@ static int globexp2(const Char *ptr, const Char *pattern, glob_t *pglob, int *rv
+ /*
+  * expand tilde from the passwd file.
+  */
+-static const Char *globtilde(const Char *pattern, Char *patbuf, size_t patbuf_len, glob_t *pglob)
++static const Char *
++globtilde(pattern, patbuf, patbuf_len, pglob)
++	const Char *pattern;
++	Char *patbuf;
++	size_t patbuf_len;
++	glob_t *pglob;
+ {
+ #ifndef PHP_WIN32
+ 	struct passwd *pwd;
+@@ -413,7 +429,10 @@ static const Char *globtilde(const Char *pattern, Char *patbuf, size_t patbuf_le
+  * if things went well, nonzero if errors occurred.  It is not an error
+  * to find no matches.
+  */
+-static int glob0( const Char *pattern, glob_t *pglob)
++static int
++glob0(pattern, pglob)
++	const Char *pattern;
++	glob_t *pglob;
+ {
+ 	const Char *qpatnext;
+ 	int c, err, oldpathc;
+@@ -499,7 +518,8 @@ static int glob0( const Char *pattern, glob_t *pglob)
+ 	return(0);
+ }
+ 
+-static int compare(const void *p, const void *q)
++static int
++compare(const void *p, const void *q)
+ {
+ 	return(strcmp(*(char **)p, *(char **)q));
+ }
+@@ -525,10 +545,15 @@ glob1(pattern, pattern_last, pglob, limitp)
+  * of recursion for each segment in the pattern that contains one or more
+  * meta characters.
+  */
+-static int glob2(Char *pathbuf, Char *pathbuf_last, Char *pathend, Char *pathend_last, Char *pattern,
+-		Char *pattern_last, glob_t *pglob, size_t *limitp)
++static int
++glob2(pathbuf, pathbuf_last, pathend, pathend_last, pattern,
++		pattern_last, pglob, limitp)
++	Char *pathbuf, *pathbuf_last, *pathend, *pathend_last;
++	Char *pattern, *pattern_last;
++	glob_t *pglob;
++	size_t *limitp;
+ {
+-	zend_stat_t sb = {0};
++	zend_stat_t sb;
+ 	Char *p, *q;
+ 	int anymeta;
+ 
+@@ -584,8 +609,13 @@ static int glob2(Char *pathbuf, Char *pathbuf_last, Char *pathend, Char *pathend
+ 	/* NOTREACHED */
+ }
+ 
+-static int glob3(Char *pathbuf, Char *pathbuf_last, Char *pathend, Char *pathend_last, Char *pattern, Char *pattern_last,
+-	Char *restpattern, Char *restpattern_last, glob_t *pglob, size_t *limitp)
++static int
++glob3(pathbuf, pathbuf_last, pathend, pathend_last, pattern, pattern_last,
++	restpattern, restpattern_last, pglob, limitp)
++	Char *pathbuf, *pathbuf_last, *pathend, *pathend_last;
++	Char *pattern, *pattern_last, *restpattern, *restpattern_last;
++	glob_t *pglob;
++	size_t *limitp;
+ {
+ 	register struct dirent *dp;
+ 	DIR *dirp;
+@@ -625,14 +655,14 @@ static int glob3(Char *pathbuf, Char *pathbuf_last, Char *pathend, Char *pathend
+ 	else
+ 		readdirfunc = readdir;
+ 	while ((dp = (*readdirfunc)(dirp))) {
+-		register uint8_t *sc;
++		register u_char *sc;
+ 		register Char *dc;
+ 
+ 		/* Initial DOT must be matched literally. */
+ 		if (dp->d_name[0] == DOT && *pattern != DOT)
+ 			continue;
+ 		dc = pathend;
+-		sc = (uint8_t *) dp->d_name;
++		sc = (u_char *) dp->d_name;
+ 		while (dc < pathend_last && (*dc++ = *sc++) != EOS)
+ 			;
+ 		if (dc >= pathend_last) {
+@@ -673,7 +703,11 @@ static int glob3(Char *pathbuf, Char *pathbuf_last, Char *pathend, Char *pathend
+  *	Either gl_pathc is zero and gl_pathv is NULL; or gl_pathc > 0 and
+  *	gl_pathv points to (gl_offs + gl_pathc + 1) items.
+  */
+-static int globextend(const Char *path, glob_t *pglob, size_t *limitp)
++static int
++globextend(path, pglob, limitp)
++	const Char *path;
++	glob_t *pglob;
++	size_t *limitp;
+ {
+ 	register char **pathv;
+ 	u_int newsize, len;
+@@ -727,7 +761,9 @@ static int globextend(const Char *path, glob_t *pglob, size_t *limitp)
+  * pattern matching function for filenames.  Each occurrence of the *
+  * pattern causes a recursion level.
+  */
+-static int match(Char *name, Char *pat, Char *patend)
++static int
++match(name, pat, patend)
++	register Char *name, *pat, *patend;
+ {
+ 	int ok, negate_range;
+ 	Char c, k;
+@@ -774,7 +810,9 @@ static int match(Char *name, Char *pat, Char *patend)
+ }
+ 
+ /* Free allocated data belonging to a glob_t structure. */
+-PHPAPI void globfree(glob_t *pglob)
++PHPAPI void
++globfree(pglob)
++	glob_t *pglob;
+ {
+ 	register int i;
+ 	register char **pp;
+@@ -789,7 +827,10 @@ PHPAPI void globfree(glob_t *pglob)
+ 	}
+ }
+ 
+-static DIR * g_opendir(Char *str, glob_t *pglob)
++static DIR *
++g_opendir(str, pglob)
++	register Char *str;
++	glob_t *pglob;
+ {
+ 	char buf[MAXPATHLEN];
+ 
+@@ -806,7 +847,11 @@ static DIR * g_opendir(Char *str, glob_t *pglob)
+ 	return(opendir(buf));
+ }
+ 
+-static int g_lstat(Char *fn, zend_stat_t *sb, glob_t *pglob)
++static int
++g_lstat(fn, sb, pglob)
++	register Char *fn;
++	zend_stat_t *sb;
++	glob_t *pglob;
+ {
+ 	char buf[MAXPATHLEN];
+ 
+@@ -817,7 +862,11 @@ static int g_lstat(Char *fn, zend_stat_t *sb, glob_t *pglob)
+ 	return(php_sys_lstat(buf, sb));
+ }
+ 
+-static int g_stat(Char *fn, zend_stat_t *sb, glob_t *pglob)
++static int
++g_stat(fn, sb, pglob)
++	register Char *fn;
++	zend_stat_t *sb;
++	glob_t *pglob;
+ {
+ 	char buf[MAXPATHLEN];
+ 
+@@ -828,7 +877,10 @@ static int g_stat(Char *fn, zend_stat_t *sb, glob_t *pglob)
+ 	return(php_sys_stat(buf, sb));
+ }
+ 
+-static Char *g_strchr(Char *str, int ch)
++static Char *
++g_strchr(str, ch)
++	Char *str;
++	int ch;
+ {
+ 	do {
+ 		if (*str == ch)
+@@ -837,7 +889,11 @@ static Char *g_strchr(Char *str, int ch)
+ 	return (NULL);
+ }
+ 
+-static int g_Ctoc(const Char *str, char *buf, u_int len)
++static int
++g_Ctoc(str, buf, len)
++	register const Char *str;
++	char *buf;
++	u_int len;
+ {
+ 
+ 	while (len--) {
+@@ -849,7 +905,9 @@ static int g_Ctoc(const Char *str, char *buf, u_int len)
+ 
+ #ifdef DEBUG
+ static void
+-qprintf(char *str, Char *s)
++qprintf(str, s)
++	const char *str;
++	register Char *s;
+ {
+ 	register Char *p;
+ 
+diff --git a/win32/registry.c b/win32/registry.c
+index cd9fc38c..9aa20054 100644
+--- a/win32/registry.c
++++ b/win32/registry.c
+@@ -116,7 +116,7 @@ static int LoadDirectory(HashTable *directories, HKEY key, char *path, int path_
+ 					zend_ulong num;
+ 					zval *tmpdata;
+ 
+-					ZEND_HASH_MAP_FOREACH_KEY_VAL(parent_ht, num, index, tmpdata) {
++					ZEND_HASH_FOREACH_KEY_VAL(parent_ht, num, index, tmpdata) {
+ 						zend_hash_add(ht, index, tmpdata);
+ 					} ZEND_HASH_FOREACH_END();
+ 				}
+@@ -263,7 +263,7 @@ void UpdateIniFromRegistry(char *path)
+ 			zend_string *index;
+ 			zval *data;
+ 
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(ht, index, data) {
++			ZEND_HASH_FOREACH_STR_KEY_VAL(ht, index, data) {
+ 				zend_alter_ini_entry(index, Z_STR_P(data), PHP_INI_USER, PHP_INI_STAGE_ACTIVATE);
+ 			} ZEND_HASH_FOREACH_END();
+ 		}
+diff --git a/win32/sendmail.c b/win32/sendmail.c
+index 6263eaac..d4de4645 100644
+--- a/win32/sendmail.c
++++ b/win32/sendmail.c
+@@ -87,7 +87,7 @@ static char *ErrorMessages[] =
+ 	{"Bad Message File"},
+ 	{"\"sendmail_from\" not set in php.ini or custom \"From:\" header missing"},
+ 	{"Mailserver rejected our \"sendmail_from\" setting"}, /* 20 */
+-	{"Error while trimming mail header with PCRE, please file a bug report at https://github.com/php/php-src/issues"} /* 21 */
++	{"Error while trimming mail header with PCRE, please file a bug report at http://bugs.php.net/"} /* 21 */
+ };
+ 
+ /* This pattern converts all single occurrences of \n (Unix)
+diff --git a/win32/signal.c b/win32/signal.c
+index 88f975ab..088a0044 100644
+--- a/win32/signal.c
++++ b/win32/signal.c
+@@ -22,7 +22,7 @@
+ /* true globals; only used from main thread and from kernel callback */
+ static zval ctrl_handler;
+ static DWORD ctrl_evt = (DWORD)-1;
+-static zend_atomic_bool *vm_interrupt_flag = NULL;
++static bool *vm_interrupt_flag = NULL;
+ 
+ static void (*orig_interrupt_function)(zend_execute_data *execute_data);
+ 
+@@ -77,7 +77,7 @@ static BOOL WINAPI php_win32_signal_system_ctrl_handler(DWORD evt)
+ 		return FALSE;
+ 	}
+ 
+-	zend_atomic_bool_store_ex(vm_interrupt_flag, true);
++	(void)InterlockedExchange8(vm_interrupt_flag, 1);
+ 
+ 	ctrl_evt = evt;
+ 
+diff --git a/win32/winutil.c b/win32/winutil.c
+index e09944d1..5e959307 100644
+--- a/win32/winutil.c
++++ b/win32/winutil.c
+@@ -29,7 +29,7 @@ PHP_WINUTIL_API char *php_win32_error_to_msg(HRESULT error)
+ 
+ 	DWORD ret = FormatMessageW(
+ 		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+-		NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),	(LPWSTR)&bufw, 0, NULL
++		NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),	(LPWSTR)&bufw, 0, NULL
+ 	);
+ 
+ 	if (!ret || !bufw) {
+@@ -448,7 +448,7 @@ static zend_always_inline BOOL is_compatible(HMODULE handle, BOOL is_smaller, ch
+ 	DWORD minor = pNTHeader->OptionalHeader.MinorLinkerVersion;
+ 
+ #if PHP_LINKER_MAJOR == 14
+-	/* VS 2015, 2017, 2019 and 2022 are binary compatible, but only forward compatible.
++	/* VS 2015, 2017 and 2019 are binary compatible, but only forward compatible.
+ 		It should be fine, if we load a module linked with an older one into
+ 		the core linked with the newer one, but not the otherway round.
+ 		Analogously, it should be fine, if a PHP build linked with an older version

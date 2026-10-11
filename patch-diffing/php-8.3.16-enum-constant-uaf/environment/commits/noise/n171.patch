@@ -1,0 +1,263 @@
+diff --git a/ext/mbstring/tests/qprint_encoding.phpt b/ext/mbstring/tests/qprint_encoding.phpt
+deleted file mode 100644
+index 8bb2c3ef..00000000
+--- a/ext/mbstring/tests/qprint_encoding.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-Temporary test of mbstring's QPrint 'encoding'
+---EXTENSIONS--
+-mbstring
+---FILE--
+-<?php
+-
+-/* Using mbstring to convert strings to and from QPrint has already been deprecated
+- * So this test should be removed when the QPrint 'encoding' is */
+-
+-function testConversion($raw, $qprint) {
+-  $converted = mb_convert_encoding($raw, 'QPrint', '8bit');
+-  if ($converted !== $qprint)
+-    die('Expected ' . bin2hex($raw) . ' to convert to "' . $qprint . '"; actually got "' . $converted . '"');
+-  $converted = mb_convert_encoding($qprint, '8bit', 'QPrint');
+-  if ($converted !== str_replace("\n", "\r\n", $raw))
+-    die('Expected "' . $qprint . '" to convert to ' . bin2hex($raw) . '; actually got ' . bin2hex($converted));
+-}
+-
+-testConversion('', '');
+-testConversion('あ', '=E3=81=82');
+-
+-testConversion("J'interdis aux marchands de vanter trop leurs marchandises. Car ils se font vite pédagogues et t'enseignent comme but ce qui n'est par essence qu'un moyen, et te trompant ainsi sur la route à suivre les voilà bientôt qui te dégradent, car si leur musique est vulgaire ils te fabriquent pour te la vendre une âme vulgaire.
+-—\xE2\x80\x89Antoine de Saint-Exupéry, Citadelle", "J'interdis aux marchands de vanter trop leurs marchandises. Car ils se f=\r\nont vite p=C3=A9dagogues et t'enseignent comme but ce qui n'est par esse=\r\nnce qu'un moyen, et te trompant ainsi sur la route =C3=A0 suivre les voi=\r\nl=C3=A0 bient=C3=B4t qui te d=C3=A9gradent, car si leur musique est vulg=\r\naire ils te fabriquent pour te la vendre une =C3=A2me vulgaire.\r\n=E2=80=94=E2=80=89Antoine de Saint-Exup=C3=A9ry, Citadelle");
+-
+-// Regression test, found by a fuzzer
+-testConversion("***,*-S,\xac,,\xb7,l,,,,\xb6UTF7,\xb5\xb5\xb5\xb5\xb5\xb5K\xb5\xb5!\xa4\xa4\xa4\xa4\xa4\xbd\xb5,\xb5\xb5\xb5\xb5\xb5\xb5\xb5\xb5\xb5&", "***,*-S,=AC,,=B7,l,,,,=B6UTF7,=B5=B5=B5=B5=B5=B5K=B5=B5!=A4=A4=A4=A4=A4=BD=\r\n=B5,=B5=B5=B5=B5=B5=B5=B5=B5=B5&");
+-
+-echo "Done!\n";
+-?>
+---EXPECTF--
+-Deprecated: mb_convert_encoding(): Handling QPrint via mbstring is deprecated; use quoted_printable_encode/quoted_printable_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling QPrint via mbstring is deprecated; use quoted_printable_encode/quoted_printable_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling QPrint via mbstring is deprecated; use quoted_printable_encode/quoted_printable_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling QPrint via mbstring is deprecated; use quoted_printable_encode/quoted_printable_decode instead in %s
+-Done!
+diff --git a/ext/mbstring/tests/sjis_mobile_encodings.phpt b/ext/mbstring/tests/sjis_mobile_encodings.phpt
+index 1d4d29e4..2e6af579 100644
+--- a/ext/mbstring/tests/sjis_mobile_encodings.phpt
++++ b/ext/mbstring/tests/sjis_mobile_encodings.phpt
+@@ -290,63 +290,13 @@ function testSJISVariant($validChars, $nonInvertible, $encoding) {
+   // flags, but in Unicode these are represented by a sequence of _two_ codepoints
+   // So if only one of those two codepoints appears at the end of a string, it can't
+   // be converted to SJIS and should be treated as an error
+-  convertInvalidString("\x00\x01\xF1\xE9", "%", "UTF-32BE", $encoding); // Regional Indicator C
+-
+-  // Test Regional Indicator codepoint followed by some other codepoint
+-  convertInvalidString("\x00\x01\xF1\xE9\x00\x00\x00A", "%A", "UTF-32BE", $encoding);
++  convertInvalidString("\x00\x01\xF1\xE6", "%", "UTF-32BE", $encoding); // Regional Indicator A
+ }
+ 
+ testSJISVariant($docomo,   $nonInvertibleDocomo,   'SJIS-Mobile#DOCOMO');
+ testSJISVariant($kddi,     $nonInvertible,         'SJIS-Mobile#KDDI');
+ testSJISVariant($softbank, $nonInvertibleSoftbank, 'SJIS-Mobile#SOFTBANK');
+ 
+-// Special Softbank escape sequences can appear at end of string
+-convertValidString("\x1B\$O", "", "SJIS-Mobile#SOFTBANK", "UTF-8", false);
+-convertValidString("\x1B\$P", "", "SJIS-Mobile#SOFTBANK", "UTF-8", false);
+-convertValidString("\x1B\$Q", "", "SJIS-Mobile#SOFTBANK", "UTF-8", false);
+-// Try invalid escape sequence
+-convertInvalidString("\x1B\$X", "%", "SJIS-Mobile#SOFTBANK", "UTF-8", false);
+-// Try truncated escape sequence
+-convertInvalidString("\x1B\$", "%", "SJIS-Mobile#SOFTBANK", "UTF-8", false);
+-
+-// Regression test for problem with not allocating enough space in output buffer
+-// This occurred when the input string was shorter than the output
+-convertValidString("\xA9\xA9\xA9\xA9", "\xF9\xD6\xF9\xD6\xF9\xD6\xF9\xD6", '8bit', 'SJIS-Mobile#DOCOMO');
+-convertValidString("\xA9\xA9\xA9\xA9", "\xF7\x74\xF7\x74\xF7\x74\xF7\x74", '8bit', 'SJIS-Mobile#KDDI');
+-convertValidString("\xA9\xA9\xA9\xA9", "\xF7\xEE\xF7\xEE\xF7\xEE\xF7\xEE", '8bit', 'SJIS-Mobile#SOFTBANK');
+-
+-// Regression test: Old implementation used to drop digits (0-9) and hash (#) if
+-// they appeared at end of input string
+-for ($i = ord('0'); $i <= ord('9'); $i++) {
+-  convertValidString("abc" . chr($i), "abc" . chr($i), 'UTF-8', 'SJIS-Mobile#DOCOMO');
+-  convertValidString("abc" . chr($i), "abc" . chr($i), 'UTF-8', 'SJIS-Mobile#KDDI');
+-  convertValidString("abc" . chr($i), "abc" . chr($i), 'UTF-8', 'SJIS-Mobile#SOFTBANK');
+-}
+-
+-// Regression test: Originally, new implementation also did not handle 0-9 and hash
+-// followed by U+20E3 (keycap modifier) correctly if the 0-9 or hash occurred at
+-// the very end of one buffer of wchars, and the keycap modifier was at the
+-// beginning of the following buffer of wchars
+-for ($i = 0; $i <= 256; $i++) {
+-  convertValidString(str_repeat("\x00a", $i) . "\x00\x30\x20\xE3", str_repeat('a', $i) . "\xF9\x90", 'UTF-16BE', 'SJIS-Mobile#DOCOMO');
+-  convertValidString(str_repeat("\x00a", $i) . "\x00\x30\x20\xE3", str_repeat('a', $i) . "\xF7\xC9", 'UTF-16BE', 'SJIS-Mobile#KDDI');
+-  convertValidString(str_repeat("\x00a", $i) . "\x00\x30\x20\xE3", str_repeat('a', $i) . "\xF7\xC5", 'UTF-16BE', 'SJIS-Mobile#SOFTBANK');
+-}
+-
+-// Regression test for 0-9 appearing at end of one buffer and U+203E NOT appearing
+-// at the beginning of the next
+-for ($i = 0; $i <= 256; $i++) {
+-  convertValidString(str_repeat("\x000", $i), str_repeat('0', $i), 'UTF-16BE', 'SJIS-Mobile#DOCOMO');
+-  convertValidString(str_repeat("\x000", $i), str_repeat('0', $i), 'UTF-16BE', 'SJIS-Mobile#KDDI');
+-  convertValidString(str_repeat("\x000", $i), str_repeat('0', $i), 'UTF-16BE', 'SJIS-Mobile#SOFTBANK');
+-}
+-
+-// Regression test for not making enough space in output buffer when 0-9 appeared
+-// at the end of one buffer and was re-processed together with the next
+-// This crazy-looking string was found by a fuzzer
+-$str = "\x04\xff\x930\x00\xffUTF7~'F\x00A\x00\xffA\x0018030@\x00[\x1b\$EEEEE\x5C\x80(8~\x00F\x00zgb-18030$\x008~\x00F\x00z-gb-18EUC_JP-2004\x00z-g0\x0018030\x00b-18030$\x008~\x00F\x00z-gb-18EUC_JP-2004\x00z-g0\x0018030\x00";
+-mb_convert_encoding($str, 'SJIS-Mobile#SOFTBANK', 'SJIS-Mobile#SOFTBANK');
+-
+ ?>
+ --EXPECT--
+ SJIS-Mobile#DOCOMO verification and conversion works on all valid characters
+diff --git a/ext/mbstring/tests/sjismac_encoding.phpt b/ext/mbstring/tests/sjismac_encoding.phpt
+index 8013d82e..1e808009 100644
+--- a/ext/mbstring/tests/sjismac_encoding.phpt
++++ b/ext/mbstring/tests/sjismac_encoding.phpt
+@@ -87,20 +87,6 @@ findInvalidChars($fromUnicode, $invalidChars, $unused, array_fill_keys(range(0,
+ convertAllInvalidChars($invalidChars, $fromUnicode, 'UTF-16BE', 'SJIS-mac', '%');
+ echo "Unicode -> SJIS-mac conversion works on all invalid characters\n";
+ 
+-// Regression test
+-convertValidString("\x20\x26\x6B\xAA", "\x81\x63\x9F\x6F", "UTF-16BE", "SJIS-mac");
+-
+-// Test special combining characters for MacJapanese when *not* appearing in
+-// an expected combination
+-convertInvalidString("\x20\x10\xF8\x7A", "\x81\x5D%", "UTF-16BE", "SJIS-mac");
+-convertInvalidString("\x20\x10\x20\xDD", "\x81\x5D%", "UTF-16BE", "SJIS-mac");
+-convertInvalidString("\x20\x10\xF8\x7F", "\x81\x5D%", "UTF-16BE", "SJIS-mac");
+-convertInvalidString("\x21\xE6\xF8\x7E", "\x86\xD0%", "UTF-16BE", "SJIS-mac");
+-
+-convertInvalidString("\xF8\x60\x00\x30\x12\x34", "%%%", "UTF-16BE", "SJIS-mac");
+-convertInvalidString("\xF8\x61\x00\x46\x00\x41\x12\x34", "%%%%", "UTF-16BE", "SJIS-mac");
+-convertInvalidString("\xF8\x62\x00\x58\x00\x49\x00\x49\x12\x34", "%%%%%", "UTF-16BE", "SJIS-mac");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\x81", "%", "SJIS-mac", "UTF-8");
+diff --git a/ext/mbstring/tests/ucs2_encoding.phpt b/ext/mbstring/tests/ucs2_encoding.phpt
+index faa43a62..468d813a 100644
+--- a/ext/mbstring/tests/ucs2_encoding.phpt
++++ b/ext/mbstring/tests/ucs2_encoding.phpt
+@@ -7,11 +7,6 @@ mbstring
+ include('encoding_tests.inc');
+ mb_substitute_character(0x25);
+ 
+-testValidString("\xFF\xFE\x00\x30", "\x30\x00", "UCS-2", "UTF-16BE", false);
+-testValidString("\xFE\xFF\x30\x00", "\x30\x00", "UCS-2", "UTF-16BE", false);
+-testValidString("\x30\x00", "\x30\x00", "UCS-2", "UTF-16BE");
+-testValidString("\x00\x30", "\x30\x00", "UCS-2LE", "UTF-16BE");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ 
+diff --git a/ext/mbstring/tests/ucs4_encoding.phpt b/ext/mbstring/tests/ucs4_encoding.phpt
+index 637123b2..953a3cd3 100644
+--- a/ext/mbstring/tests/ucs4_encoding.phpt
++++ b/ext/mbstring/tests/ucs4_encoding.phpt
+@@ -7,19 +7,6 @@ mbstring
+ include('encoding_tests.inc');
+ mb_substitute_character(0x25);
+ 
+-testValidString("\xFF\xFE\x00\x00\x00\x30\x00\x00", "\x30\x00", "UCS-4", "UTF-16BE", false);
+-testValidString("\x00\x00\xFE\xFF\x00\x00\x30\x01", "\x30\x01", "UCS-4", "UTF-16BE", false);
+-testValidString("\x02\x30\x00\x00", "\x30\x02", "UCS-4LE", "UTF-16BE");
+-testValidString("\x00\x00\x30\x03", "\x30\x03", "UCS-4BE", "UTF-16BE");
+-
+-// Truncated input
+-convertInvalidString("\x01\x02\x03", "%", "UCS-4", "UTF-8");
+-
+-
+-// Codepoint above U+10FFFF
+-convertInvalidString("\x00\x11\x00\x00", "%", "UCS-4BE", "UTF-8");
+-convertInvalidString("\x00\x00\x11\x00", "%", "UCS-4LE", "UTF-8");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\x6F\x00\x00\x00", "U+6F000000", "UCS-4BE", "UTF-8");
+diff --git a/ext/mbstring/tests/uhc_encoding.phpt b/ext/mbstring/tests/uhc_encoding.phpt
+index 622569c6..cc4d72f9 100644
+--- a/ext/mbstring/tests/uhc_encoding.phpt
++++ b/ext/mbstring/tests/uhc_encoding.phpt
+@@ -11,9 +11,6 @@ if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+ include('encoding_tests.inc');
+ testEncodingFromUTF16ConversionTable(__DIR__ . '/data/CP949.txt', 'UHC');
+ 
+-// Regression test
+-convertInvalidString("\xE4\xA4\xB4<", "\x75\x1A\x00%", "UHC", "UTF-16BE");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\x80", "%", "UHC", "UTF-8");
+diff --git a/ext/mbstring/tests/utf7imap_encoding.phpt b/ext/mbstring/tests/utf7imap_encoding.phpt
+index e91bfbbe..3899c2c1 100644
+--- a/ext/mbstring/tests/utf7imap_encoding.phpt
++++ b/ext/mbstring/tests/utf7imap_encoding.phpt
+@@ -26,10 +26,6 @@ function testInvalid($from, $to) {
+ testValid("", "");
+ echo "Identification passes on empty string... good start!\n";
+ 
+-/* RFC says that 0x00 should be Base64-encoded */
+-testValidString("\x00", "&AAA-", 'UTF-8', 'UTF7-IMAP');
+-echo "Null byte converted correctly\n";
+-
+ /* Identification and conversion of ASCII characters (minus &) */
+ for ($i = 0x20; $i <= 0x7E; $i++) {
+ 	if ($i == 0x26) // '&'
+@@ -114,30 +110,24 @@ if (strlen($testString) != 4)
+ $testString = substr($testString, 2, 2) . substr($testString, 0, 2);
+ identifyInvalidString("&" . mBase64($testString) . "-", 'UTF7-IMAP');
+ /* (Or could appear by itself) */
+-$testString2 = substr($testString, 0, 2);
+-identifyInvalidString("&" . mBase64($testString2) . "-", 'UTF7-IMAP');
++$testString = substr($testString, 0, 2);
++identifyInvalidString("&" . mBase64($testString) . "-", 'UTF7-IMAP');
+ 
+ /* ...and we should detect this wherever it occurs */
+-$singleChar = "\x00\x01";
++$singleChar = mb_convert_encoding("１", 'UTF-16BE', 'ASCII');
+ $doubleChar = mb_convert_encoding("\x00\x01\x04\x01", 'UTF-16BE', 'UTF-32BE');
+ if (strlen($doubleChar) != 4)
+ 	die("That was supposed to be a surrogate pair");
+ identifyInvalidString("&" . mBase64($singleChar . $testString) . "-", 'UTF7-IMAP');
+ identifyInvalidString("&" . mBase64($singleChar . $singleChar . $testString) . "-", 'UTF7-IMAP');
+ identifyInvalidString("&" . mBase64($singleChar . $singleChar . $singleChar . $testString) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($singleChar . $testString2) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($singleChar . $singleChar . $testString2) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($singleChar . $singleChar . $singleChar . $testString2) . "-", 'UTF7-IMAP');
+ identifyInvalidString("&" . mBase64($doubleChar . $testString) . "-", 'UTF7-IMAP');
+ identifyInvalidString("&" . mBase64($singleChar . $doubleChar . $testString) . "-", 'UTF7-IMAP');
+ identifyInvalidString("&" . mBase64($singleChar . $singleChar . $doubleChar . $testString) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($doubleChar . $testString2) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($singleChar . $doubleChar . $testString2) . "-", 'UTF7-IMAP');
+-identifyInvalidString("&" . mBase64($singleChar . $singleChar . $doubleChar . $testString2) . "-", 'UTF7-IMAP');
+ 
+ /* 2. The first half of a surrogate pair might be followed by an invalid 2nd part, */
+ $testString = mb_convert_encoding("\x00\x01\x04\x00", 'UTF-16BE', 'UTF-32BE');
+-$testString = substr($testString, 0, 2) . "\x00a";
++$testString = substr($testString, 0, 2) . mb_convert_encoding("a", 'UTF-16BE', 'ASCII');
+ identifyInvalidString("&" . mBase64($testString) . "-", 'UTF7-IMAP');
+ 
+ /* ...and we should also detect that wherever it occurs... */
+@@ -221,19 +211,10 @@ convertInvalidString("\x80", "%", "UTF7-IMAP", "UTF-8");
+ convertInvalidString("abc&", "abc%", "UTF7-IMAP", "UTF-8"); // The & starts a Base-64 coded section, which is OK... but there's no data in it
+ convertInvalidString("&**-", "%*-", "UTF7-IMAP", "UTF-8"); // When we hit the first bad byte in a Base-64 coded section, it drops us back into the default mode, so the following characters are literal
+ 
+-// Try strings where Base64 has an extra trailing byte which is not needed
+-convertInvalidString('&RR8I', "\xE4\x94\x9F%", 'UTF7-IMAP', 'UTF-8');
+-convertInvalidString('&RR8IAAA', "\xE4\x94\x9F\xE0\xA0\x80%", 'UTF7-IMAP', 'UTF-8');
+-
+-// It is useless for a Base64 section to only contain a single 'A'
+-// (which decodes to only zero bits)
+-convertInvalidString("&A", "\x00\x00\x00%", 'UTF7-IMAP', 'UTF-32BE');
+-
+ echo "Done!\n";
+ ?>
+ --EXPECT--
+ Identification passes on empty string... good start!
+-Null byte converted correctly
+ Testing all valid single-character ASCII strings... check!
+ Non-ASCII characters convert to illegal char marker... yes!
+ & can be Base64-encoded... yes!

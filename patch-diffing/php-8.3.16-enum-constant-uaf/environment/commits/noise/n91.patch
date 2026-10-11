@@ -1,0 +1,314 @@
+diff --git a/ext/date/tests/DateTimeImmutable_inherited_serialization.phpt b/ext/date/tests/DateTimeImmutable_inherited_serialization.phpt
+deleted file mode 100644
+index a533b651..00000000
+--- a/ext/date/tests/DateTimeImmutable_inherited_serialization.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Inherited DateTimeImmutable serialisation with custom properties
+---FILE--
+-<?php
+-date_default_timezone_set("Europe/London");
+-
+-class MyDateTimeImmutable extends DateTimeImmutable
+-{
+-	public function __construct(
+-		string $datetime = "now",
+-		?DateTimeZone $timezone = null,
+-		public ?bool $myProperty = null,
+-	) {
+-		parent::__construct($datetime, $timezone);
+-	}
+-}
+-
+-$d = new MyDateTimeImmutable("2023-01-25 16:32:55", myProperty: true);
+-$e = unserialize(serialize($d));
+-var_dump($e->myProperty);
+-?>
+---EXPECTF--
+-bool(true)
+diff --git a/ext/date/tests/DateTimeImmutable_serialization.phpt b/ext/date/tests/DateTimeImmutable_serialization.phpt
+deleted file mode 100644
+index 9c4c5bac..00000000
+--- a/ext/date/tests/DateTimeImmutable_serialization.phpt
++++ /dev/null
+@@ -1,118 +0,0 @@
+---TEST--
+-Test DateTimeImmutable::__serialize and DateTimeImmutable::__unserialize
+---FILE--
+-<?php
+-//Set the default time zone
+-date_default_timezone_set("Europe/London");
+-
+-$d = new DateTimeImmutable("2022-04-14 11:27:42");
+-echo "Original object:\n";
+-var_dump($d);
+-
+-echo "\n\nSerialised object:\n";
+-$s = serialize($d);
+-var_dump($s);
+-
+-echo "\n\nUnserialised object:\n";
+-$e = unserialize($s);
+-var_dump($e);
+-
+-echo "\n\nCalling __serialize manually:\n";
+-var_dump($d->__serialize());
+-
+-echo "\n\nCalling __unserialize manually:\n";
+-$d = new DateTimeImmutable;
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 3,
+-		'timezone' => 'UTC',
+-	]
+-);
+-var_dump($d);
+-
+-echo "\n\nCalling __unserialize a few more times, with abbreviations:\n";
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 2,
+-		'timezone' => 'CEST',
+-	]
+-);
+-var_dump($d);
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 1,
+-		'timezone' => '+0130',
+-	]
+-);
+-var_dump($d);
+-
+-?>
+---EXPECTF--
+-Original object:
+-object(DateTimeImmutable)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Serialised object:
+-string(135) "O:17:"DateTimeImmutable":3:{s:4:"date";s:26:"2022-04-14 11:27:42.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:13:"Europe/London";}"
+-
+-
+-Unserialised object:
+-object(DateTimeImmutable)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Calling __serialize manually:
+-array(3) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Calling __unserialize manually:
+-object(DateTimeImmutable)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-
+-
+-Calling __unserialize a few more times, with abbreviations:
+-object(DateTimeImmutable)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(2)
+-  ["timezone"]=>
+-  string(4) "CEST"
+-}
+-object(DateTimeImmutable)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(1)
+-  ["timezone"]=>
+-  string(6) "+01:30"
+-}
+diff --git a/ext/date/tests/DateTimeInterval_inherited_serialization.phpt b/ext/date/tests/DateTimeInterval_inherited_serialization.phpt
+deleted file mode 100644
+index fca8f29b..00000000
+--- a/ext/date/tests/DateTimeInterval_inherited_serialization.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Inherited DateTimeInterval serialisation with custom properties
+---FILE--
+-<?php
+-date_default_timezone_set("Europe/London");
+-
+-class MyDateInterval extends DateInterval
+-{
+-	public function __construct(
+-		string $duration,
+-		public ?bool $myProperty = null,
+-	) {
+-		parent::__construct($duration);
+-	}
+-}
+-
+-$d = new MyDateInterval("P1W2D", myProperty: true);
+-$e = unserialize(serialize($d));
+-var_dump($e->myProperty);
+-?>
+---EXPECTF--
+-bool(true)
+diff --git a/ext/date/tests/DateTimePeriod_inherited_serialization.phpt b/ext/date/tests/DateTimePeriod_inherited_serialization.phpt
+deleted file mode 100644
+index c0d94cf0..00000000
+--- a/ext/date/tests/DateTimePeriod_inherited_serialization.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Inherited DateTimePeriod serialisation with custom properties
+---FILE--
+-<?php
+-date_default_timezone_set("Europe/London");
+-
+-class MyDatePeriod extends DatePeriod
+-{
+-	public function __construct(
+-		DateTimeInterface $start,
+-		DateInterval $interval,
+-		int $recurrences,
+-		int $options = 0,
+-		public ?bool $myProperty = null,
+-	) {
+-		parent::__construct($start, $interval, $recurrences, $options);
+-	}
+-}
+-
+-$d = new MyDatePeriod(new DateTimeImmutable(), new DateInterval("PT5S"), 5, myProperty: true);
+-$e = unserialize(serialize($d));
+-var_dump($e->myProperty);
+-?>
+---EXPECTF--
+-bool(true)
+diff --git a/ext/date/tests/DateTimeZone_clone_basic3.phpt b/ext/date/tests/DateTimeZone_clone_basic3.phpt
+index c5e8761c..5f853337 100644
+--- a/ext/date/tests/DateTimeZone_clone_basic3.phpt
++++ b/ext/date/tests/DateTimeZone_clone_basic3.phpt
+@@ -37,10 +37,6 @@ object(DateTimeZone)#%d (2) {
+ }
+ 
+ -- Add some properties --
+-
+-Deprecated: Creation of dynamic property DateTimeZone::$property1 is deprecated in %s on line %d
+-
+-Deprecated: Creation of dynamic property DateTimeZone::$property2 is deprecated in %s on line %d
+ object(DateTimeZone)#%d (4) {
+   ["property1"]=>
+   int(99)
+@@ -65,10 +61,6 @@ object(DateTimeZone)#%d (4) {
+ }
+ 
+ -- Add some more properties --
+-
+-Deprecated: Creation of dynamic property DateTimeZone::$property3 is deprecated in %s on line %d
+-
+-Deprecated: Creation of dynamic property DateTimeZone::$property4 is deprecated in %s on line %d
+ object(DateTimeZone)#%d (6) {
+   ["property1"]=>
+   int(99)
+diff --git a/ext/date/tests/DateTimeZone_getTransitions_basic1.phpt b/ext/date/tests/DateTimeZone_getTransitions_basic1.phpt
+index cbc4caea..f2948d8e 100644
+--- a/ext/date/tests/DateTimeZone_getTransitions_basic1.phpt
++++ b/ext/date/tests/DateTimeZone_getTransitions_basic1.phpt
+@@ -32,7 +32,7 @@ array(5) {
+   ["ts"]=>
+   int(-213228000)
+   ["time"]=>
+-  string(25) "1963-03-31T02:00:00+00:00"
++  string(24) "1963-03-31T02:00:00+0000"
+   ["offset"]=>
+   int(3600)
+   ["isdst"]=>
+diff --git a/ext/date/tests/DateTimeZone_getTransitions_bug1.phpt b/ext/date/tests/DateTimeZone_getTransitions_bug1.phpt
+index 480e997b..7ac2c065 100644
+--- a/ext/date/tests/DateTimeZone_getTransitions_bug1.phpt
++++ b/ext/date/tests/DateTimeZone_getTransitions_bug1.phpt
+@@ -24,35 +24,35 @@ showTransitions('Europe/Paris', 1645095600);        // GH Issue 8108
+ --EXPECT--
+ Europe/London from @1648342200-@1727398200:
+ 
+-  1648342200 2022-03-27T00:50:00+00:00      0  x  GMT
+-  1648342800 2022-03-27T01:00:00+00:00   3600 DST BST
+-  1667091600 2022-10-30T01:00:00+00:00      0  x  GMT
+-  1679792400 2023-03-26T01:00:00+00:00   3600 DST BST
+-  1698541200 2023-10-29T01:00:00+00:00      0  x  GMT
+-  1711846800 2024-03-31T01:00:00+00:00   3600 DST BST
++  1648342200 2022-03-27T00:50:00+0000      0  x  GMT
++  1648342800 2022-03-27T01:00:00+0000   3600 DST BST
++  1667091600 2022-10-30T01:00:00+0000      0  x  GMT
++  1679792400 2023-03-26T01:00:00+0000   3600 DST BST
++  1698541200 2023-10-29T01:00:00+0000      0  x  GMT
++  1711846800 2024-03-31T01:00:00+0000   3600 DST BST
+ 
+ America/Los_Angeles from @1648557596-@1727613596:
+ 
+-  1648557596 2022-03-29T12:39:56+00:00 -25200 DST PDT
+-  1667725200 2022-11-06T09:00:00+00:00 -28800  x  PST
+-  1678615200 2023-03-12T10:00:00+00:00 -25200 DST PDT
+-  1699174800 2023-11-05T09:00:00+00:00 -28800  x  PST
+-  1710064800 2024-03-10T10:00:00+00:00 -25200 DST PDT
++  1648557596 2022-03-29T12:39:56+0000 -25200 DST PDT
++  1667725200 2022-11-06T09:00:00+0000 -28800  x  PST
++  1678615200 2023-03-12T10:00:00+0000 -25200 DST PDT
++  1699174800 2023-11-05T09:00:00+0000 -28800  x  PST
++  1710064800 2024-03-10T10:00:00+0000 -25200 DST PDT
+ 
+ America/Chicago from @1293861600-@1372917600:
+ 
+-  1293861600 2011-01-01T06:00:00+00:00 -21600  x  CST
+-  1300003200 2011-03-13T08:00:00+00:00 -18000 DST CDT
+-  1320562800 2011-11-06T07:00:00+00:00 -21600  x  CST
+-  1331452800 2012-03-11T08:00:00+00:00 -18000 DST CDT
+-  1352012400 2012-11-04T07:00:00+00:00 -21600  x  CST
+-  1362902400 2013-03-10T08:00:00+00:00 -18000 DST CDT
++  1293861600 2011-01-01T06:00:00+0000 -21600  x  CST
++  1300003200 2011-03-13T08:00:00+0000 -18000 DST CDT
++  1320562800 2011-11-06T07:00:00+0000 -21600  x  CST
++  1331452800 2012-03-11T08:00:00+0000 -18000 DST CDT
++  1352012400 2012-11-04T07:00:00+0000 -21600  x  CST
++  1362902400 2013-03-10T08:00:00+0000 -18000 DST CDT
+ 
+ Europe/Paris from @1645095600-@1724151600:
+ 
+-  1645095600 2022-02-17T11:00:00+00:00   3600  x  CET
+-  1648342800 2022-03-27T01:00:00+00:00   7200 DST CEST
+-  1667091600 2022-10-30T01:00:00+00:00   3600  x  CET
+-  1679792400 2023-03-26T01:00:00+00:00   7200 DST CEST
+-  1698541200 2023-10-29T01:00:00+00:00   3600  x  CET
+-  1711846800 2024-03-31T01:00:00+00:00   7200 DST CEST
++  1645095600 2022-02-17T11:00:00+0000   3600  x  CET
++  1648342800 2022-03-27T01:00:00+0000   7200 DST CEST
++  1667091600 2022-10-30T01:00:00+0000   3600  x  CET
++  1679792400 2023-03-26T01:00:00+0000   7200 DST CEST
++  1698541200 2023-10-29T01:00:00+0000   3600  x  CET
++  1711846800 2024-03-31T01:00:00+0000   7200 DST CEST

@@ -1,0 +1,46 @@
+diff --git a/testdata/dnstap.tdir/dnstap.testns b/testdata/dnstap.tdir/dnstap.testns
+index 0c911ca5b..0987c41c8 100644
+--- a/testdata/dnstap.tdir/dnstap.testns
++++ b/testdata/dnstap.tdir/dnstap.testns
+@@ -12,6 +12,16 @@ SECTION ANSWER
+ www	IN	A	10.20.30.40
+ ENTRY_END
+ 
++ENTRY_BEGIN
++MATCH opcode qtype qname
++REPLY QR AA NOERROR
++ADJUST copy_id
++SECTION QUESTION
++short	IN	A
++SECTION ANSWER
++short	2 IN	A	10.20.30.40
++ENTRY_END
++
+ ENTRY_BEGIN
+ MATCH opcode qtype qname
+ REPLY QR AA SERVFAIL
+diff --git a/testdata/doh_downstream.tdir/doh_downstream.conf b/testdata/doh_downstream.tdir/doh_downstream.conf
+index f0857bb58..222c2159d 100644
+--- a/testdata/doh_downstream.tdir/doh_downstream.conf
++++ b/testdata/doh_downstream.tdir/doh_downstream.conf
+@@ -11,6 +11,7 @@ server:
+ 	chroot: ""
+ 	username: ""
+ 	do-not-query-localhost: no
++	discard-timeout: 3000  # testns uses sleep=2
+ 	http-query-buffer-size: 1G
+ 	http-response-buffer-size: 1G
+ 	http-max-streams: 200
+diff --git a/testdata/doh_downstream_buffer_size.tdir/doh_downstream_buffer_size.test b/testdata/doh_downstream_buffer_size.tdir/doh_downstream_buffer_size.test
+index 45bde6564..00389fde2 100644
+--- a/testdata/doh_downstream_buffer_size.tdir/doh_downstream_buffer_size.test
++++ b/testdata/doh_downstream_buffer_size.tdir/doh_downstream_buffer_size.test
+@@ -33,7 +33,7 @@ echo "num answers $num and num write events $nummodew"
+ if [ $num -eq 8 ]; then
+ 	echo "content OK"
+ else
+-    if [ "(" $num -eq 9 -o $num -eq 10 ")" -a $nummodew -eq 2 ]; then
++    if [ "(" $num -eq 9 -o $num -eq 10 ")" -a "(" $nummodew -eq 2 -o $nummodew -eq 3 ")" ]; then
+ 	echo "skip buffer emptied event"
+     else
+ 	echo "result contents not OK"

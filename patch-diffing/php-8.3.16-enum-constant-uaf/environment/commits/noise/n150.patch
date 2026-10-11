@@ -1,0 +1,207 @@
+diff --git a/ext/libxml/php_libxml2.def b/ext/libxml/php_libxml2.def
+index 5980df8b..f4be787c 100644
+--- a/ext/libxml/php_libxml2.def
++++ b/ext/libxml/php_libxml2.def
+@@ -1,4 +1,5 @@
+ EXPORTS
++__docbDefaultSAXHandler
+ __htmlDefaultSAXHandler
+ __oldXMLWDcompatibility
+ __xmlBufferAllocScheme
+@@ -52,6 +53,17 @@ cdataBlock
+ characters
+ checkNamespace
+ comment
++docbCreateFileParserCtxt
++docbCreatePushParserCtxt
++docbDefaultSAXHandlerInit
++docbEncodeEntities
++docbFreeParserCtxt
++docbParseChunk
++docbParseDoc
++docbParseDocument
++docbParseFile
++docbSAXParseDoc
++docbSAXParseFile
+ elementDecl
+ endDocument
+ endElement
+@@ -125,6 +137,7 @@ htmlSetMetaEncoding
+ htmlTagLookup
+ ignorableWhitespace
+ initGenericErrorDefaultFunc
++initdocbDefaultSAXHandler
+ inithtmlDefaultSAXHandler
+ initxmlDefaultSAXHandler
+ inputPop
+@@ -788,6 +801,7 @@ xmlRegisterHTTPPostCallbacks
+ xmlRegisterInputCallbacks
+ xmlRegisterNodeDefault
+ xmlRegisterOutputCallbacks
++xmlRelaxNGCleanupTypes
+ xmlRelaxNGDump
+ xmlRelaxNGDumpTree
+ xmlRelaxNGFree
+@@ -835,6 +849,7 @@ xmlSAX2HasExternalSubset
+ xmlSAX2HasInternalSubset
+ xmlSAX2IgnorableWhitespace
+ xmlSAX2InitDefaultSAXHandler
++xmlSAX2InitDocbDefaultSAXHandler
+ xmlSAX2InitHtmlDefaultSAXHandler
+ xmlSAX2InternalSubset
+ xmlSAX2IsStandalone
+@@ -1508,8 +1523,27 @@ xmlXPathWrapExternal
+ xmlXPathWrapNodeSet
+ xmlXPathWrapString
+ xmlXPatherror
++xmlXPtrBuildNodeList
+ xmlXPtrEval
++xmlXPtrEvalRangePredicate
++xmlXPtrFreeLocationSet
++xmlXPtrLocationSetAdd
++xmlXPtrLocationSetCreate
++xmlXPtrLocationSetDel
++xmlXPtrLocationSetMerge
++xmlXPtrLocationSetRemove
++xmlXPtrNewCollapsedRange
+ xmlXPtrNewContext
++xmlXPtrNewLocationSetNodeSet
++xmlXPtrNewLocationSetNodes
++xmlXPtrNewRange
++xmlXPtrNewRangeNodeObject
++xmlXPtrNewRangeNodePoint
++xmlXPtrNewRangeNodes
++xmlXPtrNewRangePointNode
++xmlXPtrNewRangePoints
++xmlXPtrRangeToFunction
++xmlXPtrWrapLocationSet
+ xmlBufContent
+ xmlBufUse
+ xmlBufferDetach
+diff --git a/ext/libxml/tests/bug61367-read.phpt b/ext/libxml/tests/bug61367-read.phpt
+index d05b5d7c..d15402ce 100644
+--- a/ext/libxml/tests/bug61367-read.phpt
++++ b/ext/libxml/tests/bug61367-read.phpt
+@@ -14,7 +14,6 @@ open_basedir=.
+  * Note: Using error_reporting=E_ALL & ~E_NOTICE to suppress "Trying to get property of non-object" notices.
+  */
+ class StreamExploiter {
+-    public $context;
+     public function stream_close (  ) {
+         $doc = new DOMDocument;
+         $doc->resolveExternals = true;
+diff --git a/ext/libxml/tests/bug61367-read_2.phpt b/ext/libxml/tests/bug61367-read_2.phpt
+index bbcf6967..38f12949 100644
+--- a/ext/libxml/tests/bug61367-read_2.phpt
++++ b/ext/libxml/tests/bug61367-read_2.phpt
+@@ -14,8 +14,6 @@ open_basedir=.
+  * Note: Using error_reporting=E_ALL & ~E_NOTICE to suppress "Trying to get property of non-object" notices.
+  */
+ class StreamExploiter {
+-    public $context;
+-
+     public function stream_close (  ) {
+         $doc = new DOMDocument;
+         $doc->resolveExternals = true;
+diff --git a/ext/libxml/tests/bug61367-write.phpt b/ext/libxml/tests/bug61367-write.phpt
+index c65341e1..47ab3387 100644
+--- a/ext/libxml/tests/bug61367-write.phpt
++++ b/ext/libxml/tests/bug61367-write.phpt
+@@ -8,8 +8,6 @@ open_basedir=.
+ <?php
+ 
+ class StreamExploiter {
+-    public $context;
+-
+     public function stream_close (  ) {
+         $doc = new DOMDocument;
+         $doc->appendChild($doc->createTextNode('hello'));
+diff --git a/ext/libxml/tests/libxml_get_external_entity_loader.phpt b/ext/libxml/tests/libxml_get_external_entity_loader.phpt
+deleted file mode 100644
+index 48751d5c..00000000
+--- a/ext/libxml/tests/libxml_get_external_entity_loader.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-libxml_get_external_entity_loader() returns current handler
+---EXTENSIONS--
+-libxml
+---FILE--
+-<?php
+-
+-class Handler {
+-	private $name;
+-
+-	public function __construct($name) {
+-		$this->name = $name;
+-	}
+-
+-	public function handle($public, $system, $context) {
+-		return null;
+-	}
+-
+-	public function __toString() {
+-		return "Handler#{$this->name}";
+-	}
+-}
+-
+-var_dump(libxml_get_external_entity_loader());
+-libxml_set_external_entity_loader([new Handler('A'), 'handle']);
+-print libxml_get_external_entity_loader()[0] . "\n";
+-libxml_set_external_entity_loader([new Handler('B'), 'handle']);
+-print libxml_get_external_entity_loader()[0] . "\n";
+-libxml_set_external_entity_loader(null);
+-var_dump(libxml_get_external_entity_loader());
+-
+---EXPECT--
+-NULL
+-Handler#A
+-Handler#B
+-NULL
+diff --git a/ext/libxml/tests/libxml_set_external_entity_loader_error2.phpt b/ext/libxml/tests/libxml_set_external_entity_loader_error2.phpt
+deleted file mode 100644
+index 053551f5..00000000
+--- a/ext/libxml/tests/libxml_set_external_entity_loader_error2.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-libxml_set_external_entity_loader() with non-callable argument
+---EXTENSIONS--
+-libxml
+---FILE--
+-<?php
+-try {
+-	libxml_set_external_entity_loader('nonexistent_function');
+-} catch (Throwable $e) {
+-	echo "Exception: " . $e->getMessage() . "\n";
+-}
+-?>
+---EXPECT--
+-Exception: libxml_set_external_entity_loader(): Argument #1 ($resolver_function) must be a valid callback or null, function "nonexistent_function" not found or invalid function name
+diff --git a/ext/mbstring/config.m4 b/ext/mbstring/config.m4
+index 7b16ff75..30004b1f 100644
+--- a/ext/mbstring/config.m4
++++ b/ext/mbstring/config.m4
+@@ -103,12 +103,14 @@ AC_DEFUN([PHP_MBSTRING_SETUP_LIBMBFL], [
+     libmbfl/filters/mbfilter_gb18030.c
+     libmbfl/filters/mbfilter_euc_cn.c
+     libmbfl/filters/mbfilter_euc_jp.c
++    libmbfl/filters/mbfilter_euc_jp_2004.c
+     libmbfl/filters/mbfilter_euc_jp_win.c
+     libmbfl/filters/mbfilter_euc_kr.c
+     libmbfl/filters/mbfilter_euc_tw.c
+     libmbfl/filters/mbfilter_htmlent.c
+     libmbfl/filters/mbfilter_hz.c
+     libmbfl/filters/mbfilter_iso2022_jp_ms.c
++    libmbfl/filters/mbfilter_iso2022jp_2004.c
+     libmbfl/filters/mbfilter_iso2022jp_mobile.c
+     libmbfl/filters/mbfilter_iso2022_kr.c
+     libmbfl/filters/mbfilter_jis.c
+@@ -118,6 +120,7 @@ AC_DEFUN([PHP_MBSTRING_SETUP_LIBMBFL], [
+     libmbfl/filters/mbfilter_sjis_mobile.c
+     libmbfl/filters/mbfilter_sjis_mac.c
+     libmbfl/filters/mbfilter_sjis_2004.c
++    libmbfl/filters/mbfilter_tl_jisx0201_jisx0208.c
+     libmbfl/filters/mbfilter_ucs2.c
+     libmbfl/filters/mbfilter_ucs4.c
+     libmbfl/filters/mbfilter_uhc.c

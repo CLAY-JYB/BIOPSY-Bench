@@ -1,0 +1,155 @@
+diff --git a/Zend/tests/enum/backed-from-invalid-string.phpt b/Zend/tests/enum/backed-from-invalid-string.phpt
+index c6d78487..db8b791d 100644
+--- a/Zend/tests/enum/backed-from-invalid-string.phpt
++++ b/Zend/tests/enum/backed-from-invalid-string.phpt
+@@ -18,4 +18,4 @@ try {
+ 
+ ?>
+ --EXPECT--
+-"A" is not a valid backing value for enum Suit
++"A" is not a valid backing value for enum "Suit"
+diff --git a/Zend/tests/enum/backed-from-invalid-type.phpt b/Zend/tests/enum/backed-from-invalid-type.phpt
+index b4e0e6d6..3f35bef6 100644
+--- a/Zend/tests/enum/backed-from-invalid-type.phpt
++++ b/Zend/tests/enum/backed-from-invalid-type.phpt
+@@ -30,5 +30,5 @@ try {
+ 
+ ?>
+ --EXPECT--
+-"42" is not a valid backing value for enum Suit
++"42" is not a valid backing value for enum "Suit"
+ Foo::from(): Argument #1 ($value) must be of type int, string given
+diff --git a/Zend/tests/enum/backed-int-const-invalid-expr.phpt b/Zend/tests/enum/backed-int-const-invalid-expr.phpt
+index 77d9995c..f0c421a3 100644
+--- a/Zend/tests/enum/backed-int-const-invalid-expr.phpt
++++ b/Zend/tests/enum/backed-int-const-invalid-expr.phpt
+@@ -11,4 +11,4 @@ var_dump(Foo::Bar->value);
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Constant expression contains invalid operations in %s on line %d
++Fatal error: Enum case value must be compile-time evaluatable in %s on line %d
+diff --git a/Zend/tests/enum/backed-mismatch.phpt b/Zend/tests/enum/backed-mismatch.phpt
+index 73602f7b..0b28fb3b 100644
+--- a/Zend/tests/enum/backed-mismatch.phpt
++++ b/Zend/tests/enum/backed-mismatch.phpt
+@@ -7,33 +7,6 @@ enum Foo: int {
+     case Bar = 'bar';
+ }
+ 
+-try {
+-    var_dump(Foo::Bar);
+-} catch (Error $e) {
+-    echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-    var_dump(Foo::Bar);
+-} catch (Error $e) {
+-    echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-    var_dump(Foo::from(42));
+-} catch (Error $e) {
+-    echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-    var_dump(Foo::from('bar'));
+-} catch (Error $e) {
+-    echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+ ?>
+---EXPECT--
+-TypeError: Enum case type string does not match enum backing type int
+-TypeError: Enum case type string does not match enum backing type int
+-TypeError: Enum case type string does not match enum backing type int
+-TypeError: Foo::from(): Argument #1 ($value) must be of type int, string given
++--EXPECTF--
++Fatal error: Enum case type string does not match enum backing type int in %s on line %d
+diff --git a/Zend/tests/enum/empty-from.phpt b/Zend/tests/enum/empty-from.phpt
+deleted file mode 100644
+index db42c78e..00000000
+--- a/Zend/tests/enum/empty-from.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-Empty enum with from/tryFrom doens't segfault
+---FILE--
+-<?php
+-
+-enum A: string {}
+-
+-var_dump(A::tryFrom('B'));
+-
+-?>
+---EXPECT--
+-NULL
+diff --git a/Zend/tests/enum/enum-in-var-export.phpt b/Zend/tests/enum/enum-in-var-export.phpt
+deleted file mode 100644
+index a45567c5..00000000
+--- a/Zend/tests/enum/enum-in-var-export.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Enum in var_export()
+---FILE--
+-<?php
+-
+-namespace {
+-    enum Foo { case BAR; }
+-}
+-
+-namespace A {
+-    enum Foo { case BAR; }
+-}
+-
+-namespace A\B {
+-    enum Foo { case BAR; }
+-}
+-
+-namespace Test {
+-    echo var_export(\Foo::BAR, true) . "\n";
+-    echo var_export(\A\Foo::BAR, true) . "\n";
+-    echo var_export(\A\B\Foo::BAR, true) . "\n";
+-}
+-
+-?>
+---EXPECT--
+-\Foo::BAR
+-\A\Foo::BAR
+-\A\B\Foo::BAR
+diff --git a/Zend/tests/enum/gh7821.phpt b/Zend/tests/enum/gh7821.phpt
+deleted file mode 100644
+index 70307c96..00000000
+--- a/Zend/tests/enum/gh7821.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-GH-7821: Can't use arbitrary constant expressions in enum cases
+---FILE--
+-<?php
+-
+-interface I {
+-    public const A = 'A';
+-    public const B = 'B';
+-}
+-
+-enum B: string implements I {
+-    case C = I::A;
+-    case D = self::B;
+-}
+-
+-var_dump(B::A);
+-var_dump(B::B);
+-var_dump(B::C->value);
+-var_dump(B::D->value);
+-
+-?>
+---EXPECT--
+-string(1) "A"
+-string(1) "B"
+-string(1) "A"
+-string(1) "B"

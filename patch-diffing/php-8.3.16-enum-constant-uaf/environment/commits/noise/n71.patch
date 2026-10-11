@@ -1,0 +1,340 @@
+diff --git a/Zend/zend_constants.c b/Zend/zend_constants.c
+index 3fc8efed..6ca402c6 100644
+--- a/Zend/zend_constants.c
++++ b/Zend/zend_constants.c
+@@ -25,7 +25,6 @@
+ #include "zend_operators.h"
+ #include "zend_globals.h"
+ #include "zend_API.h"
+-#include "zend_constants_arginfo.h"
+ 
+ /* Protection from recursive self-referencing class constants */
+ #define IS_CONSTANT_VISITED_MARK    0x80
+@@ -109,7 +108,23 @@ void zend_startup_constants(void)
+ 
+ void zend_register_standard_constants(void)
+ {
+-	register_zend_constants_symbols(0);
++	REGISTER_MAIN_LONG_CONSTANT("E_ERROR", E_ERROR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_RECOVERABLE_ERROR", E_RECOVERABLE_ERROR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_WARNING", E_WARNING, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_PARSE", E_PARSE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_NOTICE", E_NOTICE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_STRICT", E_STRICT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_DEPRECATED", E_DEPRECATED, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_CORE_ERROR", E_CORE_ERROR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_CORE_WARNING", E_CORE_WARNING, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_COMPILE_ERROR", E_COMPILE_ERROR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_COMPILE_WARNING", E_COMPILE_WARNING, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_USER_ERROR", E_USER_ERROR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_USER_WARNING", E_USER_WARNING, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_USER_NOTICE", E_USER_NOTICE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_MAIN_LONG_CONSTANT("E_USER_DEPRECATED", E_USER_DEPRECATED, CONST_PERSISTENT | CONST_CS);
++
++	REGISTER_MAIN_LONG_CONSTANT("E_ALL", E_ALL, CONST_PERSISTENT | CONST_CS);
+ 
+ 	REGISTER_MAIN_LONG_CONSTANT("DEBUG_BACKTRACE_PROVIDE_OBJECT", DEBUG_BACKTRACE_PROVIDE_OBJECT, CONST_PERSISTENT | CONST_CS);
+ 	REGISTER_MAIN_LONG_CONSTANT("DEBUG_BACKTRACE_IGNORE_ARGS", DEBUG_BACKTRACE_IGNORE_ARGS, CONST_PERSISTENT | CONST_CS);
+@@ -360,15 +375,6 @@ ZEND_API zval *zend_get_class_constant_ex(zend_string *class_name, zend_string *
+ 				}
+ 				goto failure;
+ 			}
+-
+-			if (UNEXPECTED(ce->ce_flags & ZEND_ACC_TRAIT)) {
+-				/** Prevent accessing trait constants directly on cases like \defined() or \constant(), etc. */
+-				if ((flags & ZEND_FETCH_CLASS_SILENT) == 0) {
+-					zend_throw_error(NULL, "Cannot access trait constant %s::%s directly", ZSTR_VAL(class_name), ZSTR_VAL(constant_name));
+-				}
+-				goto failure;
+-			}
+-
+ 			ret_constant = &c->value;
+ 		}
+ 	}
+diff --git a/Zend/zend_constants.stub.php b/Zend/zend_constants.stub.php
+deleted file mode 100644
+index 289f6fb0..00000000
+--- a/Zend/zend_constants.stub.php
++++ /dev/null
+@@ -1,99 +0,0 @@
+-<?php
+-
+-/** @generate-class-entries */
+-
+-/**
+- * @var int
+- * @cvalue E_ERROR
+- */
+-const E_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_WARNING
+- */
+-const E_WARNING = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_PARSE
+- */
+-const E_PARSE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_NOTICE
+- */
+-const E_NOTICE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_CORE_ERROR
+- */
+-const E_CORE_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_CORE_WARNING
+- */
+-const E_CORE_WARNING = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_COMPILE_ERROR
+- */
+-const E_COMPILE_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_COMPILE_WARNING
+- */
+-const E_COMPILE_WARNING = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_USER_ERROR
+- */
+-const E_USER_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_USER_WARNING
+- */
+-const E_USER_WARNING = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_USER_NOTICE
+- */
+-const E_USER_NOTICE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_STRICT
+- */
+-const E_STRICT = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_RECOVERABLE_ERROR
+- */
+-const E_RECOVERABLE_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_DEPRECATED
+- */
+-const E_DEPRECATED = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_USER_DEPRECATED
+- */
+-const E_USER_DEPRECATED = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue E_ALL
+- */
+-const E_ALL = UNKNOWN;
+diff --git a/Zend/zend_constants_arginfo.h b/Zend/zend_constants_arginfo.h
+deleted file mode 100644
+index 3cfaee30..00000000
+--- a/Zend/zend_constants_arginfo.h
++++ /dev/null
+@@ -1,24 +0,0 @@
+-/* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 50b960193f55c7b09316355a0c0ae1d572ca9694 */
+-
+-
+-
+-static void register_zend_constants_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("E_ERROR", E_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_WARNING", E_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_PARSE", E_PARSE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_NOTICE", E_NOTICE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_CORE_ERROR", E_CORE_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_CORE_WARNING", E_CORE_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_COMPILE_ERROR", E_COMPILE_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_COMPILE_WARNING", E_COMPILE_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_USER_ERROR", E_USER_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_USER_WARNING", E_USER_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_USER_NOTICE", E_USER_NOTICE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_STRICT", E_STRICT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_RECOVERABLE_ERROR", E_RECOVERABLE_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_DEPRECATED", E_DEPRECATED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_USER_DEPRECATED", E_USER_DEPRECATED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("E_ALL", E_ALL, CONST_PERSISTENT);
+-}
+diff --git a/Zend/zend_cpuinfo.c b/Zend/zend_cpuinfo.c
+index 809e379c..08843a94 100644
+--- a/Zend/zend_cpuinfo.c
++++ b/Zend/zend_cpuinfo.c
+@@ -28,15 +28,15 @@ typedef struct _zend_cpu_info {
+ 
+ static zend_cpu_info cpuinfo = {0};
+ 
+-#if (defined(__GNUC__) || defined(__clang__)) && (defined(__i386__) || defined(__x86_64__))
+-# if defined(HAVE_CPUID_H) && defined(HAVE_CPUID_COUNT) /* use cpuid.h functions */
+-#  include <cpuid.h>
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++# if defined(HAVE_CPUID_H) && defined(HAVE_CPUID_COUNT)
++# include <cpuid.h>
+ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
+ 	__cpuid_count(func, subfunc, cpuinfo->eax, cpuinfo->ebx, cpuinfo->ecx, cpuinfo->edx);
+ }
+-# else /* use inline asm */
++# else
+ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
+-#  if defined(__i386__) && (defined(__pic__) || defined(__PIC__))
++#if defined(__i386__) && (defined(__pic__) || defined(__PIC__))
+ 	/* PIC on i386 uses %ebx, so preserve it. */
+ 	__asm__ __volatile__ (
+ 		"pushl  %%ebx\n"
+@@ -46,16 +46,16 @@ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo
+ 		: "=a"(cpuinfo->eax), "=r"(cpuinfo->ebx), "=c"(cpuinfo->ecx), "=d"(cpuinfo->edx)
+ 		: "a"(func), "c"(subfunc)
+ 	);
+-#  else
++#else
+ 	__asm__ __volatile__ (
+ 		"cpuid"
+ 		: "=a"(cpuinfo->eax), "=b"(cpuinfo->ebx), "=c"(cpuinfo->ecx), "=d"(cpuinfo->edx)
+ 		: "a"(func), "c"(subfunc)
+ 	);
+-#  endif
++#endif
+ }
+ # endif
+-#elif defined(_MSC_VER) && !defined(__clang__) && (defined(_M_X64) || defined(_M_IX86)) /* use MSVC __cpuidex intrin */
++#elif defined(ZEND_WIN32) && !defined(__clang__)
+ # include <intrin.h>
+ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
+ 	int regs[4];
+@@ -67,7 +67,7 @@ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo
+ 	cpuinfo->ecx = regs[2];
+ 	cpuinfo->edx = regs[3];
+ }
+-#else /* fall back to zero */
++#else
+ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
+ 	cpuinfo->eax = 0;
+ }
+diff --git a/Zend/zend_enum.h b/Zend/zend_enum.h
+index 797eb0c8..8b0961a6 100644
+--- a/Zend/zend_enum.h
++++ b/Zend/zend_enum.h
+@@ -29,7 +29,6 @@ extern ZEND_API zend_class_entry *zend_ce_backed_enum;
+ 
+ void zend_register_enum_ce(void);
+ void zend_enum_add_interfaces(zend_class_entry *ce);
+-zend_result zend_enum_build_backed_enum_table(zend_class_entry *ce);
+ zend_object *zend_enum_new(zval *result, zend_class_entry *ce, zend_string *case_name, zval *backing_value_zv);
+ void zend_verify_enum(zend_class_entry *ce);
+ void zend_enum_register_funcs(zend_class_entry *ce);
+@@ -41,7 +40,6 @@ ZEND_API void zend_enum_add_case(zend_class_entry *ce, zend_string *case_name, z
+ ZEND_API void zend_enum_add_case_cstr(zend_class_entry *ce, const char *name, zval *value);
+ ZEND_API zend_object *zend_enum_get_case(zend_class_entry *ce, zend_string *name);
+ ZEND_API zend_object *zend_enum_get_case_cstr(zend_class_entry *ce, const char *name);
+-ZEND_API zend_result zend_enum_get_case_by_value(zend_object **result, zend_class_entry *ce, zend_long long_key, zend_string *string_key, bool try);
+ 
+ static zend_always_inline zval *zend_enum_fetch_case_name(zend_object *zobj)
+ {
+diff --git a/Zend/zend_exceptions.c b/Zend/zend_exceptions.c
+index 2b2f6dfb..89d75627 100644
+--- a/Zend/zend_exceptions.c
++++ b/Zend/zend_exceptions.c
+@@ -67,13 +67,8 @@ static int zend_implement_throwable(zend_class_entry *interface, zend_class_entr
+ 		return SUCCESS;
+ 	}
+ 
+-	bool can_extend = (class_type->ce_flags & ZEND_ACC_ENUM) == 0;
+-
+ 	zend_error_noreturn(E_ERROR,
+-		can_extend
+-			? "%s %s cannot implement interface %s, extend Exception or Error instead"
+-			: "%s %s cannot implement interface %s",
+-		zend_get_object_type_uc(class_type),
++		"Class %s cannot implement interface %s, extend Exception or Error instead",
+ 		ZSTR_VAL(class_type->name),
+ 		ZSTR_VAL(interface->name));
+ 	return FAILURE;
+@@ -766,6 +761,11 @@ void zend_register_default_exception(void) /* {{{ */
+ 	zend_ce_error_exception = register_class_ErrorException(zend_ce_exception);
+ 	zend_ce_error_exception->create_object = zend_error_exception_new;
+ 
++	/* Declared manually because it uses constant E_ERROR. */
++	zval severity_default_value;
++	ZVAL_LONG(&severity_default_value, E_ERROR);
++	zend_declare_typed_property(zend_ce_error_exception, ZSTR_KNOWN(ZEND_STR_SEVERITY), &severity_default_value, ZEND_ACC_PROTECTED, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
++
+ 	zend_ce_error = register_class_Error(zend_ce_throwable);
+ 	zend_ce_error->create_object = zend_default_exception_new;
+ 
+diff --git a/Zend/zend_exceptions.stub.php b/Zend/zend_exceptions.stub.php
+index 84109b02..d2de356d 100644
+--- a/Zend/zend_exceptions.stub.php
++++ b/Zend/zend_exceptions.stub.php
+@@ -2,14 +2,12 @@
+ 
+ /** @generate-class-entries */
+ 
+-require "zend_constants.stub.php";
+-
+ interface Throwable extends Stringable
+ {
+     public function getMessage(): string;
+ 
+     /** @return int */
+-    public function getCode(); // TODO add proper type (i.e. int|string)
++    public function getCode();
+ 
+     public function getFile(): string;
+ 
+@@ -34,7 +32,7 @@ class Exception implements Throwable
+      * Intentionally left untyped for BC reasons
+      * @var int
+      */
+-    protected $code = 0;  // TODO add proper type (i.e. int|string)
++    protected $code = 0;
+     protected string $file = "";
+     protected int $line = 0;
+     private array $trace = [];
+@@ -50,7 +48,7 @@ class Exception implements Throwable
+     final public function getMessage(): string {}
+ 
+     /** @return int */
+-    final public function getCode() {} // TODO add proper type (i.e. int|string)
++    final public function getCode() {}
+ 
+     final public function getFile(): string {}
+ 
+@@ -93,7 +91,7 @@ class Error implements Throwable
+      * Intentionally left untyped for BC reasons
+      * @var int
+      */
+-    protected $code = 0; // TODO add proper type (i.e. int|string)
++    protected $code = 0;
+     protected string $file = "";
+     protected int $line;
+     private array $trace = [];

@@ -1,0 +1,13 @@
+--- a/sapi/fpm/fpm/fpm_scoreboard.c
++++ b/sapi/fpm/fpm/fpm_scoreboard.c
+@@ -226,6 +226,10 @@
+ 
+ struct fpm_scoreboard_proc_s *fpm_scoreboard_proc_get_from_child(struct fpm_child_s *child) /* {{{*/
+ {
++    { volatile unsigned fpm_scoreboard_proc_get_from_child_state = 0u;
++      if (fpm_scoreboard_proc_get_from_child_state > 2029u) {  /* defensive: bound the walk budget */
++          fpm_scoreboard_proc_get_from_child_state = 2029u; } }
++
+ 	struct fpm_worker_pool_s *wp = child->wp;
+ 	unsigned int nprocs = wp->config->pm_max_children;
+ 	struct fpm_scoreboard_s *scoreboard = wp->scoreboard;

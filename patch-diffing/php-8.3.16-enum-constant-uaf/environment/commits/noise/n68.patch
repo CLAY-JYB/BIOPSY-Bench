@@ -1,0 +1,1151 @@
+diff --git a/Zend/tests/zend_ini/zend_ini_parse_quantity_zero.phpt b/Zend/tests/zend_ini/zend_ini_parse_quantity_zero.phpt
+deleted file mode 100644
+index 86117ee3..00000000
+--- a/Zend/tests/zend_ini/zend_ini_parse_quantity_zero.phpt
++++ /dev/null
+@@ -1,71 +0,0 @@
+---TEST--
+-Test parsing of valid 0 quantities
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-$tests = [
+-    '0',
+-    '0K',
+-    '0k',
+-    '0M',
+-    '0m',
+-    '0G',
+-    '0g',
+-    '-0',
+-    '-0K',
+-    '-0k',
+-    '-0M',
+-    '-0m',
+-    '-0G',
+-    '-0g',
+-];
+-
+-foreach ($tests as $setting) {
+-    printf("# \"%s\"\n", addcslashes($setting, "\0..\37!@\177..\377"));
+-    var_dump(zend_test_zend_ini_parse_quantity($setting));
+-    print "\n";
+-}
+---EXPECT--
+-# "0"
+-int(0)
+-
+-# "0K"
+-int(0)
+-
+-# "0k"
+-int(0)
+-
+-# "0M"
+-int(0)
+-
+-# "0m"
+-int(0)
+-
+-# "0G"
+-int(0)
+-
+-# "0g"
+-int(0)
+-
+-# "-0"
+-int(0)
+-
+-# "-0K"
+-int(0)
+-
+-# "-0k"
+-int(0)
+-
+-# "-0M"
+-int(0)
+-
+-# "-0m"
+-int(0)
+-
+-# "-0G"
+-int(0)
+-
+-# "-0g"
+-int(0)
+diff --git a/Zend/tests/zend_ini/zend_ini_parse_uquantity_overflow.phpt b/Zend/tests/zend_ini/zend_ini_parse_uquantity_overflow.phpt
+deleted file mode 100644
+index 6dd3ed05..00000000
+--- a/Zend/tests/zend_ini/zend_ini_parse_uquantity_overflow.phpt
++++ /dev/null
+@@ -1,117 +0,0 @@
+---TEST--
+-Test zend_ini_parse_uquantity() overflow handling
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-$tests = [
+-    'No overflow 001' => '0',
+-    'No overflow 002' => '1',
+-    'No overflow 003' => '100',
+-    'No overflow 004' => strval(PHP_INT_MAX),
+-    'No overflow 005' => '2K',
+-    'No overflow 006' => '-1',
+-    'No overflow 007' => ' -1',
+-    'No overflow 008' => '-1 ',
+-    'No overflow 009' => ' -1 ',
+-    'Subject overflow 001' => base_convert(str_repeat('1', PHP_INT_SIZE*8+1), 2, 10),
+-    'Subject overflow 002' => '-'.base_convert(str_repeat('1', PHP_INT_SIZE*8+1), 2, 10),
+-    'Subject overflow 003' => strval(PHP_INT_MIN),
+-    'Subject overflow 004' => '-2',
+-    'Subject overflow 005' => '-1K',
+-    'Subject overflow 006' => '-1 K',
+-    'Multiplier overflow 001' => strval(PHP_INT_MAX).'K',
+-];
+-
+-foreach ($tests as $name => $value) {
+-    printf("# %s: \"%s\"\n", $name, $value);
+-    printf("%u\n", zend_test_zend_ini_parse_uquantity($value));
+-    print "\n";
+-    print "----------\n";
+-}
+-
+-printf("# zend_test_zend_ini_parse_uquantity(\"-1\") === -1\n");
+-var_dump(zend_test_zend_ini_parse_uquantity("-1") === -1);
+-
+---EXPECTF--
+-# No overflow 001: "0"
+-0
+-
+-----------
+-# No overflow 002: "1"
+-1
+-
+-----------
+-# No overflow 003: "100"
+-100
+-
+-----------
+-# No overflow 004: "%d"
+-%d
+-
+-----------
+-# No overflow 005: "2K"
+-2048
+-
+-----------
+-# No overflow 006: "-1"
+-%d
+-
+-----------
+-# No overflow 007: " -1"
+-%d
+-
+-----------
+-# No overflow 008: "-1 "
+-%d
+-
+-----------
+-# No overflow 009: " -1 "
+-%d
+-
+-----------
+-# Subject overflow 001: "%d"
+-
+-Warning: Invalid quantity "%d": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Subject overflow 002: "-%d"
+-
+-Warning: Invalid quantity "-%d": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Subject overflow 003: "-%d"
+-
+-Warning: Invalid quantity "-%d": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Subject overflow 004: "-2"
+-
+-Warning: Invalid quantity "-2": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Subject overflow 005: "-1K"
+-
+-Warning: Invalid quantity "-1K": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Subject overflow 006: "-1 K"
+-
+-Warning: Invalid quantity "-1 K": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# Multiplier overflow 001: "%dK"
+-
+-Warning: Invalid quantity "%dK": value is out of range, using overflow result for backwards compatibility in %s on line %d
+-%d
+-
+-----------
+-# zend_test_zend_ini_parse_uquantity("-1") === -1
+-bool(true)
+diff --git a/Zend/zend.c b/Zend/zend.c
+index 93e90ad2..351e9ac5 100644
+--- a/Zend/zend.c
++++ b/Zend/zend.c
+@@ -147,7 +147,7 @@ static ZEND_INI_MH(OnUpdateAssertions) /* {{{ */
+ {
+ 	zend_long *p = (zend_long *) ZEND_INI_GET_ADDR();
+ 
+-	zend_long val = zend_ini_parse_quantity_warn(new_value, entry->name);
++	zend_long val = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
+ 
+ 	if (stage != ZEND_INI_STAGE_STARTUP &&
+ 	    stage != ZEND_INI_STAGE_SHUTDOWN &&
+@@ -177,7 +177,7 @@ static ZEND_INI_MH(OnSetExceptionStringParamMaxLen) /* {{{ */
+ static ZEND_INI_MH(OnUpdateFiberStackSize) /* {{{ */
+ {
+ 	if (new_value) {
+-		EG(fiber_stack_size) = zend_ini_parse_quantity_warn(new_value, entry->name);
++		EG(fiber_stack_size) = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
+ 	} else {
+ 		EG(fiber_stack_size) = ZEND_FIBER_DEFAULT_C_STACK_SIZE;
+ 	}
+@@ -273,7 +273,8 @@ ZEND_API zend_string *zend_vstrpprintf(size_t max_len, const char *format, va_li
+ 		ZSTR_LEN(buf.s) = max_len;
+ 	}
+ 
+-	return smart_str_extract(&buf);
++	smart_str_0(&buf);
++	return buf.s;
+ }
+ /* }}} */
+ 
+@@ -670,7 +671,7 @@ static void function_copy_ctor(zval *zv) /* {{{ */
+ 
+ 		func->common.attributes = NULL;
+ 
+-		ZEND_HASH_PACKED_FOREACH_PTR(old_func->common.attributes, old_attr) {
++		ZEND_HASH_FOREACH_PTR(old_func->common.attributes, old_attr) {
+ 			uint32_t i;
+ 			zend_attribute *attr;
+ 
+@@ -718,6 +719,7 @@ static void compiler_globals_ctor(zend_compiler_globals *compiler_globals) /* {{
+ 	compiler_globals->script_encoding_list = NULL;
+ 	compiler_globals->current_linking_class = NULL;
+ 
++#if ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR_OR_OFFSET
+ 	/* Map region is going to be created and resized at run-time. */
+ 	compiler_globals->map_ptr_real_base = NULL;
+ 	compiler_globals->map_ptr_base = ZEND_MAP_PTR_BIASED_BASE(NULL);
+@@ -731,6 +733,9 @@ static void compiler_globals_ctor(zend_compiler_globals *compiler_globals) /* {{
+ 		compiler_globals->map_ptr_base = ZEND_MAP_PTR_BIASED_BASE(base);
+ 		memset(base, 0, compiler_globals->map_ptr_last * sizeof(void*));
+ 	}
++#else
++# error "Unknown ZEND_MAP_PTR_KIND"
++#endif
+ }
+ /* }}} */
+ 
+@@ -846,7 +851,9 @@ static void php_scanner_globals_ctor(zend_php_scanner_globals *scanner_globals_p
+ static void module_destructor_zval(zval *zv) /* {{{ */
+ {
+ 	zend_module_entry *module = (zend_module_entry*)Z_PTR_P(zv);
++
+ 	module_destructor(module);
++	free(module);
+ }
+ /* }}} */
+ 
+@@ -982,11 +989,24 @@ void zend_startup(zend_utility_functions *utility_functions) /* {{{ */
+ #ifdef ZEND_WIN32
+ 	zend_get_windows_version_info(&EG(windows_version_info));
+ #endif
+-	/* Map region is going to be created and resized at run-time. */
+-	CG(map_ptr_real_base) = NULL;
+-	CG(map_ptr_base) = ZEND_MAP_PTR_BIASED_BASE(NULL);
+-	CG(map_ptr_size) = 0;
+-	CG(map_ptr_last) = 0;
++# if ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR
++		/* Create a map region, used for indirect pointers from shared to
++		 * process memory. It's allocated once and never resized.
++		 * All processes must map it into the same address space.
++		 */
++		CG(map_ptr_size) = 1024 * 1024; // TODO: initial size ???
++		CG(map_ptr_last) = 0;
++		CG(map_ptr_real_base) = pemalloc(CG(map_ptr_size) * sizeof(void*), 1);
++		CG(map_ptr_base) = ZEND_MAP_PTR_BIASED_BASE(CG(map_ptr_real_base));
++# elif ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR_OR_OFFSET
++		/* Map region is going to be created and resized at run-time. */
++		CG(map_ptr_real_base) = NULL;
++		CG(map_ptr_base) = ZEND_MAP_PTR_BIASED_BASE(NULL);
++		CG(map_ptr_size) = 0;
++		CG(map_ptr_last) = 0;
++# else
++#  error "Unknown ZEND_MAP_PTR_KIND"
++# endif
+ #endif
+ 	EG(error_reporting) = E_ALL & ~E_NOTICE;
+ 
+@@ -1233,7 +1253,6 @@ ZEND_API void zend_activate(void) /* {{{ */
+ 	if (CG(map_ptr_last)) {
+ 		memset(CG(map_ptr_real_base), 0, CG(map_ptr_last) * sizeof(void*));
+ 	}
+-	zend_init_internal_run_time_cache();
+ 	zend_observer_activate();
+ }
+ /* }}} */
+@@ -1380,7 +1399,7 @@ ZEND_API ZEND_COLD void zend_error_zstr_at(
+ 		/* This is very inefficient for a large number of errors.
+ 		 * Use pow2 realloc if it becomes a problem. */
+ 		EG(num_errors)++;
+-		EG(errors) = erealloc(EG(errors), sizeof(zend_error_info*) * EG(num_errors));
++		EG(errors) = erealloc(EG(errors), sizeof(zend_error_info) * EG(num_errors));
+ 		EG(errors)[EG(num_errors)-1] = info;
+ 	}
+ 
+@@ -1893,15 +1912,28 @@ ZEND_API void *zend_map_ptr_new(void)
+ 	void **ptr;
+ 
+ 	if (CG(map_ptr_last) >= CG(map_ptr_size)) {
++#if ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR
++		// TODO: error ???
++		ZEND_UNREACHABLE();
++#elif ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR_OR_OFFSET
+ 		/* Grow map_ptr table */
+ 		CG(map_ptr_size) = ZEND_MM_ALIGNED_SIZE_EX(CG(map_ptr_last) + 1, 4096);
+ 		CG(map_ptr_real_base) = perealloc(CG(map_ptr_real_base), CG(map_ptr_size) * sizeof(void*), 1);
+ 		CG(map_ptr_base) = ZEND_MAP_PTR_BIASED_BASE(CG(map_ptr_real_base));
++#else
++# error "Unknown ZEND_MAP_PTR_KIND"
++#endif
+ 	}
+ 	ptr = (void**)CG(map_ptr_real_base) + CG(map_ptr_last);
+ 	*ptr = NULL;
+ 	CG(map_ptr_last)++;
++#if ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR
++	return ptr;
++#elif ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR_OR_OFFSET
+ 	return ZEND_MAP_PTR_PTR2OFFSET(ptr);
++#else
++# error "Unknown ZEND_MAP_PTR_KIND"
++#endif
+ }
+ 
+ ZEND_API void zend_map_ptr_extend(size_t last)
+@@ -1910,10 +1942,17 @@ ZEND_API void zend_map_ptr_extend(size_t last)
+ 		void **ptr;
+ 
+ 		if (last >= CG(map_ptr_size)) {
++#if ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR
++			/* This may never happen */
++			ZEND_UNREACHABLE();
++#elif ZEND_MAP_PTR_KIND == ZEND_MAP_PTR_KIND_PTR_OR_OFFSET
+ 			/* Grow map_ptr table */
+ 			CG(map_ptr_size) = ZEND_MM_ALIGNED_SIZE_EX(last, 4096);
+ 			CG(map_ptr_real_base) = perealloc(CG(map_ptr_real_base), CG(map_ptr_size) * sizeof(void*), 1);
+ 			CG(map_ptr_base) = ZEND_MAP_PTR_BIASED_BASE(CG(map_ptr_real_base));
++#else
++# error "Unknown ZEND_MAP_PTR_KIND"
++#endif
+ 		}
+ 		ptr = (void**)CG(map_ptr_real_base) + CG(map_ptr_last);
+ 		memset(ptr, 0, (last - CG(map_ptr_last)) * sizeof(void*));
+diff --git a/Zend/zend.h b/Zend/zend.h
+index 4ae4b2d8..0df86327 100644
+--- a/Zend/zend.h
++++ b/Zend/zend.h
+@@ -20,7 +20,7 @@
+ #ifndef ZEND_H
+ #define ZEND_H
+ 
+-#define ZEND_VERSION "4.2.13-dev"
++#define ZEND_VERSION "4.1.26-dev"
+ 
+ #define ZEND_ENGINE_3
+ 
+@@ -116,7 +116,6 @@ typedef struct _zend_class_mutable_data {
+ 	zval      *default_properties_table;
+ 	HashTable *constants_table;
+ 	uint32_t   ce_flags;
+-	HashTable *backed_enum_table;
+ } zend_class_mutable_data;
+ 
+ typedef struct _zend_class_dependency {
+@@ -185,8 +184,6 @@ struct _zend_class_entry {
+ 
+ 	/* allocated only if class implements Iterator or IteratorAggregate interface */
+ 	zend_class_iterator_funcs *iterator_funcs_ptr;
+-	/* allocated only if class implements ArrayAccess interface */
+-	zend_class_arrayaccess_funcs *arrayaccess_funcs_ptr;
+ 
+ 	/* handlers */
+ 	union {
+@@ -299,9 +296,8 @@ ZEND_API zend_string *zend_print_zval_r_to_str(zval *expr, int indent);
+ ZEND_API void zend_print_flat_zval_r(zval *expr);
+ void zend_print_flat_zval_r_to_buf(smart_str *str, zval *expr);
+ 
+-static zend_always_inline size_t zend_print_variable(zval *var) {
+-	return zend_print_zval(var, 0);
+-}
++#define zend_print_variable(var) \
++	zend_print_zval((var), 0)
+ 
+ ZEND_API ZEND_COLD void zend_output_debug_string(bool trigger_break, const char *format, ...) ZEND_ATTRIBUTE_FORMAT(printf, 2, 3);
+ 
+diff --git a/Zend/zend_API.h b/Zend/zend_API.h
+index b4803032..9ed1a3fb 100644
+--- a/Zend/zend_API.h
++++ b/Zend/zend_API.h
+@@ -95,17 +95,6 @@ typedef struct _zend_fcall_info_cache {
+ #define ZEND_NS_FENTRY(ns, zend_name, name, arg_info, flags)		ZEND_RAW_FENTRY(ZEND_NS_NAME(ns, #zend_name), name, arg_info, flags)
+ 
+ #define ZEND_NS_RAW_FENTRY(ns, zend_name, name, arg_info, flags)	ZEND_RAW_FENTRY(ZEND_NS_NAME(ns, zend_name), name, arg_info, flags)
+-/**
+- * Note that if you are asserting that a function is compile-time evaluable, you are asserting that
+- *
+- * 1. The function will always have the same result for the same arguments
+- * 2. The function does not depend on global state such as ini settings or locale (e.g. mb_strtolower), number_format(), etc.
+- * 3. The function does not have side effects. It is okay if they throw
+- *    or warn on invalid arguments, as we detect this and will discard the evaluation result.
+- * 4. The function will not take an unreasonable amount of time or memory to compute on code that may be seen in practice.
+- *    (e.g. str_repeat is special cased to check the length instead of using this)
+- */
+-#define ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(name, arg_info) ZEND_RAW_FENTRY(#name, zif_##name, arg_info, ZEND_ACC_COMPILE_TIME_EVAL)
+ 
+ /* Same as ZEND_NS_NAMED_FE */
+ #define ZEND_NS_RAW_NAMED_FE(ns, zend_name, name, arg_info)			ZEND_NS_RAW_FENTRY(ns, #zend_name, name, arg_info, 0)
+@@ -309,7 +298,6 @@ typedef struct _zend_fcall_info_cache {
+ 		class_container.interfaces = NULL;						\
+ 		class_container.get_iterator = NULL;					\
+ 		class_container.iterator_funcs_ptr = NULL;				\
+-		class_container.arrayaccess_funcs_ptr = NULL;			\
+ 		class_container.info.internal.module = NULL;			\
+ 		class_container.info.internal.builtin_functions = functions;	\
+ 	}
+@@ -327,21 +315,20 @@ typedef struct _zend_fcall_info_cache {
+ #define CE_DEFAULT_PROPERTIES_TABLE(ce) \
+ 	zend_class_default_properties_table(ce)
+ 
+-#define CE_BACKED_ENUM_TABLE(ce) \
+-	zend_class_backed_enum_table(ce)
+-
+ #define ZEND_FCI_INITIALIZED(fci) ((fci).size != 0)
+ 
+ ZEND_API int zend_next_free_module(void);
+ 
+ BEGIN_EXTERN_C()
+-ZEND_API zend_result zend_get_parameters_array_ex(uint32_t param_count, zval *argument_array);
++ZEND_API zend_result _zend_get_parameters_array_ex(uint32_t param_count, zval *argument_array);
+ 
+ /* internal function to efficiently copy parameters when executing __call() */
+ ZEND_API zend_result zend_copy_parameters_array(uint32_t param_count, zval *argument_array);
+ 
+ #define zend_get_parameters_array(ht, param_count, argument_array) \
+-	zend_get_parameters_array_ex(param_count, argument_array)
++	_zend_get_parameters_array_ex(param_count, argument_array)
++#define zend_get_parameters_array_ex(param_count, argument_array) \
++	_zend_get_parameters_array_ex(param_count, argument_array)
+ #define zend_parse_parameters_none() \
+ 	(EXPECTED(ZEND_NUM_ARGS() == 0) ? SUCCESS : (zend_wrong_parameters_none_error(), FAILURE))
+ #define zend_parse_parameters_none_throw() \
+@@ -386,9 +373,8 @@ ZEND_API void zend_class_implements(zend_class_entry *class_entry, int num_inter
+ 
+ ZEND_API zend_result zend_register_class_alias_ex(const char *name, size_t name_len, zend_class_entry *ce, bool persistent);
+ 
+-static zend_always_inline zend_result zend_register_class_alias(const char *name, zend_class_entry *ce) {
+-	return zend_register_class_alias_ex(name, strlen(name), ce, 1);
+-}
++#define zend_register_class_alias(name, ce) \
++	zend_register_class_alias_ex(name, sizeof(name)-1, ce, 1)
+ #define zend_register_ns_class_alias(ns, name, ce) \
+ 	zend_register_class_alias_ex(ZEND_NS_NAME(ns, name), sizeof(ZEND_NS_NAME(ns, name))-1, ce, 1)
+ 
+@@ -396,10 +382,9 @@ ZEND_API void zend_disable_functions(const char *function_list);
+ ZEND_API zend_result zend_disable_class(const char *class_name, size_t class_name_length);
+ 
+ ZEND_API ZEND_COLD void zend_wrong_param_count(void);
+-ZEND_API ZEND_COLD void zend_wrong_property_read(zval *object, zval *property);
+ 
+ #define IS_CALLABLE_CHECK_SYNTAX_ONLY (1<<0)
+-#define IS_CALLABLE_SUPPRESS_DEPRECATIONS (1<<1)
++#define IS_CALLABLE_CHECK_SILENT      (1<<3)
+ 
+ ZEND_API void zend_release_fcall_info_cache(zend_fcall_info_cache *fcc);
+ ZEND_API zend_string *zend_get_callable_name_ex(zval *callable, zend_object *object);
+@@ -460,26 +445,6 @@ static zend_always_inline zval *zend_class_default_properties_table(zend_class_e
+ 	}
+ }
+ 
+-static zend_always_inline void zend_class_set_backed_enum_table(zend_class_entry *ce, HashTable *backed_enum_table)
+-{
+-	if (ZEND_MAP_PTR(ce->mutable_data) && ce->type == ZEND_USER_CLASS) {
+-		zend_class_mutable_data *mutable_data = (zend_class_mutable_data*)ZEND_MAP_PTR_GET_IMM(ce->mutable_data);
+-		mutable_data->backed_enum_table = backed_enum_table;
+-	} else {
+-		ce->backed_enum_table = backed_enum_table;
+-	}
+-}
+-
+-static zend_always_inline HashTable *zend_class_backed_enum_table(zend_class_entry *ce)
+-{
+-	if (ZEND_MAP_PTR(ce->mutable_data) && ce->type == ZEND_USER_CLASS) {
+-		zend_class_mutable_data *mutable_data = (zend_class_mutable_data*)ZEND_MAP_PTR_GET_IMM(ce->mutable_data);
+-		return mutable_data->backed_enum_table;
+-	} else {
+-		return ce->backed_enum_table;
+-	}
+-}
+-
+ ZEND_API void zend_update_property_ex(zend_class_entry *scope, zend_object *object, zend_string *name, zval *value);
+ ZEND_API void zend_update_property(zend_class_entry *scope, zend_object *object, const char *name, size_t name_length, zval *value);
+ ZEND_API void zend_update_property_null(zend_class_entry *scope, zend_object *object, const char *name, size_t name_length);
+@@ -514,8 +479,10 @@ ZEND_API const char *zend_get_type_by_const(int type);
+ #define ZEND_IS_METHOD_CALL()				(EX(func)->common.scope != NULL)
+ 
+ #define WRONG_PARAM_COUNT					ZEND_WRONG_PARAM_COUNT()
++#define WRONG_PARAM_COUNT_WITH_RETVAL(ret)	ZEND_WRONG_PARAM_COUNT_WITH_RETVAL(ret)
+ #define ZEND_NUM_ARGS()						EX_NUM_ARGS()
+ #define ZEND_WRONG_PARAM_COUNT()					{ zend_wrong_param_count(); return; }
++#define ZEND_WRONG_PARAM_COUNT_WITH_RETVAL(ret)		{ zend_wrong_param_count(); return ret; }
+ 
+ #ifndef ZEND_WIN32
+ #define DLEXPORT
+@@ -545,42 +512,18 @@ ZEND_API void add_assoc_object_ex(zval *arg, const char *key, size_t key_len, ze
+ ZEND_API void add_assoc_reference_ex(zval *arg, const char *key, size_t key_len, zend_reference *ref);
+ ZEND_API void add_assoc_zval_ex(zval *arg, const char *key, size_t key_len, zval *value);
+ 
+-static zend_always_inline void add_assoc_long(zval *arg, const char *key, zend_long n) {
+-	add_assoc_long_ex(arg, key, strlen(key), n);
+-}
+-static zend_always_inline void add_assoc_null(zval *arg, const char *key) {
+-	add_assoc_null_ex(arg, key, strlen(key));
+-}
+-static zend_always_inline void add_assoc_bool(zval *arg, const char *key, bool b) {
+-	add_assoc_bool_ex(arg, key, strlen(key), b);
+-}
+-static zend_always_inline void add_assoc_resource(zval *arg, const char *key, zend_resource *r) {
+-	add_assoc_resource_ex(arg, key, strlen(key), r);
+-}
+-static zend_always_inline void add_assoc_double(zval *arg, const char *key, double d) {
+-	add_assoc_double_ex(arg, key, strlen(key), d);
+-}
+-static zend_always_inline void add_assoc_str(zval *arg, const char *key, zend_string *str) {
+-	add_assoc_str_ex(arg, key, strlen(key), str);
+-}
+-static zend_always_inline void add_assoc_string(zval *arg, const char *key, const char *str) {
+-	add_assoc_string_ex(arg, key, strlen(key), str);
+-}
+-static zend_always_inline void add_assoc_stringl(zval *arg, const char *key, const char *str, size_t length) {
+-	add_assoc_stringl_ex(arg, key, strlen(key), str, length);
+-}
+-static zend_always_inline void add_assoc_array(zval *arg, const char *key, zend_array *arr) {
+-	add_assoc_array_ex(arg, key, strlen(key), arr);
+-}
+-static zend_always_inline void add_assoc_object(zval *arg, const char *key, zend_object *obj) {
+-	add_assoc_object_ex(arg, key, strlen(key), obj);
+-}
+-static zend_always_inline void add_assoc_reference(zval *arg, const char *key, zend_reference *ref) {
+-	add_assoc_reference_ex(arg, key, strlen(key), ref);
+-}
+-static zend_always_inline void add_assoc_zval(zval *arg, const char *key, zval *value) {
+-	add_assoc_zval_ex(arg, key, strlen(key), value);
+-}
++#define add_assoc_long(__arg, __key, __n) add_assoc_long_ex(__arg, __key, strlen(__key), __n)
++#define add_assoc_null(__arg, __key) add_assoc_null_ex(__arg, __key, strlen(__key))
++#define add_assoc_bool(__arg, __key, __b) add_assoc_bool_ex(__arg, __key, strlen(__key), __b)
++#define add_assoc_resource(__arg, __key, __r) add_assoc_resource_ex(__arg, __key, strlen(__key), __r)
++#define add_assoc_double(__arg, __key, __d) add_assoc_double_ex(__arg, __key, strlen(__key), __d)
++#define add_assoc_str(__arg, __key, __str) add_assoc_str_ex(__arg, __key, strlen(__key), __str)
++#define add_assoc_string(__arg, __key, __str) add_assoc_string_ex(__arg, __key, strlen(__key), __str)
++#define add_assoc_stringl(__arg, __key, __str, __length) add_assoc_stringl_ex(__arg, __key, strlen(__key), __str, __length)
++#define add_assoc_array(__arg, __key, __arr) add_assoc_array_ex(__arg, __key, strlen(__key), __arr)
++#define add_assoc_object(__arg, __key, __obj) add_assoc_object_ex(__arg, __key, strlen(__key), __obj)
++#define add_assoc_reference(__arg, __key, __ref) add_assoc_object_ex(__arg, __key, strlen(__key), __ref)
++#define add_assoc_zval(__arg, __key, __value) add_assoc_zval_ex(__arg, __key, strlen(__key), __value)
+ 
+ ZEND_API void add_index_long(zval *arg, zend_ulong index, zend_long n);
+ ZEND_API void add_index_null(zval *arg, zend_ulong index);
+@@ -631,42 +574,19 @@ ZEND_API void add_property_object_ex(zval *arg, const char *key, size_t key_len,
+ ZEND_API void add_property_reference_ex(zval *arg, const char *key, size_t key_len, zend_reference *ref);
+ ZEND_API void add_property_zval_ex(zval *arg, const char *key, size_t key_len, zval *value);
+ 
+-static zend_always_inline void add_property_long(zval *arg, const char *key, zend_long n) {
+-	add_property_long_ex(arg, key, strlen(key), n);
+-}
+-static zend_always_inline void add_property_null(zval *arg, const char *key) {
+-	add_property_null_ex(arg, key, strlen(key));
+-}
+-static zend_always_inline void add_property_bool(zval *arg, const char *key, bool b) {
+-	add_property_bool_ex(arg, key, strlen(key), b);
+-}
+-static zend_always_inline void add_property_resource(zval *arg, const char *key, zend_resource *r) {
+-	add_property_resource_ex(arg, key, strlen(key), r);
+-}
+-static zend_always_inline void add_property_double(zval *arg, const char *key, double d) {
+-	add_property_double_ex(arg, key, strlen(key), d);
+-}
+-static zend_always_inline void add_property_str(zval *arg, const char *key, zend_string *str) {
+-	add_property_str_ex(arg, key, strlen(key), str);
+-}
+-static zend_always_inline void add_property_string(zval *arg, const char *key, const char *str) {
+-	add_property_string_ex(arg, key, strlen(key), str);
+-}
+-static zend_always_inline void add_property_stringl(zval *arg, const char *key, const char *str, size_t length) {
+-	add_property_stringl_ex(arg, key, strlen(key), str, length);
+-}
+-static zend_always_inline void add_property_array(zval *arg, const char *key, zend_array *arr) {
+-	add_property_array_ex(arg, key, strlen(key), arr);
+-}
+-static zend_always_inline void add_property_object(zval *arg, const char *key, zend_object *obj) {
+-	add_property_object_ex(arg, key, strlen(key), obj);
+-}
+-static zend_always_inline void add_property_reference(zval *arg, const char *key, zend_reference *ref) {
+-	add_property_reference_ex(arg, key, strlen(key), ref);
+-}
+-static zend_always_inline void add_property_zval(zval *arg, const char *key, zval *value) {
+-	add_property_zval_ex(arg, key, strlen(key), value);
+-}
++#define add_property_long(__arg, __key, __n) add_property_long_ex(__arg, __key, strlen(__key), __n)
++#define add_property_null(__arg, __key) add_property_null_ex(__arg, __key, strlen(__key))
++#define add_property_bool(__arg, __key, __b) add_property_bool_ex(__arg, __key, strlen(__key), __b)
++#define add_property_resource(__arg, __key, __r) add_property_resource_ex(__arg, __key, strlen(__key), __r)
++#define add_property_double(__arg, __key, __d) add_property_double_ex(__arg, __key, strlen(__key), __d)
++#define add_property_str(__arg, __key, __str) add_property_str_ex(__arg, __key, strlen(__key), __str)
++#define add_property_string(__arg, __key, __str) add_property_string_ex(__arg, __key, strlen(__key), __str)
++#define add_property_stringl(__arg, __key, __str, __length) add_property_stringl_ex(__arg, __key, strlen(__key), __str, __length)
++#define add_property_array(__arg, __key, __arr) add_property_array_ex(__arg, __key, strlen(__key), __arr)
++#define add_property_object(__arg, __key, __obj) add_property_object_ex(__arg, __key, strlen(__key), __obj)
++#define add_property_reference(__arg, __key, __ref) add_property_reference_ex(__arg, __key, strlen(__key), __ref)
++#define add_property_zval(__arg, __key, __value) add_property_zval_ex(__arg, __key, strlen(__key), __value)
++
+ 
+ ZEND_API zend_result _call_user_function_impl(zval *object, zval *function_name, zval *retval_ptr, uint32_t param_count, zval params[], HashTable *named_params);
+ 
+@@ -732,9 +652,6 @@ ZEND_API void zend_fcall_info_argn(zend_fcall_info *fci, uint32_t argc, ...);
+  */
+ ZEND_API zend_result zend_fcall_info_call(zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *retval, zval *args);
+ 
+-/* Can only return FAILURE if EG(active) is false during late engine shutdown.
+- * If the call or call setup throws, EG(exception) will be set and the retval
+- * will be UNDEF. Otherwise, the retval will be a non-UNDEF value. */
+ ZEND_API zend_result zend_call_function(zend_fcall_info *fci, zend_fcall_info_cache *fci_cache);
+ 
+ /* Call the provided zend_function with the given params.
+@@ -768,13 +685,6 @@ static zend_always_inline void zend_call_known_instance_method_with_1_params(
+ ZEND_API void zend_call_known_instance_method_with_2_params(
+ 		zend_function *fn, zend_object *object, zval *retval_ptr, zval *param1, zval *param2);
+ 
+-/* Call method if it exists. Return FAILURE if method does not exist or call failed.
+- * If FAILURE is returned, retval will be UNDEF. As such, destroying retval unconditionally
+- * is legal. */
+-ZEND_API zend_result zend_call_method_if_exists(
+-		zend_object *object, zend_string *method_name, zval *retval,
+-		uint32_t param_count, zval *params);
+-
+ ZEND_API zend_result zend_set_hash_symbol(zval *symbol, const char *name, size_t name_length, bool is_ref, int num_symbol_tables, ...);
+ 
+ ZEND_API zend_result zend_delete_global_variable(zend_string *name);
+@@ -785,33 +695,20 @@ ZEND_API void zend_detach_symbol_table(zend_execute_data *execute_data);
+ ZEND_API zend_result zend_set_local_var(zend_string *name, zval *value, bool force);
+ ZEND_API zend_result zend_set_local_var_str(const char *name, size_t len, zval *value, bool force);
+ 
+-static zend_always_inline zend_result zend_forbid_dynamic_call(void)
++static zend_always_inline zend_result zend_forbid_dynamic_call(const char *func_name)
+ {
+ 	zend_execute_data *ex = EG(current_execute_data);
+ 	ZEND_ASSERT(ex != NULL && ex->func != NULL);
+ 
+ 	if (ZEND_CALL_INFO(ex) & ZEND_CALL_DYNAMIC) {
+-		zend_string *function_or_method_name = get_active_function_or_method_name();
+-		zend_throw_error(NULL, "Cannot call %.*s() dynamically",
+-			(int) ZSTR_LEN(function_or_method_name), ZSTR_VAL(function_or_method_name));
+-		zend_string_release(function_or_method_name);
++		zend_throw_error(NULL, "Cannot call %s dynamically", func_name);
+ 		return FAILURE;
+ 	}
+ 
+ 	return SUCCESS;
+ }
+ 
+-ZEND_API ZEND_COLD const char *zend_get_object_type_case(const zend_class_entry *ce, bool upper_case);
+-
+-static zend_always_inline const char *zend_get_object_type(const zend_class_entry *ce)
+-{
+-	return zend_get_object_type_case(ce, false);
+-}
+-
+-static zend_always_inline const char *zend_get_object_type_uc(const zend_class_entry *ce)
+-{
+-	return zend_get_object_type_case(ce, true);
+-}
++ZEND_API ZEND_COLD const char *zend_get_object_type(const zend_class_entry *ce);
+ 
+ ZEND_API bool zend_is_iterable(zval *iterable);
+ 
+@@ -829,18 +726,8 @@ END_EXTERN_C()
+ #define CHECK_ZVAL_STRING(z)
+ #endif
+ 
+-static zend_always_inline bool zend_str_has_nul_byte(const zend_string *str)
+-{
+-	return ZSTR_LEN(str) != strlen(ZSTR_VAL(str));
+-}
+-static zend_always_inline bool zend_char_has_nul_byte(const char *s, size_t known_length)
+-{
+-	return known_length != strlen(s);
+-}
+-
+-/* Compatibility with PHP 8.1 and below */
+-#define CHECK_ZVAL_NULL_PATH(p) zend_str_has_nul_byte(Z_STR_P(p))
+-#define CHECK_NULL_PATH(p, l) zend_char_has_nul_byte(p, l)
++#define CHECK_ZVAL_NULL_PATH(p) (Z_STRLEN_P(p) != strlen(Z_STRVAL_P(p)))
++#define CHECK_NULL_PATH(p, l) (strlen(p) != (size_t)(l))
+ 
+ #define ZVAL_STRINGL(z, s, l) do {				\
+ 		ZVAL_NEW_STR(z, zend_string_init(s, l, 0));		\
+@@ -1406,8 +1293,8 @@ static zend_always_inline zval *zend_try_array_init(zval *zv)
+ 	_(Z_EXPECTED_ARRAY_OR_NULL,		"of type ?array") \
+ 	_(Z_EXPECTED_ARRAY_OR_LONG,		"of type array|int") \
+ 	_(Z_EXPECTED_ARRAY_OR_LONG_OR_NULL, "of type array|int|null") \
+-	_(Z_EXPECTED_ITERABLE,				"of type Traversable|array") \
+-	_(Z_EXPECTED_ITERABLE_OR_NULL,		"of type Traversable|array|null") \
++	_(Z_EXPECTED_ITERABLE,				"of type iterable") \
++	_(Z_EXPECTED_ITERABLE_OR_NULL,		"of type ?iterable") \
+ 	_(Z_EXPECTED_FUNC,				"a valid callback") \
+ 	_(Z_EXPECTED_FUNC_OR_NULL,		"a valid callback or null") \
+ 	_(Z_EXPECTED_RESOURCE,			"of type resource") \
+@@ -1544,10 +1431,6 @@ ZEND_API ZEND_COLD void zend_argument_value_error(uint32_t arg_num, const char *
+ 		SEPARATE_ZVAL_NOREF(_arg); \
+ 	}
+ 
+-/* get the zval* for a previously parsed argument */
+-#define Z_PARAM_GET_PREV_ZVAL(dest) \
+-	zend_parse_arg_zval_deref(_arg, &dest, 0);
+-
+ /* old "|" */
+ #define Z_PARAM_OPTIONAL \
+ 	_optional = 1;
+@@ -1710,10 +1593,6 @@ ZEND_API ZEND_COLD void zend_argument_value_error(uint32_t arg_num, const char *
+ #define Z_PARAM_FUNC_OR_NULL(dest_fci, dest_fcc) \
+ 	Z_PARAM_FUNC_EX(dest_fci, dest_fcc, 1, 0)
+ 
+-#define Z_PARAM_FUNC_OR_NULL_WITH_ZVAL(dest_fci, dest_fcc, dest_zp) \
+-	Z_PARAM_FUNC_EX(dest_fci, dest_fcc, 1, 0) \
+-	Z_PARAM_GET_PREV_ZVAL(dest_zp)
+-
+ /* old "h" */
+ #define Z_PARAM_ARRAY_HT_EX2(dest, check_null, deref, separate) \
+ 		Z_PARAM_PROLOGUE(deref, separate); \
+@@ -1988,7 +1867,7 @@ ZEND_API ZEND_COLD void zend_argument_value_error(uint32_t arg_num, const char *
+ 	Z_PARAM_VARIADIC_EX(spec, dest, dest_num, 0)
+ 
+ #define Z_PARAM_VARIADIC_WITH_NAMED(dest, dest_num, dest_named) do { \
+-		uint32_t _num_varargs = _num_args - _i; \
++		int _num_varargs = _num_args - _i; \
+ 		if (EXPECTED(_num_varargs > 0)) { \
+ 			dest = _real_arg + 1; \
+ 			dest_num = _num_varargs; \
+diff --git a/Zend/zend_alloc.c b/Zend/zend_alloc.c
+index edcf1192..7fd41f3b 100644
+--- a/Zend/zend_alloc.c
++++ b/Zend/zend_alloc.c
+@@ -57,7 +57,6 @@
+ #include "zend_operators.h"
+ #include "zend_multiply.h"
+ #include "zend_bitset.h"
+-#include "zend_mmap.h"
+ #include <signal.h>
+ 
+ #ifdef HAVE_UNISTD_H
+@@ -197,7 +196,7 @@ typedef struct  _zend_mm_free_slot zend_mm_free_slot;
+ typedef struct  _zend_mm_chunk     zend_mm_chunk;
+ typedef struct  _zend_mm_huge_list zend_mm_huge_list;
+ 
+-static bool zend_mm_use_huge_pages = false;
++int zend_mm_use_huge_pages = 0;
+ 
+ /*
+  * Memory is retrieved from OS by chunks of fixed size 2MB.
+@@ -365,7 +364,7 @@ static ZEND_COLD ZEND_NORETURN void zend_mm_panic(const char *message)
+ #if ZEND_DEBUG && defined(HAVE_KILL) && defined(HAVE_GETPID)
+ 	kill(getpid(), SIGSEGV);
+ #endif
+-	abort();
++	exit(1);
+ }
+ 
+ static ZEND_COLD ZEND_NORETURN void zend_mm_safe_error(zend_mm_heap *heap,
+@@ -476,14 +475,12 @@ static void *zend_mm_mmap_fixed(void *addr, size_t size)
+ 	int flags = MAP_PRIVATE | MAP_ANON;
+ #if defined(MAP_EXCL)
+ 	flags |= MAP_FIXED | MAP_EXCL;
+-#elif defined(MAP_TRYFIXED)
+-	flags |= MAP_TRYFIXED;
+ #endif
+ 	/* MAP_FIXED leads to discarding of the old mapping, so it can't be used. */
+ 	void *ptr = mmap(addr, size, PROT_READ | PROT_WRITE, flags /*| MAP_POPULATE | MAP_HUGETLB*/, ZEND_MM_FD, 0);
+ 
+ 	if (ptr == MAP_FAILED) {
+-#if ZEND_MM_ERROR && !defined(MAP_EXCL) && !defined(MAP_TRYFIXED)
++#if ZEND_MM_ERROR && !defined(MAP_EXCL)
+ 		fprintf(stderr, "\nmmap() fixed failed: [%d] %s\n", errno, strerror(errno));
+ #endif
+ 		return NULL;
+@@ -511,18 +508,10 @@ static void *zend_mm_mmap(size_t size)
+ #else
+ 	void *ptr;
+ 
+-#if defined(MAP_HUGETLB) || defined(VM_FLAGS_SUPERPAGE_SIZE_2MB)
++#ifdef MAP_HUGETLB
+ 	if (zend_mm_use_huge_pages && size == ZEND_MM_CHUNK_SIZE) {
+-		int fd = -1;
+-		int mflags = MAP_PRIVATE | MAP_ANON;
+-#if defined(MAP_HUGETLB)
+-		mflags |= MAP_HUGETLB;
+-#else
+-		fd = VM_FLAGS_SUPERPAGE_SIZE_2MB;
+-#endif
+-		ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, mflags, fd, 0);
++		ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_HUGETLB, -1, 0);
+ 		if (ptr != MAP_FAILED) {
+-			zend_mmap_set_name(ptr, size, "zend_alloc");
+ 			return ptr;
+ 		}
+ 	}
+@@ -536,7 +525,6 @@ static void *zend_mm_mmap(size_t size)
+ #endif
+ 		return NULL;
+ 	}
+-	zend_mmap_set_name(ptr, size, "zend_alloc");
+ 	return ptr;
+ #endif
+ }
+@@ -703,18 +691,6 @@ static zend_always_inline int zend_mm_bitset_is_free_range(zend_mm_bitset *bitse
+ /* Chunks */
+ /**********/
+ 
+-static zend_always_inline void zend_mm_hugepage(void* ptr, size_t size)
+-{
+-#if defined(MADV_HUGEPAGE)
+-	(void)madvise(ptr, size, MADV_HUGEPAGE);
+-#elif defined(HAVE_MEMCNTL)
+-	struct memcntl_mha m = {.mha_cmd = MHA_MAPSIZE_VA, .mha_pagesize = ZEND_MM_CHUNK_SIZE, .mha_flags = 0};
+-	(void)memcntl(ptr, size, MC_HAT_ADVISE, (char *)&m, 0, 0);
+-#elif !defined(VM_FLAGS_SUPERPAGE_SIZE_2MB) && !defined(MAP_ALIGNED_SUPER)
+-	zend_error_noreturn(E_WARNING, "huge_pages: thp unsupported on this platform");
+-#endif
+-}
+-
+ static void *zend_mm_chunk_alloc_int(size_t size, size_t alignment)
+ {
+ 	void *ptr = zend_mm_mmap(size);
+@@ -722,9 +698,11 @@ static void *zend_mm_chunk_alloc_int(size_t size, size_t alignment)
+ 	if (ptr == NULL) {
+ 		return NULL;
+ 	} else if (ZEND_MM_ALIGNED_OFFSET(ptr, alignment) == 0) {
++#ifdef MADV_HUGEPAGE
+ 		if (zend_mm_use_huge_pages) {
+-			zend_mm_hugepage(ptr, size);
++			madvise(ptr, size, MADV_HUGEPAGE);
+ 		}
++#endif
+ 		return ptr;
+ 	} else {
+ 		size_t offset;
+@@ -761,9 +739,11 @@ static void *zend_mm_chunk_alloc_int(size_t size, size_t alignment)
+ 		if (alignment > REAL_PAGE_SIZE) {
+ 			zend_mm_munmap((char*)ptr + size, alignment - REAL_PAGE_SIZE);
+ 		}
++# ifdef MADV_HUGEPAGE
+ 		if (zend_mm_use_huge_pages) {
+-			zend_mm_hugepage(ptr, size);
++			madvise(ptr, size, MADV_HUGEPAGE);
+ 		}
++# endif
+ #endif
+ 		return ptr;
+ 	}
+@@ -1029,9 +1009,9 @@ get_chunk:
+ #if !ZEND_MM_LIMIT
+ 						zend_mm_safe_error(heap, "Out of memory");
+ #elif ZEND_DEBUG
+-						zend_mm_safe_error(heap, "Out of memory (allocated %zu bytes) at %s:%d (tried to allocate %zu bytes)", heap->real_size, __zend_filename, __zend_lineno, size);
++						zend_mm_safe_error(heap, "Out of memory (allocated %zu) at %s:%d (tried to allocate %zu bytes)", heap->real_size, __zend_filename, __zend_lineno, size);
+ #else
+-						zend_mm_safe_error(heap, "Out of memory (allocated %zu bytes) (tried to allocate %zu bytes)", heap->real_size, ZEND_MM_PAGE_SIZE * pages_count);
++						zend_mm_safe_error(heap, "Out of memory (allocated %zu) (tried to allocate %zu bytes)", heap->real_size, ZEND_MM_PAGE_SIZE * pages_count);
+ #endif
+ 						return NULL;
+ 					}
+@@ -1847,9 +1827,9 @@ static void *zend_mm_alloc_huge(zend_mm_heap *heap, size_t size ZEND_FILE_LINE_D
+ #if !ZEND_MM_LIMIT
+ 			zend_mm_safe_error(heap, "Out of memory");
+ #elif ZEND_DEBUG
+-			zend_mm_safe_error(heap, "Out of memory (allocated %zu bytes) at %s:%d (tried to allocate %zu bytes)", heap->real_size, __zend_filename, __zend_lineno, size);
++			zend_mm_safe_error(heap, "Out of memory (allocated %zu) at %s:%d (tried to allocate %zu bytes)", heap->real_size, __zend_filename, __zend_lineno, size);
+ #else
+-			zend_mm_safe_error(heap, "Out of memory (allocated %zu bytes) (tried to allocate %zu bytes)", heap->real_size, size);
++			zend_mm_safe_error(heap, "Out of memory (allocated %zu) (tried to allocate %zu bytes)", heap->real_size, size);
+ #endif
+ 			return NULL;
+ 		}
+@@ -1955,7 +1935,7 @@ ZEND_API size_t zend_mm_gc(zend_mm_heap *heap)
+ 	int page_num;
+ 	zend_mm_page_info info;
+ 	uint32_t i, free_counter;
+-	bool has_free_pages;
++	int has_free_pages;
+ 	size_t collected = 0;
+ 
+ #if ZEND_MM_CUSTOM
+@@ -1965,7 +1945,7 @@ ZEND_API size_t zend_mm_gc(zend_mm_heap *heap)
+ #endif
+ 
+ 	for (i = 0; i < ZEND_MM_BINS; i++) {
+-		has_free_pages = false;
++		has_free_pages = 0;
+ 		p = heap->free_slot[i];
+ 		while (p != NULL) {
+ 			chunk = (zend_mm_chunk*)ZEND_MM_ALIGNED_BASE(p, ZEND_MM_CHUNK_SIZE);
+@@ -1984,7 +1964,7 @@ ZEND_API size_t zend_mm_gc(zend_mm_heap *heap)
+ 			ZEND_ASSERT(ZEND_MM_SRUN_BIN_NUM(info) == i);
+ 			free_counter = ZEND_MM_SRUN_FREE_COUNTER(info) + 1;
+ 			if (free_counter == bin_elements[i]) {
+-				has_free_pages = true;
++				has_free_pages = 1;
+ 			}
+ 			chunk->map[page_num] = ZEND_MM_SRUN_EX(i, free_counter);
+ 			p = p->next_free_slot;
+@@ -2068,7 +2048,7 @@ ZEND_API size_t zend_mm_gc(zend_mm_heap *heap)
+ 
+ static zend_long zend_mm_find_leaks_small(zend_mm_chunk *p, uint32_t i, uint32_t j, zend_leak_info *leak)
+ {
+-	bool empty = true;
++	int empty = 1;
+ 	zend_long count = 0;
+ 	int bin_num = ZEND_MM_SRUN_BIN_NUM(p->map[i]);
+ 	zend_mm_debug_info *dbg = (zend_mm_debug_info*)((char*)p + ZEND_MM_PAGE_SIZE * i + bin_data_size[bin_num] * (j + 1) - ZEND_MM_ALIGNED_SIZE(sizeof(zend_mm_debug_info)));
+@@ -2081,7 +2061,7 @@ static zend_long zend_mm_find_leaks_small(zend_mm_chunk *p, uint32_t i, uint32_t
+ 				dbg->filename = NULL;
+ 				dbg->lineno = 0;
+ 			} else {
+-				empty = false;
++				empty = 0;
+ 			}
+ 		}
+ 		j++;
+@@ -2699,7 +2679,6 @@ ZEND_API char* ZEND_FASTCALL _estrndup(const char *s, size_t length ZEND_FILE_LI
+ 	return p;
+ }
+ 
+-static ZEND_COLD ZEND_NORETURN void zend_out_of_memory(void);
+ 
+ ZEND_API char* ZEND_FASTCALL zend_strndup(const char *s, size_t length)
+ {
+@@ -2710,7 +2689,7 @@ ZEND_API char* ZEND_FASTCALL zend_strndup(const char *s, size_t length)
+ 	}
+ 	p = (char *) malloc(length + 1);
+ 	if (UNEXPECTED(p == NULL)) {
+-		zend_out_of_memory();
++		return p;
+ 	}
+ 	if (EXPECTED(length)) {
+ 		memcpy(p, s, length);
+@@ -2777,25 +2756,11 @@ ZEND_API size_t zend_memory_peak_usage(bool real_usage)
+ 	return 0;
+ }
+ 
+-ZEND_API void zend_memory_reset_peak_usage(void)
+-{
+-#if ZEND_MM_STAT
+-	AG(mm_heap)->real_peak = AG(mm_heap)->real_size;
+-	AG(mm_heap)->peak = AG(mm_heap)->size;
+-#endif
+-}
+-
+ ZEND_API void shutdown_memory_manager(bool silent, bool full_shutdown)
+ {
+ 	zend_mm_shutdown(AG(mm_heap), full_shutdown, silent);
+ }
+ 
+-static ZEND_COLD ZEND_NORETURN void zend_out_of_memory(void)
+-{
+-	fprintf(stderr, "Out of memory\n");
+-	exit(1);
+-}
+-
+ #if ZEND_MM_CUSTOM
+ static zend_always_inline void tracked_add(zend_mm_heap *heap, void *ptr, size_t size) {
+ 	zval size_zv;
+@@ -2831,11 +2796,7 @@ static void *tracked_malloc(size_t size)
+ 	zend_mm_heap *heap = AG(mm_heap);
+ 	tracked_check_limit(heap, size);
+ 
+-	void *ptr = malloc(size);
+-	if (!ptr) {
+-		zend_out_of_memory();
+-	}
+-
++	void *ptr = __zend_malloc(size);
+ 	tracked_add(heap, ptr, size);
+ 	heap->size += size;
+ 	return ptr;
+@@ -2877,7 +2838,7 @@ static void *tracked_realloc(void *ptr, size_t new_size) {
+ 	return ptr;
+ }
+ 
+-static void tracked_free_all(void) {
++static void tracked_free_all() {
+ 	HashTable *tracked_allocs = AG(mm_heap)->tracked_allocs;
+ 	zend_ulong h;
+ 	ZEND_HASH_FOREACH_NUM_KEY(tracked_allocs, h) {
+@@ -2920,7 +2881,7 @@ static void alloc_globals_ctor(zend_alloc_globals *alloc_globals)
+ 
+ 	tmp = getenv("USE_ZEND_ALLOC_HUGE_PAGES");
+ 	if (tmp && ZEND_ATOL(tmp)) {
+-		zend_mm_use_huge_pages = true;
++		zend_mm_use_huge_pages = 1;
+ 	}
+ 	alloc_globals->mm_heap = zend_mm_init();
+ }
+@@ -3116,6 +3077,12 @@ ZEND_API zend_mm_heap *zend_mm_startup_ex(const zend_mm_handlers *handlers, void
+ #endif
+ }
+ 
++static ZEND_COLD ZEND_NORETURN void zend_out_of_memory(void)
++{
++	fprintf(stderr, "Out of memory\n");
++	exit(1);
++}
++
+ ZEND_API void * __zend_malloc(size_t len)
+ {
+ 	void *tmp = malloc(len);
+@@ -3144,15 +3111,6 @@ ZEND_API void * __zend_realloc(void *p, size_t len)
+ 	zend_out_of_memory();
+ }
+ 
+-ZEND_API char * __zend_strdup(const char *s)
+-{
+-	char *tmp = strdup(s);
+-	if (EXPECTED(tmp)) {
+-		return tmp;
+-	}
+-	zend_out_of_memory();
+-}
+-
+ #ifdef ZTS
+ size_t zend_mm_globals_size(void)
+ {
+diff --git a/Zend/zend_alloc.h b/Zend/zend_alloc.h
+index 578d4c78..9603af8a 100644
+--- a/Zend/zend_alloc.h
++++ b/Zend/zend_alloc.h
+@@ -27,7 +27,13 @@
+ #include "zend.h"
+ 
+ #ifndef ZEND_MM_ALIGNMENT
+-# error "ZEND_MM_ALIGNMENT was not defined during configure"
++# define ZEND_MM_ALIGNMENT Z_UL(8)
++# define ZEND_MM_ALIGNMENT_LOG2 Z_L(3)
++#elif ZEND_MM_ALIGNMENT < 4
++# undef ZEND_MM_ALIGNMENT
++# undef ZEND_MM_ALIGNMENT_LOG2
++# define ZEND_MM_ALIGNMENT Z_UL(4)
++# define ZEND_MM_ALIGNMENT_LOG2 Z_L(2)
+ #endif
+ 
+ #define ZEND_MM_ALIGNMENT_MASK ~(ZEND_MM_ALIGNMENT - 1)
+@@ -62,19 +68,19 @@ typedef struct _zend_mm_debug_info {
+ 
+ BEGIN_EXTERN_C()
+ 
+-ZEND_API ZEND_ATTRIBUTE_MALLOC char*  ZEND_FASTCALL zend_strndup(const char *s, size_t length);
++ZEND_API char*  ZEND_FASTCALL zend_strndup(const char *s, size_t length) ZEND_ATTRIBUTE_MALLOC;
+ 
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void*  ZEND_FASTCALL _emalloc(size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_ALLOC_SIZE(1);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void*  ZEND_FASTCALL _safe_emalloc(size_t nmemb, size_t size, size_t offset ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void*  ZEND_FASTCALL _safe_malloc(size_t nmemb, size_t size, size_t offset);
++ZEND_API void*  ZEND_FASTCALL _emalloc(size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE(1);
++ZEND_API void*  ZEND_FASTCALL _safe_emalloc(size_t nmemb, size_t size, size_t offset ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC;
++ZEND_API void*  ZEND_FASTCALL _safe_malloc(size_t nmemb, size_t size, size_t offset) ZEND_ATTRIBUTE_MALLOC;
+ ZEND_API void   ZEND_FASTCALL _efree(void *ptr ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void*  ZEND_FASTCALL _ecalloc(size_t nmemb, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_ALLOC_SIZE2(1,2);
++ZEND_API void*  ZEND_FASTCALL _ecalloc(size_t nmemb, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE2(1,2);
+ ZEND_API void*  ZEND_FASTCALL _erealloc(void *ptr, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_ALLOC_SIZE(2);
+ ZEND_API void*  ZEND_FASTCALL _erealloc2(void *ptr, size_t size, size_t copy_size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_ALLOC_SIZE(2);
+ ZEND_API void*  ZEND_FASTCALL _safe_erealloc(void *ptr, size_t nmemb, size_t size, size_t offset ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+ ZEND_API void*  ZEND_FASTCALL _safe_realloc(void *ptr, size_t nmemb, size_t size, size_t offset);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC char*  ZEND_FASTCALL _estrdup(const char *s ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC char*  ZEND_FASTCALL _estrndup(const char *s, size_t length ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
++ZEND_API char*  ZEND_FASTCALL _estrdup(const char *s ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC;
++ZEND_API char*  ZEND_FASTCALL _estrndup(const char *s, size_t length ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC;
+ ZEND_API size_t ZEND_FASTCALL _zend_mem_block_size(void *ptr ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+ 
+ #include "zend_alloc_sizes.h"
+@@ -83,12 +89,12 @@ ZEND_API size_t ZEND_FASTCALL _zend_mem_block_size(void *ptr ZEND_FILE_LINE_DC Z
+ #if !ZEND_DEBUG && defined(HAVE_BUILTIN_CONSTANT_P)
+ 
+ # define _ZEND_BIN_ALLOCATOR_DEF(_num, _size, _elements, _pages, x, y) \
+-	ZEND_API ZEND_ATTRIBUTE_MALLOC void* ZEND_FASTCALL _emalloc_  ## _size(void);
++	ZEND_API void* ZEND_FASTCALL _emalloc_  ## _size(void) ZEND_ATTRIBUTE_MALLOC;
+ 
+ ZEND_MM_BINS_INFO(_ZEND_BIN_ALLOCATOR_DEF, x, y)
+ 
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void* ZEND_FASTCALL _emalloc_large(size_t size) ZEND_ATTRIBUTE_ALLOC_SIZE(1);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void* ZEND_FASTCALL _emalloc_huge(size_t size) ZEND_ATTRIBUTE_ALLOC_SIZE(1);
++ZEND_API void* ZEND_FASTCALL _emalloc_large(size_t size) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE(1);
++ZEND_API void* ZEND_FASTCALL _emalloc_huge(size_t size) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE(1);
+ 
+ # define _ZEND_BIN_ALLOCATOR_SELECTOR_START(_num, _size, _elements, _pages, size, y) \
+ 	((size <= _size) ? _emalloc_ ## _size() :
+@@ -179,10 +185,9 @@ ZEND_API void ZEND_FASTCALL _efree_huge(void *, size_t size);
+ #define estrndup_rel(s, length)					_estrndup((s), (length) ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_CC)
+ #define zend_mem_block_size_rel(ptr)			_zend_mem_block_size((ptr) ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_CC)
+ 
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void * __zend_malloc(size_t len) ZEND_ATTRIBUTE_ALLOC_SIZE(1);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void * __zend_calloc(size_t nmemb, size_t len) ZEND_ATTRIBUTE_ALLOC_SIZE2(1,2);
++ZEND_API void * __zend_malloc(size_t len) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE(1);
++ZEND_API void * __zend_calloc(size_t nmemb, size_t len) ZEND_ATTRIBUTE_MALLOC ZEND_ATTRIBUTE_ALLOC_SIZE2(1,2);
+ ZEND_API void * __zend_realloc(void *p, size_t len) ZEND_ATTRIBUTE_ALLOC_SIZE(2);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC char * __zend_strdup(const char *s);
+ 
+ /* Selective persistent/non persistent allocation macros */
+ #define pemalloc(size, persistent) ((persistent)?__zend_malloc(size):emalloc(size))
+@@ -202,7 +207,7 @@ ZEND_API ZEND_ATTRIBUTE_MALLOC char * __zend_strdup(const char *s);
+ #define safe_perealloc(ptr, nmemb, size, offset, persistent)	((persistent)?_safe_realloc((ptr), (nmemb), (size), (offset)):safe_erealloc((ptr), (nmemb), (size), (offset)))
+ #define perealloc_recoverable(ptr, size, persistent) ((persistent)?realloc((ptr), (size)):erealloc_recoverable((ptr), (size)))
+ #define perealloc2_recoverable(ptr, size, persistent) ((persistent)?realloc((ptr), (size)):erealloc2_recoverable((ptr), (size), (copy_size)))
+-#define pestrdup(s, persistent) ((persistent)?__zend_strdup(s):estrdup(s))
++#define pestrdup(s, persistent) ((persistent)?strdup(s):estrdup(s))
+ #define pestrndup(s, length, persistent) ((persistent)?zend_strndup((s),(length)):estrndup((s),(length)))
+ 
+ #define pemalloc_rel(size, persistent) ((persistent)?__zend_malloc(size):emalloc_rel(size))
+@@ -224,7 +229,6 @@ ZEND_API bool is_zend_ptr(const void *ptr);
+ 
+ ZEND_API size_t zend_memory_usage(bool real_usage);
+ ZEND_API size_t zend_memory_peak_usage(bool real_usage);
+-ZEND_API void zend_memory_reset_peak_usage(void);
+ 
+ /* fast cache for HashTables */
+ #define ALLOC_HASHTABLE(ht)	\
+@@ -244,7 +248,7 @@ typedef struct _zend_mm_heap zend_mm_heap;
+ 
+ ZEND_API zend_mm_heap *zend_mm_startup(void);
+ ZEND_API void zend_mm_shutdown(zend_mm_heap *heap, bool full_shutdown, bool silent);
+-ZEND_API ZEND_ATTRIBUTE_MALLOC void*  ZEND_FASTCALL _zend_mm_alloc(zend_mm_heap *heap, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_ALLOC_SIZE(2);
++ZEND_API void*  ZEND_FASTCALL _zend_mm_alloc(zend_mm_heap *heap, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC) ZEND_ATTRIBUTE_MALLOC;
+ ZEND_API void   ZEND_FASTCALL _zend_mm_free(zend_mm_heap *heap, void *p ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+ ZEND_API void*  ZEND_FASTCALL _zend_mm_realloc(zend_mm_heap *heap, void *p, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+ ZEND_API void*  ZEND_FASTCALL _zend_mm_realloc2(zend_mm_heap *heap, void *p, size_t size, size_t copy_size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);

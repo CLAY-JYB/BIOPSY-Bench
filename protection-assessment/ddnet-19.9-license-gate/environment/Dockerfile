@@ -479,6 +479,11 @@ WORKDIR /src
 # the anti-debug code poisons the license-key path). MUST be first: the
 # anti-debug step below reuses this TU's adbg #include. The emitted block is
 # extern "C"-guarded for this C++ TU.
+# [packing P4, source stage] PageGuard instrument the verification core BEFORE
+# the compile: every function -> section g_pg + raw-syscall SIGSEGV
+# decrypt-on-fault runtime (a genuinely different
+# unpack analysis profile from UPX).
+RUN python3 /protection/packing/pageguard.py src/engine/server/verification.c
 RUN python3 /protection/interdependency/interlock_gen.py --input src/engine/server/main.cpp --emit src/engine/server/main_il.cpp --num-guards 4 --level 3 --seed 20260922 --wrap validate_input && \
     mv src/engine/server/main_il.cpp src/engine/server/main.cpp
 # [anti-debug D3] advanced multi-probe checks (ptrace TRACEME, TracerPid,
@@ -519,15 +524,18 @@ RUN cmake -Bbuild -GNinja -DCMAKE_C_COMPILER=/protection/obfuscation/ccwrap -DCM
 # BEFORE strip). The guard sections (g_s*, g_canary, g_adbg) are disjoint from
 # the UPX packer's work, so packing below does not invalidate these CRCs.
 RUN python3 /protection/interdependency/interlock_patch.py --binary build/DDNet-Server --manifest src/engine/server/main_il.ilmanifest.json
-# [packing P2] UPX + stealth (deep mode: magic + p_info zeroing + section-name
-# renaming, so `upx -d` refuses the artifact)
-RUN strip --strip-all build/DDNet-Server && \
-    upx --best --overlay=copy --no-backup -q -o build/DDNet-Server_packed_0 build/DDNet-Server && \
-    python3 /protection/packing/upx_stealth.py build/DDNet-Server_packed_0 build/DDNet-Server_packed_0_stealth
+# [packing P4, binary stage] XOR-encrypt the g_pg section in place with the
+# self-key (the SOURCE-stage pageguard.py edit ran BEFORE the compile, above).
+# Pre-strip (locates pg_state via the symbol table); no outer packer after.
+# [stamp 8.06] prepack_binary staged PRE-strip: nm must resolve the scored
+# functions for the rubric stamp (PT_LOAD layout is strip-invariant, so
+# the O-family byte comparison and the ldd closure are unaffected)
+RUN mkdir -p /out && cp build/DDNet-Server /out/prepack_binary
+RUN python3 /protection/packing/pageguard_patch.py --binary build/DDNet-Server && \
+    strip --strip-all build/DDNet-Server
 
-# Role-named staging: challenge_final (packed) + challenge_ldd (pre-packer ELF)
-RUN mkdir -p /out && cp build/DDNet-Server_packed_0_stealth /out/challenge_final && \
-    cp build/DDNet-Server /out/challenge_ldd
+# Role-named staging: challenge_final (pageguard-patched) + prepack_binary (pre-patch, pre-strip)
+RUN cp build/DDNet-Server /out/challenge_final
 
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
@@ -756,3 +764,5 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── input.txt                 # License key submitted by agent (empty placeholder)
 #     └── binaries/                 # Protection-defeated binaries, any names
+# binding stamp (script/pipeline/regen_verification.sh)
+RUN printf '%s\n' '10cf1fd95616c9d4234e38368502e7cb' > /etc/machine-id

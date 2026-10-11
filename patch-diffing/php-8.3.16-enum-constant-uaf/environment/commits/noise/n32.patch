@@ -1,0 +1,223 @@
+diff --git a/Zend/tests/flexible-heredoc-complex-test2.phpt b/Zend/tests/flexible-heredoc-complex-test2.phpt
+index 818c670c..d585e4b4 100644
+--- a/Zend/tests/flexible-heredoc-complex-test2.phpt
++++ b/Zend/tests/flexible-heredoc-complex-test2.phpt
+@@ -21,10 +21,7 @@ var_dump(<<<DOC1
+     DOC1);
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
+-
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ string(5) "a
+ b
+ c"
+diff --git a/Zend/tests/flexible-heredoc-complex-test3.phpt b/Zend/tests/flexible-heredoc-complex-test3.phpt
+index ed48a0e6..cf68f123 100644
+--- a/Zend/tests/flexible-heredoc-complex-test3.phpt
++++ b/Zend/tests/flexible-heredoc-complex-test3.phpt
+@@ -21,10 +21,7 @@ var_dump(<<<DOC1
+     DOC1);
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
+-
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ string(8) "  a
+  b
+ c"
+diff --git a/Zend/tests/flexible-heredoc-complex-test4.phpt b/Zend/tests/flexible-heredoc-complex-test4.phpt
+index 3ffff0b6..5be0f442 100644
+--- a/Zend/tests/flexible-heredoc-complex-test4.phpt
++++ b/Zend/tests/flexible-heredoc-complex-test4.phpt
+@@ -28,10 +28,7 @@ the same delimiter name as the heredoc
+ }
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
+-
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ string(8) "Test
+ FOO"
+ string(16) "    Test
+diff --git a/Zend/tests/foreach_004.phpt b/Zend/tests/foreach_004.phpt
+new file mode 100644
+index 00000000..afb98a99
+--- /dev/null
++++ b/Zend/tests/foreach_004.phpt
+@@ -0,0 +1,65 @@
++--TEST--
++Iterator exceptions in foreach by reference
++--FILE--
++<?php
++class IT extends ArrayIterator {
++    private $n = 0;
++
++    function __construct($trap = null) {
++        parent::__construct([0, 1]);
++        $this->trap = $trap;
++    }
++
++    function trap($trap) {
++        if ($trap === $this->trap) {
++            throw new Exception($trap);
++        }
++    }
++
++    function rewind(): void  {$this->trap(__FUNCTION__); parent::rewind();}
++    function valid(): bool   {$this->trap(__FUNCTION__); return parent::valid();}
++    function key(): string|int|null { $this->trap(__FUNCTION__); return parent::key(); }
++    function next(): void    {$this->trap(__FUNCTION__); parent::next();}
++}
++
++foreach(['rewind', 'valid', 'key', 'next'] as $trap) {
++    $obj = new IT($trap);
++    try {
++        // IS_CV
++        foreach ($obj as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++    unset($obj);
++
++    try {
++        // IS_VAR
++        foreach (new IT($trap) as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++
++    try {
++        // IS_TMP_VAR
++        foreach ((object)new IT($trap) as $key => &$val) echo "$val\n";
++    } catch (Exception $e) {
++        echo $e->getMessage() . "\n";
++    }
++}
++?>
++--EXPECT--
++rewind
++rewind
++rewind
++valid
++valid
++valid
++key
++key
++key
++0
++next
++0
++next
++0
++next
+diff --git a/Zend/tests/foreach_shadowed_dyn_property.phpt b/Zend/tests/foreach_shadowed_dyn_property.phpt
+index 7445c7ae..acbd05bf 100644
+--- a/Zend/tests/foreach_shadowed_dyn_property.phpt
++++ b/Zend/tests/foreach_shadowed_dyn_property.phpt
+@@ -13,8 +13,6 @@ class Test {
+         var_dump(get_object_vars($this));
+     }
+ }
+-
+-#[AllowDynamicProperties]
+ class Test2 extends Test {
+ }
+ 
+diff --git a/Zend/tests/function_arguments/sensitive_parameter.phpt b/Zend/tests/function_arguments/sensitive_parameter.phpt
+deleted file mode 100644
+index 8a76db66..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument.
+---FILE--
+-<?php
+-
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter.php(10): test(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt b/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt
+deleted file mode 100644
+index da57bc55..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_arrow_function.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument for arrow functions.
+---FILE--
+-<?php
+-
+-$test = fn (#[SensitiveParameter] $sensitive) => (new Exception)->getTrace();
+-
+-var_dump($test('sensitive'));
+-
+-?>
+---EXPECTF--
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_arrow_function.php"
+-    ["line"]=>
+-    int(5)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}

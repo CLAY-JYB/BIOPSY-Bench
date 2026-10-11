@@ -34,7 +34,7 @@ source half of a two-stage tool:
       build).
 
 Usage:
-  python3 pageguard.py verification.c            # in-place, idempotent
+  python3 pageguard.py verification.c # in-place, idempotent
   python3 pageguard.py verification.c --dry-run
 
 PG_DEBUG=1 in the environment enables handler diagnostics over write(2).

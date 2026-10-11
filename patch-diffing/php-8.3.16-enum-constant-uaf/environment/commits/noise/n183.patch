@@ -1,0 +1,368 @@
+diff --git a/ext/mysqli/tests/mysqli_constants.phpt b/ext/mysqli/tests/mysqli_constants.phpt
+index c228e1aa..0380792e 100644
+--- a/ext/mysqli/tests/mysqli_constants.phpt
++++ b/ext/mysqli/tests/mysqli_constants.phpt
+@@ -7,6 +7,7 @@ mysqli.allow_local_infile=1
+ --FILE--
+ <?php
+ 
++$IS_MYSQLND = stristr(mysqli_get_client_info(), "mysqlnd");
+ $constants = get_defined_constants(true);
+ sort($constants);
+ 
+@@ -46,7 +47,6 @@ $expected_constants = array(
+     "MYSQLI_GROUP_FLAG" 				=> true,
+     "MYSQLI_SERVER_QUERY_NO_GOOD_INDEX_USED"=> true,
+     "MYSQLI_SERVER_QUERY_NO_INDEX_USED"	=> true,
+-    "MYSQLI_OPT_LOAD_DATA_LOCAL_DIR"    => true,
+     "MYSQLI_IS_MARIADB"                 => true,
+ 
+     "MYSQLI_TYPE_DECIMAL"				=> true,
+@@ -102,27 +102,48 @@ $expected_constants = array(
+     "MYSQLI_TRANS_COR_NO_RELEASE"		=> true,
+ );
+ 
+-$expected_constants['MYSQLI_OPT_INT_AND_FLOAT_NATIVE'] = true;
++/* depends on the build - experimental */
++if ($IS_MYSQLND) {
++    $expected_constants['MYSQLI_OPT_INT_AND_FLOAT_NATIVE'] = true;
++}
+ 
+-$expected_constants['MYSQLI_STORE_RESULT_COPY_DATA'] = true;
++if ($IS_MYSQLND) {
++    $expected_constants['MYSQLI_STORE_RESULT_COPY_DATA'] = true;
++}
+ 
+-$expected_constants['MYSQLI_REFRESH_BACKUP_LOG'] = true;
++if ($IS_MYSQLND) {
++    $expected_constants['MYSQLI_REFRESH_BACKUP_LOG'] = true;
++}
+ 
+-$version = 50007 + 1;
+-$expected_constants['MYSQLI_OPT_NET_CMD_BUFFER_SIZE'] = true;
+-$expected_constants['MYSQLI_OPT_NET_READ_BUFFER_SIZE'] = true;
+-$expected_constants['MYSQLI_ASYNC'] = true;
++if ($IS_MYSQLND) {
++    $version = 50007 + 1;
++    $expected_constants['MYSQLI_OPT_NET_CMD_BUFFER_SIZE'] = true;
++    $expected_constants['MYSQLI_OPT_NET_READ_BUFFER_SIZE'] = true;
++    $expected_constants['MYSQLI_ASYNC'] = true;
+ 
+-$expected_constants['MYSQLI_SERVER_PS_OUT_PARAMS'] = true;
++    $expected_constants['MYSQLI_SERVER_PS_OUT_PARAMS'] = true;
++} else {
++    $version = mysqli_get_client_version();
++}
+ 
+-$expected_constants['MYSQLI_ON_UPDATE_NOW_FLAG'] = true;
++if (($version > 51122 && $version < 60000) || ($version > 60003) || $IS_MYSQLND) {
++    $expected_constants['MYSQLI_ON_UPDATE_NOW_FLAG'] = true;
++}
+ 
+-$expected_constants['MYSQLI_SERVER_QUERY_WAS_SLOW'] = true;
++/* First introduced in MySQL 6.0, backported to MySQL 5.5 */
++if ($version >= 50500 || $IS_MYSQLND) {
++    $expected_constants['MYSQLI_SERVER_QUERY_WAS_SLOW'] = true;
++}
+ 
+ $expected_constants['MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT'] = true;
+-$expected_constants['MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT'] = true;
++if ($IS_MYSQLND) {
++    $expected_constants['MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT'] = true;
++}
+ 
+-$expected_constants['MYSQLI_SERVER_PUBLIC_KEY'] = true;
++/* First introduced in MySQL 6.0, backported to MySQL 5.5 */
++if ($version >= 50606 || $IS_MYSQLND) {
++    $expected_constants['MYSQLI_SERVER_PUBLIC_KEY'] = true;
++}
+ 
+ $expected_constants = array_merge($expected_constants, array(
+     "MYSQLI_TYPE_NEWDECIMAL"	=> true,
+@@ -143,15 +164,26 @@ $expected_constants = array_merge($expected_constants, array(
+     "MYSQLI_STMT_ATTR_PREFETCH_ROWS"	=> true,
+ ));
+ 
+-$expected_constants['MYSQLI_OPT_SSL_VERIFY_SERVER_CERT'] = true;
++if ($version < 80000 || $version >= 100000 || $IS_MYSQLND) {
++    $expected_constants['MYSQLI_OPT_SSL_VERIFY_SERVER_CERT'] = true;
++}
+ 
+ /* pretty dump test, but that is the best way to mimic mysql.c */
+ $expected_constants["MYSQLI_DATA_TRUNCATED"] = true;
+ 
+-$expected_constants["MYSQLI_OPT_CAN_HANDLE_EXPIRED_PASSWORDS"] = true;
+-$expected_constants["MYSQLI_CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS"] = true;
++if ($IS_MYSQLND || (!$IS_MYSQLND && ($version > 50610))) {
++    /* could be that MySQL/libmysql 5.6.9 had the flag already but it was no stable release */
++    $expected_constants["MYSQLI_OPT_CAN_HANDLE_EXPIRED_PASSWORDS"] = true;
++    $expected_constants["MYSQLI_CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS"] = true;
++}
++
++if ($IS_MYSQLND) {
++    $expected_constants["MYSQLI_TYPE_JSON"]	= true;
++}
+ 
+-$expected_constants["MYSQLI_TYPE_JSON"]	= true;
++if (($version > 80021 && $constants['mysqli']['MYSQLI_IS_MARIADB']) || $IS_MYSQLND) {
++    $expected_constants['MYSQLI_OPT_LOAD_DATA_LOCAL_DIR'] = true;
++}
+ 
+ $unexpected_constants = array();
+ 
+diff --git a/ext/mysqli/tests/mysqli_debug.phpt b/ext/mysqli/tests/mysqli_debug.phpt
+index 25cd8f2c..ec0eacce 100644
+--- a/ext/mysqli/tests/mysqli_debug.phpt
++++ b/ext/mysqli/tests/mysqli_debug.phpt
+@@ -23,34 +23,38 @@ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     if (true !== ($tmp = mysqli_debug(sprintf('d:t:O,%s/mysqli_debug_phpt.trace', sys_get_temp_dir()))))
+         printf("[002] Expecting boolean/true, got %s/%s\n", gettype($tmp), $tmp);
+ 
+-    // table.inc will create a database connection and run some SQL queries, therefore
+-    // the debug file should have entries
+-    require_once('table.inc');
+-
+-    clearstatcache();
+-    $trace_file = sprintf('%s/mysqli_debug_phpt.trace', sys_get_temp_dir());
+-    if (!file_exists($trace_file))
+-        printf("[003] Trace file '%s' has not been created\n", $trace_file);
+-    if (filesize($trace_file) < 50)
+-        printf("[004] Trace file '%s' is very small. filesize() reports only %d bytes. Please check.\n",
+-            $trace_file,
+-            filesize($trace_file));
+-
+-    // will mysqli_debug() mind if the trace file gets removed?
+-    unlink($trace_file);
+-    clearstatcache();
+-
+-    if (!$res = mysqli_query($link, 'SELECT * FROM test'))
+-            printf("[005] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-        else
+-            mysqli_free_result($res);
+-
+-    mysqli_close($link);
+-
+-    clearstatcache();
+-    if (!file_exists($trace_file))
+-        printf("[006] Trace file '%s' does not exist\n", $trace_file);
+-    unlink($trace_file);
++    if ($IS_MYSQLND) {
++        // let's make this mysqlnd only - for libmysql we need debug installation
++
++        // table.inc will create a database connection and run some SQL queries, therefore
++        // the debug file should have entries
++        require_once('table.inc');
++
++        clearstatcache();
++        $trace_file = sprintf('%s/mysqli_debug_phpt.trace', sys_get_temp_dir());
++        if (!file_exists($trace_file))
++            printf("[003] Trace file '%s' has not been created\n", $trace_file);
++        if (filesize($trace_file) < 50)
++            printf("[004] Trace file '%s' is very small. filesize() reports only %d bytes. Please check.\n",
++                $trace_file,
++                filesize($trace_file));
++
++        // will mysqli_debug() mind if the trace file gets removed?
++        unlink($trace_file);
++        clearstatcache();
++
++        if (!$res = mysqli_query($link, 'SELECT * FROM test'))
++                printf("[005] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++            else
++                mysqli_free_result($res);
++
++        mysqli_close($link);
++
++        clearstatcache();
++        if (!file_exists($trace_file))
++            printf("[006] Trace file '%s' does not exist\n", $trace_file);
++        unlink($trace_file);
++    }
+ 
+     print "done!";
+ ?>
+diff --git a/ext/mysqli/tests/mysqli_debug_append.phpt b/ext/mysqli/tests/mysqli_debug_append.phpt
+index 1c26d469..b48e8470 100644
+--- a/ext/mysqli/tests/mysqli_debug_append.phpt
++++ b/ext/mysqli/tests/mysqli_debug_append.phpt
+@@ -15,6 +15,9 @@ if (!defined('MYSQLI_DEBUG_TRACE_ENABLED'))
+ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     die("skip: debug functionality not enabled");
+ 
++if (!$IS_MYSQLND)
++    die("SKIP Libmysql feature not sufficiently spec'd in MySQL C API documentation");
++
+ if (substr(PHP_OS, 0, 3) == 'WIN') die("skip this test is not for Windows platforms");
+ ?>
+ --FILE--
+@@ -81,7 +84,8 @@ if (substr(PHP_OS, 0, 3) == 'WIN') die("skip this test is not for Windows platfo
+ 
+     mysqli_close($link);
+     print "done";
+-    print "libmysql/DBUG package prints some debug info here."
++    if ($IS_MYSQLND)
++        print "libmysql/DBUG package prints some debug info here."
+ ?>
+ --CLEAN--
+ <?php
+diff --git a/ext/mysqli/tests/mysqli_debug_control_string.phpt b/ext/mysqli/tests/mysqli_debug_control_string.phpt
+index eec3a669..73b0b032 100644
+--- a/ext/mysqli/tests/mysqli_debug_control_string.phpt
++++ b/ext/mysqli/tests/mysqli_debug_control_string.phpt
+@@ -14,6 +14,9 @@ if (!defined('MYSQLI_DEBUG_TRACE_ENABLED'))
+ 
+ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     die("skip: debug functionality not enabled");
++
++if (!$IS_MYSQLND)
++    die("SKIP Libmysql feature not sufficiently spec'd in MySQL C API documentation");
+ ?>
+ --FILE--
+ <?php
+@@ -66,7 +69,8 @@ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+ 
+     mysqli_close($link);
+     print "done";
+-    print "libmysql/DBUG package prints some debug info here."
++    if ($IS_MYSQLND)
++        print "libmysql/DBUG package prints some debug info here."
+ ?>
+ --EXPECTF--
+ Warning: mysqli_debug(): Unrecognized format ',' in %s on line %d
+diff --git a/ext/mysqli/tests/mysqli_debug_ini.phpt b/ext/mysqli/tests/mysqli_debug_ini.phpt
+index c53b103f..6827e6cc 100644
+--- a/ext/mysqli/tests/mysqli_debug_ini.phpt
++++ b/ext/mysqli/tests/mysqli_debug_ini.phpt
+@@ -4,7 +4,7 @@ mysqli_debug() - enabling trace with ini setting
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
+ 
+ if (!function_exists('mysqli_debug'))
+     die("skip mysqli_debug() not available");
+@@ -15,6 +15,10 @@ if (!defined('MYSQLI_DEBUG_TRACE_ENABLED'))
+ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     die("skip: debug functionality not enabled");
+ 
++require_once('connect.inc');
++if (!$IS_MYSQLND)
++    die("skip needs mysqlnd");
++
+ if (!$fp = @fopen('/tmp/mysqli_debug_phpt.trace', 'w'))
+     die("skip PHP cannot create a file in /tmp/mysqli_debug_phpt");
+ else
+@@ -25,7 +29,8 @@ else
+ mysqlnd.debug="t:O,/tmp/mysqli_debug_phpt.trace"
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     var_dump(ini_get('mysqlnd.debug'));
+ 
+@@ -43,10 +48,6 @@ mysqlnd.debug="t:O,/tmp/mysqli_debug_phpt.trace"
+ 
+     print "done!";
+ ?>
+---CLEAN--
+-<?php
+-require_once "clean_table.inc";
+-?>
+ --EXPECT--
+ string(32) "t:O,/tmp/mysqli_debug_phpt.trace"
+ done!
+diff --git a/ext/mysqli/tests/mysqli_debug_mysqlnd_control_string.phpt b/ext/mysqli/tests/mysqli_debug_mysqlnd_control_string.phpt
+index 5c2f58e9..8dc6a385 100644
+--- a/ext/mysqli/tests/mysqli_debug_mysqlnd_control_string.phpt
++++ b/ext/mysqli/tests/mysqli_debug_mysqlnd_control_string.phpt
+@@ -14,6 +14,9 @@ if (!defined('MYSQLI_DEBUG_TRACE_ENABLED'))
+ 
+ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     die("skip: debug functionality not enabled");
++
++if (!$IS_MYSQLND)
++    die("SKIP Libmysql feature not sufficiently spec'd in MySQL C API documentation");
+ ?>
+ --FILE--
+ <?php
+@@ -70,7 +73,7 @@ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+         printf("[025] Timestamp not found. One reason could be that the test is borked and does not recognize the format of the gettimeofday() system call. Check manually (and fix the test, if needed :-)). First characters from trace are '%s'\n", substr($trace, 0, 80));
+ 
+     // i - add PID of the current process
+-    // currently PHP is not multi-threaded, so it should be safe to test for the PID of this PHP process
++    // currently PHP is not multi-threaded, so it should be save to test for the PID of this PHP process
+     if (false === ($pid = getmypid()))
+         $pid = "[\d]+";
+ 
+@@ -200,17 +203,22 @@ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+         var_dump($tmp);
+     }
+ 
+-    // m - trace memory allocations
+-    $trace = try_control_string($link, 't:O,' . $trace_file . ':m', $trace_file, 120);
+-    if (!preg_match("@^[|\s]*>\_mysqlnd_p?efree@ismU", $trace, $matches) &&
+-            !preg_match("@^[|\s]*>\_mysqlnd_p?emalloc@ismU", $trace, $matches)) {
+-        printf("[125] Memory dump does neither contain _mysqlnd_pefree nor _mysqlnd_pemalloc calls - check manually.\n");
+-        var_dump($trace);
++    if ($IS_MYSQLND) {
++        // mysqlnd only option
++        // m - trace memory allocations
++        $trace = try_control_string($link, 't:O,' . $trace_file . ':m', $trace_file, 120);
++        if (!preg_match("@^[|\s]*>\_mysqlnd_p?efree@ismU", $trace, $matches) &&
++                !preg_match("@^[|\s]*>\_mysqlnd_p?emalloc@ismU", $trace, $matches)) {
++            printf("[125] Memory dump does neither contain _mysqlnd_pefree nor _mysqlnd_pemalloc calls - check manually.\n");
++            var_dump($trace);
++        }
++
+     }
+ 
+     mysqli_close($link);
+     print "done";
+-    print "libmysql/DBUG package prints some debug info here.";
++    if ($IS_MYSQLND)
++        print "libmysql/DBUG package prints some debug info here.";
+     @unlink($trace_file);
+ ?>
+ --CLEAN--
+diff --git a/ext/mysqli/tests/mysqli_debug_mysqlnd_only.phpt b/ext/mysqli/tests/mysqli_debug_mysqlnd_only.phpt
+index 8d905843..c252e645 100644
+--- a/ext/mysqli/tests/mysqli_debug_mysqlnd_only.phpt
++++ b/ext/mysqli/tests/mysqli_debug_mysqlnd_only.phpt
+@@ -4,7 +4,8 @@ mysqli_debug() - mysqlnd only control strings
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
+ 
+ if (!function_exists('mysqli_debug'))
+     die("skip mysqli_debug() not available");
+@@ -14,10 +15,14 @@ if (!defined('MYSQLI_DEBUG_TRACE_ENABLED'))
+ 
+ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+     die("skip: debug functionality not enabled");
++
++if (!$IS_MYSQLND)
++    die("skip mysqlnd only test");
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     function try_control_string($link, $control_string, $trace_file, $offset) {
+ 
+@@ -121,7 +126,7 @@ if (defined('MYSQLI_DEBUG_TRACE_ENABLED') && !MYSQLI_DEBUG_TRACE_ENABLED)
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!

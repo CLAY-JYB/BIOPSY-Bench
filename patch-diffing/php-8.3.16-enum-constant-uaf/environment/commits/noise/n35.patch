@@ -1,0 +1,163 @@
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt
+deleted file mode 100644
+index 59452592..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_to_string.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue may not be converted to a string.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-var_dump((string)$v);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class SensitiveParameterValue could not be converted to string in %ssensitive_parameter_value_to_string.php:5
+-Stack trace:
+-#0 {main}
+-  thrown in %ssensitive_parameter_value_to_string.php on line 5
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt
+deleted file mode 100644
+index 3d9bf20a..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_variadic_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses all variadic arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] ...$args
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_variadic_arguments.php(12): test(Object(SensitiveParameterValue), Object(SensitiveParameterValue), Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_variadic_arguments.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_variadic_arguments.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/gc_038.phpt b/Zend/tests/gc_038.phpt
+index 5e3c4114..91f22bf1 100644
+--- a/Zend/tests/gc_038.phpt
++++ b/Zend/tests/gc_038.phpt
+@@ -126,14 +126,13 @@ function test_pow() {
+ test_pow();
+ 
+ class Y {
+-    public $x;
+     function __toString() {
+         return "y";
+     }
+ }
+ function test_concat() {
+     $x = new Y;
+-    $x->x = $x;
++    $x->x= $x;
+     @$x .= "x";
+     $n = gc_collect_cycles();
+     echo ".=\t$n\n";
+diff --git a/Zend/tests/gc_042.phpt b/Zend/tests/gc_042.phpt
+index b56309f1..c8dfc0ef 100644
+--- a/Zend/tests/gc_042.phpt
++++ b/Zend/tests/gc_042.phpt
+@@ -3,7 +3,6 @@ Object properties HT may need to be removed from nested data
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public function __destruct() {
+         $GLOBALS['x'] = $this;
+diff --git a/Zend/tests/gc_043.phpt b/Zend/tests/gc_043.phpt
+index 37906a02..06b64de3 100644
+--- a/Zend/tests/gc_043.phpt
++++ b/Zend/tests/gc_043.phpt
+@@ -8,8 +8,7 @@ STR;
+ var_dump(unserialize($s));
+ gc_collect_cycles();
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property RegexIterator::$5 is deprecated in %s on line %d
++--EXPECT--
+ object(stdClass)#1 (2) {
+   ["5"]=>
+   object(SplStack)#2 (2) {
+diff --git a/Zend/tests/gc_046.phpt b/Zend/tests/gc_046.phpt
+index d5024737..74481fb7 100644
+--- a/Zend/tests/gc_046.phpt
++++ b/Zend/tests/gc_046.phpt
+@@ -5,7 +5,6 @@ zend.enable_gc=1
+ --FILE--
+ <?php
+ class Action {
+-    private $iterator;
+     function __construct() {
+         $this->iterator = new ArrayIterator($this);
+     }
+diff --git a/Zend/tests/generators/iterator_wrapper_leak.phpt b/Zend/tests/generators/iterator_wrapper_leak.phpt
+index 366702e8..bc0f34e9 100644
+--- a/Zend/tests/generators/iterator_wrapper_leak.phpt
++++ b/Zend/tests/generators/iterator_wrapper_leak.phpt
+@@ -4,8 +4,6 @@ A generator iterator wrapper involved in a cycle should not leak
+ <?php
+ 
+ class Test {
+-    private $gen1;
+-    private $gen2;
+     public function method() {
+         $this->gen1 = (function () {
+             yield 1;

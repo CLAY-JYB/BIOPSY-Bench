@@ -1,0 +1,201 @@
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt
+deleted file mode 100644
+index 67cd8130..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_drop_type2.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Co-variance check failure for intersection type where child removes one of intersection type members
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-interface C {}
+-interface X {}
+-
+-class Test implements A, B, C {}
+-
+-class Foo {
+-    public function foo(): (A&B&C)|X {
+-        return new Test();
+-    }
+-}
+-
+-/* This fails because just (A&B) larger than ((A&B)&C) */
+-class FooChild extends Foo {
+-    public function foo(): (A&B)|X {
+-        return new Test();
+-    }
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of FooChild::foo(): (A&B)|X must be compatible with Foo::foo(): (A&B&C)|X in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt
+deleted file mode 100644
+index 273bbcf1..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union1.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 1
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-interface L {}
+-
+-class TestOne implements X, Y {}
+-class TestTwo implements X {}
+-
+-interface A
+-{
+-    public function foo(): (X&Y)|L;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|TestTwo;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|TestTwo must be compatible with A::foo(): (X&Y)|L in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt
+deleted file mode 100644
+index 1eafcb5d..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 2
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class TestOne implements X, Y {}
+-
+-interface A
+-{
+-    public function foo(): X&Y;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|int;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|int must be compatible with A::foo(): X&Y in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt
+deleted file mode 100644
+index c4dd3449..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_covariance_intersection_to_union3.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Co-variance failure for intersection type where child is union, but not all members are a subtype of intersection 2
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-interface Z extends Y {}
+-
+-class TestOne implements X, Z {}
+-class TestTwo implements X, Y {}
+-
+-interface A
+-{
+-    public function foo(): X&Z;
+-}
+-
+-interface B extends A
+-{
+-    public function foo(): TestOne|TestTwo;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Declaration of B::foo(): TestOne|TestTwo must be compatible with A::foo(): X&Z in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt
+deleted file mode 100644
+index 65d3d203..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property types must be invariant
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A {
+-    public (X&Y)|L $prop;
+-}
+-class B extends A {
+-    public (X&Y&Z)|L $prop;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type of B::$prop must be (X&Y)|L (as in class A) in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt
+deleted file mode 100644
+index 1a8a31f0..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance1_var.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property types must be invariant
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A {
+-    public (X&Y&Z)|L $prop;
+-}
+-class B extends A {
+-    public (X&Y)|L $prop;
+-}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type of B::$prop must be (X&Y&Z)|L (as in class A) in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt b/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt
+deleted file mode 100644
+index 3b82afa8..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/invalid_invariance2.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Intersection type reduction invalid invariant type check
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-class A implements X, Y {}
+-class B {}
+-
+-class Test {
+-    public (X&Y)|B $prop;
+-}
+-class Test2 extends Test {
+-    public A|B $prop;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type of Test2::$prop must be (X&Y)|B (as in class Test) in %s on line %d

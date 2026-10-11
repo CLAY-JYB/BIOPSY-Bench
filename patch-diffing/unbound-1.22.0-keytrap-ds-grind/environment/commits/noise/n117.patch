@@ -1,0 +1,443 @@
+diff --git a/util/storage/lookup3.c b/util/storage/lookup3.c
+index c4026626c..ae7c166ec 100644
+--- a/util/storage/lookup3.c
++++ b/util/storage/lookup3.c
+@@ -89,7 +89,7 @@ on 1 byte), but shoehorning those bytes into integers efficiently is messy.
+ # if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
+       __BYTE_ORDER == __LITTLE_ENDIAN) || \
+      (defined(i386) || defined(__i386__) || defined(__i486__) || \
+-      defined(__i586__) || defined(__i686__) || defined(vax) || defined(MIPSEL) || defined(__x86))
++      defined(__i586__) || defined(__i686__) || defined(vax) || defined(MIPSEL) || defined(__x86) || defined(__loongarch__))
+ #  define HASH_LITTLE_ENDIAN 1
+ #  define HASH_BIG_ENDIAN 0
+ # elif (defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && \
+@@ -254,11 +254,15 @@ uint32_t        initval)         /* the previous hash, or an arbitrary value */
+   switch(length)                     /* all the case statements fall through */
+   { 
+   case 3 : c+=k[2];
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 2 : b+=k[1];
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 1 : a+=k[0];
+     final(a,b,c);
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 0:     /* case 0: nothing left to add */
+     break;
+   }
+@@ -304,9 +308,15 @@ uint32_t       *pb)               /* IN: more seed OUT: secondary hash value */
+   switch(length)                     /* all the case statements fall through */
+   { 
+   case 3 : c+=k[2];
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 2 : b+=k[1];
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 1 : a+=k[0];
+     final(a,b,c);
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+   case 0:     /* case 0: nothing left to add */
+     break;
+   }
+@@ -404,16 +414,32 @@ uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
+     switch(length)
+     {
+     case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+-    case 11: c+=((uint32_t)k8[10])<<16;  /* fall through */
+-    case 10: c+=((uint32_t)k8[9])<<8;    /* fall through */
+-    case 9 : c+=k8[8];                   /* fall through */
++    case 11: c+=((uint32_t)k8[10])<<16;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
++    case 10: c+=((uint32_t)k8[9])<<8;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
++    case 9 : c+=k8[8];
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 8 : b+=k[1]; a+=k[0]; break;
+-    case 7 : b+=((uint32_t)k8[6])<<16;   /* fall through */
+-    case 6 : b+=((uint32_t)k8[5])<<8;    /* fall through */
+-    case 5 : b+=k8[4];                   /* fall through */
++    case 7 : b+=((uint32_t)k8[6])<<16;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
++    case 6 : b+=((uint32_t)k8[5])<<8;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
++    case 5 : b+=k8[4];
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 4 : a+=k[0]; break;
+-    case 3 : a+=((uint32_t)k8[2])<<16;   /* fall through */
+-    case 2 : a+=((uint32_t)k8[1])<<8;    /* fall through */
++    case 3 : a+=((uint32_t)k8[2])<<16;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
++    case 2 : a+=((uint32_t)k8[1])<<8;
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 1 : a+=k8[0]; break;
+     case 0 : return c;
+     }
+@@ -443,23 +469,33 @@ uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
+              b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 11: c+=((uint32_t)k8[10])<<16;     /* fall through */
++    case 11: c+=((uint32_t)k8[10])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 10: c+=k[4];
+              b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 9 : c+=k8[8];                      /* fall through */
++    case 9 : c+=k8[8];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 7 : b+=((uint32_t)k8[6])<<16;      /* fall through */
++    case 7 : b+=((uint32_t)k8[6])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 6 : b+=k[2];
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 5 : b+=k8[4];                      /* fall through */
++    case 5 : b+=k8[4];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 3 : a+=((uint32_t)k8[2])<<16;      /* fall through */
++    case 3 : a+=((uint32_t)k8[2])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 2 : a+=k[0];
+              break;
+     case 1 : a+=k8[0];
+@@ -494,27 +530,38 @@ uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
+     switch(length)                   /* all the case statements fall through */
+     {
+     case 12: c+=((uint32_t)k[11])<<24;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 11: c+=((uint32_t)k[10])<<16;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 10: c+=((uint32_t)k[9])<<8;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 9 : c+=k[8];
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 8 : b+=((uint32_t)k[7])<<24;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 7 : b+=((uint32_t)k[6])<<16;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 6 : b+=((uint32_t)k[5])<<8;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 5 : b+=k[4];
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 4 : a+=((uint32_t)k[3])<<24;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 3 : a+=((uint32_t)k[2])<<16;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 2 : a+=((uint32_t)k[1])<<8;
+-  	/* fallthrough */
++	ATTR_FALLTHROUGH
++	/* fallthrough */
+     case 1 : a+=k[0];
+              break;
+     case 0 : return c;
+@@ -603,16 +650,32 @@ void hashlittle2(
+     switch(length)
+     {
+     case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+-    case 11: c+=((uint32_t)k8[10])<<16;  /* fall through */
+-    case 10: c+=((uint32_t)k8[9])<<8;    /* fall through */
+-    case 9 : c+=k8[8];                   /* fall through */
++    case 11: c+=((uint32_t)k8[10])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 10: c+=((uint32_t)k8[9])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 9 : c+=k8[8];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=k[1]; a+=k[0]; break;
+-    case 7 : b+=((uint32_t)k8[6])<<16;   /* fall through */
+-    case 6 : b+=((uint32_t)k8[5])<<8;    /* fall through */
+-    case 5 : b+=k8[4];                   /* fall through */
++    case 7 : b+=((uint32_t)k8[6])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 6 : b+=((uint32_t)k8[5])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 5 : b+=k8[4];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=k[0]; break;
+-    case 3 : a+=((uint32_t)k8[2])<<16;   /* fall through */
+-    case 2 : a+=((uint32_t)k8[1])<<8;    /* fall through */
++    case 3 : a+=((uint32_t)k8[2])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 2 : a+=((uint32_t)k8[1])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 1 : a+=k8[0]; break;
+     case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+     }
+@@ -642,23 +705,33 @@ void hashlittle2(
+              b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 11: c+=((uint32_t)k8[10])<<16;     /* fall through */
++    case 11: c+=((uint32_t)k8[10])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 10: c+=k[4];
+              b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 9 : c+=k8[8];                      /* fall through */
++    case 9 : c+=k8[8];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=k[2]+(((uint32_t)k[3])<<16);
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 7 : b+=((uint32_t)k8[6])<<16;      /* fall through */
++    case 7 : b+=((uint32_t)k8[6])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 6 : b+=k[2];
+              a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 5 : b+=k8[4];                      /* fall through */
++    case 5 : b+=k8[4];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=k[0]+(((uint32_t)k[1])<<16);
+              break;
+-    case 3 : a+=((uint32_t)k8[2])<<16;      /* fall through */
++    case 3 : a+=((uint32_t)k8[2])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 2 : a+=k[0];
+              break;
+     case 1 : a+=k8[0];
+@@ -693,16 +766,38 @@ void hashlittle2(
+     switch(length)                   /* all the case statements fall through */
+     {
+     case 12: c+=((uint32_t)k[11])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 11: c+=((uint32_t)k[10])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 10: c+=((uint32_t)k[9])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 9 : c+=k[8];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=((uint32_t)k[7])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 7 : b+=((uint32_t)k[6])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 6 : b+=((uint32_t)k[5])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 5 : b+=k[4];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=((uint32_t)k[3])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 3 : a+=((uint32_t)k[2])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 2 : a+=((uint32_t)k[1])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 1 : a+=k[0];
+              break;
+     case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+@@ -784,16 +879,32 @@ uint32_t hashbig( const void *key, size_t length, uint32_t initval)
+     switch(length)                   /* all the case statements fall through */
+     {
+     case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+-    case 11: c+=((uint32_t)k8[10])<<8;  /* fall through */
+-    case 10: c+=((uint32_t)k8[9])<<16;  /* fall through */
+-    case 9 : c+=((uint32_t)k8[8])<<24;  /* fall through */
++    case 11: c+=((uint32_t)k8[10])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 10: c+=((uint32_t)k8[9])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 9 : c+=((uint32_t)k8[8])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=k[1]; a+=k[0]; break;
+-    case 7 : b+=((uint32_t)k8[6])<<8;   /* fall through */
+-    case 6 : b+=((uint32_t)k8[5])<<16;  /* fall through */
+-    case 5 : b+=((uint32_t)k8[4])<<24;  /* fall through */
++    case 7 : b+=((uint32_t)k8[6])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 6 : b+=((uint32_t)k8[5])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 5 : b+=((uint32_t)k8[4])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=k[0]; break;
+-    case 3 : a+=((uint32_t)k8[2])<<8;   /* fall through */
+-    case 2 : a+=((uint32_t)k8[1])<<16;  /* fall through */
++    case 3 : a+=((uint32_t)k8[2])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
++    case 2 : a+=((uint32_t)k8[1])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 1 : a+=((uint32_t)k8[0])<<24; break;
+     case 0 : return c;
+     }
+@@ -827,16 +938,38 @@ uint32_t hashbig( const void *key, size_t length, uint32_t initval)
+     switch(length)                   /* all the case statements fall through */
+     {
+     case 12: c+=k[11];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 11: c+=((uint32_t)k[10])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 10: c+=((uint32_t)k[9])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 9 : c+=((uint32_t)k[8])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 8 : b+=k[7];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 7 : b+=((uint32_t)k[6])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 6 : b+=((uint32_t)k[5])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 5 : b+=((uint32_t)k[4])<<24;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 4 : a+=k[3];
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 3 : a+=((uint32_t)k[2])<<8;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 2 : a+=((uint32_t)k[1])<<16;
++	     ATTR_FALLTHROUGH
++	     /* fallthrough */
+     case 1 : a+=((uint32_t)k[0])<<24;
+              break;
+     case 0 : return c;
+diff --git a/util/storage/lruhash.c b/util/storage/lruhash.c
+index e17b180db..aba9fcc1d 100644
+--- a/util/storage/lruhash.c
++++ b/util/storage/lruhash.c
+@@ -528,6 +528,40 @@ lruhash_setmarkdel(struct lruhash* table, lruhash_markdelfunc_type md)
+ 	lock_quick_unlock(&table->lock);
+ }
+ 
++void
++lruhash_update_space_used(struct lruhash* table, void* cb_arg, int diff_size)
++{
++	struct lruhash_entry *reclaimlist = NULL;
++
++	fptr_ok(fptr_whitelist_hash_sizefunc(table->sizefunc));
++	fptr_ok(fptr_whitelist_hash_delkeyfunc(table->delkeyfunc));
++	fptr_ok(fptr_whitelist_hash_deldatafunc(table->deldatafunc));
++	fptr_ok(fptr_whitelist_hash_markdelfunc(table->markdelfunc));
++
++	if(cb_arg == NULL) cb_arg = table->cb_arg;
++
++	/* update space used */
++	lock_quick_lock(&table->lock);
++
++	if((int)table->space_used + diff_size < 0)
++		table->space_used = 0;
++	else table->space_used = (size_t)((int)table->space_used + diff_size);
++
++	if(table->space_used > table->space_max)
++		reclaim_space(table, &reclaimlist);
++
++	lock_quick_unlock(&table->lock);
++
++	/* finish reclaim if any (outside of critical region) */
++	while(reclaimlist) {
++		struct lruhash_entry* n = reclaimlist->overflow_next;
++		void* d = reclaimlist->data;
++		(*table->delkeyfunc)(reclaimlist->key, cb_arg);
++		(*table->deldatafunc)(d, cb_arg);
++		reclaimlist = n;
++	}
++}
++
+ void 
+ lruhash_traverse(struct lruhash* h, int wr, 
+ 	void (*func)(struct lruhash_entry*, void*), void* arg)
+diff --git a/util/storage/lruhash.h b/util/storage/lruhash.h
+index 2086e4dec..5ab488beb 100644
+--- a/util/storage/lruhash.h
++++ b/util/storage/lruhash.h
+@@ -303,6 +303,17 @@ void lru_touch(struct lruhash* table, struct lruhash_entry* entry);
+  */
+ void lruhash_setmarkdel(struct lruhash* table, lruhash_markdelfunc_type md);
+ 
++/**
++ * Update the size of an element in the hashtable.
++ *
++ * @param table: hash table.
++ * @param cb_override: if not NULL overrides the cb_arg for deletefunc.
++ * @param diff_size: difference in size to the hash table storage.
++ * 	This is newsize - oldsize, a positive number uses more space.
++ */
++void lruhash_update_space_used(struct lruhash* table, void* cb_override,
++	int diff_size);
++
+ /************************* getdns functions ************************/
+ /*** these are used by getdns only and not by unbound. ***/
+ 

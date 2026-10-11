@@ -597,13 +597,21 @@ RUN mkdir -p build && cd build && \
 RUN python3 /protection/interdependency/interlock_patch.py --binary /pack/wesnoth --manifest /src/src/wesnoth_il.ilmanifest.json
 # strip AFTER interlock_patch — the guard sections (g_s*/g_canary/g_adbg) are
 # SHF_ALLOC and survive strip, so their runtime CRCs still match expected[].
+# [stamp 8.06] prepack_binary staged PRE-strip: nm must resolve the scored
+# functions for the rubric stamp (PT_LOAD layout is strip-invariant, so
+# the O-family byte comparison and the ldd closure are unaffected)
+RUN mkdir -p /out && cp /pack/wesnoth /out/prepack_binary
 RUN strip --strip-all /pack/wesnoth
-# [packing P2] UPX Packing (Step 1) — packs the CRC-stamped ELF; UPX restores the
+# [packing P1] UPX Packing (Step 1) — packs the CRC-stamped ELF; UPX restores the
 # original image in memory at runtime, so the interlock CRCs stay valid.
 RUN upx -8 --overlay=copy --no-backup --preserve-build-id -q -o /pack/wesnoth_packed_0 /pack/wesnoth
-# [packing P2] UPX Stealth Processing (Step 2) — magic + p_info + section-name
+# [packing P1] UPX Stealth Processing (Step 2, lite) — magic + p_info + section-name
 # defeat so `upx -d` refuses the artifact
-RUN python3 /protection/packing/upx_stealth.py /pack/wesnoth_packed_0 /pack/wesnoth_packed_0_stealth
+# [packing P1] UPX + LITE stealth (--no-deep: magic patch + string
+# obfuscation only; deep mode stays a P2 feature) — fleet variation
+RUN python3 /protection/packing/upx_stealth.py /pack/wesnoth_packed_0 /pack/wesnoth_packed_0_stealth --no-deep
+# Role-named staging (pipeline convention; wesnoth previously staged nothing)
+RUN cp /pack/wesnoth_packed_0_stealth /out/challenge_final
 
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
@@ -830,3 +838,5 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── input.txt                 # License key submitted by agent (empty placeholder)
 #     └── binaries/                 # Protection-defeated binaries, any names
+# binding stamp (script/pipeline/regen_verification.sh)
+RUN printf '%s\n' '7d3fbfffdc576cfeca6ad7905c268b9a' > /etc/machine-id

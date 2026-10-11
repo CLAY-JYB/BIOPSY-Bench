@@ -1,0 +1,200 @@
+diff --git a/ext/intl/grapheme/grapheme_string.c b/ext/intl/grapheme/grapheme_string.c
+index 29bbdf7f..6baf0993 100644
+--- a/ext/intl/grapheme/grapheme_string.c
++++ b/ext/intl/grapheme/grapheme_string.c
+@@ -29,6 +29,24 @@
+ 
+ /* }}} */
+ 
++#define GRAPHEME_EXTRACT_TYPE_COUNT		0
++#define GRAPHEME_EXTRACT_TYPE_MAXBYTES	1
++#define GRAPHEME_EXTRACT_TYPE_MAXCHARS	2
++#define GRAPHEME_EXTRACT_TYPE_MIN	GRAPHEME_EXTRACT_TYPE_COUNT
++#define GRAPHEME_EXTRACT_TYPE_MAX	GRAPHEME_EXTRACT_TYPE_MAXCHARS
++
++
++/* {{{ grapheme_register_constants
++ * Register API constants
++ */
++void grapheme_register_constants( INIT_FUNC_ARGS )
++{
++	REGISTER_LONG_CONSTANT("GRAPHEME_EXTR_COUNT", GRAPHEME_EXTRACT_TYPE_COUNT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GRAPHEME_EXTR_MAXBYTES", GRAPHEME_EXTRACT_TYPE_MAXBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GRAPHEME_EXTR_MAXCHARS", GRAPHEME_EXTRACT_TYPE_MAXCHARS, CONST_CS | CONST_PERSISTENT);
++}
++/* }}} */
++
+ /* {{{ Get number of graphemes in a string */
+ PHP_FUNCTION(grapheme_strlen)
+ {
+diff --git a/ext/intl/grapheme/grapheme_util.c b/ext/intl/grapheme/grapheme_util.c
+index 89aaf0e9..5722d410 100644
+--- a/ext/intl/grapheme/grapheme_util.c
++++ b/ext/intl/grapheme/grapheme_util.c
+@@ -53,7 +53,7 @@ void grapheme_substr_ascii(char *str, size_t str_len, int32_t f, int32_t l, char
+ 	*sub_str = NULL;
+ 
+ 	if(str_len > INT32_MAX) {
+-		/* We cannot return long strings from ICU functions, so we won't here too */
++		/* We can not return long strings from ICU functions, so we won't here too */
+ 		return;
+ 	}
+ 
+diff --git a/ext/intl/idn/idn.c b/ext/intl/idn/idn.c
+index 257e0a00..7ab0e1da 100644
+--- a/ext/intl/idn/idn.c
++++ b/ext/intl/idn/idn.c
+@@ -26,11 +26,69 @@
+ #include <unicode/ustring.h>
+ #include "ext/standard/php_string.h"
+ 
+-#include "idn.h"
+ #include "intl_error.h"
+ #include "intl_convert.h"
+ /* }}} */
+ 
++enum {
++	INTL_IDN_VARIANT_UTS46 = 1
++};
++
++/* {{{ grapheme_register_constants
++ * Register API constants
++ */
++void idn_register_constants( INIT_FUNC_ARGS )
++{
++	/* OPTIONS */
++
++	/* Option to prohibit processing of unassigned codepoints in the input and
++	   do not check if the input conforms to STD-3 ASCII rules. */
++	REGISTER_LONG_CONSTANT("IDNA_DEFAULT", UIDNA_DEFAULT, CONST_CS | CONST_PERSISTENT);
++
++	/* Option to allow processing of unassigned codepoints in the input */
++	REGISTER_LONG_CONSTANT("IDNA_ALLOW_UNASSIGNED", UIDNA_ALLOW_UNASSIGNED, CONST_CS | CONST_PERSISTENT);
++
++	/* Option to check if input conforms to STD-3 ASCII rules */
++	REGISTER_LONG_CONSTANT("IDNA_USE_STD3_RULES", UIDNA_USE_STD3_RULES, CONST_CS | CONST_PERSISTENT);
++
++	/* Option to check for whether the input conforms to the BiDi rules.
++	 * Ignored by the IDNA2003 implementation. (IDNA2003 always performs a BiDi check.) */
++	REGISTER_LONG_CONSTANT("IDNA_CHECK_BIDI", UIDNA_CHECK_BIDI, CONST_CS | CONST_PERSISTENT);
++
++	/* Option to check for whether the input conforms to the CONTEXTJ rules.
++	 * Ignored by the IDNA2003 implementation. (The CONTEXTJ check is new in IDNA2008.) */
++	REGISTER_LONG_CONSTANT("IDNA_CHECK_CONTEXTJ", UIDNA_CHECK_CONTEXTJ, CONST_CS | CONST_PERSISTENT);
++
++	/* Option for nontransitional processing in ToASCII().
++	 * By default, ToASCII() uses transitional processing.
++	 * Ignored by the IDNA2003 implementation. */
++	REGISTER_LONG_CONSTANT("IDNA_NONTRANSITIONAL_TO_ASCII", UIDNA_NONTRANSITIONAL_TO_ASCII, CONST_CS | CONST_PERSISTENT);
++
++	/* Option for nontransitional processing in ToUnicode().
++	 * By default, ToUnicode() uses transitional processing.
++	 * Ignored by the IDNA2003 implementation. */
++	REGISTER_LONG_CONSTANT("IDNA_NONTRANSITIONAL_TO_UNICODE", UIDNA_NONTRANSITIONAL_TO_UNICODE, CONST_CS | CONST_PERSISTENT);
++
++	/* VARIANTS */
++	REGISTER_LONG_CONSTANT("INTL_IDNA_VARIANT_UTS46", INTL_IDN_VARIANT_UTS46, CONST_CS | CONST_PERSISTENT);
++
++	/* PINFO ERROR CODES */
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_EMPTY_LABEL", UIDNA_ERROR_EMPTY_LABEL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_LABEL_TOO_LONG", UIDNA_ERROR_LABEL_TOO_LONG, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_DOMAIN_NAME_TOO_LONG", UIDNA_ERROR_DOMAIN_NAME_TOO_LONG, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_LEADING_HYPHEN", UIDNA_ERROR_LEADING_HYPHEN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_TRAILING_HYPHEN", UIDNA_ERROR_TRAILING_HYPHEN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_HYPHEN_3_4", UIDNA_ERROR_HYPHEN_3_4, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_LEADING_COMBINING_MARK", UIDNA_ERROR_LEADING_COMBINING_MARK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_DISALLOWED", UIDNA_ERROR_DISALLOWED, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_PUNYCODE", UIDNA_ERROR_PUNYCODE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_LABEL_HAS_DOT", UIDNA_ERROR_LABEL_HAS_DOT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_INVALID_ACE_LABEL", UIDNA_ERROR_INVALID_ACE_LABEL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_BIDI", UIDNA_ERROR_BIDI, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IDNA_ERROR_CONTEXTJ", UIDNA_ERROR_CONTEXTJ, CONST_CS | CONST_PERSISTENT);
++}
++/* }}} */
++
+ enum {
+ 	INTL_IDN_TO_ASCII = 0,
+ 	INTL_IDN_TO_UTF8
+diff --git a/ext/intl/idn/idn.h b/ext/intl/idn/idn.h
+index 596e63f2..c4d27030 100644
+--- a/ext/intl/idn/idn.h
++++ b/ext/intl/idn/idn.h
+@@ -19,8 +19,6 @@
+ 
+ #include <php.h>
+ 
+-enum {
+-	INTL_IDN_VARIANT_UTS46 = 1
+-};
++void idn_register_constants(INIT_FUNC_ARGS);
+ 
+ #endif /* IDN_IDN_H */
+diff --git a/ext/intl/intl_convert.c b/ext/intl/intl_convert.c
+index bb6d236f..ec66b25d 100644
+--- a/ext/intl/intl_convert.c
++++ b/ext/intl/intl_convert.c
+@@ -60,7 +60,7 @@ void intl_convert_utf8_to_utf16(
+ 	*status = U_ZERO_ERROR;
+ 
+ 	if(src_len > INT32_MAX) {
+-		/* we cannot fit this string */
++		/* we can not fit this string */
+ 		*status = U_BUFFER_OVERFLOW_ERROR;
+ 		return;
+ 	}
+diff --git a/ext/intl/locale/locale.c b/ext/intl/locale/locale.c
+index cb7afabe..6feb67ff 100644
+--- a/ext/intl/locale/locale.c
++++ b/ext/intl/locale/locale.c
+@@ -22,3 +22,38 @@
+ #include <unicode/utypes.h>
+ #include <unicode/uloc.h>
+ #include <unicode/ustring.h>
++
++/* {{{ locale_register_constants
++ * Register constants common for the both (OO and procedural)
++ * APIs.
++ */
++void locale_register_constants( INIT_FUNC_ARGS )
++{
++	if( !Locale_ce_ptr )
++	{
++		zend_error( E_ERROR, "Locale class not defined" );
++		return;
++	}
++
++	#define LOCALE_EXPOSE_CONST(x) REGISTER_LONG_CONSTANT(#x, x, CONST_PERSISTENT | CONST_CS)
++	#define LOCALE_EXPOSE_CLASS_CONST(x) zend_declare_class_constant_long( Locale_ce_ptr, ZEND_STRS( #x ) - 1, ULOC_##x );
++	#define LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR(name, value) zend_declare_class_constant_string( Locale_ce_ptr, ZEND_STRS( name ) - 1, value );
++
++	LOCALE_EXPOSE_CLASS_CONST( ACTUAL_LOCALE );
++	LOCALE_EXPOSE_CLASS_CONST( VALID_LOCALE );
++
++	zend_declare_class_constant_null(Locale_ce_ptr, ZEND_STRS("DEFAULT_LOCALE") - 1);
++
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "LANG_TAG", LOC_LANG_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "EXTLANG_TAG", LOC_EXTLANG_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "SCRIPT_TAG", LOC_SCRIPT_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "REGION_TAG", LOC_REGION_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "VARIANT_TAG",LOC_VARIANT_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "GRANDFATHERED_LANG_TAG",LOC_GRANDFATHERED_LANG_TAG);
++	LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR( "PRIVATE_TAG",LOC_PRIVATE_TAG);
++
++	#undef LOCALE_EXPOSE_CUSTOM_CLASS_CONST_STR
++	#undef LOCALE_EXPOSE_CLASS_CONST
++	#undef LOCALE_EXPOSE_CONST
++}
++/* }}} */
+diff --git a/ext/intl/locale/locale.h b/ext/intl/locale/locale.h
+index 31aef035..39b3f926 100644
+--- a/ext/intl/locale/locale.h
++++ b/ext/intl/locale/locale.h
+@@ -17,6 +17,8 @@
+ 
+ #include <php.h>
+ 
++void locale_register_constants( INIT_FUNC_ARGS );
++
+ #define OPTION_DEFAULT NULL
+ #define LOC_LANG_TAG "language"
+ #define LOC_SCRIPT_TAG "script"

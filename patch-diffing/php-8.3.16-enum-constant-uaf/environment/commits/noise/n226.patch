@@ -1,0 +1,93 @@
+diff --git a/ext/pdo/pdo_stmt.c b/ext/pdo/pdo_stmt.c
+index 45393360..c3c466fb 100644
+--- a/ext/pdo/pdo_stmt.c
++++ b/ext/pdo/pdo_stmt.c
+@@ -1377,9 +1377,9 @@ PHP_METHOD(PDOStatement, fetchAll)
+ 	}
+ 
+ 	if (!error) {
+-		if ((how & PDO_FETCH_GROUP) || how == PDO_FETCH_KEY_PAIR ||
+-			(how == PDO_FETCH_USE_DEFAULT && stmt->default_fetch_type == PDO_FETCH_KEY_PAIR)
+-		) {
++		if ((how & PDO_FETCH_GROUP)) {
++			while (do_fetch(stmt, &data, how | flags, PDO_FETCH_ORI_NEXT, /* offset */ 0, return_all));
++		} else if (how == PDO_FETCH_KEY_PAIR || (how == PDO_FETCH_USE_DEFAULT && stmt->default_fetch_type == PDO_FETCH_KEY_PAIR)) {
+ 			while (do_fetch(stmt, &data, how | flags, PDO_FETCH_ORI_NEXT, /* offset */ 0, return_all));
+ 		} else {
+ 			array_init(return_value);
+diff --git a/ext/pdo/php_pdo.h b/ext/pdo/php_pdo.h
+index 023372eb..9c278cd4 100644
+--- a/ext/pdo/php_pdo.h
++++ b/ext/pdo/php_pdo.h
+@@ -53,8 +53,6 @@ PHP_MINFO_FUNCTION(pdo);
+ #define REGISTER_PDO_CLASS_CONST_STRING(const_name, value) \
+ 	zend_declare_class_constant_stringl(php_pdo_get_dbh_ce(), const_name, sizeof(const_name)-1, value, sizeof(value)-1);
+ 
+-#define LONG_CONST(c) (zend_long) c
+-
+ #define PDO_CONSTRUCT_CHECK \
+ 	if (!dbh->driver) { \
+ 		zend_throw_error(NULL, "PDO object is not initialized, constructor was not called"); \
+diff --git a/ext/pdo/php_pdo_driver.h b/ext/pdo/php_pdo_driver.h
+index c8322846..91a60fe3 100644
+--- a/ext/pdo/php_pdo_driver.h
++++ b/ext/pdo/php_pdo_driver.h
+@@ -672,7 +672,7 @@ PDO_API zend_class_entry *php_pdo_get_exception(void);
+ PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string **outquery);
+ 
+ PDO_API void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt,
+-	pdo_error_type sqlstate, const char *supp);
++	const char *sqlstate, const char *supp);
+ 
+ PDO_API void php_pdo_dbh_addref(pdo_dbh_t *dbh);
+ PDO_API void php_pdo_dbh_delref(pdo_dbh_t *dbh);
+diff --git a/ext/pdo/php_pdo_int.h b/ext/pdo/php_pdo_int.h
+index aa83c660..c3d2fe00 100644
+--- a/ext/pdo/php_pdo_int.h
++++ b/ext/pdo/php_pdo_int.h
+@@ -25,7 +25,7 @@ extern HashTable pdo_driver_hash;
+ extern zend_class_entry *pdo_exception_ce;
+ int php_pdo_list_entry(void);
+ 
+-void pdo_dbh_init(int module_number);
++void pdo_dbh_init(void);
+ void pdo_stmt_init(void);
+ 
+ extern zend_object *pdo_dbh_new(zend_class_entry *ce);
+diff --git a/ext/pdo/tests/bug_73234.phpt b/ext/pdo/tests/bug_73234.phpt
+index 5f8f620c..7e5729a4 100644
+--- a/ext/pdo/tests/bug_73234.phpt
++++ b/ext/pdo/tests/bug_73234.phpt
+@@ -6,7 +6,6 @@ pdo
+ <?php
+ $dir = getenv('REDIR_TEST_DIR');
+ if (false == $dir) die('skip no driver');
+-if (str_starts_with(getenv('PDOTEST_DSN'), "firebird")) die('xfail firebird driver does not behave as expected');
+ require_once $dir . 'pdo_test.inc';
+ PDOTest::skip();
+ 
+diff --git a/ext/pdo/tests/gh8626.phpt b/ext/pdo/tests/gh8626.phpt
+index 0a6f81b6..b222120f 100644
+--- a/ext/pdo/tests/gh8626.phpt
++++ b/ext/pdo/tests/gh8626.phpt
+@@ -46,7 +46,7 @@ array(3) {
+   [0]=>
+   string(%d) "%s"
+   [1]=>
+-  int(%i)
++  int(%d)
+   [2]=>
+   string(%d) "%s%w%S"
+ }
+diff --git a/ext/pdo/tests/pdo_005.phpt b/ext/pdo/tests/pdo_005.phpt
+index efcd335f..62f47801 100644
+--- a/ext/pdo/tests/pdo_005.phpt
++++ b/ext/pdo/tests/pdo_005.phpt
+@@ -29,7 +29,6 @@ class TestBase
+     private $val2;
+ }
+ 
+-#[AllowDynamicProperties] // $val2 will be dynamic now.
+ class TestDerived extends TestBase
+ {
+     protected $row;

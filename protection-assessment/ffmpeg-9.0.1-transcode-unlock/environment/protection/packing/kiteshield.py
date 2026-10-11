@@ -31,13 +31,13 @@ KITESHIELD OPTIONS
 ================================================================================
 
 BUILD TYPES:
-  release             Standard release build with all optimizations (default)
-  debug               Debug build with verbose logging, anti-debug disabled
+  release Standard release build with all optimizations (default)
+  debug Debug build with verbose logging, anti-debug disabled
   debug-antidebug     Debug build with anti-debugging enabled
 
 ENCRYPTION LAYERS:
-  Layer 1             Whole-binary RC4 encryption (always applied)
-  Layer 2             Per-function RC4 encryption with ptrace runtime engine
+  Layer 1 Whole-binary RC4 encryption (always applied)
+  Layer 2 Per-function RC4 encryption with ptrace runtime engine
                       - Requires unstripped binary (symbol table needed)
                       - Use -n flag to disable for stripped binaries
 
@@ -45,21 +45,21 @@ ANTI-DEBUGGING:
   --no-anti-debug     Disable anti-debugging features (debug builds only)
 
 OTHER OPTIONS:
-  -n                  Disable layer 2 encryption (for stripped binaries)
-  -o FILE             Write output to FILE
+  -n Disable layer 2 encryption (for stripped binaries)
+  -o FILE Write output to FILE
 
 ================================================================================
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input filename (default: program)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input filename (default: program)
   --build-type TYPE     Build type: release, debug, debug-antidebug (default: random)
   --force-layer2        Force layer 2 encryption (don't use -n flag)
   --seed SEED           Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
 
 ================================================================================
 """

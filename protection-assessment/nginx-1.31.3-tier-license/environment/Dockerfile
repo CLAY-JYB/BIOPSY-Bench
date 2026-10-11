@@ -439,9 +439,11 @@ RUN mkdir -p /gt/binaries && \
         | python3 -c "import sys,json; pts=[{'name':n,'vaddr':int(a,16),'weight':1} for a,n in (l.split() for l in sys.stdin)]; json.dump({'points':pts}, open('/gt/trace_points.json','w'), indent=1)"; } && \
     test -s /gt/trace_points.json && \
     python3 -c "import json; assert len(json.load(open('/gt/trace_points.json'))['points']) >= 2, 'no probe symbols in origin binary'" && \
-    strip --strip-all objs/nginx && \
     cp objs/nginx /gt/binaries/origin_binary && \
     chmod +x /gt/binaries/origin_binary
+# NOTE: the origin ships UNstripped — the 8.06 stamp nm's the probe symbols
+# (incl. stage_iter_N counting probes) straight off this binary, and the
+# oracle lives root-only in the verifier image, so symbols leak nowhere.
 
 # ============================================================================================
 # CHALLENGE-BINARY — full protection chain, runs IN PARALLEL with
@@ -455,7 +457,7 @@ ENV LLVM22_DIR=/opt/llvm-22
 ENV PATH="${LLVM22_DIR}/bin:${PATH}"
 WORKDIR /src
 
-# TEMPLATE: PROTECTION CHAIN — re-hardened profile P2 D3 O3 I3 (seed 20260922).
+# TEMPLATE: PROTECTION CHAIN — profile P2 D2 O3 I3 (D2 standard set).
 # Mirrors the ffmpeg-9.0.1 PROVEN re-harden flow, adapted to nginx's own build
 # system (auto/configure + make, artifact objs/nginx) and P2 = UPX + stealth packing:
 #   (1) configure runs FIRST so the nginx build tree + objs/ headers exist.
@@ -481,11 +483,11 @@ WORKDIR /src
 #       are genuinely obfuscated (anchor probe must print 0).
 #   (5) interlock_patch stamps expected section CRCs (incl. g_adbg) into the
 #       UNSTRIPPED objs/nginx BEFORE strip; then UPX deep-stealth packing (P2)
-#       yields challenge_final; challenge_ldd is the pre-packing ELF.
+#       yields challenge_final; prepack_binary is the pre-packing intermediate.
 #
 # Two fixed artifact names, ALWAYS both staged (deterministic for the pipeline):
 #   /out/challenge_final — the packed artifact (P2) — becomes /app/binary.
-#   /out/challenge_ldd   — packer-free ELF for the verifier's ldd closure.
+#   /out/prepack_binary   — packer-free ELF for the verifier's ldd closure.
 
 # === STAGE 0: configure (build tree + objs/ generated headers) ===
 RUN ./auto/configure --with-cc-opt="-O2 -Wno-error -D_GNU_SOURCE"
@@ -498,7 +500,9 @@ RUN python3 /protection/interdependency/interlock_gen.py --input src/core/nginx.
 # [anti-debug D3] advanced + anti-dump + DebugBlocker; --copy-libs guarantees
 # adbg.c/adbg.h sit next to nginx.c (interlock already emitted the #include, so
 # anti-debug skips its own check — expected, ffmpeg-proven).
-RUN python3 /protection/anti-debug/anti-debug.py src/core/nginx.c --checks advanced --copy-libs --insert-at-call validate_input --target-function ngx_license_stage --harden --debug-blocker
+# [anti-debug D2] STANDARD set (ptrace/tracer_pid/parent/gdb) — fleet
+# variation: no anti-dump hardening, no self-ptrace DebugBlocker
+RUN python3 /protection/anti-debug/anti-debug.py src/core/nginx.c --checks standard --copy-libs --insert-at-call validate_input --target-function ngx_license_stage
 
 # === STAGE 2: Compile (configure regenerates makefiles for the edited TU) ===
 RUN ./auto/configure --with-cc-opt="-O2 -Wno-error -D_GNU_SOURCE" && make -j$(nproc)
@@ -521,6 +525,10 @@ RUN VOBJ="$(find objs -name verification.o | head -1)" && test -n "$VOBJ" && \
 # [interdependency I3 patch] stamp the guard network's expected section CRCs
 # (incl. g_adbg) into UNSTRIPPED objs/nginx — BEFORE strip. Guard sections
 # (g_s*/g_canary/g_adbg) are disjoint from the UPX overlay.
+# [stamp 8.06] prepack_binary staged PRE-strip: nm must resolve the scored
+# functions for the rubric stamp (PT_LOAD layout is strip-invariant, so
+# the O-family byte comparison and the ldd closure are unaffected)
+RUN mkdir -p /out && cp objs/nginx /out/prepack_binary
 RUN python3 /protection/interdependency/interlock_patch.py --binary objs/nginx --manifest src/core/nginx_il.ilmanifest.json && \
     strip --strip-all objs/nginx
 # [packing P2] UPX deep-stealth (magic + p_info zeroing + section renaming, so
@@ -529,8 +537,7 @@ RUN upx -6 --overlay=copy --no-backup -q -o objs/nginx_packed_0 objs/nginx && \
     python3 /protection/packing/upx_stealth.py objs/nginx_packed_0 objs/nginx_packed_0_stealth
 
 # === Final artifact — role-named staging (pipeline convention) ===
-RUN mkdir -p /out && cp objs/nginx_packed_0_stealth /out/challenge_final && \
-    cp objs/nginx /out/challenge_ldd
+RUN cp objs/nginx_packed_0_stealth /out/challenge_final
 
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
@@ -743,3 +750,5 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── input.txt                 # License key submitted by agent (empty placeholder)
 #     └── binaries/                 # Protection-defeated binaries, any names
+# binding stamp (script/pipeline/regen_verification.sh)
+RUN printf '%s\n' 'bfe228f219e9cb0eb53f16947ccf25ec' > /etc/machine-id

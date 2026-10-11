@@ -1,0 +1,282 @@
+diff --git a/ext/dba/tests/dba013.phpt b/ext/dba/tests/dba013.phpt
+new file mode 100644
+index 00000000..0d41341b
+--- /dev/null
++++ b/ext/dba/tests/dba013.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++DBA with array key with empty array
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    dba_insert(array(), "Content String 1", $db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++
++Fatal error: Uncaught Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name" in %s.php:%d
++Stack trace:
++#0 %sdba013.php(6): dba_insert(Array, '%s', Resource id #%d)
++#1 {main}
++  thrown in %sdba013.php on line 6
+diff --git a/ext/dba/tests/dba014.phpt b/ext/dba/tests/dba014.phpt
+new file mode 100644
+index 00000000..1ed6d061
+--- /dev/null
++++ b/ext/dba/tests/dba014.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++DBA with array key with array containing too many elements
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    dba_insert(array("a", "b", "c"), "Content String 2", $db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: %s
++
++Fatal error: Uncaught Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name" in %s.php:%d
++Stack trace:
++#0 %sdba014.php(6): dba_insert(Array, '%s', Resource id #%d)
++#1 {main}
++  thrown in %sdba014.php on line 6
+diff --git a/ext/dba/tests/dba015.phpt b/ext/dba/tests/dba015.phpt
+index 5712edce..f20c4588 100644
+--- a/ext/dba/tests/dba015.phpt
++++ b/ext/dba/tests/dba015.phpt
+@@ -8,8 +8,6 @@ $handler = "flatfile";
+ require_once(__DIR__ .'/skipif.inc');
+ die("info $HND handler used");
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+ 
+diff --git a/ext/dba/tests/dba016.phpt b/ext/dba/tests/dba016.phpt
+new file mode 100644
+index 00000000..4b0933a5
+--- /dev/null
++++ b/ext/dba/tests/dba016.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++DBA lock modifier error message test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "flatfile";
++require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++$handler = "flatfile";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++$db_file1 = dba_popen($db_filename, 'n-t', 'flatfile');
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: flatfile
++
++Warning: dba_popen(%stest0.dbm,n-t): You cannot combine modifiers - (no lock) and t (test lock) in %sdba016.php on line %d
+diff --git a/ext/dba/tests/dba_array_keys.phpt b/ext/dba/tests/dba_array_keys.phpt
+deleted file mode 100644
+index a9883dab..00000000
+--- a/ext/dba/tests/dba_array_keys.phpt
++++ /dev/null
+@@ -1,43 +0,0 @@
+---TEST--
+-DBA check behaviour of array keys
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_basic.db';
+-
+-$db = get_any_db($name);
+-
+-var_dump(dba_insert(['group', 'name'], 'Normal group', $db));
+-var_dump(dba_insert(['group', ''], 'Empty name', $db));
+-var_dump(dba_insert(['', 'name'], 'Empty group', $db));
+-var_dump(dba_insert(['', ''], 'Empty keys', $db));
+-var_dump(dba_fetch(['group', 'name'], $db));
+-var_dump(dba_fetch(['group', ''], $db));
+-var_dump(dba_fetch(['', 'name'], $db));
+-var_dump(dba_fetch(['', ''], $db));
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_basic.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-bool(true)
+-bool(true)
+-bool(true)
+-bool(true)
+-string(12) "Normal group"
+-string(10) "Empty name"
+-string(11) "Empty group"
+-string(10) "Empty keys"
+diff --git a/ext/dba/tests/dba_array_keys_errors.phpt b/ext/dba/tests/dba_array_keys_errors.phpt
+deleted file mode 100644
+index d80915c7..00000000
+--- a/ext/dba/tests/dba_array_keys_errors.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-DBA with invalid array key
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_errors.db';
+-
+-$db = get_any_db($name);
+-
+-try {
+-    dba_insert([], "Content String 1", $db);
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    dba_insert(["a", "b", "c"], "Content String 2", $db);
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-
+-/* Use an object */
+-$o = new stdClass();
+-try {
+-    var_dump(dba_insert([$o, 'obj'], 'Test', $db));
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    var_dump(dba_insert(['group', $o], 'Test', $db));
+-} catch (\Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), \PHP_EOL;
+-}
+-
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_errors.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name"
+-Error: dba_insert(): Argument #1 ($key) must have exactly two elements: "key" and "name"
+-Error: Object of class stdClass could not be converted to string
+-Error: Object of class stdClass could not be converted to string
+diff --git a/ext/dba/tests/dba_array_keys_inifile.phpt b/ext/dba/tests/dba_array_keys_inifile.phpt
+deleted file mode 100644
+index 658b53b8..00000000
+--- a/ext/dba/tests/dba_array_keys_inifile.phpt
++++ /dev/null
+@@ -1,42 +0,0 @@
+---TEST--
+-DBA check behaviour of array keys (inifile version)
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('inifile');
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = __DIR__ . '/array_keys_basic.db';
+-
+-$db = dba_open($name, 'c', 'inifile');
+-
+-var_dump(dba_insert(['group', 'name'], 'Normal group', $db));
+-var_dump(dba_insert(['group', ''], 'Empty name', $db));
+-var_dump(dba_insert(['', 'name'], 'Empty group', $db));
+-var_dump(dba_insert(['', ''], 'Empty keys', $db));
+-var_dump(dba_fetch(['group', 'name'], $db));
+-var_dump(dba_fetch(['group', ''], $db));
+-var_dump(dba_fetch(['', 'name'], $db));
+-var_dump(dba_fetch(['', ''], $db));
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = __DIR__ . '/array_keys_basic.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-bool(true)
+-bool(true)
+-bool(true)
+-bool(true)
+-string(12) "Normal group"
+-string(0) ""
+-string(11) "Empty group"
+-bool(false)

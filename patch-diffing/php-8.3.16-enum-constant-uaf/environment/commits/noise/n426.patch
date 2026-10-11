@@ -1,0 +1,389 @@
+diff --git a/sapi/cli/tests/gh8827-003.phpt b/sapi/cli/tests/gh8827-003.phpt
+index 11f78807..8c1fc491 100644
+--- a/sapi/cli/tests/gh8827-003.phpt
++++ b/sapi/cli/tests/gh8827-003.phpt
+@@ -8,6 +8,12 @@ if (php_sapi_name() != "cli") {
+ if (PHP_OS_FAMILY == 'Windows') {
+ 	die("skip not for Windows");
+ }
++if (PHP_DEBUG) {
++    die("skip std streams are not closeable in debug builds");
++}
++if (getenv('SKIP_REPEAT')) {
++    die("skip cannot be repeated");
++}
+ ?>
+ --FILE--
+ <?php
+diff --git a/sapi/cli/tests/php_cli_server.inc b/sapi/cli/tests/php_cli_server.inc
+index 65f2cc9a..26bdd4c1 100644
+--- a/sapi/cli/tests/php_cli_server.inc
++++ b/sapi/cli/tests/php_cli_server.inc
+@@ -12,7 +12,7 @@ function php_cli_server_start(
+     ?string $router = 'index.php',
+     array $cmd_args = []
+ ): CliServerInfo {
+-    $php_executable = getenv('TEST_PHP_EXECUTABLE') ?: PHP_BINARY;
++    $php_executable = getenv('TEST_PHP_EXECUTABLE');
+     $error = null;
+ 
+     // Create dedicated doc root to avoid index.php clashes between tests.
+@@ -28,40 +28,37 @@ function php_cli_server_start(
+         $cmd[] = $router;
+     }
+ 
+-    $output_file = tempnam(sys_get_temp_dir(), 'cli_server_output');
+-    $output_file_fd = fopen($output_file, 'ab');
+-    if ($output_file_fd === false) {
+-        die(sprintf("Failed opening output file %s\n", $output_file));
+-    }
+-
+     $descriptorspec = array(
+         0 => STDIN,
+-        1 => $output_file_fd,
+-        2 => $output_file_fd,
++        1 => STDOUT,
++        2 => ['pipe', 'w'],
+     );
+     $handle = proc_open($cmd, $descriptorspec, $pipes, $doc_root, null, array("suppress_errors" => true));
+ 
+     // First, wait for the dev server to declare itself ready.
+     $bound = null;
++    stream_set_blocking($pipes[2], false);
+     for ($i = 0; $i < 60; $i++) {
+         usleep(50000); // 50ms per try
+         $status = proc_get_status($handle);
+         if (empty($status['running'])) {
+-            echo "Server failed to start\n";
+-            printf("Server output:\n%s\n", file_get_contents($output_file));
++            echo "Server is not running\n";
+             proc_terminate($handle);
+             exit(1);
+         }
+ 
+-        $output = file_get_contents($output_file);
+-        if (preg_match('@PHP \S* Development Server \(https?://(.*?:\d+)\) started@', $output, $matches)) {
+-            $bound = $matches[1];
+-            break;
++        while (($line = fgets($pipes[2])) !== false) {
++            if (preg_match('@PHP \S* Development Server \(https?://(.*?:\d+)\) started@', $line, $matches)) {
++                $bound = $matches[1];
++                // Now that we've identified the listen address, close STDERR.
++                // Otherwise the pipe may clog up with unread log messages.
++                fclose($pipes[2]);
++                break 2;
++            }
+         }
+     }
+     if ($bound === null) {
+         echo "Server did not output startup message";
+-        printf("Server output:\n%s\n", file_get_contents($output_file));
+         proc_terminate($handle);
+         exit(1);
+     }
+@@ -76,7 +73,7 @@ function php_cli_server_start(
+         $fp = @fsockopen("tcp://$bound");
+         // Failure, the server is no longer running
+         if (!($status && $status['running'])) {
+-            $error = sprintf("Server stopped\nServer output:\n%s\n", file_get_contents($output_file));
++            $error = "Server is not running\n";
+             break;
+         }
+         // Success, Connected to servers
+@@ -93,14 +90,8 @@ function php_cli_server_start(
+     }
+ 
+     register_shutdown_function(
+-        function($handle) use($router, $doc_root, $output_file) {
++        function($handle) use($router, $doc_root) {
+             proc_terminate($handle);
+-            $status = proc_get_status($handle);
+-            if ($status['exitcode'] !== -1 && $status['exitcode'] !== 0
+-                    && !($status['exitcode'] === 255 && PHP_OS_FAMILY == 'Windows')) {
+-                printf("Server exited with non-zero status: %d\n", $status['exitcode']);
+-                printf("Server output:\n%s\n", file_get_contents($output_file));
+-            }
+             @unlink(__DIR__ . "/{$router}");
+             @rmdir($doc_root);
+         },
+diff --git a/sapi/cli/tests/php_cli_server_013.phpt b/sapi/cli/tests/php_cli_server_013.phpt
+index 11e3fdf0..8042219a 100644
+--- a/sapi/cli/tests/php_cli_server_013.phpt
++++ b/sapi/cli/tests/php_cli_server_013.phpt
+@@ -58,60 +58,6 @@ HEAD /main/foo/bar HTTP/1.1
+ Host: {$host}
+ 
+ 
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-DELETE / HTTP/1.1
+-Host: {$host}
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-PUT / HTTP/1.1
+-Host: {$host}
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        $output .= fgets($fp);
+-    }
+-}
+-
+-echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
+-fclose($fp);
+-
+-$output = '';
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-PATCH / HTTP/1.1
+-Host: {$host}
+-
+-
+ HEADER
+ )) {
+     while (!feof($fp)) {
+@@ -148,34 +94,5 @@ Connection: close
+ Content-Type: text/html; charset=UTF-8
+ Content-Length: %d
+ 
+-
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
+-HTTP/1.1 405 Method Not Allowed
+-Host: %s
+-Date: %s
+-Connection: close
+-Content-Type: text/html; charset=UTF-8
+-Content-Length: %d
+-Allow: GET, HEAD, POST
+-
+-<!doctype html><html><head><title>405 Method Not Allowed</title><style>AAA</style>
+-</head><body><h1>Method Not Allowed</h1><p>Requested method not allowed.</p></body></html>
++<!doctype html><html><head><title>404 Not Found</title><style>AAA</style>
++</head><body><h1>Not Found</h1><p>The requested resource <code class="url">/main/foo/bar</code> was not found on this server.</p></body></html>
+diff --git a/sapi/cli/tests/php_cli_server_022.phpt b/sapi/cli/tests/php_cli_server_022.phpt
+deleted file mode 100644
+index 763a2036..00000000
+--- a/sapi/cli/tests/php_cli_server_022.phpt
++++ /dev/null
+@@ -1,45 +0,0 @@
+---TEST--
+-Check PHP file body is executed
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-include "php_cli_server.inc";
+-php_cli_server_start(<<<'PHP'
+-header('Bar-Foo: Foo');
+-echo "Hello world\n";
+-var_dump(true);
+-PHP
+-);
+-
+-$host = PHP_CLI_SERVER_HOSTNAME;
+-$fp = php_cli_server_connect();
+-
+-if(fwrite($fp, <<<HEADER
+-GET / HTTP/1.1
+-Host: {$host}
+-Foo-Bar: Bar
+-
+-
+-HEADER
+-)) {
+-    while (!feof($fp)) {
+-        echo fgets($fp);
+-    }
+-}
+-
+-fclose($fp);
+-?>
+---EXPECTF--
+-HTTP/1.1 200 OK
+-Host: %s
+-Date: %s
+-Connection: close
+-X-Powered-By: %s
+-Bar-Foo: Foo
+-Content-type: text/html; charset=UTF-8
+-
+-Hello world
+-bool(true)
+diff --git a/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt b/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
+index 69ffb52d..09030c90 100644
+--- a/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
++++ b/sapi/cli/tests/sapi_windows_set_ctrl_handler.phpt
+@@ -55,13 +55,13 @@ if ($is_child) {
+ 
+     $status = proc_get_status($proc);
+     if ($status["running"]) {
+-        echo "Child $child_pid didn't exit after {$max}us\n";
++        echo "Child $child_pid didn't exit after ${max}us\n";
+ 		foreach ($pipes as $pipe) {
+ 			fclose($pipe);
+ 		}
+ 		proc_terminate($proc);
+     } else {
+-        echo "Child $child_pid exit with status ", $status["exitcode"], " after {$total}us\n";
++        echo "Child $child_pid exit with status ", $status["exitcode"], " after ${total}us\n";
+     }
+ }
+ 
+diff --git a/sapi/embed/php_embed.c b/sapi/embed/php_embed.c
+index 4b94bd98..1679246a 100644
+--- a/sapi/embed/php_embed.c
++++ b/sapi/embed/php_embed.c
+@@ -119,7 +119,10 @@ static void php_embed_register_variables(zval *track_vars_array)
+ /* Module initialization (MINIT) */
+ static int php_embed_startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, NULL);
++	if (php_module_startup(sapi_module, NULL, 0) == FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ EMBED_SAPI_API sapi_module_struct php_embed_module = {
+diff --git a/sapi/fpm/config.m4 b/sapi/fpm/config.m4
+index da09511a..09c3ae08 100644
+--- a/sapi/fpm/config.m4
++++ b/sapi/fpm/config.m4
+@@ -25,30 +25,6 @@ AC_DEFUN([AC_FPM_PRCTL],
+   ])
+ ])
+ 
+-AC_DEFUN([AC_FPM_PROCCTL],
+-[
+-  AC_MSG_CHECKING([for procctl])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/procctl.h>]], [[procctl(0, 0, 0, 0);]])], [
+-    AC_DEFINE([HAVE_PROCCTL], 1, [do we have procctl?])
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-])
+-
+-AC_DEFUN([AC_FPM_SETPFLAGS],
+-[
+-  AC_MSG_CHECKING([for setpflags])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <priv.h>]], [[setpflags(0, 0);]])], [
+-    AC_DEFINE([HAVE_SETPFLAGS], 1, [do we have setpflags?])
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-])
+-
+ AC_DEFUN([AC_FPM_CLOCK],
+ [
+   have_clock_gettime=no
+@@ -343,19 +319,6 @@ AC_DEFUN([AC_FPM_LQ],
+     AC_DEFINE([HAVE_LQ_TCP_INFO], 1, [do we have TCP_INFO?])
+   fi
+ 
+-  AC_MSG_CHECKING([for TCP_CONNECTION_INFO])
+-
+-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <netinet/tcp.h>]], [[struct tcp_connection_info ti; int x = TCP_CONNECTION_INFO;]])], [
+-    have_lq=tcp_connection_info
+-    AC_MSG_RESULT([yes])
+-  ], [
+-    AC_MSG_RESULT([no])
+-  ])
+-
+-  if test "$have_lq" = "tcp_connection_info"; then
+-    AC_DEFINE([HAVE_LQ_TCP_CONNECTION_INFO], 1, [do we have TCP_CONNECTION_INFO?])
+-  fi
+-
+   if test "$have_lq" = "no" ; then
+     AC_MSG_CHECKING([for SO_LISTENQLEN])
+ 
+@@ -531,8 +494,6 @@ if test "$PHP_FPM" != "no"; then
+ 
+   AC_FPM_STDLIBS
+   AC_FPM_PRCTL
+-  AC_FPM_PROCCTL
+-  AC_FPM_SETPFLAGS
+   AC_FPM_CLOCK
+   AC_FPM_TRACE
+   AC_FPM_BUILTIN_ATOMIC
+@@ -576,12 +537,6 @@ if test "$PHP_FPM" != "no"; then
+     [no],
+     [no])
+ 
+-  PHP_ARG_WITH([fpm-selinux],,
+-    [AS_HELP_STRING([--with-fpm-selinux],
+-      [Support SELinux policy library])],
+-    [no],
+-    [no])
+-
+   if test "$PHP_FPM_SYSTEMD" != "no" ; then
+     PKG_CHECK_MODULES([SYSTEMD], [libsystemd >= 209])
+ 
+@@ -663,14 +618,6 @@ if test "$PHP_FPM" != "no"; then
+     ])
+   fi
+ 
+-  if test "x$PHP_FPM_SELINUX" != "xno" ; then
+-    AC_CHECK_HEADERS([selinux/selinux.h])
+-    AC_CHECK_LIB(selinux, security_setenforce, [
+-      PHP_ADD_LIBRARY(selinux)
+-      AC_DEFINE(HAVE_SELINUX, 1, [ SElinux available ])
+-    ],[])
+-  fi
+-
+   PHP_SUBST_OLD(php_fpm_systemd)
+   AC_DEFINE_UNQUOTED(PHP_FPM_SYSTEMD, "$php_fpm_systemd", [fpm systemd service type])
+ 

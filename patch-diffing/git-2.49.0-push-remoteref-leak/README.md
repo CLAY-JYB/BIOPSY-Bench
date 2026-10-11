@@ -7,7 +7,7 @@
 | **Difficulty**   | hard       |
 | **Challenge ID** | git-2.49.0-push-remoteref-leak          |
 | **Domain**       | 1-day vulnerability analysis (patch diffing) |
-| **Focus**        | none (R2 v1 flags-only) |
+| **Focus**        | xollvm armor on the ref-filter sort and clear paths, away from both the fix site and the ladder hosts |
 
 **Objective.** isolate the security fix between two builds of the same program, characterize the vulnerability it closes, and prove the finding with a differential trigger, per the contract in `instruction.md`.
 
@@ -32,9 +32,10 @@ Difficulty is the sole derived quantity. The band `hard` is computed from the dr
 |-------|---------------------------------------------------------------------------|
 | realism | real historical CVE pair > realistic crash-inducing modification > synthetic archetype |
 | series volume | how many unlabeled commits the fix hides among                          |
-| topology | cluster count, cross-file dispersal, decoy mixing                        |
+| ladder depth | how many ordered analysis stages the rubric demands                     |
+| protection | armor on the pair, explicit grind bars on the ladder                     |
 
-The v1 build stance is flags-only. Both sides compile with the same profile, so no surface indicator tells you which build is vulnerable.
+Both sides compile with the same profile. The xollvm armor (control-flow flattening, mixed arithmetic, anti-optimization shield) covers the same ref-filter functions on both sides, so it adds analysis friction without telling you which build is vulnerable.
 
 ## Intended solve path
 

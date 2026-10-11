@@ -1,0 +1,863 @@
+diff --git a/ext/spl/spl_directory.stub.php b/ext/spl/spl_directory.stub.php
+index d11c9b50..d734a66f 100644
+--- a/ext/spl/spl_directory.stub.php
++++ b/ext/spl/spl_directory.stub.php
+@@ -97,10 +97,7 @@ class SplFileInfo implements Stringable
+     /** @tentative-return-type */
+     public function __debugInfo(): array {}
+ 
+-    /**
+-     * @deprecated
+-     * @tentative-return-type
+-     */
++    /** @tentative-return-type */
+     final public function _bad_state_ex(): void {}
+ }
+ 
+@@ -150,67 +147,6 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator
+ 
+ class FilesystemIterator extends DirectoryIterator
+ {
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_CURRENT_MODE_MASK
+-     */
+-    public const CURRENT_MODE_MASK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_CURRENT_AS_PATHNAME
+-     */
+-    public const CURRENT_AS_PATHNAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_CURRENT_AS_FILEINFO
+-     */
+-    public const CURRENT_AS_FILEINFO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_CURRENT_AS_SELF
+-     */
+-    public const CURRENT_AS_SELF = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_KEY_MODE_MASK
+-     */
+-    public const KEY_MODE_MASK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_KEY_AS_PATHNAME
+-     */
+-    public const KEY_AS_PATHNAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_FOLLOW_SYMLINKS
+-     */
+-    public const FOLLOW_SYMLINKS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_KEY_AS_FILENAME
+-     */
+-    public const KEY_AS_FILENAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_NEW_CURRENT_AND_KEY
+-     */
+-    public const NEW_CURRENT_AND_KEY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_OTHERS_MASK
+-     */
+-    public const OTHER_MODE_MASK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_SKIPDOTS
+-     */
+-    public const SKIP_DOTS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_DIR_UNIXPATHS
+-     */
+-    public const UNIX_PATHS = UNKNOWN;
+-
+     public function __construct(string $directory, int $flags = FilesystemIterator::KEY_AS_PATHNAME | FilesystemIterator::CURRENT_AS_FILEINFO | FilesystemIterator::SKIP_DOTS) {}
+ 
+     /** @tentative-return-type */
+@@ -258,27 +194,6 @@ class GlobIterator extends FilesystemIterator implements Countable
+ 
+ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIterator
+ {
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_OBJECT_DROP_NEW_LINE
+-     */
+-    public const DROP_NEW_LINE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_OBJECT_READ_AHEAD
+-     */
+-    public const READ_AHEAD = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_OBJECT_SKIP_EMPTY
+-     */
+-    public const SKIP_EMPTY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_FILE_OBJECT_READ_CSV
+-     */
+-    public const READ_CSV = UNKNOWN;
+-
+     /** @param resource|null $context */
+     public function __construct(string $filename, string $mode = "r", bool $useIncludePath = false, $context = null) {}
+ 
+@@ -364,10 +279,10 @@ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIt
+     public function getMaxLineLen(): int {}
+ 
+     /** @tentative-return-type */
+-    public function hasChildren(): false {}
++    public function hasChildren(): bool {}
+ 
+     /** @tentative-return-type */
+-    public function getChildren(): null {}
++    public function getChildren(): ?RecursiveIterator {}
+ 
+     /** @tentative-return-type */
+     public function seek(int $line): void {}
+diff --git a/ext/spl/spl_directory_arginfo.h b/ext/spl/spl_directory_arginfo.h
+index 99a6e0b8..2b220828 100644
+--- a/ext/spl/spl_directory_arginfo.h
++++ b/ext/spl/spl_directory_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 7e67d07b6079c39a091e91dfddfbe7170067955e */
++ * Stub hash: c8e8093692f8a4642ea7c840e301f1afed599ee1 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_SplFileInfo___construct, 0, 0, 1)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+@@ -254,10 +254,9 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_class_SplFileObject_getMaxLineLen arginfo_class_FilesystemIterator_getFlags
+ 
+-ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplFileObject_hasChildren, 0, 0, IS_FALSE, 0)
+-ZEND_END_ARG_INFO()
++#define arginfo_class_SplFileObject_hasChildren arginfo_class_SplFileInfo_isWritable
+ 
+-ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplFileObject_getChildren, 0, 0, IS_NULL, 1)
++ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_OBJ_INFO_EX(arginfo_class_SplFileObject_getChildren, 0, 0, RecursiveIterator, 1)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplFileObject_seek, 0, 1, IS_VOID, 0)
+@@ -396,7 +395,7 @@ static const zend_function_entry class_SplFileInfo_methods[] = {
+ 	ZEND_ME(SplFileInfo, setInfoClass, arginfo_class_SplFileInfo_setInfoClass, ZEND_ACC_PUBLIC)
+ 	ZEND_MALIAS(SplFileInfo, __toString, getPathname, arginfo_class_SplFileInfo___toString, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(SplFileInfo, __debugInfo, arginfo_class_SplFileInfo___debugInfo, ZEND_ACC_PUBLIC)
+-	ZEND_ME(SplFileInfo, _bad_state_ex, arginfo_class_SplFileInfo__bad_state_ex, ZEND_ACC_PUBLIC|ZEND_ACC_FINAL|ZEND_ACC_DEPRECATED)
++	ZEND_ME(SplFileInfo, _bad_state_ex, arginfo_class_SplFileInfo__bad_state_ex, ZEND_ACC_PUBLIC|ZEND_ACC_FINAL)
+ 	ZEND_FE_END
+ };
+ 
+@@ -439,13 +438,15 @@ static const zend_function_entry class_RecursiveDirectoryIterator_methods[] = {
+ };
+ 
+ 
+-#if defined(HAVE_GLOB)
+ static const zend_function_entry class_GlobIterator_methods[] = {
++#if defined(HAVE_GLOB)
+ 	ZEND_ME(GlobIterator, __construct, arginfo_class_GlobIterator___construct, ZEND_ACC_PUBLIC)
++#endif
++#if defined(HAVE_GLOB)
+ 	ZEND_ME(GlobIterator, count, arginfo_class_GlobIterator_count, ZEND_ACC_PUBLIC)
++#endif
+ 	ZEND_FE_END
+ };
+-#endif
+ 
+ 
+ static const zend_function_entry class_SplFileObject_methods[] = {
+@@ -520,78 +521,6 @@ static zend_class_entry *register_class_FilesystemIterator(zend_class_entry *cla
+ 	INIT_CLASS_ENTRY(ce, "FilesystemIterator", class_FilesystemIterator_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_DirectoryIterator);
+ 
+-	zval const_CURRENT_MODE_MASK_value;
+-	ZVAL_LONG(&const_CURRENT_MODE_MASK_value, SPL_FILE_DIR_CURRENT_MODE_MASK);
+-	zend_string *const_CURRENT_MODE_MASK_name = zend_string_init_interned("CURRENT_MODE_MASK", sizeof("CURRENT_MODE_MASK") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURRENT_MODE_MASK_name, &const_CURRENT_MODE_MASK_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURRENT_MODE_MASK_name);
+-
+-	zval const_CURRENT_AS_PATHNAME_value;
+-	ZVAL_LONG(&const_CURRENT_AS_PATHNAME_value, SPL_FILE_DIR_CURRENT_AS_PATHNAME);
+-	zend_string *const_CURRENT_AS_PATHNAME_name = zend_string_init_interned("CURRENT_AS_PATHNAME", sizeof("CURRENT_AS_PATHNAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURRENT_AS_PATHNAME_name, &const_CURRENT_AS_PATHNAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURRENT_AS_PATHNAME_name);
+-
+-	zval const_CURRENT_AS_FILEINFO_value;
+-	ZVAL_LONG(&const_CURRENT_AS_FILEINFO_value, SPL_FILE_DIR_CURRENT_AS_FILEINFO);
+-	zend_string *const_CURRENT_AS_FILEINFO_name = zend_string_init_interned("CURRENT_AS_FILEINFO", sizeof("CURRENT_AS_FILEINFO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURRENT_AS_FILEINFO_name, &const_CURRENT_AS_FILEINFO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURRENT_AS_FILEINFO_name);
+-
+-	zval const_CURRENT_AS_SELF_value;
+-	ZVAL_LONG(&const_CURRENT_AS_SELF_value, SPL_FILE_DIR_CURRENT_AS_SELF);
+-	zend_string *const_CURRENT_AS_SELF_name = zend_string_init_interned("CURRENT_AS_SELF", sizeof("CURRENT_AS_SELF") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURRENT_AS_SELF_name, &const_CURRENT_AS_SELF_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURRENT_AS_SELF_name);
+-
+-	zval const_KEY_MODE_MASK_value;
+-	ZVAL_LONG(&const_KEY_MODE_MASK_value, SPL_FILE_DIR_KEY_MODE_MASK);
+-	zend_string *const_KEY_MODE_MASK_name = zend_string_init_interned("KEY_MODE_MASK", sizeof("KEY_MODE_MASK") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_KEY_MODE_MASK_name, &const_KEY_MODE_MASK_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_KEY_MODE_MASK_name);
+-
+-	zval const_KEY_AS_PATHNAME_value;
+-	ZVAL_LONG(&const_KEY_AS_PATHNAME_value, SPL_FILE_DIR_KEY_AS_PATHNAME);
+-	zend_string *const_KEY_AS_PATHNAME_name = zend_string_init_interned("KEY_AS_PATHNAME", sizeof("KEY_AS_PATHNAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_KEY_AS_PATHNAME_name, &const_KEY_AS_PATHNAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_KEY_AS_PATHNAME_name);
+-
+-	zval const_FOLLOW_SYMLINKS_value;
+-	ZVAL_LONG(&const_FOLLOW_SYMLINKS_value, SPL_FILE_DIR_FOLLOW_SYMLINKS);
+-	zend_string *const_FOLLOW_SYMLINKS_name = zend_string_init_interned("FOLLOW_SYMLINKS", sizeof("FOLLOW_SYMLINKS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FOLLOW_SYMLINKS_name, &const_FOLLOW_SYMLINKS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FOLLOW_SYMLINKS_name);
+-
+-	zval const_KEY_AS_FILENAME_value;
+-	ZVAL_LONG(&const_KEY_AS_FILENAME_value, SPL_FILE_DIR_KEY_AS_FILENAME);
+-	zend_string *const_KEY_AS_FILENAME_name = zend_string_init_interned("KEY_AS_FILENAME", sizeof("KEY_AS_FILENAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_KEY_AS_FILENAME_name, &const_KEY_AS_FILENAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_KEY_AS_FILENAME_name);
+-
+-	zval const_NEW_CURRENT_AND_KEY_value;
+-	ZVAL_LONG(&const_NEW_CURRENT_AND_KEY_value, SPL_FILE_NEW_CURRENT_AND_KEY);
+-	zend_string *const_NEW_CURRENT_AND_KEY_name = zend_string_init_interned("NEW_CURRENT_AND_KEY", sizeof("NEW_CURRENT_AND_KEY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NEW_CURRENT_AND_KEY_name, &const_NEW_CURRENT_AND_KEY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NEW_CURRENT_AND_KEY_name);
+-
+-	zval const_OTHER_MODE_MASK_value;
+-	ZVAL_LONG(&const_OTHER_MODE_MASK_value, SPL_FILE_DIR_OTHERS_MASK);
+-	zend_string *const_OTHER_MODE_MASK_name = zend_string_init_interned("OTHER_MODE_MASK", sizeof("OTHER_MODE_MASK") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OTHER_MODE_MASK_name, &const_OTHER_MODE_MASK_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OTHER_MODE_MASK_name);
+-
+-	zval const_SKIP_DOTS_value;
+-	ZVAL_LONG(&const_SKIP_DOTS_value, SPL_FILE_DIR_SKIPDOTS);
+-	zend_string *const_SKIP_DOTS_name = zend_string_init_interned("SKIP_DOTS", sizeof("SKIP_DOTS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SKIP_DOTS_name, &const_SKIP_DOTS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SKIP_DOTS_name);
+-
+-	zval const_UNIX_PATHS_value;
+-	ZVAL_LONG(&const_UNIX_PATHS_value, SPL_FILE_DIR_UNIXPATHS);
+-	zend_string *const_UNIX_PATHS_name = zend_string_init_interned("UNIX_PATHS", sizeof("UNIX_PATHS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_UNIX_PATHS_name, &const_UNIX_PATHS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_UNIX_PATHS_name);
+-
+ 	return class_entry;
+ }
+ 
+@@ -606,7 +535,6 @@ static zend_class_entry *register_class_RecursiveDirectoryIterator(zend_class_en
+ 	return class_entry;
+ }
+ 
+-#if defined(HAVE_GLOB)
+ static zend_class_entry *register_class_GlobIterator(zend_class_entry *class_entry_FilesystemIterator, zend_class_entry *class_entry_Countable)
+ {
+ 	zend_class_entry ce, *class_entry;
+@@ -617,7 +545,6 @@ static zend_class_entry *register_class_GlobIterator(zend_class_entry *class_ent
+ 
+ 	return class_entry;
+ }
+-#endif
+ 
+ static zend_class_entry *register_class_SplFileObject(zend_class_entry *class_entry_SplFileInfo, zend_class_entry *class_entry_RecursiveIterator, zend_class_entry *class_entry_SeekableIterator)
+ {
+@@ -627,30 +554,6 @@ static zend_class_entry *register_class_SplFileObject(zend_class_entry *class_en
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_SplFileInfo);
+ 	zend_class_implements(class_entry, 2, class_entry_RecursiveIterator, class_entry_SeekableIterator);
+ 
+-	zval const_DROP_NEW_LINE_value;
+-	ZVAL_LONG(&const_DROP_NEW_LINE_value, SPL_FILE_OBJECT_DROP_NEW_LINE);
+-	zend_string *const_DROP_NEW_LINE_name = zend_string_init_interned("DROP_NEW_LINE", sizeof("DROP_NEW_LINE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_DROP_NEW_LINE_name, &const_DROP_NEW_LINE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_DROP_NEW_LINE_name);
+-
+-	zval const_READ_AHEAD_value;
+-	ZVAL_LONG(&const_READ_AHEAD_value, SPL_FILE_OBJECT_READ_AHEAD);
+-	zend_string *const_READ_AHEAD_name = zend_string_init_interned("READ_AHEAD", sizeof("READ_AHEAD") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_READ_AHEAD_name, &const_READ_AHEAD_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_READ_AHEAD_name);
+-
+-	zval const_SKIP_EMPTY_value;
+-	ZVAL_LONG(&const_SKIP_EMPTY_value, SPL_FILE_OBJECT_SKIP_EMPTY);
+-	zend_string *const_SKIP_EMPTY_name = zend_string_init_interned("SKIP_EMPTY", sizeof("SKIP_EMPTY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SKIP_EMPTY_name, &const_SKIP_EMPTY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SKIP_EMPTY_name);
+-
+-	zval const_READ_CSV_value;
+-	ZVAL_LONG(&const_READ_CSV_value, SPL_FILE_OBJECT_READ_CSV);
+-	zend_string *const_READ_CSV_name = zend_string_init_interned("READ_CSV", sizeof("READ_CSV") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_READ_CSV_name, &const_READ_CSV_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_READ_CSV_name);
+-
+ 	return class_entry;
+ }
+ 
+diff --git a/ext/spl/spl_dllist.c b/ext/spl/spl_dllist.c
+index 186b9a34..f398d93d 100644
+--- a/ext/spl/spl_dllist.c
++++ b/ext/spl/spl_dllist.c
+@@ -51,6 +51,11 @@ PHPAPI zend_class_entry  *spl_ce_SplStack;
+ #define SPL_LLIST_ADDREF(elem) SPL_LLIST_RC(elem)++
+ #define SPL_LLIST_CHECK_ADDREF(elem) if (elem) SPL_LLIST_RC(elem)++
+ 
++#define SPL_DLLIST_IT_DELETE 0x00000001 /* Delete flag makes the iterator delete the current element on next */
++#define SPL_DLLIST_IT_LIFO   0x00000002 /* LIFO flag makes the iterator traverse the structure as a LastInFirstOut */
++#define SPL_DLLIST_IT_MASK   0x00000003 /* Mask to isolate flags related to iterators */
++#define SPL_DLLIST_IT_FIX    0x00000004 /* Backward/Forward bit is fixed */
++
+ #ifdef accept
+ #undef accept
+ #endif
+@@ -86,7 +91,7 @@ struct _spl_dllist_object {
+ 
+ /* define an overloaded iterator structure */
+ struct _spl_dllist_it {
+-	zend_object_iterator   intern;
++	zend_user_iterator     intern;
+ 	spl_ptr_llist_element *traverse_pointer;
+ 	int                    traverse_position;
+ 	int                    flags;
+@@ -404,7 +409,7 @@ static zend_object *spl_dllist_object_clone(zend_object *old_object) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result spl_dllist_object_count_elements(zend_object *object, zend_long *count) /* {{{ */
++static int spl_dllist_object_count_elements(zend_object *object, zend_long *count) /* {{{ */
+ {
+ 	spl_dllist_object *intern = spl_dllist_from_obj(object);
+ 
+@@ -812,7 +817,8 @@ static void spl_dllist_it_dtor(zend_object_iterator *iter) /* {{{ */
+ 
+ 	SPL_LLIST_CHECK_DELREF(iterator->traverse_pointer);
+ 
+-	zval_ptr_dtor(&iterator->intern.data);
++	zend_user_it_invalidate_current(iter);
++	zval_ptr_dtor(&iterator->intern.it.data);
+ }
+ /* }}} */
+ 
+@@ -911,6 +917,8 @@ static void spl_dllist_it_move_forward(zend_object_iterator *iter) /* {{{ */
+ 	spl_dllist_it *iterator = (spl_dllist_it *)iter;
+ 	spl_dllist_object *object = Z_SPLDLLIST_P(&iter->data);
+ 
++	zend_user_it_invalidate_current(iter);
++
+ 	spl_dllist_it_helper_move_forward(&iterator->traverse_pointer, &iterator->traverse_position, object->llist, iterator->flags);
+ }
+ /* }}} */
+@@ -1027,10 +1035,12 @@ PHP_METHOD(SplDoublyLinkedList, serialize)
+ 		current = next;
+ 	}
+ 
++	smart_str_0(&buf);
++
+ 	/* done */
+ 	PHP_VAR_SERIALIZE_DESTROY(var_hash);
+ 
+-	RETURN_STR(smart_str_extract(&buf));
++	RETURN_NEW_STR(buf.s);
+ } /* }}} */
+ 
+ /* {{{ Unserializes storage */
+@@ -1184,7 +1194,6 @@ PHP_METHOD(SplDoublyLinkedList, add)
+ 
+ 		/* Get the element we want to insert before */
+ 		element = spl_ptr_llist_offset(intern->llist, index, intern->flags & SPL_DLLIST_IT_LIFO);
+-		ZEND_ASSERT(element != NULL);
+ 
+ 		ZVAL_COPY(&elem->data, value);
+ 		SPL_LLIST_RC(elem) = 1;
+@@ -1208,7 +1217,7 @@ PHP_METHOD(SplDoublyLinkedList, add)
+ PHP_METHOD(SplDoublyLinkedList, __debugInfo)
+ {
+ 	if (zend_parse_parameters_none() == FAILURE) {
+-		RETURN_THROWS();
++		return;
+ 	}
+ 
+ 	RETURN_ARR(spl_dllist_object_get_debug_info(Z_OBJ_P(ZEND_THIS)));
+@@ -1228,6 +1237,7 @@ static const zend_object_iterator_funcs spl_dllist_it_funcs = {
+ 
+ zend_object_iterator *spl_dllist_get_iterator(zend_class_entry *ce, zval *object, int by_ref) /* {{{ */
+ {
++	spl_dllist_it *iterator;
+ 	spl_dllist_object *dllist_object = Z_SPLDLLIST_P(object);
+ 
+ 	if (by_ref) {
+@@ -1235,19 +1245,21 @@ zend_object_iterator *spl_dllist_get_iterator(zend_class_entry *ce, zval *object
+ 		return NULL;
+ 	}
+ 
+-	spl_dllist_it *iterator = emalloc(sizeof(spl_dllist_it));
++	iterator = emalloc(sizeof(spl_dllist_it));
+ 
+-	zend_iterator_init(&iterator->intern);
++	zend_iterator_init((zend_object_iterator*)iterator);
+ 
+-	ZVAL_OBJ_COPY(&iterator->intern.data, Z_OBJ_P(object));
+-	iterator->intern.funcs       = &spl_dllist_it_funcs;
++	ZVAL_OBJ_COPY(&iterator->intern.it.data, Z_OBJ_P(object));
++	iterator->intern.it.funcs    = &spl_dllist_it_funcs;
++	iterator->intern.ce          = ce;
+ 	iterator->traverse_position  = dllist_object->traverse_position;
+ 	iterator->traverse_pointer   = dllist_object->traverse_pointer;
+ 	iterator->flags              = dllist_object->flags & SPL_DLLIST_IT_MASK;
++	ZVAL_UNDEF(&iterator->intern.value);
+ 
+ 	SPL_LLIST_CHECK_ADDREF(iterator->traverse_pointer);
+ 
+-	return &iterator->intern;
++	return &iterator->intern.it;
+ }
+ /* }}} */
+ 
+@@ -1267,6 +1279,11 @@ PHP_MINIT_FUNCTION(spl_dllist) /* {{{ */
+ 	spl_handler_SplDoublyLinkedList.get_gc = spl_dllist_object_get_gc;
+ 	spl_handler_SplDoublyLinkedList.free_obj = spl_dllist_object_free_storage;
+ 
++	REGISTER_SPL_CLASS_CONST_LONG(SplDoublyLinkedList, "IT_MODE_LIFO",  SPL_DLLIST_IT_LIFO);
++	REGISTER_SPL_CLASS_CONST_LONG(SplDoublyLinkedList, "IT_MODE_FIFO",  0);
++	REGISTER_SPL_CLASS_CONST_LONG(SplDoublyLinkedList, "IT_MODE_DELETE",SPL_DLLIST_IT_DELETE);
++	REGISTER_SPL_CLASS_CONST_LONG(SplDoublyLinkedList, "IT_MODE_KEEP",  0);
++
+ 	spl_ce_SplQueue = register_class_SplQueue(spl_ce_SplDoublyLinkedList);
+ 	spl_ce_SplQueue->create_object = spl_dllist_object_new;
+ 	spl_ce_SplQueue->get_iterator = spl_dllist_get_iterator;
+diff --git a/ext/spl/spl_dllist.h b/ext/spl/spl_dllist.h
+index 6915eb27..c31c7a3a 100644
+--- a/ext/spl/spl_dllist.h
++++ b/ext/spl/spl_dllist.h
+@@ -20,13 +20,6 @@
+ #include "php.h"
+ #include "php_spl.h"
+ 
+-#define SPL_DLLIST_IT_KEEP   0x00000000
+-#define SPL_DLLIST_IT_FIFO   0x00000000 /* FIFO flag makes the iterator traverse the structure as a FirstInFirstOut */
+-#define SPL_DLLIST_IT_DELETE 0x00000001 /* Delete flag makes the iterator delete the current element on next */
+-#define SPL_DLLIST_IT_LIFO   0x00000002 /* LIFO flag makes the iterator traverse the structure as a LastInFirstOut */
+-#define SPL_DLLIST_IT_MASK   0x00000003 /* Mask to isolate flags related to iterators */
+-#define SPL_DLLIST_IT_FIX    0x00000004 /* Backward/Forward bit is fixed */
+-
+ extern PHPAPI zend_class_entry *spl_ce_SplDoublyLinkedList;
+ extern PHPAPI zend_class_entry *spl_ce_SplQueue;
+ extern PHPAPI zend_class_entry *spl_ce_SplStack;
+diff --git a/ext/spl/spl_dllist.stub.php b/ext/spl/spl_dllist.stub.php
+index 8083889f..f8d3c985 100644
+--- a/ext/spl/spl_dllist.stub.php
++++ b/ext/spl/spl_dllist.stub.php
+@@ -4,27 +4,6 @@
+ 
+ class SplDoublyLinkedList implements Iterator, Countable, ArrayAccess, Serializable
+ {
+-    /**
+-     * @var int
+-     * @cvalue SPL_DLLIST_IT_LIFO
+-     */
+-    public const IT_MODE_LIFO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_DLLIST_IT_FIFO
+-     */
+-    public const IT_MODE_FIFO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_DLLIST_IT_DELETE
+-     */
+-    public const IT_MODE_DELETE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_DLLIST_IT_KEEP
+-     */
+-    public const IT_MODE_KEEP = UNKNOWN;
+-
+     /** @tentative-return-type */
+     public function add(int $index, mixed $value): void {}
+ 
+diff --git a/ext/spl/spl_dllist_arginfo.h b/ext/spl/spl_dllist_arginfo.h
+index 13cab9a6..7238bcde 100644
+--- a/ext/spl/spl_dllist_arginfo.h
++++ b/ext/spl/spl_dllist_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: b88d228873f2d8e0caa583fd80c70ce2bfc51188 */
++ * Stub hash: 4631669bb268bb2c9e005fa7ee385245604c1d71 */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplDoublyLinkedList_add, 0, 2, IS_VOID, 0)
+ 	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
+@@ -162,30 +162,6 @@ static zend_class_entry *register_class_SplDoublyLinkedList(zend_class_entry *cl
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+ 	zend_class_implements(class_entry, 4, class_entry_Iterator, class_entry_Countable, class_entry_ArrayAccess, class_entry_Serializable);
+ 
+-	zval const_IT_MODE_LIFO_value;
+-	ZVAL_LONG(&const_IT_MODE_LIFO_value, SPL_DLLIST_IT_LIFO);
+-	zend_string *const_IT_MODE_LIFO_name = zend_string_init_interned("IT_MODE_LIFO", sizeof("IT_MODE_LIFO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IT_MODE_LIFO_name, &const_IT_MODE_LIFO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IT_MODE_LIFO_name);
+-
+-	zval const_IT_MODE_FIFO_value;
+-	ZVAL_LONG(&const_IT_MODE_FIFO_value, SPL_DLLIST_IT_FIFO);
+-	zend_string *const_IT_MODE_FIFO_name = zend_string_init_interned("IT_MODE_FIFO", sizeof("IT_MODE_FIFO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IT_MODE_FIFO_name, &const_IT_MODE_FIFO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IT_MODE_FIFO_name);
+-
+-	zval const_IT_MODE_DELETE_value;
+-	ZVAL_LONG(&const_IT_MODE_DELETE_value, SPL_DLLIST_IT_DELETE);
+-	zend_string *const_IT_MODE_DELETE_name = zend_string_init_interned("IT_MODE_DELETE", sizeof("IT_MODE_DELETE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IT_MODE_DELETE_name, &const_IT_MODE_DELETE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IT_MODE_DELETE_name);
+-
+-	zval const_IT_MODE_KEEP_value;
+-	ZVAL_LONG(&const_IT_MODE_KEEP_value, SPL_DLLIST_IT_KEEP);
+-	zend_string *const_IT_MODE_KEEP_name = zend_string_init_interned("IT_MODE_KEEP", sizeof("IT_MODE_KEEP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_IT_MODE_KEEP_name, &const_IT_MODE_KEEP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_IT_MODE_KEEP_name);
+-
+ 	return class_entry;
+ }
+ 
+diff --git a/ext/spl/spl_fixedarray.c b/ext/spl/spl_fixedarray.c
+index 14ae7032..562806a5 100644
+--- a/ext/spl/spl_fixedarray.c
++++ b/ext/spl/spl_fixedarray.c
+@@ -40,10 +40,6 @@ PHPAPI zend_class_entry *spl_ce_SplFixedArray;
+ ZEND_GET_MODULE(spl_fixedarray)
+ #endif
+ 
+-/* Check if the object is an instance of a subclass of SplFixedArray that overrides method's implementation.
+- * Expect subclassing SplFixedArray to be rare and check that first. */
+-#define HAS_FIXEDARRAY_ARRAYACCESS_OVERRIDE(object, method) UNEXPECTED((object)->ce != spl_ce_SplFixedArray && (object)->ce->arrayaccess_funcs_ptr->method->common.scope != spl_ce_SplFixedArray)
+-
+ typedef struct _spl_fixedarray {
+ 	zend_long size;
+ 	/* It is possible to resize this, so this can't be combined with the object */
+@@ -54,9 +50,17 @@ typedef struct _spl_fixedarray {
+ 	zend_long cached_resize;
+ } spl_fixedarray;
+ 
++typedef struct _spl_fixedarray_methods {
++	zend_function       *fptr_offset_get;
++	zend_function       *fptr_offset_set;
++	zend_function       *fptr_offset_has;
++	zend_function       *fptr_offset_del;
++	zend_function       *fptr_count;
++} spl_fixedarray_methods;
++
+ typedef struct _spl_fixedarray_object {
+ 	spl_fixedarray          array;
+-	zend_function          *fptr_count;
++	spl_fixedarray_methods *methods;
+ 	zend_object             std;
+ } spl_fixedarray_object;
+ 
+@@ -104,18 +108,13 @@ static void spl_fixedarray_init_elems(spl_fixedarray *array, zend_long from, zen
+ 	}
+ }
+ 
+-static void spl_fixedarray_init_non_empty_struct(spl_fixedarray *array, zend_long size)
+-{
+-	array->size = 0; /* reset size in case ecalloc() fails */
+-	array->elements = size ? safe_emalloc(size, sizeof(zval), 0) : NULL;
+-	array->size = size;
+-	array->should_rebuild_properties = true;
+-}
+-
+ static void spl_fixedarray_init(spl_fixedarray *array, zend_long size)
+ {
+ 	if (size > 0) {
+-		spl_fixedarray_init_non_empty_struct(array, size);
++		array->size = 0; /* reset size in case ecalloc() fails */
++		array->elements = safe_emalloc(size, sizeof(zval), 0);
++		array->size = size;
++		array->should_rebuild_properties = true;
+ 		spl_fixedarray_init_elems(array, 0, size);
+ 	} else {
+ 		spl_fixedarray_default_ctor(array);
+@@ -268,10 +267,6 @@ static HashTable* spl_fixedarray_object_get_properties(zend_object *obj)
+ 				zend_hash_index_del(ht, i);
+ 			}
+ 		}
+-		if (HT_IS_PACKED(ht)) {
+-			/* Engine doesn't expet packed array */
+-			zend_hash_packed_to_hash(ht);
+-		}
+ 	}
+ 
+ 	return ht;
+@@ -282,6 +277,9 @@ static void spl_fixedarray_object_free_storage(zend_object *object)
+ 	spl_fixedarray_object *intern = spl_fixed_array_from_obj(object);
+ 	spl_fixedarray_dtor(&intern->array);
+ 	zend_object_std_dtor(&intern->std);
++	if (intern->methods) {
++		efree(intern->methods);
++	}
+ }
+ 
+ static zend_object *spl_fixedarray_object_new_ex(zend_class_entry *class_type, zend_object *orig, bool clone_orig)
+@@ -313,11 +311,34 @@ static zend_object *spl_fixedarray_object_new_ex(zend_class_entry *class_type, z
+ 	ZEND_ASSERT(parent);
+ 
+ 	if (UNEXPECTED(inherited)) {
+-		zend_function *fptr_count = zend_hash_str_find_ptr(&class_type->function_table, "count", sizeof("count") - 1);
+-		if (fptr_count->common.scope == parent) {
+-			fptr_count = NULL;
++		spl_fixedarray_methods methods;
++		methods.fptr_offset_get = zend_hash_str_find_ptr(&class_type->function_table, "offsetget", sizeof("offsetget") - 1);
++		if (methods.fptr_offset_get->common.scope == parent) {
++			methods.fptr_offset_get = NULL;
++		}
++		methods.fptr_offset_set = zend_hash_str_find_ptr(&class_type->function_table, "offsetset", sizeof("offsetset") - 1);
++		if (methods.fptr_offset_set->common.scope == parent) {
++			methods.fptr_offset_set = NULL;
++		}
++		methods.fptr_offset_has = zend_hash_str_find_ptr(&class_type->function_table, "offsetexists", sizeof("offsetexists") - 1);
++		if (methods.fptr_offset_has->common.scope == parent) {
++			methods.fptr_offset_has = NULL;
++		}
++		methods.fptr_offset_del = zend_hash_str_find_ptr(&class_type->function_table, "offsetunset", sizeof("offsetunset") - 1);
++		if (methods.fptr_offset_del->common.scope == parent) {
++			methods.fptr_offset_del = NULL;
++		}
++		methods.fptr_count = zend_hash_str_find_ptr(&class_type->function_table, "count", sizeof("count") - 1);
++		if (methods.fptr_count->common.scope == parent) {
++			methods.fptr_count = NULL;
++		}
++		/* Assume that most of the time in performance-sensitive code, SplFixedArray won't be subclassed with overrides for these ArrayAccess methods. */
++		/* Save 32 bytes per object on 64-bit systems by combining the 5 null pointers into 1 null pointer */
++		/* (This is already looking up 5 functions when any subclass of SplFixedArray is instantiated, which is inefficient) */
++		if (methods.fptr_offset_get || methods.fptr_offset_set || methods.fptr_offset_del || methods.fptr_offset_has || methods.fptr_count) {
++			intern->methods = emalloc(sizeof(spl_fixedarray_methods));
++			*intern->methods = methods;
+ 		}
+-		intern->fptr_count = fptr_count;
+ 	}
+ 
+ 	return &intern->std;
+@@ -397,27 +418,30 @@ static int spl_fixedarray_object_has_dimension(zend_object *object, zval *offset
+ 
+ static zval *spl_fixedarray_object_read_dimension(zend_object *object, zval *offset, int type, zval *rv)
+ {
++	spl_fixedarray_object *intern;
++
++	intern = spl_fixed_array_from_obj(object);
++
+ 	if (type == BP_VAR_IS && !spl_fixedarray_object_has_dimension(object, offset, 0)) {
+ 		return &EG(uninitialized_zval);
+ 	}
+ 
+-	if (HAS_FIXEDARRAY_ARRAYACCESS_OVERRIDE(object, zf_offsetget)) {
++	if (UNEXPECTED(intern->methods && intern->methods->fptr_offset_get)) {
+ 		zval tmp;
+ 		if (!offset) {
+ 			ZVAL_NULL(&tmp);
+ 			offset = &tmp;
+ 		}
+-		zend_call_known_instance_method_with_1_params(object->ce->arrayaccess_funcs_ptr->zf_offsetget, object, rv, offset);
++		zend_call_method_with_1_params(object, intern->std.ce, &intern->methods->fptr_offset_get, "offsetGet", rv, offset);
+ 		if (!Z_ISUNDEF_P(rv)) {
+ 			return rv;
+ 		}
+ 		return &EG(uninitialized_zval);
+ 	}
+-
+-	spl_fixedarray_object *intern = spl_fixed_array_from_obj(object);
+ 	if (type != BP_VAR_IS && type != BP_VAR_R) {
+ 		intern->array.should_rebuild_properties = true;
+ 	}
++
+ 	return spl_fixedarray_object_read_dimension_helper(intern, offset);
+ }
+ 
+@@ -453,18 +477,20 @@ static void spl_fixedarray_object_write_dimension_helper(spl_fixedarray_object *
+ 
+ static void spl_fixedarray_object_write_dimension(zend_object *object, zval *offset, zval *value)
+ {
+-	if (HAS_FIXEDARRAY_ARRAYACCESS_OVERRIDE(object, zf_offsetset)) {
+-		zval tmp;
++	spl_fixedarray_object *intern;
++	zval tmp;
+ 
++	intern = spl_fixed_array_from_obj(object);
++
++	if (UNEXPECTED(intern->methods && intern->methods->fptr_offset_set)) {
+ 		if (!offset) {
+ 			ZVAL_NULL(&tmp);
+ 			offset = &tmp;
+ 		}
+-		zend_call_known_instance_method_with_2_params(object->ce->arrayaccess_funcs_ptr->zf_offsetset, object, NULL, offset, value);
++		zend_call_method_with_2_params(object, intern->std.ce, &intern->methods->fptr_offset_set, "offsetSet", NULL, offset, value);
+ 		return;
+ 	}
+ 
+-	spl_fixedarray_object *intern = spl_fixed_array_from_obj(object);
+ 	spl_fixedarray_object_write_dimension_helper(intern, offset, value);
+ }
+ 
+@@ -490,12 +516,15 @@ static void spl_fixedarray_object_unset_dimension_helper(spl_fixedarray_object *
+ 
+ static void spl_fixedarray_object_unset_dimension(zend_object *object, zval *offset)
+ {
+-	if (UNEXPECTED(HAS_FIXEDARRAY_ARRAYACCESS_OVERRIDE(object, zf_offsetunset))) {
+-		zend_call_known_instance_method_with_1_params(object->ce->arrayaccess_funcs_ptr->zf_offsetunset, object, NULL, offset);
++	spl_fixedarray_object *intern;
++
++	intern = spl_fixed_array_from_obj(object);
++
++	if (UNEXPECTED(intern->methods && intern->methods->fptr_offset_del)) {
++		zend_call_method_with_1_params(object, intern->std.ce, &intern->methods->fptr_offset_del, "offsetUnset", NULL, offset);
+ 		return;
+ 	}
+ 
+-	spl_fixedarray_object *intern = spl_fixed_array_from_obj(object);
+ 	spl_fixedarray_object_unset_dimension_helper(intern, offset);
+ }
+ 
+@@ -521,28 +550,31 @@ static bool spl_fixedarray_object_has_dimension_helper(spl_fixedarray_object *in
+ 
+ static int spl_fixedarray_object_has_dimension(zend_object *object, zval *offset, int check_empty)
+ {
+-	if (HAS_FIXEDARRAY_ARRAYACCESS_OVERRIDE(object, zf_offsetexists)) {
++	spl_fixedarray_object *intern;
++
++	intern = spl_fixed_array_from_obj(object);
++
++	if (UNEXPECTED(intern->methods && intern->methods->fptr_offset_has)) {
+ 		zval rv;
++		bool result;
+ 
+-		zend_call_known_instance_method_with_1_params(object->ce->arrayaccess_funcs_ptr->zf_offsetexists, object, &rv, offset);
+-		bool result = zend_is_true(&rv);
++		zend_call_method_with_1_params(object, intern->std.ce, &intern->methods->fptr_offset_has, "offsetExists", &rv, offset);
++		result = zend_is_true(&rv);
+ 		zval_ptr_dtor(&rv);
+ 		return result;
+ 	}
+ 
+-	spl_fixedarray_object *intern = spl_fixed_array_from_obj(object);
+-
+ 	return spl_fixedarray_object_has_dimension_helper(intern, offset, check_empty);
+ }
+ 
+-static zend_result spl_fixedarray_object_count_elements(zend_object *object, zend_long *count)
++static int spl_fixedarray_object_count_elements(zend_object *object, zend_long *count)
+ {
+ 	spl_fixedarray_object *intern;
+ 
+ 	intern = spl_fixed_array_from_obj(object);
+-	if (UNEXPECTED(intern->fptr_count)) {
++	if (UNEXPECTED(intern->methods && intern->methods->fptr_count)) {
+ 		zval rv;
+-		zend_call_known_instance_method_with_0_params(intern->fptr_count, object, &rv);
++		zend_call_method_with_0_params(object, intern->std.ce, &intern->methods->fptr_count, "count", &rv);
+ 		if (!Z_ISUNDEF(rv)) {
+ 			*count = zval_get_long(&rv);
+ 			zval_ptr_dtor(&rv);
+@@ -607,84 +639,6 @@ PHP_METHOD(SplFixedArray, __wakeup)
+ 	}
+ }
+ 
+-PHP_METHOD(SplFixedArray, __serialize)
+-{
+-	spl_fixedarray_object *intern = Z_SPLFIXEDARRAY_P(ZEND_THIS);
+-	zval *current;
+-	zend_string *key;
+-
+-	if (zend_parse_parameters_none() == FAILURE) {
+-		RETURN_THROWS();
+-	}
+-
+-	HashTable *ht = zend_std_get_properties(&intern->std);
+-	uint32_t num_properties = zend_hash_num_elements(ht);
+-	array_init_size(return_value, intern->array.size + num_properties);
+-
+-	/* elements */
+-	for (zend_long i = 0; i < intern->array.size; i++) {
+-		current = &intern->array.elements[i];
+-		zend_hash_next_index_insert(Z_ARRVAL_P(return_value), current);
+-		Z_TRY_ADDREF_P(current);
+-	}
+-
+-	/* members */
+-	ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, current) {
+-		/* If the properties table was already rebuild, it will also contain the
+-		 * array elements. The array elements are already added in the above loop.
+-		 * We can detect array elements by the fact that their key == NULL. */
+-		if (key != NULL) {
+-			zend_hash_add_new(Z_ARRVAL_P(return_value), key, current);
+-			Z_TRY_ADDREF_P(current);
+-		}
+-	} ZEND_HASH_FOREACH_END();
+-}
+-
+-PHP_METHOD(SplFixedArray, __unserialize)
+-{
+-	spl_fixedarray_object *intern = Z_SPLFIXEDARRAY_P(ZEND_THIS);
+-	HashTable *data;
+-	zval members_zv, *elem;
+-	zend_string *key;
+-	zend_long size;
+-
+-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "h", &data) == FAILURE) {
+-		RETURN_THROWS();
+-	}
+-
+-	if (intern->array.size == 0) {
+-		size = zend_hash_num_elements(data);
+-		spl_fixedarray_init_non_empty_struct(&intern->array, size);
+-		if (!size) {
+-			return;
+-		}
+-		array_init(&members_zv);
+-
+-		intern->array.size = 0;
+-		ZEND_HASH_FOREACH_STR_KEY_VAL(data, key, elem) {
+-			if (key == NULL) {
+-				ZVAL_COPY(&intern->array.elements[intern->array.size], elem);
+-				intern->array.size++;
+-			} else {
+-				Z_TRY_ADDREF_P(elem);
+-				zend_hash_add(Z_ARRVAL(members_zv), key, elem);
+-			}
+-		} ZEND_HASH_FOREACH_END();
+-
+-		if (intern->array.size != size) {
+-			if (intern->array.size) {
+-				intern->array.elements = erealloc(intern->array.elements, sizeof(zval) * intern->array.size);
+-			} else {
+-				efree(intern->array.elements);
+-				intern->array.elements = NULL;
+-			}
+-		}
+-
+-		object_properties_load(&intern->std, Z_ARRVAL(members_zv));
+-		zval_ptr_dtor(&members_zv);
+-	}
+-}
+-
+ PHP_METHOD(SplFixedArray, count)
+ {
+ 	zval *object = ZEND_THIS;
+@@ -884,7 +838,7 @@ PHP_METHOD(SplFixedArray, offsetUnset)
+ PHP_METHOD(SplFixedArray, getIterator)
+ {
+ 	if (zend_parse_parameters_none() == FAILURE) {
+-		RETURN_THROWS();
++		return;
+ 	}
+ 
+ 	zend_create_internal_iterator_zval(return_value, ZEND_THIS);
+@@ -986,6 +940,7 @@ PHP_MINIT_FUNCTION(spl_fixedarray)
+ 		zend_ce_aggregate, zend_ce_arrayaccess, zend_ce_countable, php_json_serializable_ce);
+ 	spl_ce_SplFixedArray->create_object = spl_fixedarray_new;
+ 	spl_ce_SplFixedArray->get_iterator = spl_fixedarray_get_iterator;
++	spl_ce_SplFixedArray->ce_flags |= ZEND_ACC_REUSE_GET_ITERATOR;
+ 
+ 	memcpy(&spl_handler_SplFixedArray, &std_object_handlers, sizeof(zend_object_handlers));
+ 

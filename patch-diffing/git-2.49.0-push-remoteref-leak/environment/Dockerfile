@@ -17,7 +17,7 @@
 #     │             └─ target-deps ─┬─► vulnerable-binary ─┬─► runtime
 #     │                             └─► patched-binary ────┘      + gt-export (scratch)
 #
-# The two target compiles (vulnerable vs patched) run IN PARALLEL from the same pristine src.tar.gz. The vulnerable tree applies patches/vuln.patch, the patched tree applies vuln+fix+noise_*.patch (design principle: one provenance).
+# The two target compiles (vulnerable vs patched) run IN PARALLEL from the same pristine src.tar.gz. The vulnerable tree IS the pristine source, the patched tree applies the whole update series, fix fragments plus release-drift noise plus decoy guards (design principle: one provenance).
 #
 # Build: docker buildx build --target gt-export -t <gt-image> .   # function maps + trigger expectation docker buildx build -t <agent-image> .                   # runtime (default target)
 # ============================================================================================
@@ -98,19 +98,21 @@ ENV PATH="${LLVM22_DIR}/bin:${PATH}"
 # load via -fpass-plugin. Ninja comes from apt-build. xollvm's
 # CMakeLists aborts without an external clang on PATH (provided by
 # dl-llvm22).
+# XOLLVM-ONLY BEGIN plugin stage (finalize strips for plain tasks)
 FROM dl-llvm22 AS xollvm-plugin
 COPY --from=dl-cmake43 /opt/cmake-4.3.1-linux-x86_64 /opt/cmake-4.3.1-linux-x86_64
-COPY protection/obfuscation/xollvm-patched /protection/xollvm-patched
+COPY protection/xollvm/engine /protection/xollvm
 RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
     ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/ctest /usr/local/bin/ctest && \
-    cd /protection/xollvm-patched && \
+    cd /protection/xollvm && \
     mkdir -p build && cd build && \
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
           -DLLVM_DIR=/opt/llvm-22/lib/cmake/llvm \
           -DCMAKE_CXX_FLAGS="-fno-rtti" .. && \
     ninja Obfuscator && \
     cp Obfuscator.so /usr/local/lib/Obfuscator.so && \
-    rm -rf /protection/xollvm-patched/build
+    rm -rf /protection/xollvm/build
+# XOLLVM-ONLY END
 
 
 # Ghidra (headless analyzeHeadless)
@@ -316,10 +318,12 @@ FROM apt-build AS target-deps
 COPY --from=dl-cmake43 /opt/cmake-4.3.1-linux-x86_64 /opt/cmake-4.3.1-linux-x86_64
 # the build-train toolchain: clang 22 + the xollvm plugin for BOTH binary
 # stages (each side's OPT_FLAGS carries -fpass-plugin with its own draw.
-# see script/patch/protection.py). PATH rides ENV so configure/Configure/
+# see script/protection/xollvm/). PATH rides ENV so configure/Configure/
 # cmake pick clang up as CC.
 COPY --from=dl-llvm22 /opt/llvm-22 /opt/llvm-22
+# XOLLVM-ONLY BEGIN plugin deliver (finalize strips for plain tasks)
 COPY --from=xollvm-plugin /usr/local/lib/Obfuscator.so /usr/local/lib/Obfuscator.so
+# XOLLVM-ONLY END
 ENV PATH="/opt/llvm-22/bin:${PATH}"
 RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
     ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/ctest /usr/local/bin/ctest
@@ -333,20 +337,27 @@ RUN mkdir -p /src && tar xzf /tmp/src.tar.gz -C /src --strip-components=1 && rm 
 ENV TARGET_DEPS=/opt/target-deps
 RUN mkdir -p /opt/target-deps
 
-# The patch series (vuln/fix/noise) and the GT-stamping tools ride next to the single src.tar.gz copy. Both build stages consume them.
-COPY patches/ /builder-inputs/patches/
-COPY builder-tools/ /builder/
+# The commit series rides next to the single src.tar.gz copy. Both
+# build stages consume it.
+COPY commits/ /builder-inputs/commits/
 
-# clang shim FIRST on PATH: assembly compilations never load the xollvm
-# plugin and clang hard-errors on its -mllvm obf options (OpenSSL's
-# perlasm modules). The shim strips them for .s/.S inputs only
+# ARMOR-ONLY BEGIN tools (any armor type)
+COPY protection/ /builder-protection/
+# ARMOR-ONLY END
+
+# XOLLVM-ONLY BEGIN compiler compat (finalize strips for plain tasks)
+# The xollvm compiler compatibility layer wraps clang on PATH: assembly
+# compilations never load the pass plugin and clang hard-errors on its
+# -mllvm obf options. The layer strips them for .s/.S inputs only.
+COPY protection/ /builder-protection/
 RUN mkdir -p /opt/shim/bin && \
-    printf '#!/bin/sh\nexec python3 /builder/clang_shim.py /opt/llvm-22/bin/clang "$@"\n' \
+    printf '#!/bin/sh\nexec python3 /builder-protection/xollvm/compiler.py /opt/llvm-22/bin/clang "$@"\n' \
         > /opt/shim/bin/clang && \
-    printf '#!/bin/sh\nexec python3 /builder/clang_shim.py /opt/llvm-22/bin/clang++ "$@"\n' \
+    printf '#!/bin/sh\nexec python3 /builder-protection/xollvm/compiler.py /opt/llvm-22/bin/clang++ "$@"\n' \
         > /opt/shim/bin/clang++ && \
     chmod 0755 /opt/shim/bin/clang /opt/shim/bin/clang++
 ENV PATH="/opt/shim/bin:/opt/llvm-22/bin:${PATH}"
+# XOLLVM-ONLY END
 
 # TEMPLATE:
 RUN apt-get update && apt-get install -y --no-install-recommends libz-dev libssl-dev libcurl4-openssl-dev libexpat1-dev gettext autoconf && rm -rf /var/lib/apt/lists/*
@@ -357,22 +368,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends libz-dev libssl
 # An apt-only target (no custom libs) legitimately leaves /opt/target-deps empty. The fixed prefix keeps every downstream COPY/ENV unconditional.
 
 # ============================================================================================
-# VULNERABLE-BINARY: the vulnerable build: pristine src.tar.gz + patches/ vuln.patch.
+# VULNERABLE-BINARY: the vulnerable build, the pristine source itself.
 # Its function map (symbol-ful) is stamped to /gt BEFORE any strip (strip never moves .text, so stamped offsets stay valid).
 # ============================================================================================
 FROM target-deps AS vulnerable-binary
 WORKDIR /src
 
 # TEMPLATE:
-COPY src.tar.gz patches/ trigger/  /builder-inputs/
+COPY src.tar.gz commits/  /builder-inputs/
 RUN set -eux; \
     mkdir -p /out /gt; \
     cd /src; \
-    make configure >/dev/null 2>&1 && ./configure --without-tcltk CC=clang CFLAGS="-O1 -fno-omit-frame-pointer -fsanitize=address" "LDFLAGS=-fsanitize=address"; \
+    python3 /builder-protection/xollvm/prep.py ref-filter.c "obf: mba,flattening,shield" --function ref_array_sort && \
+    python3 /builder-protection/xollvm/prep.py ref-filter.c "obf: mba,flattening,shield" --function ref_array_clear && \
+    make configure >/dev/null 2>&1 && ./configure --without-tcltk CC=clang CFLAGS="-O1 -fno-omit-frame-pointer -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fsanitize=address -fpass-plugin=/usr/local/lib/Obfuscator.so -mllvm -obf-deterministic -mllvm -obf-seed=20261010" "LDFLAGS=-fsanitize=address -Wl,-z,relro,-z,now"; \
     make -j16 git; \
     cp /src/git /out/vuln_binary; \
+    cp /out/vuln_binary /out/vuln_binary.unstripped; \
     mkdir -p /app/repo && cd /app/repo && PATH=/src:\$PATH git init -q -b main . && GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@b GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@b PATH=/src:\$PATH git commit -q --allow-empty -m x && PATH=/src:\$PATH git config branch.main.pushRemote origin && PATH=/src:\$PATH git config remote.origin.push 'refs/heads/*:refs/heads/*'; \
-    python3 /builder/funcevidence.py --binary /out/vuln_binary --out /gt/function_map_vulnerable.json --label vulnerable; \
     strip /out/vuln_binary; \
     objcopy --remove-section .comment /out/vuln_binary; \
     chmod 0755 /out/vuln_binary
@@ -381,93 +394,101 @@ FROM target-deps AS patched-binary
 WORKDIR /src
 
 # TEMPLATE:
-COPY src.tar.gz patches/ trigger/  /builder-inputs/
+COPY src.tar.gz commits/  /builder-inputs/
 RUN set -eux; \
     mkdir -p /out /gt; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_1.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c1.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c2.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_2.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_3.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_4.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_5.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c3.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_6.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_7.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c4.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c5.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c6.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c7.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c8.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_8.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_9.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_10.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c9.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_11.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_12.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c10.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c11.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_13.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c12.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_14.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c13.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_15.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_16.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_17.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_18.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_19.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_20.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_21.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_22.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_23.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c14.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c15.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_24.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_25.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c16.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_26.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c17.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c18.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c19.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c20.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c21.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_27.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c22.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_28.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_29.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_30.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_31.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_32.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_33.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_34.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_35.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_36.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_37.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_38.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c23.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_39.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_40.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_41.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c24.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_42.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_43.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c25.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_44.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_45.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_46.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c26.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c27.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c28.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_47.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_48.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/noise_49.patch; \
-    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/patches/fix_c29.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p1.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n1.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p2.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n2.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d1.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n3.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n4.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n5.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d2.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p3.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n6.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p4.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n7.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n8.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n9.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p5.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n10.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d3.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n11.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p6.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p7.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n12.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n13.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p8.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n14.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n15.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n16.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p9.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p10.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n17.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n18.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n19.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p11.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p12.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n20.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n21.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p13.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n22.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d4.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p14.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n23.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n24.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n25.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n26.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n27.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n28.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n29.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n30.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p15.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p16.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d5.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n31.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p17.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n32.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p18.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p19.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p20.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p21.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p22.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n33.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p23.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d6.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n34.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n35.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d7.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d8.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n36.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n37.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n38.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n39.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p24.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n40.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n41.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p25.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n42.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d9.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/noise/n43.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p26.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p27.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p28.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d10.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d11.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/decoy/d12.patch; \
+    patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p29.patch; \
     cd /src; \
-    make configure >/dev/null 2>&1 && ./configure --without-tcltk CC=clang CFLAGS="-O1 -fno-omit-frame-pointer -fsanitize=address" "LDFLAGS=-fsanitize=address"; \
+    python3 /builder-protection/xollvm/prep.py ref-filter.c "obf: mba,flattening,shield" --function ref_array_sort && \
+    python3 /builder-protection/xollvm/prep.py ref-filter.c "obf: mba,flattening,shield" --function ref_array_clear && \
+    make configure >/dev/null 2>&1 && ./configure --without-tcltk CC=clang CFLAGS="-O1 -fno-omit-frame-pointer -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fsanitize=address -fpass-plugin=/usr/local/lib/Obfuscator.so -mllvm -obf-deterministic -mllvm -obf-seed=20261010" "LDFLAGS=-fsanitize=address -Wl,-z,relro,-z,now"; \
     make -j16 git; \
     cp /src/git /out/fixed_binary; \
+    cp /out/fixed_binary /out/fixed_binary.unstripped; \
     mkdir -p /app/repo && cd /app/repo && PATH=/src:\$PATH git init -q -b main . && GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=a@b GIT_COMMITTER_NAME=a GIT_COMMITTER_EMAIL=a@b PATH=/src:\$PATH git commit -q --allow-empty -m x && PATH=/src:\$PATH git config branch.main.pushRemote origin && PATH=/src:\$PATH git config remote.origin.push 'refs/heads/*:refs/heads/*'; \
-    python3 /builder/funcevidence.py --binary /out/fixed_binary --out /gt/function_map_patched.json --label patched; \
     strip /out/fixed_binary; \
     objcopy --remove-section .comment /out/fixed_binary; \
     chmod 0755 /out/fixed_binary
@@ -687,4 +708,5 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── trigger.json               # Differential trigger spec (empty placeholder)
 #     └── trigger_input.bin          # Optional trigger input file (agent-supplied)
+
 #

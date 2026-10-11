@@ -1,0 +1,120 @@
+diff --git a/ext/soap/tests/bugs/bug43045.phpt b/ext/soap/tests/bugs/bug43045.phpt
+index 34d60df0..633b22ef 100644
+--- a/ext/soap/tests/bugs/bug43045.phpt
++++ b/ext/soap/tests/bugs/bug43045.phpt
+@@ -9,8 +9,6 @@ function test($x) {
+ }
+ 
+ class TestSoapClient extends SoapClient {
+-  private $server;
+-
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+     $this->server = new SoapServer($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug46419.phpt b/ext/soap/tests/bugs/bug46419.phpt
+index 159ae237..092cbaa7 100644
+--- a/ext/soap/tests/bugs/bug46419.phpt
++++ b/ext/soap/tests/bugs/bug46419.phpt
+@@ -9,7 +9,6 @@ function bar() {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/bugs/bug50762.phpt b/ext/soap/tests/bugs/bug50762.phpt
+index e73f48a7..79af58b6 100644
+--- a/ext/soap/tests/bugs/bug50762.phpt
++++ b/ext/soap/tests/bugs/bug50762.phpt
+@@ -15,7 +15,6 @@ class testSoap {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+@@ -35,8 +34,10 @@ class LocalSoapClient extends SoapClient {
+ 
+ $cl = new LocalSoapClient(__DIR__.'/bug50762.wsdl', array('cache_wsdl'=>WSDL_CACHE_NONE, 'trace'=>true));
+ 
+-class authToken {
+-    public function __construct(public $authToken) {}
++class authToken{
++    public function __construct($token){
++        $this->authToken=$token;
++    }
+ }
+ 
+ $cl->__setSoapHeaders(array(new SoapHeader('http://sova.pronto.ru/', 'authToken', new authToken('tokendata'))));
+diff --git a/ext/soap/tests/bugs/bug69085.phpt b/ext/soap/tests/bugs/bug69085.phpt
+index 3572efa5..1e603996 100644
+--- a/ext/soap/tests/bugs/bug69085.phpt
++++ b/ext/soap/tests/bugs/bug69085.phpt
+@@ -7,7 +7,6 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class MySoapClient extends SoapClient {
+     public function __doRequest($request, $location, $action, $version, $one_way = 0): string {
+         echo $request, "\n";
+diff --git a/ext/soap/tests/classmap003.phpt b/ext/soap/tests/classmap003.phpt
+index 98570cfd..c3181bb9 100644
+--- a/ext/soap/tests/classmap003.phpt
++++ b/ext/soap/tests/classmap003.phpt
+@@ -26,7 +26,6 @@ function f(){
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/classmap004.phpt b/ext/soap/tests/classmap004.phpt
+index b183be4b..541a3364 100644
+--- a/ext/soap/tests/classmap004.phpt
++++ b/ext/soap/tests/classmap004.phpt
+@@ -34,7 +34,6 @@ function f(){
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/soap/tests/gh12392.phpt b/ext/soap/tests/gh12392.phpt
+new file mode 100644
+index 00000000..8a234ba0
+--- /dev/null
++++ b/ext/soap/tests/gh12392.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++GH-12392 (Segmentation fault on SoapClient::__getTypes)
++--EXTENSIONS--
++soap
++--FILE--
++<?php
++
++$client = new SoapClient(__DIR__ . "/gh12392.wsdl", ['cache_wsdl' => WSDL_CACHE_NONE]);
++echo 'Client created!' . "\n";
++
++$types = $client->__getTypes();
++echo 'Got types!' . "\n";
++
++var_dump($types);
++
++?>
++--EXPECT--
++Client created!
++Got types!
++array(1) {
++  [0]=>
++  string(62) "struct dummy {
++ string foo;
++ string a;
++ string b;
++ string c;
++}"
++}

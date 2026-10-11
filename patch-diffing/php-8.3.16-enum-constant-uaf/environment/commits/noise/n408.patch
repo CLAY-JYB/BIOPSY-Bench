@@ -1,0 +1,248 @@
+diff --git a/ext/zend_test/tests/zend_forbid_dynamic_call.phpt b/ext/zend_test/tests/zend_forbid_dynamic_call.phpt
+deleted file mode 100644
+index 77d8649f..00000000
+--- a/ext/zend_test/tests/zend_forbid_dynamic_call.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-Zend: Test zend_forbid_dynamic_call() for methods
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-$object = new ZendTestForbidDynamicCall();
+-$object->call();
+-ZendTestForbidDynamicCall::callStatic();
+-
+-try {
+-    $call = [$object, 'call'];
+-    $call();
+-} catch (Error $error) {
+-    echo $error->getMessage(), "\n";
+-}
+-
+-try {
+-    $callStatic = [ZendTestForbidDynamicCall::class, 'callStatic'];
+-    $callStatic();
+-} catch (Error $error) {
+-    echo $error->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot call ZendTestForbidDynamicCall::call() dynamically
+-Cannot call ZendTestForbidDynamicCall::callStatic() dynamically
+diff --git a/ext/zend_test/tests/zend_ini_str_validator_basic.phpt b/ext/zend_test/tests/zend_ini_str_validator_basic.phpt
+deleted file mode 100644
+index ab1133dd..00000000
+--- a/ext/zend_test/tests/zend_ini_str_validator_basic.phpt
++++ /dev/null
+@@ -1,33 +0,0 @@
+---TEST--
+-Test OnUpdateStr and OnUpdateStrNotEmpty validators.
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-echo 'str_test INI', PHP_EOL;
+-var_dump(ini_get("zend_test.str_test"));
+-var_dump(ini_set("zend_test.str_test", "Test"));
+-var_dump(ini_get("zend_test.str_test"));
+-var_dump(ini_set("zend_test.str_test", ""));
+-var_dump(ini_get("zend_test.str_test"));
+-
+-echo 'not_empty_str_test INI', PHP_EOL;
+-var_dump(ini_get("zend_test.not_empty_str_test"));
+-var_dump(ini_set("zend_test.not_empty_str_test", "Test"));
+-var_dump(ini_get("zend_test.not_empty_str_test"));
+-var_dump(ini_set("zend_test.not_empty_str_test", ""));
+-var_dump(ini_get("zend_test.not_empty_str_test"));
+-?>
+---EXPECT--
+-str_test INI
+-string(0) ""
+-string(0) ""
+-string(4) "Test"
+-string(4) "Test"
+-string(0) ""
+-not_empty_str_test INI
+-string(3) "val"
+-string(3) "val"
+-string(4) "Test"
+-bool(false)
+-string(4) "Test"
+diff --git a/ext/zend_test/tests/zend_ini_str_validator_return_from_func.phpt b/ext/zend_test/tests/zend_ini_str_validator_return_from_func.phpt
+deleted file mode 100644
+index a02748f6..00000000
+--- a/ext/zend_test/tests/zend_ini_str_validator_return_from_func.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-Test zend_test_zend_ini_str() to check for GC refcount on global returned
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-var_dump(zend_test_zend_ini_str());
+-?>
+---EXPECT--
+-string(0) ""
+diff --git a/ext/zend_test/tests/zend_internal_class_prop_intersection.phpt b/ext/zend_test/tests/zend_internal_class_prop_intersection.phpt
+deleted file mode 100644
+index dd9fe93a..00000000
+--- a/ext/zend_test/tests/zend_internal_class_prop_intersection.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Test that internal classes can register intersection types
+---EXTENSIONS--
+-zend_test
+-spl
+---FILE--
+-<?php
+-
+-class C implements Countable {
+-    public function count(): int {
+-        return 1;
+-    }
+-}
+-
+-class I extends EmptyIterator implements Countable {
+-    public function count(): int {
+-        return 1;
+-    }
+-}
+-
+-$o = new _ZendTestClass();
+-
+-try {
+-    var_dump($o->classIntersectionProp);
+-} catch (Error $e) {
+-    echo $e::class, ': ', $e->getMessage(), PHP_EOL;
+-}
+-try {
+-    $o->classIntersectionProp = new EmptyIterator();
+-} catch (TypeError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-try {
+-    $o->classIntersectionProp = new C();
+-} catch (TypeError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-$o->classIntersectionProp = new I();
+-
+-?>
+-==DONE==
+---EXPECT--
+-Error: Typed property _ZendTestClass::$classIntersectionProp must not be accessed before initialization
+-Cannot assign EmptyIterator to property _ZendTestClass::$classIntersectionProp of type Traversable&Countable
+-Cannot assign C to property _ZendTestClass::$classIntersectionProp of type Traversable&Countable
+-==DONE==
+diff --git a/ext/zend_test/tests/zend_legacy_iterable.phpt b/ext/zend_test/tests/zend_legacy_iterable.phpt
+deleted file mode 100644
+index 73bbb269..00000000
+--- a/ext/zend_test/tests/zend_legacy_iterable.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Test that legacy IS_ITERABLE arg info type generates a notice
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-function gen() {
+-    yield 1;
+-};
+-
+-var_dump(zend_iterable_legacy([], null));
+-var_dump(zend_iterable_legacy([], []));
+-var_dump(zend_iterable_legacy(gen(), null));
+-var_dump(zend_iterable_legacy(gen(), gen()));
+-
+-?>
+-==DONE==
+---EXPECT--
+-array(0) {
+-}
+-array(0) {
+-}
+-object(Generator)#1 (0) {
+-}
+-object(Generator)#1 (0) {
+-}
+-==DONE==
+diff --git a/ext/zend_test/tests/zend_test_compile_string.phpt b/ext/zend_test/tests/zend_test_compile_string.phpt
+deleted file mode 100644
+index f2449d86..00000000
+--- a/ext/zend_test/tests/zend_test_compile_string.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Zend: Test compile string
+---EXTENSIONS--
+-zend_test
+---FILE--
+-<?php
+-
+-define('ZEND_COMPILE_POSITION_AT_SHEBANG', 0);
+-define('ZEND_COMPILE_POSITION_AT_OPEN_TAG', 1);
+-define('ZEND_COMPILE_POSITION_AFTER_OPEN_TAG', 2);
+-
+-$source_string = <<<EOF
+-#!/path/to/php
+-<?php
+-var_dump('php');
+-EOF;
+-
+-zend_test_compile_string($source_string, 'Source string', ZEND_COMPILE_POSITION_AT_SHEBANG);
+-
+-$source_string = <<<EOF
+-#!/path/to/php
+-<?php
+-var_dump('php');
+-EOF;
+-
+-zend_test_compile_string($source_string, 'Source string', ZEND_COMPILE_POSITION_AT_OPEN_TAG);
+-
+-$source_string = <<<EOF
+-<?php
+-var_dump('php');
+-EOF;
+-
+-zend_test_compile_string($source_string, 'Source string', ZEND_COMPILE_POSITION_AT_OPEN_TAG);
+-
+-$source_string = <<<EOF
+-var_dump('php');
+-EOF;
+-
+-zend_test_compile_string($source_string, 'Source string', ZEND_COMPILE_POSITION_AFTER_OPEN_TAG);
+-
+-$source_string = <<<EOF
+-<?php
+-var_dump('php');
+-EOF;
+-
+-zend_test_compile_string($source_string, 'Source string', ZEND_COMPILE_POSITION_AFTER_OPEN_TAG);
+-?>
+---EXPECT--
+-string(3) "php"
+-#!/path/to/php
+-string(3) "php"
+-string(3) "php"
+-string(3) "php"
+-
+-Parse error: syntax error, unexpected token "<", expecting end of file in Source string on line 1
+diff --git a/ext/zend_test/tests/zend_weakmap.phpt b/ext/zend_test/tests/zend_weakmap.phpt
+index 209b8bc0..99a2075c 100644
+--- a/ext/zend_test/tests/zend_weakmap.phpt
++++ b/ext/zend_test/tests/zend_weakmap.phpt
+@@ -51,4 +51,4 @@ array(1) {
+   [%s]=>
+   object(stdClass)#2 (0) {
+   }
+-}
++}
+\ No newline at end of file

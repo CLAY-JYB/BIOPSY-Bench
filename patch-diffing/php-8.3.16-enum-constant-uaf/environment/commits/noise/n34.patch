@@ -1,0 +1,337 @@
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt b/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt
+deleted file mode 100644
+index 6f481b72..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_nested_calls.phpt
++++ /dev/null
+@@ -1,115 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute handles nested function calls correctly.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-function wrapper(
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive1 = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    test($non_sensitive, $sensitive1, $sensitive2);
+-}
+-
+-wrapper('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_nested_calls.php(20): test(Object(SensitiveParameterValue), 'bar', Object(SensitiveParameterValue))
+-#1 %ssensitive_parameter_nested_calls.php(23): wrapper('foo', Object(SensitiveParameterValue), Object(SensitiveParameterValue))
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(20)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(3) "bar"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(23)
+-    ["function"]=>
+-    string(7) "wrapper"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(20)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(3) "bar"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_nested_calls.php"
+-    ["line"]=>
+-    int(23)
+-    ["function"]=>
+-    string(7) "wrapper"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value.phpt b/Zend/tests/function_arguments/sensitive_parameter_value.phpt
+deleted file mode 100644
+index accf1933..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value.phpt
++++ /dev/null
+@@ -1,45 +0,0 @@
+---TEST--
+-A SensitiveParameterValue keeps the inner value secret.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-echo "# var_dump() / debug_zval_dump() / print_r()", PHP_EOL;
+-var_dump($v);
+-debug_zval_dump($v);
+-print_r($v);
+-echo PHP_EOL;
+-
+-echo "# var_export()", PHP_EOL;
+-echo var_export($v, true), PHP_EOL;
+-echo PHP_EOL;
+-
+-echo "# (array) / json_encode()", PHP_EOL;
+-var_dump((array)$v);
+-var_dump(json_encode($v));
+-echo PHP_EOL;
+-
+-echo "# ->getValue()", PHP_EOL;
+-var_dump($v->getValue());
+-
+-?>
+---EXPECTF--
+-# var_dump() / debug_zval_dump() / print_r()
+-object(SensitiveParameterValue)#%d (0) {
+-}
+-object(SensitiveParameterValue)#%d (%d) refcount(%d){
+-}
+-SensitiveParameterValue Object
+-
+-# var_export()
+-\SensitiveParameterValue::__set_state(array(
+-))
+-
+-# (array) / json_encode()
+-array(0) {
+-}
+-string(2) "{}"
+-
+-# ->getValue()
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt
+deleted file mode 100644
+index 5170e62e..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_clone.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue is clonable.
+---FILE--
+-<?php
+-
+-$v1 = new SensitiveParameterValue('secret');
+-$v2 = clone $v1;
+-
+-var_dump($v1->getValue());
+-var_dump($v2->getValue());
+-
+-?>
+---EXPECTF--
+-string(6) "secret"
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt
+deleted file mode 100644
+index e7b0de51..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_keeps_object_alive.phpt
++++ /dev/null
+@@ -1,74 +0,0 @@
+---TEST--
+-A SensitiveParameterValue keeps inner objects alive.
+---FILE--
+-<?php
+-
+-class CustomDestructor
+-{
+-  public function __construct(private int $id)
+-  {
+-    echo __METHOD__, " - ", $this->id, PHP_EOL;
+-  }
+-
+-  public function __destruct()
+-  {
+-    echo __METHOD__, " - ", $this->id, PHP_EOL;
+-  }
+-
+-  public function getId(): int
+-  {
+-    return $this->id;
+-  }
+-}
+-
+-function test(#[SensitiveParameter] CustomDestructor $o, bool $throw)
+-{
+-  if ($throw) {
+-    throw new Exception('Error');
+-  }
+-}
+-
+-function wrapper(int $id, bool $throw)
+-{
+-  $o = new CustomDestructor($id);
+-  test($o, $throw);
+-}
+-
+-function main(): SensitiveParameterValue
+-{
+-  try {
+-    echo "Before 1", PHP_EOL;
+-    wrapper(1, false);
+-    echo "After 1", PHP_EOL;
+-    echo "Before 2", PHP_EOL;
+-    wrapper(2, true);
+-    echo "Not Reached: After 2", PHP_EOL;
+-  } catch (Exception $e) {
+-    echo "catch", PHP_EOL;
+-    return $e->getTrace()[0]['args'][0];
+-  }
+-}
+-
+-$v = main();
+-
+-var_dump($v->getValue()->getId());
+-
+-echo "Before unset", PHP_EOL;
+-
+-unset($v);
+-
+-echo "After unset", PHP_EOL;
+-
+-?>
+---EXPECT--
+-Before 1
+-CustomDestructor::__construct - 1
+-CustomDestructor::__destruct - 1
+-After 1
+-Before 2
+-CustomDestructor::__construct - 2
+-catch
+-int(2)
+-Before unset
+-CustomDestructor::__destruct - 2
+-After unset
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt
+deleted file mode 100644
+index 86cbc2a1..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_no_dynamic_property.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue does not allow dynamic properties.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-$v->foo = 'bar';
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot create dynamic property SensitiveParameterValue::$foo in %ssensitive_parameter_value_no_dynamic_property.php:5
+-Stack trace:
+-#0 {main}
+-  thrown in %ssensitive_parameter_value_no_dynamic_property.php on line 5
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt
+deleted file mode 100644
+index 020cbef3..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_reflection.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-A SensitiveParameterValue's value is accessible using reflection.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-$r = new ReflectionClass($v);
+-$p = $r->getProperty('value');
+-
+-var_dump($p->getValue($v));
+-
+-?>
+---EXPECTF--
+-string(6) "secret"
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt b/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt
+deleted file mode 100644
+index 79a2e359..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_value_serialize.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-A SensitiveParameterValue may not be serialized.
+---FILE--
+-<?php
+-
+-$v = new SensitiveParameterValue('secret');
+-
+-var_dump(serialize($v));
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception: Serialization of 'SensitiveParameterValue' is not allowed in %ssensitive_parameter_value_serialize.php:5
+-Stack trace:
+-#0 %ssensitive_parameter_value_serialize.php(5): serialize(Object(SensitiveParameterValue))
+-#1 {main}
+-  thrown in %ssensitive_parameter_value_serialize.php on line 5

@@ -1,0 +1,457 @@
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt
+deleted file mode 100644
+index e9089c13..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_null.phpt
++++ /dev/null
+@@ -1,74 +0,0 @@
+---TEST--
+-Union of null and intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A implements X, Y {}
+-class C {}
+-
+-class Test {
+-    public (X&Y)|null $prop1;
+-    public null|(X&Y) $prop2;
+-
+-    public function foo1((X&Y)|null $v): (X&Y)|null {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function foo2(null|(X&Y) $v): null|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-}
+-
+-$test = new Test();
+-$a = new A();
+-$n = null;
+-
+-$test->foo1($a);
+-$test->foo2($a);
+-$test->foo1($n);
+-$test->foo2($n);
+-$test->prop1 = $a;
+-$test->prop1 = $n;
+-$test->prop2 = $a;
+-$test->prop2 = $n;
+-
+-$c = new C();
+-try {
+-    $test->foo1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->foo2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop1 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop2 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-NULL
+-NULL
+-Test::foo1(): Argument #1 ($v) must be of type (X&Y)|null, C given, called in %s on line %d
+-Test::foo2(): Argument #1 ($v) must be of type (X&Y)|null, C given, called in %s on line %d
+-Cannot assign C to property Test::$prop1 of type (X&Y)|null
+-Cannot assign C to property Test::$prop2 of type (X&Y)|null
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt
+deleted file mode 100644
+index 4c9a5f95..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_single.phpt
++++ /dev/null
+@@ -1,127 +0,0 @@
+---TEST--
+-Union of a simple and intersection type
+---FILE--
+-<?php
+-
+-interface X {}
+-interface Y {}
+-
+-class A implements X, Y {}
+-class B {}
+-class C {}
+-
+-class Test {
+-    public (X&Y)|int $prop1;
+-    public int|(X&Y) $prop2;
+-    public (X&Y)|B $prop3;
+-    public B|(X&Y) $prop4;
+-
+-    public function foo1((X&Y)|int $v): (X&Y)|int {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function foo2(int|(X&Y) $v): int|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function bar1(B|(X&Y) $v): B|(X&Y) {
+-        var_dump($v);
+-        return $v;
+-    }
+-    public function bar2((X&Y)|B $v): (X&Y)|B {
+-        var_dump($v);
+-        return $v;
+-    }
+-}
+-
+-$test = new Test();
+-$a = new A();
+-$b = new B();
+-$i = 10;
+-
+-$test->foo1($a);
+-$test->foo2($a);
+-$test->foo1($i);
+-$test->foo2($i);
+-$test->prop1 = $a;
+-$test->prop1 = $i;
+-$test->prop2 = $a;
+-$test->prop2 = $i;
+-
+-$test->bar1($a);
+-$test->bar2($a);
+-$test->bar1($b);
+-$test->bar2($b);
+-$test->prop3 = $a;
+-$test->prop4 = $b;
+-$test->prop3 = $a;
+-$test->prop4 = $b;
+-
+-$c = new C();
+-try {
+-    $test->foo1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->foo2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->bar1($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->bar2($c);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop1 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop2 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop3 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    $test->prop4 = $c;
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-int(10)
+-int(10)
+-object(A)#2 (0) {
+-}
+-object(A)#2 (0) {
+-}
+-object(B)#3 (0) {
+-}
+-object(B)#3 (0) {
+-}
+-Test::foo1(): Argument #1 ($v) must be of type (X&Y)|int, C given, called in %s on line %d
+-Test::foo2(): Argument #1 ($v) must be of type (X&Y)|int, C given, called in %s on line %d
+-Test::bar1(): Argument #1 ($v) must be of type B|(X&Y), C given, called in %s on line %d
+-Test::bar2(): Argument #1 ($v) must be of type (X&Y)|B, C given, called in %s on line %d
+-Cannot assign C to property Test::$prop1 of type (X&Y)|int
+-Cannot assign C to property Test::$prop2 of type (X&Y)|int
+-Cannot assign C to property Test::$prop3 of type (X&Y)|B
+-Cannot assign C to property Test::$prop4 of type B|(X&Y)
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/gh9516.phpt b/Zend/tests/type_declarations/dnf_types/gh9516.phpt
+deleted file mode 100644
+index 3d91932e..00000000
+--- a/Zend/tests/type_declarations/dnf_types/gh9516.phpt
++++ /dev/null
+@@ -1,157 +0,0 @@
+---TEST--
+-GH-9516: (A&B)|D as a param should allow AB or D. Not just A.
+---FILE--
+-<?php
+-
+-interface A { }
+-interface B { }
+-interface D { }
+-
+-class A_ implements A {}
+-class B_ implements B {}
+-class AB_ implements A, B {}
+-class D_ implements D {}
+-
+-class T {
+-    public function method1((A&B)|D $arg): void {}
+-    public function method2((B&A)|D $arg): void {}
+-    public function method3(D|(A&B) $arg): void {}
+-    public function method4(D|(B&A) $arg): void {}
+-}
+-
+-$t = new T;
+-
+-try {
+-    $t->method1(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method1(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-// Lets try in reverse?
+-try {
+-    $t->method2(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method2(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-/* Single before intersection */
+-try {
+-    $t->method3(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method3(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-// Lets try in reverse?
+-try {
+-    $t->method4(new A_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new B_);
+-    echo 'Fail', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new AB_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-try {
+-    $t->method4(new D_);
+-    echo 'Pass', \PHP_EOL;
+-} catch (\Throwable $throwable) {
+-    echo $throwable->getMessage(), \PHP_EOL;
+-}
+-
+-
+-?>
+---EXPECTF--
+-T::method1(): Argument #1 ($arg) must be of type (A&B)|D, A_ given, called in %s on line %d
+-T::method1(): Argument #1 ($arg) must be of type (A&B)|D, B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method2(): Argument #1 ($arg) must be of type (B&A)|D, A_ given, called in %s on line %d
+-T::method2(): Argument #1 ($arg) must be of type (B&A)|D, B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method3(): Argument #1 ($arg) must be of type D|(A&B), A_ given, called in %s on line %d
+-T::method3(): Argument #1 ($arg) must be of type D|(A&B), B_ given, called in %s on line %d
+-Pass
+-Pass
+-T::method4(): Argument #1 ($arg) must be of type D|(B&A), A_ given, called in %s on line %d
+-T::method4(): Argument #1 ($arg) must be of type D|(B&A), B_ given, called in %s on line %d
+-Pass
+-Pass
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt
+deleted file mode 100644
+index 93ff6385..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Duplicate class alias type
+---FILE--
+-<?php
+-
+-interface X {}
+-
+-use A as B;
+-function foo(): (X&A)|(X&B) {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type X&A is redundant with type X&A in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt
+deleted file mode 100644
+index 0b2e2a13..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/duplicate_class_alias_type_runtime.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Duplicate class alias type at runtime
+---FILE--
+-<?php
+-
+-class A {}
+-interface X {}
+-
+-class_alias('A', 'B');
+-function foo(): (X&A)|(X&B) {}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt
+deleted file mode 100644
+index ef57adf0..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/inheritence.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Intersection with child class
+---FILE--
+-<?php
+-
+-interface  X {}
+-class A {}
+-class B extends A {}
+-
+-function test(): (A&X)|(B&X) {}
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt b/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt
+deleted file mode 100644
+index b0753313..00000000
+--- a/Zend/tests/type_declarations/dnf_types/redundant_types/less_restrive_type_constraint_already_present001.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-A less restrictive type constrain is part of the DNF type 001
+---FILE--
+-<?php
+-
+-interface A {}
+-interface B {}
+-
+-function test(): (A&B)|A {}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Type A&B is redundant as it is more restrictive than type A in %s on line %d

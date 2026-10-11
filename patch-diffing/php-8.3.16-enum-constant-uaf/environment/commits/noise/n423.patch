@@ -1,0 +1,453 @@
+diff --git a/sapi/apache2handler/sapi_apache2.c b/sapi/apache2handler/sapi_apache2.c
+index 30e05aec..95934848 100644
+--- a/sapi/apache2handler/sapi_apache2.c
++++ b/sapi/apache2handler/sapi_apache2.c
+@@ -368,22 +368,20 @@ static void php_apache_sapi_log_message_ex(const char *msg, request_rec *r)
+ 	}
+ }
+ 
+-static zend_result php_apache_sapi_get_request_time(double *request_time)
++static double php_apache_sapi_get_request_time(void)
+ {
+ 	php_struct *ctx = SG(server_context);
+-	if (!ctx) {
+-		return FAILURE;
+-	}
+-
+-	*request_time = ((double) ctx->r->request_time) / 1000000.0;
+-	return SUCCESS;
++	return ((double) ctx->r->request_time) / 1000000.0;
+ }
+ 
+ extern zend_module_entry php_apache_module;
+ 
+ static int php_apache2_startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, &php_apache_module);
++	if (php_module_startup(sapi_module, &php_apache_module, 1)==FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ static sapi_module_struct apache2_sapi_module = {
+@@ -564,7 +562,7 @@ typedef struct {
+ 		zend_string *str;
+ 		php_conf_rec *c = ap_get_module_config(r->per_dir_config, &php_module);
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&c->config, str) {
++		ZEND_HASH_FOREACH_STR_KEY(&c->config, str) {
+ 			zend_restore_ini_entry(str, ZEND_INI_STAGE_SHUTDOWN);
+ 		} ZEND_HASH_FOREACH_END();
+ 	}
+diff --git a/sapi/cgi/cgi_main.c b/sapi/cgi/cgi_main.c
+index b4546803..499a7932 100644
+--- a/sapi/cgi/cgi_main.c
++++ b/sapi/cgi/cgi_main.c
+@@ -22,7 +22,6 @@
+ #include "php.h"
+ #include "php_globals.h"
+ #include "php_variables.h"
+-#include "php_ini_builder.h"
+ #include "zend_modules.h"
+ 
+ #include "SAPI.h"
+@@ -255,7 +254,7 @@ static void print_modules(void)
+ 	zend_hash_init(&sorted_registry, 64, NULL, NULL, 1);
+ 	zend_hash_copy(&sorted_registry, &module_registry, NULL);
+ 	zend_hash_sort(&sorted_registry, module_name_cmp, 0);
+-	ZEND_HASH_MAP_FOREACH_PTR(&sorted_registry, module) {
++	ZEND_HASH_FOREACH_PTR(&sorted_registry, module) {
+ 		php_printf("%s\n", module->name);
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_hash_destroy(&sorted_registry);
+@@ -967,7 +966,10 @@ static int sapi_cgi_deactivate(void)
+ 
+ static int php_cgi_startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, &cgi_module_entry);
++	if (php_module_startup(sapi_module, &cgi_module_entry, 1) == FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ /* {{{ sapi_module_struct cgi_sapi_module */
+@@ -1018,7 +1020,7 @@ static void php_cgi_usage(char *argv0)
+ 	if (prog) {
+ 		prog++;
+ 	} else {
+-		prog = "php-cgi";
++		prog = "php";
+ 	}
+ 
+ 	php_printf(	"Usage: %s [-q] [-h] [-s] [-v] [-i] [-f <file>]\n"
+@@ -1210,7 +1212,7 @@ static void init_request_info(fcgi_request *request)
+ #endif
+ 
+ 		if (CGIG(fix_pathinfo)) {
+-			zend_stat_t st = {0};
++			zend_stat_t st;
+ 			char *real_path = NULL;
+ 			char *env_redirect_url = CGI_GETENV("REDIRECT_URL");
+ 			char *env_document_root = CGI_GETENV("DOCUMENT_ROOT");
+@@ -1725,7 +1727,7 @@ int main(int argc, char *argv[])
+ 	int orig_optind = php_optind;
+ 	char *orig_optarg = php_optarg;
+ 	char *script_file = NULL;
+-	struct php_ini_builder ini_builder;
++	size_t ini_entries_len = 0;
+ 	/* end of temporary locals */
+ 
+ 	int max_requests = 500;
+@@ -1810,8 +1812,6 @@ int main(int argc, char *argv[])
+ 		free(decoded_query_string);
+ 	}
+ 
+-	php_ini_builder_init(&ini_builder);
+-
+ 	while (!skip_getopt && (c = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
+ 		switch (c) {
+ 			case 'c':
+@@ -1823,10 +1823,37 @@ int main(int argc, char *argv[])
+ 			case 'n':
+ 				cgi_sapi_module.php_ini_ignore = 1;
+ 				break;
+-			case 'd':
++			case 'd': {
+ 				/* define ini entries on command line */
+-				php_ini_builder_define(&ini_builder, php_optarg);
++				size_t len = strlen(php_optarg);
++				char *val;
++
++				if ((val = strchr(php_optarg, '='))) {
++					val++;
++					if (!isalnum(*val) && *val != '"' && *val != '\'' && *val != '\0') {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\"\"\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, (val - php_optarg));
++						ini_entries_len += (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"", 1);
++						ini_entries_len++;
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, val, len - (val - php_optarg));
++						ini_entries_len += len - (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"\n\0", sizeof("\"\n\0"));
++						ini_entries_len += sizeof("\n\0\"") - 2;
++					} else {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "\n\0", sizeof("\n\0"));
++						ini_entries_len += len + sizeof("\n\0") - 2;
++					}
++				} else {
++					cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("=1\n\0"));
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "=1\n\0", sizeof("=1\n\0"));
++					ini_entries_len += len + sizeof("=1\n\0") - 2;
++				}
+ 				break;
++			}
+ 			/* if we're started on command line, check to see if
+ 			 * we are being started as an 'external' fastcgi
+ 			 * server by accepting a bindpath parameter. */
+@@ -1843,8 +1870,6 @@ int main(int argc, char *argv[])
+ 	php_optind = orig_optind;
+ 	php_optarg = orig_optarg;
+ 
+-	cgi_sapi_module.ini_entries = php_ini_builder_finish(&ini_builder);
+-
+ 	if (fastcgi || bindpath) {
+ 		/* Override SAPI callbacks */
+ 		cgi_sapi_module.ub_write     = sapi_fcgi_ub_write;
+@@ -2271,7 +2296,6 @@ parent_loop_end:
+ 
+ 						case 'a':	/* interactive mode */
+ 							printf("Interactive mode enabled\n\n");
+-							fflush(stdout);
+ 							break;
+ 
+ 						case 'C': /* don't chdir to the script directory */
+@@ -2502,12 +2526,11 @@ parent_loop_end:
+ 					break;
+ 				case PHP_MODE_LINT:
+ 					PG(during_request_startup) = 0;
+-					if (php_lint_script(&file_handle) == SUCCESS) {
++					exit_status = php_lint_script(&file_handle);
++					if (exit_status == SUCCESS) {
+ 						zend_printf("No syntax errors detected in %s\n", ZSTR_VAL(file_handle.filename));
+-						exit_status = 0;
+ 					} else {
+ 						zend_printf("Errors parsing %s\n", ZSTR_VAL(file_handle.filename));
+-						exit_status = -1;
+ 					}
+ 					break;
+ 				case PHP_MODE_STRIP:
+@@ -2596,7 +2619,9 @@ fastcgi_request_done:
+ 		if (cgi_sapi_module.php_ini_path_override) {
+ 			free(cgi_sapi_module.php_ini_path_override);
+ 		}
+-		php_ini_builder_deinit(&ini_builder);
++		if (cgi_sapi_module.ini_entries) {
++			free(cgi_sapi_module.ini_entries);
++		}
+ 	} zend_catch {
+ 		exit_status = 255;
+ 	} zend_end_try();
+diff --git a/sapi/cgi/tests/005-win32.phpt b/sapi/cgi/tests/005-win32.phpt
+new file mode 100644
+index 00000000..cafec91d
+--- /dev/null
++++ b/sapi/cgi/tests/005-win32.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++using invalid combinations of cmdline options
++--SKIPIF--
++<?php
++
++if (substr(PHP_OS, 0, 3) != 'WIN') {
++    die ("skip Windows only");
++}
++
++include "skipif.inc";
++?>
++--FILE--
++<?php
++
++include "include.inc";
++
++$php = get_cgi_path();
++reset_env_vars();
++
++var_dump(`$php -n -a -f "wrong"`);
++var_dump(`$php -n -f "wrong" -a`);
++
++echo "Done\n";
++?>
++--EXPECT--
++string(51) "Interactive mode enabled
++
++No input file specified.
++"
++string(51) "Interactive mode enabled
++
++No input file specified.
++"
++Done
+diff --git a/sapi/cgi/tests/005.phpt b/sapi/cgi/tests/005.phpt
+index 55247588..a46ac912 100644
+--- a/sapi/cgi/tests/005.phpt
++++ b/sapi/cgi/tests/005.phpt
+@@ -1,5 +1,14 @@
+ --TEST--
+ using invalid combinations of cmdline options
++--SKIPIF--
++<?php
++
++if (substr(PHP_OS, 0, 3) == 'WIN') {
++    die ("skip not for Windows");
++}
++
++include "skipif.inc";
++?>
+ --FILE--
+ <?php
+ 
+@@ -8,18 +17,18 @@ include "include.inc";
+ $php = get_cgi_path();
+ reset_env_vars();
+ 
+-var_dump(`$php -n -a -f "wrong"`);
+-var_dump(`$php -n -f "wrong" -a`);
++var_dump(`$php -n -a -f 'wrong'`);
++var_dump(`$php -n -f 'wrong' -a`);
+ 
+ echo "Done\n";
+ ?>
+ --EXPECT--
+-string(51) "Interactive mode enabled
++string(51) "No input file specified.
++Interactive mode enabled
+ 
+-No input file specified.
+ "
+-string(51) "Interactive mode enabled
++string(51) "No input file specified.
++Interactive mode enabled
+ 
+-No input file specified.
+ "
+ Done
+diff --git a/sapi/cgi/tests/bug69487.phpt b/sapi/cgi/tests/bug69487.phpt
+index fcda1ac0..3ac37968 100644
+--- a/sapi/cgi/tests/bug69487.phpt
++++ b/sapi/cgi/tests/bug69487.phpt
+@@ -11,8 +11,10 @@ var_dump(isset($_POST['foo']));
+ var_dump(strlen(file_get_contents('php://input')));
+ ?>
+ --EXPECT--
+-Warning: PHP Request Startup: Unable to create temporary file, Check permissions in temporary files directory. in Unknown on line 0
++Warning: Unknown: Unable to create temporary file, Check permissions in temporary files directory. in Unknown on line 0
+ 
+-Warning: PHP Request Startup: POST data can't be buffered; all data discarded in Unknown on line 0
++Warning: Unknown: POST data can't be buffered; all data discarded in Unknown on line 0
++
++Warning: Cannot modify header information - headers already sent in Unknown on line 0
+ bool(false)
+ int(0)
+diff --git a/sapi/cli/generate_mime_type_map.php b/sapi/cli/generate_mime_type_map.php
+index c48766b0..322b85cc 100755
+--- a/sapi/cli/generate_mime_type_map.php
++++ b/sapi/cli/generate_mime_type_map.php
+@@ -3,7 +3,7 @@
+ 
+ // Check if we are being given a mime.types file or if we should use the
+ // default URL.
+-$source = count($argv) > 1 ? $argv[1] : 'https://cdn.jsdelivr.net/gh/jshttp/mime-db@v1.52.0/db.json';
++$source = count($argv) > 1 ? $argv[1] : 'https://cdn.jsdelivr.net/gh/jshttp/mime-db@v1.45.0/db.json';
+ 
+ // See if we can actually load it.
+ $data = @file_get_contents($source);
+diff --git a/sapi/cli/mime_type_map.h b/sapi/cli/mime_type_map.h
+index 505ae862..8dd2dcad 100644
+--- a/sapi/cli/mime_type_map.h
++++ b/sapi/cli/mime_type_map.h
+@@ -49,7 +49,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "aep", "application/vnd.audiograph" },
+ 	{ "afm", "application/x-font-type1" },
+ 	{ "afp", "application/vnd.ibm.modcap" },
+-	{ "age", "application/vnd.age" },
+ 	{ "ahead", "application/vnd.ahead.space" },
+ 	{ "ai", "application/postscript" },
+ 	{ "aif", "audio/x-aiff" },
+@@ -58,7 +57,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "air", "application/vnd.adobe.air-application-installer-package+zip" },
+ 	{ "ait", "application/vnd.dvb.ait" },
+ 	{ "ami", "application/vnd.amiga.ami" },
+-	{ "amr", "audio/amr" },
+ 	{ "apk", "application/vnd.android.package-archive" },
+ 	{ "apng", "image/apng" },
+ 	{ "appcache", "text/cache-manifest" },
+@@ -66,7 +64,7 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "apr", "application/vnd.lotus-approach" },
+ 	{ "arc", "application/x-freearc" },
+ 	{ "arj", "application/x-arj" },
+-	{ "asc", "application/pgp-keys" },
++	{ "asc", "application/pgp-signature" },
+ 	{ "asf", "video/x-ms-asf" },
+ 	{ "asm", "text/x-asm" },
+ 	{ "aso", "application/vnd.accpac.simply.aso" },
+@@ -78,8 +76,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "atomsvc", "application/atomsvc+xml" },
+ 	{ "atx", "application/vnd.antix.game-component" },
+ 	{ "au", "audio/basic" },
+-	{ "avci", "image/avci" },
+-	{ "avcs", "image/avcs" },
+ 	{ "avi", "video/x-msvideo" },
+ 	{ "avif", "image/avif" },
+ 	{ "aw", "application/applixware" },
+@@ -172,7 +168,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "com", "application/x-msdownload" },
+ 	{ "conf", "text/plain" },
+ 	{ "cpio", "application/x-cpio" },
+-	{ "cpl", "application/cpl+xml" },
+ 	{ "cpp", "text/x-c" },
+ 	{ "cpt", "application/mac-compactpro" },
+ 	{ "crd", "application/x-mscardfile" },
+@@ -278,7 +273,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "evy", "application/x-envoy" },
+ 	{ "exe", "application/x-msdos-program" },
+ 	{ "exi", "application/exi" },
+-	{ "exp", "application/express" },
+ 	{ "exr", "image/aces" },
+ 	{ "ext", "application/vnd.novadigm.ext" },
+ 	{ "ez", "application/andrew-inset" },
+@@ -333,7 +327,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "gca", "application/x-gca-compressed" },
+ 	{ "gdl", "model/vnd.gdl" },
+ 	{ "gdoc", "application/vnd.google-apps.document" },
+-	{ "ged", "text/vnd.familysearch.gedcom" },
+ 	{ "geo", "application/vnd.dynageo" },
+ 	{ "geojson", "application/geo+json" },
+ 	{ "gex", "application/vnd.geometry-explorer" },
+@@ -523,7 +516,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "m3u8", "application/vnd.apple.mpegurl" },
+ 	{ "m4a", "audio/mp4" },
+ 	{ "m4p", "application/mp4" },
+-	{ "m4s", "video/iso.segment" },
+ 	{ "m4u", "video/vnd.mpegurl" },
+ 	{ "m4v", "video/x-m4v" },
+ 	{ "ma", "application/mathematica" },
+@@ -592,14 +584,13 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "mpd", "application/dash+xml" },
+ 	{ "mpe", "video/mpeg" },
+ 	{ "mpeg", "video/mpeg" },
+-	{ "mpf", "application/media-policy-dataset+xml" },
+ 	{ "mpg", "video/mpeg" },
+ 	{ "mpg4", "video/mp4" },
+ 	{ "mpga", "audio/mpeg" },
+ 	{ "mpkg", "application/vnd.apple.installer+xml" },
+ 	{ "mpm", "application/vnd.blueice.multipass" },
+ 	{ "mpn", "application/vnd.mophun.application" },
+-	{ "mpp", "application/dash-patch+xml" },
++	{ "mpp", "application/vnd.ms-project" },
+ 	{ "mpt", "application/vnd.ms-project" },
+ 	{ "mpy", "application/vnd.ibm.minipay" },
+ 	{ "mqy", "application/vnd.mobius.mqy" },
+@@ -623,7 +614,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "musd", "application/mmt-usd+xml" },
+ 	{ "musicxml", "application/vnd.recordare.musicxml+xml" },
+ 	{ "mvb", "application/x-msmediaview" },
+-	{ "mvt", "application/vnd.mapbox-vector-tile" },
+ 	{ "mwf", "application/vnd.mfer" },
+ 	{ "mxf", "application/mxf" },
+ 	{ "mxl", "application/vnd.recordare.musicxml" },
+@@ -683,7 +673,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "opf", "application/oebps-package+xml" },
+ 	{ "opml", "text/x-opml" },
+ 	{ "oprc", "application/vnd.palm" },
+-	{ "opus", "audio/ogg" },
+ 	{ "org", "application/vnd.lotus-organizer" },
+ 	{ "osf", "application/vnd.yamaha.openscoreformat" },
+ 	{ "osfpvg", "application/vnd.yamaha.openscoreformat.osfpvg+xml" },
+@@ -928,9 +917,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "sti", "application/vnd.sun.xml.impress.template" },
+ 	{ "stk", "application/hyperstudio" },
+ 	{ "stl", "model/stl" },
+-	{ "stpx", "model/step+xml" },
+-	{ "stpxz", "model/step-xml+zip" },
+-	{ "stpz", "model/step+zip" },
+ 	{ "str", "application/vnd.pg.format" },
+ 	{ "stw", "application/vnd.sun.xml.writer.template" },
+ 	{ "styl", "text/stylus" },
+@@ -986,7 +972,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "tpt", "application/vnd.trid.tpt" },
+ 	{ "tr", "text/troff" },
+ 	{ "tra", "application/vnd.trueapp" },
+-	{ "trig", "application/trig" },
+ 	{ "trm", "application/x-msterminal" },
+ 	{ "ts", "video/mp2t" },
+ 	{ "tsd", "application/timestamped-data" },
+@@ -1057,7 +1042,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "vcs", "text/x-vcalendar" },
+ 	{ "vcx", "application/vnd.vcx" },
+ 	{ "vdi", "application/x-virtualbox-vdi" },
+-	{ "vds", "model/vnd.sap.vds" },
+ 	{ "vhd", "application/x-virtualbox-vhd" },
+ 	{ "vis", "application/vnd.visionary" },
+ 	{ "viv", "video/vnd.vivo" },
+@@ -1095,7 +1079,6 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "webp", "image/webp" },
+ 	{ "wg", "application/vnd.pmi.widget" },
+ 	{ "wgt", "application/widget" },
+-	{ "wif", "application/watcherinfo+xml" },
+ 	{ "wks", "application/vnd.ms-works" },
+ 	{ "wm", "video/x-ms-wm" },
+ 	{ "wma", "audio/x-ms-wma" },
+@@ -1139,7 +1122,7 @@ static const php_cli_server_ext_mime_type_pair mime_type_map[] = {
+ 	{ "xbm", "image/x-xbitmap" },
+ 	{ "xca", "application/xcap-caps+xml" },
+ 	{ "xcs", "application/calendar+xml" },
+-	{ "xdf", "application/xcap-diff+xml" },
++	{ "xdf", "application/mrb-consumer+xml" },
+ 	{ "xdm", "application/vnd.syncml.dm+xml" },
+ 	{ "xdp", "application/vnd.adobe.xdp+xml" },
+ 	{ "xdssc", "application/dssc+xml" },

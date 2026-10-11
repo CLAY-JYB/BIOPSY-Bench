@@ -1,0 +1,130 @@
+diff --git a/ext/phar/tests/stat2_5.3.phpt b/ext/phar/tests/stat2_5.3.phpt
+index 0696d351..0dae17d8 100644
+--- a/ext/phar/tests/stat2_5.3.phpt
++++ b/ext/phar/tests/stat2_5.3.phpt
+@@ -33,10 +33,8 @@ __HALT_COMPILER();');
+ include $fname3;
+ ?>
+ --CLEAN--
+-<?php
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar'); ?>
+ --EXPECT--
+ bool(true)
+ is_link
+diff --git a/ext/phar/tests/tar/bignames_overflow.phpt b/ext/phar/tests/tar/bignames_overflow.phpt
+index 411c25a3..d992bbeb 100644
+--- a/ext/phar/tests/tar/bignames_overflow.phpt
++++ b/ext/phar/tests/tar/bignames_overflow.phpt
+@@ -7,6 +7,7 @@ phar.require_hash=0
+ --FILE--
+ <?php
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.tar';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.2.tar';
+ $pname = 'phar://' . $fname;
+ 
+ include __DIR__ . '/files/make.dangerous.tar.php.inc';
+@@ -28,6 +29,7 @@ echo $p1[str_repeat('a', 155) . '/' . str_repeat('a', 100)]->getContent() . "\n"
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.tar');
+ ?>
+ --EXPECT--
+ a
+diff --git a/ext/phar/tests/tar/create_new_phar_b.phpt b/ext/phar/tests/tar/create_new_phar_b.phpt
+index 7ec06f42..4b61403f 100644
+--- a/ext/phar/tests/tar/create_new_phar_b.phpt
++++ b/ext/phar/tests/tar/create_new_phar_b.phpt
+@@ -12,6 +12,9 @@ file_put_contents('phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.pha
+     'brand new!');
+ include 'phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar/a.php';
+ ?>
++
++--CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar'); ?>
+ --EXPECTF--
+ Warning: file_put_contents(phar://%screate_new_phar_b.phar.tar/a.php): Failed to open stream: phar error: write operations disabled by the php.ini setting phar.readonly in %screate_new_phar_b.php on line %d
+ 
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator4.phpt b/ext/phar/tests/tar/phar_buildfromiterator4.phpt
+index 8fa55768..36ea9cac 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator4.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator4.phpt
+@@ -35,15 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator4.phar.tar');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
+-var_dump($phar->isFileFormat(Phar::TAR));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.tar');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
++    var_dump($phar->isFileFormat(Phar::TAR));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator4.phar.tar');
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator5.phpt b/ext/phar/tests/tar/phar_buildfromiterator5.phpt
+index 27d9dc32..bcfbc071 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator5.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator5.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator6.phpt b/ext/phar/tests/tar/phar_buildfromiterator6.phpt
+index 91820369..addacc26 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator6.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator6.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid
+diff --git a/ext/phar/tests/tar/phar_buildfromiterator7.phpt b/ext/phar/tests/tar/phar_buildfromiterator7.phpt
+index 297b40b5..6eee2392 100644
+--- a/ext/phar/tests/tar/phar_buildfromiterator7.phpt
++++ b/ext/phar/tests/tar/phar_buildfromiterator7.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.tar');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid

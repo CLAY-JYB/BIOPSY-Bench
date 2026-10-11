@@ -1,0 +1,310 @@
+diff --git a/ext/session/tests/bug60634_error_3.phpt b/ext/session/tests/bug60634_error_3.phpt
+index 358f4011..5669aa31 100644
+--- a/ext/session/tests/bug60634_error_3.phpt
++++ b/ext/session/tests/bug60634_error_3.phpt
+@@ -52,4 +52,4 @@ Stack trace:
+ #1 {main}
+   thrown in %s on line %d
+ 
+-Warning: PHP Request Shutdown: Cannot call session save handler in a recursive manner in Unknown on line 0
++Warning: Unknown: Cannot call session save handler in a recursive manner in Unknown on line 0
+diff --git a/ext/session/tests/bug60634_error_4.phpt b/ext/session/tests/bug60634_error_4.phpt
+index f9eda46b..a8abedca 100644
+--- a/ext/session/tests/bug60634_error_4.phpt
++++ b/ext/session/tests/bug60634_error_4.phpt
+@@ -52,4 +52,4 @@ Stack trace:
+ #1 {main}
+   thrown in %s on line %d
+ 
+-Warning: PHP Request Shutdown: Cannot call session save handler in a recursive manner in Unknown on line 0
++Warning: Unknown: Cannot call session save handler in a recursive manner in Unknown on line 0
+diff --git a/ext/session/tests/gh7787.phpt b/ext/session/tests/gh7787.phpt
+deleted file mode 100644
+index b3839882..00000000
+--- a/ext/session/tests/gh7787.phpt
++++ /dev/null
+@@ -1,90 +0,0 @@
+---TEST--
+-GH-7787: Provide more SessionHandler failure information
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---INI--
+-session.use_strict_mode=0
+-session.save_handler=files
+---FILE--
+-<?php
+-class MySessionHandler extends SessionHandler implements SessionUpdateTimestampHandlerInterface
+-{
+-    public function open($path, $sessname): bool {
+-        return true;
+-    }
+-
+-    public function close(): bool {
+-        return true;
+-    }
+-
+-    public function read($sessid): string|false {
+-        return 'foo|s:3:"foo";';
+-    }
+-
+-    public function write($sessid, $sessdata): bool {
+-        return false;
+-    }
+-
+-    public function destroy($sessid): bool {
+-        return true;
+-    }
+-
+-    public function gc($maxlifetime): int|false {
+-        return true;
+-    }
+-
+-    public function create_sid(): string {
+-        return sha1(random_bytes(32));
+-    }
+-
+-    public function validateId($sid): bool {
+-        return true;
+-    }
+-
+-    public function updateTimestamp($sessid, $sessdata): bool {
+-        return false;
+-    }
+-}
+-
+-ob_start();
+-
+-$handler = new MySessionHandler();
+-session_set_save_handler($handler);
+-
+-session_start();
+-$_SESSION['foo'] = 'bar';
+-session_write_close();
+-
+-session_start();
+-session_write_close();
+-
+-session_set_save_handler(
+-    fn() => true,
+-    fn() => true,
+-    fn() => 'foo|s:3:"foo";',
+-    fn() => false,
+-    fn() => true,
+-    fn() => true,
+-    fn() => sha1(random_bytes(32)),
+-    fn() => true,
+-    fn() => false,
+-);
+-
+-session_start();
+-$_SESSION['foo'] = 'bar';
+-session_write_close();
+-
+-session_start();
+-session_write_close();
+-
+-?>
+---EXPECTF--
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: MySessionHandler::write) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: MySessionHandler::updateTimestamp) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: write) in %s on line %d
+-
+-Warning: session_write_close(): Failed to write session data using user defined save handler. (session.save_path: , handler: update_timestamp) in %s on line %d
+diff --git a/ext/session/tests/gh9200.phpt b/ext/session/tests/gh9200.phpt
+deleted file mode 100644
+index fd6e28ab..00000000
+--- a/ext/session/tests/gh9200.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-9200: setcookie has an obsolete expires date format
+---INI--
+-session.cookie_lifetime=3600
+---EXTENSIONS--
+-session
+---CGI--
+---FILE--
+-<?php
+-session_name("foo");
+-session_id('bar');
+-session_start();
+-
+-foreach (headers_list() as $header) {
+-	if (preg_match('/^Set-Cookie: foo=bar; expires=(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9][0-9] (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) 2[0-9][0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] GMT; Max-Age=3600; path=\\/$/', $header)) {
+-		echo "Success", PHP_EOL;
+-		exit;
+-	}
+-}
+-echo "Fail", PHP_EOL;
+-?>
+---EXPECT--
+-Success
+diff --git a/ext/session/tests/gh9584.phpt b/ext/session/tests/gh9584.phpt
+deleted file mode 100644
+index 14fbcb6d..00000000
+--- a/ext/session/tests/gh9584.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-GH-9584: PS(mod_user_class_name) must not leak into next request
+---EXTENSIONS--
+-session
+---SKIPIF--
+-<?php include('skipif.inc'); ?>
+---FILE--
+-<?php
+-
+-class MySessionHandler extends SessionHandler implements SessionUpdateTimestampHandlerInterface
+-{
+-    public function open($path, $sessname): bool {
+-        return true;
+-    }
+-
+-    public function close(): bool {
+-        return true;
+-    }
+-
+-    public function read($sessid): string|false {
+-        return 'foo|s:3:"foo";';
+-    }
+-
+-    public function write($sessid, $sessdata): bool {
+-        return false;
+-    }
+-
+-    public function destroy($sessid): bool {
+-        return true;
+-    }
+-
+-    public function gc($maxlifetime): int|false {
+-        return true;
+-    }
+-
+-    public function create_sid(): string {
+-        return sha1(random_bytes(32));
+-    }
+-
+-    public function validateId($sid): bool {
+-        return true;
+-    }
+-
+-    public function updateTimestamp($sessid, $sessdata): bool {
+-        return false;
+-    }
+-}
+-
+-$handler = new MySessionHandler();
+-session_set_save_handler($handler);
+-
+-?>
+-===DONE===
+---EXPECT--
+-===DONE===
+diff --git a/ext/session/tests/rfc1867_sid_invalid.phpt b/ext/session/tests/rfc1867_sid_invalid.phpt
+index fe01b5a8..265883c9 100644
+--- a/ext/session/tests/rfc1867_sid_invalid.phpt
++++ b/ext/session/tests/rfc1867_sid_invalid.phpt
+@@ -52,17 +52,17 @@ session_destroy();
+ @unlink(__DIR__ . DIRECTORY_SEPARATOR . "rfc1867_sid_invalid.post.txt");
+ ?>
+ --EXPECTF--
+-Warning: PHP Request Startup: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
++Warning: Unknown: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to read session data: files (path: ) in Unknown on line 0
++Warning: Unknown: Failed to read session data: files (path: ) in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
++Warning: Unknown: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
++Warning: Unknown: Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, "-", and "," characters are allowed in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to read session data: files (path: ) in Unknown on line 0
++Warning: Unknown: Failed to read session data: files (path: ) in Unknown on line 0
+ 
+-Warning: PHP Request Startup: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
++Warning: Unknown: Failed to write session data (files). Please verify that the current setting of session.save_path is correct () in Unknown on line 0
+ string(%d) ""
+ bool(true)
+ array(2) {
+diff --git a/ext/session/tests/save_handler.inc b/ext/session/tests/save_handler.inc
+index 43475d33..56b35052 100644
+--- a/ext/session/tests/save_handler.inc
++++ b/ext/session/tests/save_handler.inc
+@@ -27,7 +27,7 @@ function open($save_path, $session_name) {
+     global $session_save_path, $name;
+     $session_save_path = $save_path;
+     $name = $session_name;
+-    echo "Open [{$session_save_path},{$session_name}]\n";
++    echo "Open [${session_save_path},${session_name}]\n";
+ 
+     // MUST return bool. Return TRUE for success.
+     return true;
+@@ -39,7 +39,7 @@ function close() {
+     // NOTE: This function should unlock session data, if write() does not unlock it.
+ 
+     global $session_save_path, $name;
+-    echo "Close [{$session_save_path},{$name}]\n";
++    echo "Close [${session_save_path},${name}]\n";
+ 
+     // MUST return bool. Return TRUE for success.
+     return true;
+@@ -54,7 +54,7 @@ function read($id) {
+ 
+     global $session_save_path, $name, $session_id;
+     $session_id = $id;
+-    echo "Read [{$session_save_path},{$id}]\n";
++    echo "Read [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     // read MUST create file. Otherwise, strict mode will not work
+     touch($session_file);
+@@ -74,7 +74,7 @@ function write($id, $session_data) {
+ 
+     global $session_save_path, $name, $session_id;
+     $session_id = $id;
+-    echo "Write [{$session_save_path},{$id},{$session_data}]\n";
++    echo "Write [${session_save_path},${id},${session_data}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     if ($fp = fopen($session_file, "w")) {
+         $return = fwrite($fp, $session_data);
+@@ -91,7 +91,7 @@ function destroy($id) {
+     // string $id - Session ID string
+ 
+     global $session_save_path, $name;
+-    echo "Destroy [{$session_save_path},{$id}]\n";
++    echo "Destroy [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     unlink($session_file);
+ 
+@@ -136,7 +136,7 @@ function create_sid() {
+     //       e.g. hash('sha2', random_bytes(64)) or use /dev/urandom
+ 
+     $id = ('PHPT-'.time());
+-    echo "CreateID [{$id}]\n";
++    echo "CreateID [${id}]\n";
+ 
+     // MUST return session ID string.
+     // Return FALSE for error.
+@@ -148,7 +148,7 @@ function validate_sid($id) {
+     // string $id - Session ID string
+ 
+     global $session_save_path, $name;
+-    echo "ValidateID [{$session_save_path},{$id}]\n";
++    echo "ValidateID [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     $ret = file_exists($session_file);
+ 
+@@ -168,7 +168,7 @@ function update($id, $session_data) {
+     //       support time stamp updating, you must not define this.
+ 
+     global $session_save_path, $name;
+-    echo "Update [{$session_save_path},{$id}]\n";
++    echo "Update [${session_save_path},${id}]\n";
+     $session_file = "$session_save_path/".SESSION_FILE_PREFIX.$id;
+     $ret = touch($session_file);
+ 

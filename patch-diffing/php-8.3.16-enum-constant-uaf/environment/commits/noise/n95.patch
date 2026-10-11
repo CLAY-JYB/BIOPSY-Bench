@@ -1,0 +1,297 @@
+diff --git a/ext/date/tests/bug53437_var1.phpt b/ext/date/tests/bug53437_var1.phpt
+index 9413c6ff..938439ab 100644
+--- a/ext/date/tests/bug53437_var1.phpt
++++ b/ext/date/tests/bug53437_var1.phpt
+@@ -12,7 +12,7 @@ var_dump($dp);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DatePeriod object in %sbug53437_var1.php:%d
+ Stack trace:
+-#0 [internal function]: DatePeriod->__unserialize(Array)
++#0 [internal function]: DatePeriod->__wakeup()
+ #1 %sbug53437_var1.php(%d): unserialize('O:10:"DatePerio...')
+ #2 {main}
+   thrown in %sbug53437_var1.php on line %d
+diff --git a/ext/date/tests/bug53437_var2.phpt b/ext/date/tests/bug53437_var2.phpt
+index 9ca6a0f6..7a87b384 100644
+--- a/ext/date/tests/bug53437_var2.phpt
++++ b/ext/date/tests/bug53437_var2.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #53437 (DateInterval basic serialization)
++Bug #53437 DateInterval basic serialization
+ --FILE--
+ <?php
+ $di0 = new DateInterval('P2Y4DT6H8M');
+@@ -11,8 +11,8 @@ $di1 = unserialize($s);
+ var_dump($di0, $di1);
+ 
+ ?>
+---EXPECTF--
+-object(DateInterval)#1 (%d) {
++--EXPECT--
++object(DateInterval)#1 (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -27,14 +27,26 @@ object(DateInterval)#1 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+-object(DateInterval)#2 (%d) {
++object(DateInterval)#2 (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -49,10 +61,22 @@ object(DateInterval)#2 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug53437_var3.phpt b/ext/date/tests/bug53437_var3.phpt
+index c87c5c8b..eb043398 100644
+--- a/ext/date/tests/bug53437_var3.phpt
++++ b/ext/date/tests/bug53437_var3.phpt
+@@ -4,14 +4,14 @@ Bug #53437 DateInterval unserialize bad data, 32 bit
+ <?php if (PHP_INT_SIZE != 4) { die('skip 32 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":8:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":15:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -24,12 +24,24 @@ object(DateInterval)#%d (%d) {
+   int(8)
+   ["s"]=>
+   int(0)
+-  ["f"]=>
+-  float(0)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(-1)
++  ["have_weekday_relative"]=>
++  int(%d)
++  ["have_special_relative"]=>
++  int(0)
++  ["f"]=>
++  float(0)
+ }
+diff --git a/ext/date/tests/bug53437_var4.phpt b/ext/date/tests/bug53437_var4.phpt
+index 14823fb4..b53483ab 100644
+--- a/ext/date/tests/bug53437_var4.phpt
++++ b/ext/date/tests/bug53437_var4.phpt
+@@ -21,7 +21,7 @@ var_dump($df,
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -36,12 +36,24 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(2)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+ int(0)
+ int(0)
+diff --git a/ext/date/tests/bug53437_var5.phpt b/ext/date/tests/bug53437_var5.phpt
+index 77d117bc..55bba9ed 100644
+--- a/ext/date/tests/bug53437_var5.phpt
++++ b/ext/date/tests/bug53437_var5.phpt
+@@ -1,17 +1,17 @@
+ --TEST--
+-Bug #53437 (DateInterval unserialize bad data, 64 bit)
++Bug #53437 DateInterval unserialize bad data, 64 bit
+ --SKIPIF--
+ <?php if (PHP_INT_SIZE != 8) { die('skip true 64 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":8:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":15:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -24,12 +24,24 @@ object(DateInterval)#%d (%d) {
+   int(8)
+   ["s"]=>
+   int(0)
+-  ["f"]=>
+-  float(0)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(9223372036854775807)
++  ["have_weekday_relative"]=>
++  int(9)
++  ["have_special_relative"]=>
++  int(0)
++  ["f"]=>
++  float(0)
+ }
+diff --git a/ext/date/tests/bug53437_var6.phpt b/ext/date/tests/bug53437_var6.phpt
+index cfc60e6c..f5ff22c4 100644
+--- a/ext/date/tests/bug53437_var6.phpt
++++ b/ext/date/tests/bug53437_var6.phpt
+@@ -1,17 +1,17 @@
+ --TEST--
+-Bug #53437 (DateInterval unserialize bad data, 64 bit)
++Bug #53437 DateInterval unserialize bad data, 64 bit
+ --SKIPIF--
+ <?php if (PHP_INT_SIZE != 8) { die('skip true 64 bit only'); } ?>
+ --FILE--
+ <?php
+-$s = 'O:12:"DateInterval":9:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:1:"f";d:0.123654;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";}';
++$s = 'O:12:"DateInterval":16:{s:1:"y";s:1:"2";s:1:"m";s:1:"0";s:1:"d";s:3:"bla";s:1:"h";s:1:"6";s:1:"i";s:1:"8";s:1:"s";s:1:"0";s:1:"f";d:0.123654;s:7:"weekday";i:10;s:16:"weekday_behavior";i:10;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";s:4:"aoeu";s:12:"special_type";i:0;s:14:"special_amount";s:21:"234523452345234532455";s:21:"have_weekday_relative";i:21474836489;s:21:"have_special_relative";s:3:"bla";}';
+ 
+ $di = unserialize($s);
+ var_dump($di);
+ 
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(2)
+   ["m"]=>
+@@ -26,10 +26,22 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0.123654)
++  ["weekday"]=>
++  int(10)
++  ["weekday_behavior"]=>
++  int(10)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(0)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(9223372036854775807)
++  ["have_weekday_relative"]=>
++  int(9)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug55397.phpt b/ext/date/tests/bug55397.phpt
+index 559490df..98f29a25 100644
+--- a/ext/date/tests/bug55397.phpt
++++ b/ext/date/tests/bug55397.phpt
+@@ -8,7 +8,7 @@ var_dump(unserialize('O:8:"DateTime":0:{}') == new DateTime);
+ --EXPECTF--
+ Fatal error: Uncaught Error: Invalid serialization data for DateTime object in %sbug55397.php:%d
+ Stack trace:
+-#0 [internal function]: DateTime->__unserialize(Array)
++#0 [internal function]: DateTime->__wakeup()
+ #1 %sbug55397.php(%d): unserialize('O:8:"DateTime":...')
+ #2 {main}
+   thrown in %sbug55397.php on line %d

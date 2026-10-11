@@ -1,0 +1,161 @@
+diff --git a/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt b/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt
+deleted file mode 100644
+index 1061ca21..00000000
+--- a/Zend/tests/type_declarations/dnf_types/variance/valid9.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Covariant replacement of iterable type with unregistered intersection type in DNF type
+---FILE--
+-<?php
+-
+-class Test {
+-    function method1(): iterable|string {}
+-    function method2(): iterable|int {}
+-}
+-class Test2 extends Test {
+-    function method1(): (X&Traversable)|string {}
+-    function method2(): int|(X&MyIterator) {}
+-}
+-
+-?>
+-===DONE===
+---EXPECTF--
+-Fatal error: Could not check compatibility between Test2::method2(): (X&MyIterator)|int and Test::method2(): Traversable|array|int, because class X is not available in %s
+diff --git a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
+index d3dab0d7..fdac7576 100644
+--- a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
++++ b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type.phpt
+@@ -1,14 +1,10 @@
+ --TEST--
+-Intersection types can be implicitly nullable
++Intersection types cannot be implicitly nullable
+ --FILE--
+ <?php
+ 
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-foo(null);
++function foo(X&Y $foo = null) {}
+ 
+ ?>
+---EXPECT--
+-NULL
++--EXPECTF--
++Fatal error: Cannot use null as default value for parameter $foo of type X&Y in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt b/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt
+deleted file mode 100644
+index 65fc16e6..00000000
+--- a/Zend/tests/type_declarations/intersection_types/implicit_nullable_intersection_type_error.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Verify type rendering in type error for implicitly nullable intersection types
+---FILE--
+-<?php
+-
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-try {
+-    foo(5);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-foo(): Argument #1 ($foo) must be of type (X&Y)|null, int given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
+index 3fd321d3..fc4ee2d5 100644
+--- a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
++++ b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_iterable_type.phpt
+@@ -7,4 +7,4 @@ function foo(): iterable&Iterator {}
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Type Traversable|array cannot be part of an intersection type in %s on line %d
++Fatal error: Type iterable cannot be part of an intersection type in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt b/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt
+deleted file mode 100644
+index 6a184cf6..00000000
+--- a/Zend/tests/type_declarations/intersection_types/invalid_types/invalid_true_type.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-true type cannot take part in an intersection type
+---FILE--
+-<?php
+-
+-function foo(): true&Iterator {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Type true cannot be part of an intersection type in %s on line %d
+diff --git a/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt b/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
+index ce3a20fb..b704f89b 100644
+--- a/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
++++ b/Zend/tests/type_declarations/intersection_types/variance/invalid5.phpt
+@@ -15,4 +15,4 @@ class Test2 extends Test {
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Declaration of Test2::method(): X&Y must be compatible with Test::method(): Traversable|array in %s on line %d
++Fatal error: Declaration of Test2::method(): X&Y must be compatible with Test::method(): iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable/iterable_001.phpt b/Zend/tests/type_declarations/iterable/iterable_001.phpt
+deleted file mode 100644
+index f7541800..00000000
+--- a/Zend/tests/type_declarations/iterable/iterable_001.phpt
++++ /dev/null
+@@ -1,48 +0,0 @@
+---TEST--
+-iterable type#001
+---FILE--
+-<?php
+-
+-function test(iterable $iterable) {
+-    var_dump($iterable);
+-}
+-
+-function gen() {
+-    yield 1;
+-    yield 2;
+-    yield 3;
+-};
+-
+-test([1, 2, 3]);
+-test(gen());
+-test(new ArrayIterator([1, 2, 3]));
+-
+-try {
+-    test(1);
+-} catch (Throwable $e) {
+-    echo $e->getMessage();
+-}
+-?>
+---EXPECTF--
+-array(3) {
+-  [0]=>
+-  int(1)
+-  [1]=>
+-  int(2)
+-  [2]=>
+-  int(3)
+-}
+-object(Generator)#1 (0) {
+-}
+-object(ArrayIterator)#1 (1) {
+-  ["storage":"ArrayIterator":private]=>
+-  array(3) {
+-    [0]=>
+-    int(1)
+-    [1]=>
+-    int(2)
+-    [2]=>
+-    int(3)
+-  }
+-}
+-test(): Argument #1 ($iterable) must be of type Traversable|array, int given, called in %s on line %d

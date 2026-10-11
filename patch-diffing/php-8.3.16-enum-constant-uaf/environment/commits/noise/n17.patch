@@ -1,0 +1,208 @@
+diff --git a/Zend/tests/bug65911.phpt b/Zend/tests/bug65911.phpt
+index 47d4eebc..cea7cdc1 100644
+--- a/Zend/tests/bug65911.phpt
++++ b/Zend/tests/bug65911.phpt
+@@ -6,7 +6,6 @@ class A {}
+ 
+ class B
+ {
+-    public $foo;
+     public function go()
+     {
+         $this->foo = 'bar';
+diff --git a/Zend/tests/bug66609.phpt b/Zend/tests/bug66609.phpt
+index 0807d146..f8c0d9ce 100644
+--- a/Zend/tests/bug66609.phpt
++++ b/Zend/tests/bug66609.phpt
+@@ -10,7 +10,6 @@ class Bar {
+         return $foo->foo;
+     }
+ }
+-#[AllowDynamicProperties]
+ class Foo {
+     public function __get($x) {
+         global $bar;
+diff --git a/Zend/tests/bug66719.phpt b/Zend/tests/bug66719.phpt
+index 3acff69a..70785b4a 100644
+--- a/Zend/tests/bug66719.phpt
++++ b/Zend/tests/bug66719.phpt
+@@ -34,14 +34,10 @@ call_user_func(array(B::class, 'parent::who'));
+ C::test();
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ string(1) "B"
+ string(1) "A"
+-
+-Deprecated: Callables of the form ["B", "parent::who"] are deprecated in %s on line %d
+ string(1) "A"
+ string(1) "B"
+ string(1) "A"
+-
+-Deprecated: Callables of the form ["B", "parent::who"] are deprecated in %s on line %d
+ string(1) "A"
+diff --git a/Zend/tests/bug69180-backtrace.phpt b/Zend/tests/bug69180-backtrace.phpt
+deleted file mode 100644
+index da463047..00000000
+--- a/Zend/tests/bug69180-backtrace.phpt
++++ /dev/null
+@@ -1,119 +0,0 @@
+---TEST--
+-Bug #69180: Backtrace does not honor trait conflict resolution / method aliasing
+---FILE--
+-<?php
+-
+-trait T {
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        print_r(array_map(fn ($v) => $v['class'] . '::' . $v['function'], debug_backtrace()));
+-        
+-        return '=' . $name;
+-    }
+-}
+-
+-class Model {
+-    use T {
+-        T::__get as private __t_get;
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__t_get($name);
+-    }
+-}
+-
+-class X extends Model {}
+-
+-class Y extends Model {
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-}
+-
+-class Z extends Model {
+-    private function __x_get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__x_get($name);
+-    }
+-}
+-
+-class P extends Model {
+-    private function __t_get($name): string {
+-        var_dump(__METHOD__);
+-        return parent::__get($name);
+-    }
+-    
+-    public function __get($name): string {
+-        var_dump(__METHOD__);
+-        return $this->__t_get($name);
+-    }
+-}
+-
+-$m = new X();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new Y();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new Z();
+-$m->a;
+-
+-echo "\n";
+-
+-$m = new P();
+-$m->a;
+-
+-?>
+---EXPECT--
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-)
+-
+-string(8) "Y::__get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => Y::__get
+-)
+-
+-string(8) "Z::__get"
+-string(10) "Z::__x_get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => Z::__x_get
+-    [3] => Z::__get
+-)
+-
+-string(8) "P::__get"
+-string(10) "P::__t_get"
+-string(12) "Model::__get"
+-string(8) "T::__get"
+-Array
+-(
+-    [0] => Model::__t_get
+-    [1] => Model::__get
+-    [2] => P::__t_get
+-    [3] => P::__get
+-)
+diff --git a/Zend/tests/bug69446.phpt b/Zend/tests/bug69446.phpt
+index 6bc3c700..a82ecb44 100644
+--- a/Zend/tests/bug69446.phpt
++++ b/Zend/tests/bug69446.phpt
+@@ -5,7 +5,6 @@ zend.enable_gc = 1
+ --FILE--
+ <?php
+ $bar = NULL;
+-#[AllowDynamicProperties]
+ class bad {
+     public function __destruct() {
+         global $bar;
+diff --git a/Zend/tests/bug70089.phpt b/Zend/tests/bug70089.phpt
+index 3a8e7d8e..d2bf14fb 100644
+--- a/Zend/tests/bug70089.phpt
++++ b/Zend/tests/bug70089.phpt
+@@ -30,6 +30,6 @@ try {
+ ?>
+ --EXPECT--
+ string(36) "Cannot use string offset as an array"
+-string(36) "Cannot use string offset as an array"
+-string(47) "Cannot create references to/from string offsets"
++string(27) "Cannot unset string offsets"
++string(41) "Only variables can be passed by reference"
+ string(41) "Cannot increment/decrement string offsets"
+diff --git a/Zend/tests/bug70223.phpt b/Zend/tests/bug70223.phpt
+index 7fcbae93..7f1633a7 100644
+--- a/Zend/tests/bug70223.phpt
++++ b/Zend/tests/bug70223.phpt
+@@ -3,9 +3,6 @@ Bug #70223 (Incrementing value returned by magic getter)
+ --FILE--
+ <?php
+ 
+-// Note that this actually writes to dynamic property A::$f.
+-// Increment goes through __set(), not __get() by reference!
+-#[AllowDynamicProperties]
+ class A {
+ 
+     private $foo = 0;

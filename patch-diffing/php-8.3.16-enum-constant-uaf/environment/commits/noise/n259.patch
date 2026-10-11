@@ -1,0 +1,280 @@
+diff --git a/ext/reflection/tests/bug53366.phpt b/ext/reflection/tests/bug53366.phpt
+index e2bc250e..61493d53 100644
+--- a/ext/reflection/tests/bug53366.phpt
++++ b/ext/reflection/tests/bug53366.phpt
+@@ -3,7 +3,6 @@ Bug #53366 (Reflection doesn't get dynamic property value from getProperty())
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class UserClass {
+ }
+ 
+diff --git a/ext/reflection/tests/bug72661.phpt b/ext/reflection/tests/bug72661.phpt
+new file mode 100644
+index 00000000..b1cb764b
+--- /dev/null
++++ b/ext/reflection/tests/bug72661.phpt
+@@ -0,0 +1,10 @@
++--TEST--
++Bug #72661 (ReflectionType::__toString crashes with iterable)
++--FILE--
++<?php
++function test(iterable $arg) { }
++
++var_dump((string)(new ReflectionParameter("test", 0))->getType());
++?>
++--EXPECT--
++string(8) "iterable"
+diff --git a/ext/reflection/tests/bug79820.phpt b/ext/reflection/tests/bug79820.phpt
+index 3fa7871e..ff81f0e7 100644
+--- a/ext/reflection/tests/bug79820.phpt
++++ b/ext/reflection/tests/bug79820.phpt
+@@ -3,7 +3,6 @@ Bug #79820: Use after free when type duplicated into ReflectionProperty gets res
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public stdClass $prop;
+ }
+diff --git a/ext/reflection/tests/bug80370.phpt b/ext/reflection/tests/bug80370.phpt
+index e1131d43..41d01c2e 100644
+--- a/ext/reflection/tests/bug80370.phpt
++++ b/ext/reflection/tests/bug80370.phpt
+@@ -2,7 +2,6 @@
+ Bug #80370: Segfault on ReflectionProperty::getAttributes of dynamic property
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Foobar {
+ 
+ }
+diff --git a/ext/reflection/tests/intersection_types.phpt b/ext/reflection/tests/intersection_types.phpt
+new file mode 100644
+index 00000000..4ee3ac63
+--- /dev/null
++++ b/ext/reflection/tests/intersection_types.phpt
+@@ -0,0 +1,80 @@
++--TEST--
++Intersection types in reflection
++--FILE--
++<?php
++
++function dumpType(ReflectionIntersectionType $rt) {
++    echo "Type $rt:\n";
++    echo "Allows null: " . json_encode($rt->allowsNull()) . "\n";
++    foreach ($rt->getTypes() as $type) {
++        echo "  Name: " . $type->getName() . "\n";
++        echo "  String: " . (string) $type . "\n";
++        echo "  Allows Null: " . json_encode($type->allowsNull()) . "\n";
++    }
++}
++
++function test1(): X&Y&Z&Traversable&Countable { }
++
++class Test {
++    public X&Y&Countable $prop;
++}
++
++dumpType((new ReflectionFunction('test1'))->getReturnType());
++
++$rc = new ReflectionClass(Test::class);
++$rp = $rc->getProperty('prop');
++dumpType($rp->getType());
++
++/* Force CE resolution of the property type */
++
++interface y {}
++class x implements Y, Countable {
++    public function count(): int { return 0; }
++}
++$test = new Test;
++$test->prop = new x;
++
++$rp = $rc->getProperty('prop');
++dumpType($rp->getType());
++
++?>
++--EXPECT--
++Type X&Y&Z&Traversable&Countable:
++Allows null: false
++  Name: X
++  String: X
++  Allows Null: false
++  Name: Y
++  String: Y
++  Allows Null: false
++  Name: Z
++  String: Z
++  Allows Null: false
++  Name: Traversable
++  String: Traversable
++  Allows Null: false
++  Name: Countable
++  String: Countable
++  Allows Null: false
++Type X&Y&Countable:
++Allows null: false
++  Name: X
++  String: X
++  Allows Null: false
++  Name: Y
++  String: Y
++  Allows Null: false
++  Name: Countable
++  String: Countable
++  Allows Null: false
++Type X&Y&Countable:
++Allows null: false
++  Name: X
++  String: X
++  Allows Null: false
++  Name: Y
++  String: Y
++  Allows Null: false
++  Name: Countable
++  String: Countable
++  Allows Null: false
+diff --git a/ext/reflection/tests/iterable_Reflection.phpt b/ext/reflection/tests/iterable_Reflection.phpt
+deleted file mode 100644
+index 0a8a30a6..00000000
+--- a/ext/reflection/tests/iterable_Reflection.phpt
++++ /dev/null
+@@ -1,98 +0,0 @@
+---TEST--
+-iterable Type in Reflection
+---FILE--
+-<?php
+-
+-$function = function(iterable $arg): iterable {};
+-
+-$paramType = (new ReflectionParameter($function, 0))->getType();
+-var_dump($paramType::class);
+-var_dump($paramType);
+-var_dump($paramType->getName());
+-var_dump((string) $paramType);
+-var_dump($paramType->isBuiltin());
+-
+-$reflectionFunc = new ReflectionFunction($function);
+-$returnType = $reflectionFunc->getReturnType();
+-var_dump($returnType::class);
+-var_dump($returnType);
+-var_dump($returnType->getName());
+-var_dump((string) $returnType);
+-var_dump($returnType->isBuiltin());
+-
+-class PropIterableTypeTest {
+-    public iterable $iterable;
+-    public ?iterable $nullableIterable;
+-    public array $control;
+-    public ?array $nullableControl;
+-}
+-
+-$reflector = new ReflectionClass(PropIterableTypeTest::class);
+-
+-[$property, $nullable, $control, $nullableControl] = $reflector->getProperties();
+-$iterableType = $property->getType();
+-var_dump($iterableType::class);
+-var_dump($iterableType);
+-var_dump($iterableType->getName());
+-var_dump((string) $iterableType);
+-var_dump($iterableType->isBuiltin());
+-
+-$nullableIterableType = $nullable->getType();
+-var_dump($nullableIterableType::class);
+-var_dump($nullableIterableType);
+-var_dump($nullableIterableType->getName());
+-var_dump((string) $nullableIterableType);
+-var_dump($nullableIterableType->isBuiltin());
+-
+-$controlType = $control->getType();
+-var_dump($controlType::class);
+-var_dump($controlType);
+-var_dump($controlType->getName());
+-var_dump((string) $controlType);
+-var_dump($controlType->isBuiltin());
+-
+-$nullableControlType = $nullableControl->getType();
+-var_dump($nullableControlType::class);
+-var_dump($nullableControlType);
+-var_dump($nullableControlType->getName());
+-var_dump((string) $nullableControlType);
+-var_dump($nullableControlType->isBuiltin());
+-
+-?>
+---EXPECTF--
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(8) "iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(8) "iterable"
+-string(9) "?iterable"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(5) "array"
+-string(5) "array"
+-bool(true)
+-string(19) "ReflectionNamedType"
+-object(ReflectionNamedType)#%d (0) {
+-}
+-string(5) "array"
+-string(6) "?array"
+-bool(true)
+diff --git a/ext/reflection/tests/mixed_type.phpt b/ext/reflection/tests/mixed_type.phpt
+new file mode 100644
+index 00000000..2860e603
+--- /dev/null
++++ b/ext/reflection/tests/mixed_type.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++Test that the mixed type is reflectable
++--FILE--
++<?php
++class A
++{
++    public mixed $a;
++
++    public function test(mixed ...$a): mixed {}
++}
++
++$a = new A();
++
++$object = new ReflectionObject($a);
++$method = new ReflectionMethod($a, "test");
++
++var_dump($object->getProperty("a")->getType()->getName());
++var_dump($method->getParameters()[0]->getType()->getName());
++var_dump($method->getReturnType()->getName());
++
++var_dump((string) $object->getProperty("a")->getType());
++var_dump((string) $method->getParameters()[0]->getType());
++var_dump((string) $method->getReturnType());
++
++?>
++--EXPECT--
++string(5) "mixed"
++string(5) "mixed"
++string(5) "mixed"
++string(5) "mixed"
++string(5) "mixed"
++string(5) "mixed"

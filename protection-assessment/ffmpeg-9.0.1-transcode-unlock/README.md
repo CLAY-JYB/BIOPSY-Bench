@@ -2,11 +2,11 @@
 
 ## Overview
 
-| Attribute           | Value                |
+| Attribute | Value |
 |---------------------|----------------------|
-| **Difficulty**      | hard                 |
-| **Challenge ID**    | ffmpeg-9.0.1-transcode-unlock |
-| **Focus**           | per-engine commercial transcoding tier (the transcode engine runs only under a valid entitlement key) |
+| **Difficulty** | expert |
+| **Challenge ID** | ffmpeg-9.0.1-transcode-unlock |
+| **Focus** | per-machine codec licensing tier (the transcode engine runs only under a valid subscription entitlement, MPEG-LA/Fraunhofer-style TERM license analog) |
 | **Protection Type** | multi-layer (UPX+stealth-packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) |
 
 **Objective.** Locate the hidden license-key verification routine in `/app/binary`, defeat the protections around it (which may be interdependent), recover the full verification logic end-to-end, and derive a key that validates, per the contract in `instruction.md`. A correct key makes the binary print `flag{...}` and exit 0. A wrong key prints an error message and exits non-zero.
@@ -29,13 +29,13 @@ This challenge instantiates a filed construction case. The filing records the fo
 
 The challenge composes independent protection axes. This task's values are recorded on this card as `P#D#O#I#` plus the A level.
 
-| Axis  | Covers                                                                                                        |
+| Axis | Covers |
 |-------|---------------------------------------------------------------------------------------------------------------|
-| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048)     |
-| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer                                        |
+| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048) |
+| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer |
 | **D** | anti-debug with tiers none, basic, standard, and advanced. Advanced means many probes including frida detection and a self-ptrace DebugBlocker |
-| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum                                   |
-| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards                       |
+| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum |
+| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards |
 
 **This task** is `A3 P2 D3 O3 I3`. It has a medium algorithm (A3), UPX+stealth packing (P2), advanced anti-debug with DebugBlocker (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **hard** for this stack.
 
@@ -54,13 +54,13 @@ The binary implements multi-layer (UPX+stealth-packed, xollvm-obfuscated, anti-d
 1. **Verification unit placement.** The verification code is compiled into the `fftools` translation units with `verification.o` linked into the converter. The license key is read once from stdin at startup into a global, and the gate sits at the top of the transcode function, so the protected feature only runs under a valid key.
 2. **Stealth-UPX packing.** The entire executable is UPX-compressed and stealth-processed (magic / `p_info` / section-name scrub) so the stock `upx -d` refuses it; the agent must repair or bypass the stealth modifications to unpack. The interlock guard sections (`g_s*`, `g_canary`, `g_adbg`) and their CRCs apply to the unpacked image.
 3. **Anti-debug anchoring (D3).** The advanced probe set is anchored at the top of the transcode function, before the verification call. Under a tracer the probe corrupts the key via the interlock taint path, so the run ends in a clean `Invalid key` rejection rather than a crash.
-4. **Invocation contract.** `echo KEY | ./binary -f lavfi -i anullsrc -t 0.05 -f null -` uses the program's own options for a minimal headless transcode, and this is what reaches the protected feature.
+4. **Invocation contract.** `echo KEY |./binary -f lavfi -i anullsrc -t 0.05 -f null -` uses the program's own options for a minimal headless transcode, and this is what reaches the protected feature.
 
 ## Verification algorithm
 
 The verification routine follows one of several paradigms. The options are **partial-key** (per-group transforms plus checksum signature), **stream-cipher** (RC4, TEA, XTEA, or LFSR keystream), **name-serial hash** (custom hash plus checksum), **license state-machine** (multi-stage checkpoint validation through ARX or polynomial-hash bit transforms), and **weak public-key signature** (Wiener-weak RSA where the private exponent falls to continued fractions). The license key is a transport encoding (Base64, Base32, Base62, Base58, Hex, URL, or ASCII85) of the variant's verification blob (16 to 440 bytes depending on variant). A valid key prints `flag{XXXXX-XXXXX-XXXXX-XXXXX-XXXXX}`.
 
-**This task** uses the **stream-cipher/AEAD paradigm**. The submitted key is a Base58 transport encoding of a 56-byte license blob. Verification checks length, a 4-byte magic (`LNS3`), and a 16-byte Poly1305-style MAC computed over the blob with key material embedded in the binary (ChaCha20-derived keystream), through three checkpoints. The `flag{XXXXX-XXXXX-XXXXX-XXXXX-XXXXX}` output is derived at runtime from the verified blob. Every constant needed to mint a valid key is embedded in the binary.
+**This task** uses the **stream-cipher/AEAD paradigm**. The submitted key is a Base58 transport encoding of a 56-byte license blob. Verification enforces a field-level license chain: key length, magic, version, feature bits, a validity window, user and machine-fingerprint binding (the license is node-locked to the deployment's machine identity), and a 16-byte Poly1305-style MAC over the blob, through eight ordered checkpoints. The license is a time-limited subscription: an expiry window is enforced and a clock-rollback guard is armed. The `flag{XXXXX-XXXXX-XXXXX-XXXXX-XXXXX}` output is derived at runtime from the verified blob. Every constant needed to mint a valid key is embedded in the binary.
 
 ## Intended solve path
 
@@ -75,10 +75,10 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 
 ## Evaluation
 
-| Category             | Points | Type    | Action                                            |
+| Category | Points | Type | Action |
 |----------------------|--------|---------|---------------------------------------------------|
-| License verification | 50     | dynamic | the derived key actually validates against the binary |
-| Property validation  | 50     | dynamic | the defeat binaries genuinely carry the defeats  |
+| License verification | 50 | dynamic | the derived key actually validates against the binary |
+| Property validation | 50 | dynamic | the defeat binaries genuinely carry the defeats |
 
 - Scoring
 - License verification (50, dynamic):
@@ -100,23 +100,15 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 The task source directory is as follows.
 
 ```
-README.md                      # this task card
-instruction.md                 # the agent-facing challenge (static by design)
-task.toml                      # harness metadata (id, difficulty, network policy)
-environment/                   # build context: the carrier source, protection build, the challenge binary
-tests/                         # the verifier (test.sh, ground truth, defeat properties)
-solution/                      # the reference solve + ground truth
+README.md # this task card instruction.md # the agent-facing challenge (static by design) task.toml # harness metadata (id, difficulty, network policy) environment/ # build context: the carrier source, protection build, the challenge binary tests/ # the verifier (test.sh, ground truth, defeat properties) solution/ # the reference solve + ground truth
 ```
 
 The challenge container at runtime is as follows.
 
 ```
-/app/
-└── binary                     # the protected challenge binary (read-only)
+/app/ └── binary # the protected challenge binary (read-only)
 
-/logs/artifacts/agent_output/  # the agent's writable deliverables (contract in instruction.md)
-├── input.txt
-└── binaries/                  # defeat-demonstrating binaries, any names
+/logs/artifacts/agent_output/ # the agent's writable deliverables (contract in instruction.md) ├── input.txt └── binaries/ # defeat-demonstrating binaries, any names
 ```
 
 The tool environment is disclosed to the agent in `instruction.md`. The installed inventory lives in `environment/Dockerfile` and in `reference/tools.md`.

@@ -1,0 +1,195 @@
+diff --git a/ext/mbstring/php_unicode.c b/ext/mbstring/php_unicode.c
+index 0da63fe1..51e7a8e9 100644
+--- a/ext/mbstring/php_unicode.c
++++ b/ext/mbstring/php_unicode.c
+@@ -121,9 +121,7 @@ static inline unsigned mph_lookup(
+ 
+ static unsigned php_unicode_toupper_raw(unsigned code, enum mbfl_no_encoding enc)
+ {
+-	/* After the ASCII characters, the first codepoint with an uppercase version
+-	 * is 0xB5 (MICRO SIGN) */
+-	if (code < 0xB5) {
++	if (code < 0x80) {
+ 		/* Fast path for ASCII */
+ 		if (code >= 0x61 && code <= 0x7A) {
+ 			if (UNEXPECTED(enc == mbfl_no_encoding_8859_9 && code == 0x69)) {
+@@ -143,9 +141,7 @@ static unsigned php_unicode_toupper_raw(unsigned code, enum mbfl_no_encoding enc
+ 
+ static unsigned php_unicode_tolower_raw(unsigned code, enum mbfl_no_encoding enc)
+ {
+-	/* After the ASCII characters, the first codepoint with a lowercase version
+-	 * is 0xC0 (LATIN CAPITAL LETTER A WITH GRAVE) */
+-	if (code < 0xC0) {
++	if (code < 0x80) {
+ 		/* Fast path for ASCII */
+ 		if (code >= 0x41 && code <= 0x5A) {
+ 			if (UNEXPECTED(enc == mbfl_no_encoding_8859_9 && code == 0x0049L)) {
+@@ -367,7 +363,7 @@ MBSTRING_API char *php_unicode_convert_case(
+ {
+ 	struct convert_case_data data;
+ 	mbfl_convert_filter *from_wchar, *to_wchar;
+-	mbfl_string result;
++	mbfl_string result, *result_ptr;
+ 
+ 	mbfl_memory_device device;
+ 	mbfl_memory_device_init(&device, srclen + 1, 0);
+@@ -414,10 +410,14 @@ MBSTRING_API char *php_unicode_convert_case(
+ 
+ 	mbfl_convert_filter_flush(to_wchar);
+ 	mbfl_convert_filter_flush(from_wchar);
+-	mbfl_memory_device_result(&device, &result);
++	result_ptr = mbfl_memory_device_result(&device, &result);
+ 	mbfl_convert_filter_delete(to_wchar);
+ 	mbfl_convert_filter_delete(from_wchar);
+ 
++	if (!result_ptr) {
++		return NULL;
++	}
++
+ 	*ret_len = result.len;
+ 	return (char *) result.val;
+ }
+diff --git a/ext/mbstring/tests/armscii8_encoding.phpt b/ext/mbstring/tests/armscii8_encoding.phpt
+index 97006e09..37af3820 100644
+--- a/ext/mbstring/tests/armscii8_encoding.phpt
++++ b/ext/mbstring/tests/armscii8_encoding.phpt
+@@ -33,10 +33,6 @@ mb_substitute_character("long");
+ convertInvalidString("\xA1", "%", "ARMSCII-8", "UTF-8");
+ convertInvalidString("\xFF", "%", "ARMSCII-8", "UTF-8");
+ 
+-// Test replacement character which cannot be encoded in ARMSCII-8
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'ARMSCII-8');
+-
+ echo "Done!\n";
+ ?>
+ --EXPECT--
+diff --git a/ext/mbstring/tests/base64_encoding.phpt b/ext/mbstring/tests/base64_encoding.phpt
+deleted file mode 100644
+index 01657cb3..00000000
+--- a/ext/mbstring/tests/base64_encoding.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-Temporary test of mbstring's Base64 'encoding'
+---EXTENSIONS--
+-mbstring
+---FILE--
+-<?php
+-
+-/* Using mbstring to convert strings to and from Base64 has already been deprecated
+- * So this test should be removed when the Base64 'encoding' is */
+-
+-function testConversion($raw, $base64) {
+-  $converted = mb_convert_encoding($raw, 'Base64', '8bit');
+-  if ($converted !== $base64)
+-    die('Expected ' . bin2hex($raw) . ' to convert to "' . $base64 . '"; actually got "' . $converted . '"');
+-  $converted = mb_convert_encoding($base64, '8bit', 'Base64');
+-  if ($converted !== $raw)
+-    die('Expected "' . $base64 . '" to convert to ' . bin2hex($raw) . '; actually got ' . bin2hex($converted));
+-}
+-
+-testConversion('', '');
+-testConversion('a', 'YQ==');
+-testConversion('ab', 'YWI=');
+-testConversion("\x01\x02\x03", 'AQID');
+-testConversion("\xFF\xFE\x11\x22", '//4RIg==');
+-testConversion("\x00", 'AA==');
+-testConversion("\x00\x00", 'AAA=');
+-testConversion("\x00\x00\x00", 'AAAA');
+-
+-testConversion(str_repeat("ABCDEFGHIJ", 20), "QUJDREVGR0hJSkFCQ0RFRkdISUpBQkNERUZHSElKQUJDREVGR0hJSkFCQ0RFRkdISUpBQkNERUZH\r\nSElKQUJDREVGR0hJSkFCQ0RFRkdISUpBQkNERUZHSElKQUJDREVGR0hJSkFCQ0RFRkdISUpBQkNE\r\nRUZHSElKQUJDREVGR0hJSkFCQ0RFRkdISUpBQkNERUZHSElKQUJDREVGR0hJSkFCQ0RFRkdISUpB\r\nQkNERUZHSElKQUJDREVGR0hJSkFCQ0RFRkdISUo=");
+-
+-echo "Done!\n";
+-?>
+---EXPECTF--
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s
+-Done!
+diff --git a/ext/mbstring/tests/bug40685.phpt b/ext/mbstring/tests/bug40685.phpt
+index f7603179..00114385 100644
+--- a/ext/mbstring/tests/bug40685.phpt
++++ b/ext/mbstring/tests/bug40685.phpt
+@@ -19,7 +19,7 @@ string(1) "&"
+ string(3) "&&&"
+ string(2) "&#"
+ string(3) "&#x"
+-string(1) "="
+-string(1) "="
++string(4) "&#61"
++string(5) "&#x3D"
+ string(1) "="
+ string(1) "="
+diff --git a/ext/mbstring/tests/bug45722.phpt b/ext/mbstring/tests/bug45722.phpt
+index c656982c..08d3a627 100644
+--- a/ext/mbstring/tests/bug45722.phpt
++++ b/ext/mbstring/tests/bug45722.phpt
+@@ -6,6 +6,5 @@ mbstring
+ <?php
+ var_dump(mb_check_encoding("&\xc2\xb7 TEST TEST TEST TEST TEST TEST", "HTML-ENTITIES"));
+ ?>
+---EXPECTF--
+-Deprecated: mb_check_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s on line %d
++--EXPECT--
+ bool(true)
+diff --git a/ext/mbstring/tests/bug52681.phpt b/ext/mbstring/tests/bug52681.phpt
+index 86295d33..2086051e 100644
+--- a/ext/mbstring/tests/bug52681.phpt
++++ b/ext/mbstring/tests/bug52681.phpt
+@@ -4,12 +4,15 @@ Bug #52681 (mb_send_mail() appends an extra MIME-Version header)
+ mbstring
+ --SKIPIF--
+ <?php
++if (substr(PHP_OS, 0, 3) == 'WIN') {
++    die('skip.. Not valid for Windows');
++}
+ if (!function_exists("mb_send_mail") || !mb_language("neutral")) {
+     die("skip mb_send_mail() not available");
+ }
+ ?>
+ --INI--
+-sendmail_path={MAIL:{PWD}/bug52681.eml}
++sendmail_path=/bin/cat
+ mail.add_x_header=off
+ --FILE--
+ <?php
+@@ -17,12 +20,6 @@ $to = 'example@example.com';
+ $headers = 'MIME-Version: 2.0';
+ 
+ mb_send_mail($to, mb_language(), "test", $headers);
+-
+-readfile(__DIR__ . "/bug52681.eml");
+-?>
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . "/bug52681.eml");
+ ?>
+ --EXPECTF--
+ To: example@example.com
+diff --git a/ext/mbstring/tests/bug63447_001.phpt b/ext/mbstring/tests/bug63447_001.phpt
+index 12326acd..47a285d7 100644
+--- a/ext/mbstring/tests/bug63447_001.phpt
++++ b/ext/mbstring/tests/bug63447_001.phpt
+@@ -13,6 +13,6 @@ a=1&b=2&c=3&d=4&e=5&f=6
+ var_dump($_POST);
+ ?>
+ --EXPECT--
+-Warning: PHP Request Startup: Input variables exceeded 5. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
++Warning: Unknown: Input variables exceeded 5. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
+ array(0) {
+ }

@@ -1,0 +1,775 @@
+diff --git a/ext/reflection/tests/types/intersection_types.phpt b/ext/reflection/tests/types/intersection_types.phpt
+deleted file mode 100644
+index 4ee3ac63..00000000
+--- a/ext/reflection/tests/types/intersection_types.phpt
++++ /dev/null
+@@ -1,80 +0,0 @@
+---TEST--
+-Intersection types in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionIntersectionType $rt) {
+-    echo "Type $rt:\n";
+-    echo "Allows null: " . json_encode($rt->allowsNull()) . "\n";
+-    foreach ($rt->getTypes() as $type) {
+-        echo "  Name: " . $type->getName() . "\n";
+-        echo "  String: " . (string) $type . "\n";
+-        echo "  Allows Null: " . json_encode($type->allowsNull()) . "\n";
+-    }
+-}
+-
+-function test1(): X&Y&Z&Traversable&Countable { }
+-
+-class Test {
+-    public X&Y&Countable $prop;
+-}
+-
+-dumpType((new ReflectionFunction('test1'))->getReturnType());
+-
+-$rc = new ReflectionClass(Test::class);
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-/* Force CE resolution of the property type */
+-
+-interface y {}
+-class x implements Y, Countable {
+-    public function count(): int { return 0; }
+-}
+-$test = new Test;
+-$test->prop = new x;
+-
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-?>
+---EXPECT--
+-Type X&Y&Z&Traversable&Countable:
+-Allows null: false
+-  Name: X
+-  String: X
+-  Allows Null: false
+-  Name: Y
+-  String: Y
+-  Allows Null: false
+-  Name: Z
+-  String: Z
+-  Allows Null: false
+-  Name: Traversable
+-  String: Traversable
+-  Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type X&Y&Countable:
+-Allows null: false
+-  Name: X
+-  String: X
+-  Allows Null: false
+-  Name: Y
+-  String: Y
+-  Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type X&Y&Countable:
+-Allows null: false
+-  Name: X
+-  String: X
+-  Allows Null: false
+-  Name: Y
+-  String: Y
+-  Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+diff --git a/ext/reflection/tests/types/mixed_type.phpt b/ext/reflection/tests/types/mixed_type.phpt
+deleted file mode 100644
+index 2860e603..00000000
+--- a/ext/reflection/tests/types/mixed_type.phpt
++++ /dev/null
+@@ -1,32 +0,0 @@
+---TEST--
+-Test that the mixed type is reflectable
+---FILE--
+-<?php
+-class A
+-{
+-    public mixed $a;
+-
+-    public function test(mixed ...$a): mixed {}
+-}
+-
+-$a = new A();
+-
+-$object = new ReflectionObject($a);
+-$method = new ReflectionMethod($a, "test");
+-
+-var_dump($object->getProperty("a")->getType()->getName());
+-var_dump($method->getParameters()[0]->getType()->getName());
+-var_dump($method->getReturnType()->getName());
+-
+-var_dump((string) $object->getProperty("a")->getType());
+-var_dump((string) $method->getParameters()[0]->getType());
+-var_dump((string) $method->getReturnType());
+-
+-?>
+---EXPECT--
+-string(5) "mixed"
+-string(5) "mixed"
+-string(5) "mixed"
+-string(5) "mixed"
+-string(5) "mixed"
+-string(5) "mixed"
+diff --git a/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt b/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt
+deleted file mode 100644
+index de2474cf..00000000
+--- a/ext/reflection/tests/types/pure_intersection_type_implicitly_nullable.phpt
++++ /dev/null
+@@ -1,37 +0,0 @@
+---TEST--
+-Intersection type which is implicitly nullable should be a DNF type in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    echo $str_indent . "Allows Null: " . json_encode($rt->allowsNull()) . "\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function foo(X&Y $foo = null) {
+-    var_dump($foo);
+-}
+-
+-dumpType((new ReflectionFunction('foo'))->getParameters()[0]->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null
+diff --git a/ext/reflection/tests/types/union_types.phpt b/ext/reflection/tests/union_types.phpt
+similarity index 59%
+rename from ext/reflection/tests/types/union_types.phpt
+rename to ext/reflection/tests/union_types.phpt
+index 22de6b8d..8dbbbdab 100644
+--- a/ext/reflection/tests/types/union_types.phpt
++++ b/ext/reflection/tests/union_types.phpt
+@@ -13,20 +13,8 @@ function dumpType(ReflectionUnionType $rt) {
+     }
+ }
+ 
+-function dumpBCType(ReflectionNamedType $rt) {
+-    echo "Type $rt:\n";
+-    echo "  Name: " . $rt->getName() . "\n";
+-    echo "  String: " . (string) $rt . "\n";
+-    echo "  Allows Null: " . ($rt->allowsNull() ? "true" : "false") . "\n";
+-}
+-
+ function test1(): X|Y|int|float|false|null { }
+ function test2(): X|iterable|bool { }
+-function test3(): null|false { }
+-function test4(): ?false { }
+-function test5(): X|iterable|true { }
+-function test6(): null|true { }
+-function test7(): ?true { }
+ 
+ class Test {
+     public X|Y|int $prop;
+@@ -34,11 +22,6 @@ class Test {
+ 
+ dumpType((new ReflectionFunction('test1'))->getReturnType());
+ dumpType((new ReflectionFunction('test2'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test3'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test4'))->getReturnType());
+-dumpType((new ReflectionFunction('test5'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test6'))->getReturnType());
+-dumpBCType((new ReflectionFunction('test7'))->getReturnType());
+ 
+ $rc = new ReflectionClass(Test::class);
+ $rp = $rc->getProperty('prop');
+@@ -81,50 +64,17 @@ Allows null: true
+   Name: null
+   String: null
+   Allows Null: true
+-Type X|Traversable|array|bool:
++Type X|iterable|bool:
+ Allows null: false
+   Name: X
+   String: X
+   Allows Null: false
+-  Name: Traversable
+-  String: Traversable
+-  Allows Null: false
+-  Name: array
+-  String: array
++  Name: iterable
++  String: iterable
+   Allows Null: false
+   Name: bool
+   String: bool
+   Allows Null: false
+-Type ?false:
+-  Name: false
+-  String: ?false
+-  Allows Null: true
+-Type ?false:
+-  Name: false
+-  String: ?false
+-  Allows Null: true
+-Type X|Traversable|array|true:
+-Allows null: false
+-  Name: X
+-  String: X
+-  Allows Null: false
+-  Name: Traversable
+-  String: Traversable
+-  Allows Null: false
+-  Name: array
+-  String: array
+-  Allows Null: false
+-  Name: true
+-  String: true
+-  Allows Null: false
+-Type ?true:
+-  Name: true
+-  String: ?true
+-  Allows Null: true
+-Type ?true:
+-  Name: true
+-  String: ?true
+-  Allows Null: true
+ Type X|Y|int:
+ Allows null: false
+   Name: X
+diff --git a/ext/session/mod_files.c b/ext/session/mod_files.c
+index e640f96f..e774de74 100644
+--- a/ext/session/mod_files.c
++++ b/ext/session/mod_files.c
+@@ -89,8 +89,9 @@
+ #endif
+ 
+ typedef struct {
+-	zend_string *last_key;
+-	zend_string *basedir;
++	char *lastkey;
++	char *basedir;
++	size_t basedir_len;
+ 	size_t dirdepth;
+ 	size_t st_size;
+ 	int filemode;
+@@ -103,20 +104,22 @@ const ps_module ps_mod_files = {
+ };
+ 
+ 
+-static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, const zend_string *key)
++static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, const char *key)
+ {
++	size_t key_len;
+ 	const char *p;
+ 	int i;
+ 	size_t n;
+ 
+-	if (!data || ZSTR_LEN(key) <= data->dirdepth ||
+-		buflen < (ZSTR_LEN(data->basedir) + 2 * data->dirdepth + ZSTR_LEN(key) + 5 + sizeof(FILE_PREFIX))) {
++	key_len = strlen(key);
++	if (!data || key_len <= data->dirdepth ||
++		buflen < (strlen(data->basedir) + 2 * data->dirdepth + key_len + 5 + sizeof(FILE_PREFIX))) {
+ 		return NULL;
+ 	}
+ 
+-	p = ZSTR_VAL(key);
+-	memcpy(buf, ZSTR_VAL(data->basedir), ZSTR_LEN(data->basedir));
+-	n = ZSTR_LEN(data->basedir);
++	p = key;
++	memcpy(buf, data->basedir, data->basedir_len);
++	n = data->basedir_len;
+ 	buf[n++] = PHP_DIR_SEPARATOR;
+ 	for (i = 0; i < (int)data->dirdepth; i++) {
+ 		buf[n++] = *p++;
+@@ -124,8 +127,8 @@ static char *ps_files_path_create(char *buf, size_t buflen, ps_files *data, cons
+ 	}
+ 	memcpy(buf + n, FILE_PREFIX, sizeof(FILE_PREFIX) - 1);
+ 	n += sizeof(FILE_PREFIX) - 1;
+-	memcpy(buf + n, ZSTR_VAL(key), ZSTR_LEN(key));
+-	n += ZSTR_LEN(key);
++	memcpy(buf + n, key, key_len);
++	n += key_len;
+ 	buf[n] = '\0';
+ 
+ 	return buf;
+@@ -148,23 +151,23 @@ static void ps_files_close(ps_files *data)
+ 	}
+ }
+ 
+-static void ps_files_open(ps_files *data, /* const */ zend_string *key)
++static void ps_files_open(ps_files *data, const char *key)
+ {
+ 	char buf[MAXPATHLEN];
+ #if !defined(O_NOFOLLOW) || !defined(PHP_WIN32)
+-    struct stat sbuf = {0};
++    struct stat sbuf;
+ #endif
+ 	int ret;
+ 
+-	if (data->fd < 0 || !data->last_key || !zend_string_equals(key, data->last_key)) {
+-		if (data->last_key) {
+-			zend_string_release_ex(data->last_key, /* persistent */ false);
+-			data->last_key = NULL;
++	if (data->fd < 0 || !data->lastkey || strcmp(key, data->lastkey)) {
++		if (data->lastkey) {
++			efree(data->lastkey);
++			data->lastkey = NULL;
+ 		}
+ 
+ 		ps_files_close(data);
+ 
+-		if (php_session_valid_key(ZSTR_VAL(key)) == FAILURE) {
++		if (php_session_valid_key(key) == FAILURE) {
+ 			php_error_docref(NULL, E_WARNING, "Session ID is too long or contains illegal characters. Only the A-Z, a-z, 0-9, \"-\", and \",\" characters are allowed");
+ 			return;
+ 		}
+@@ -174,7 +177,7 @@ static void ps_files_open(ps_files *data, /* const */ zend_string *key)
+ 			return;
+ 		}
+ 
+-		data->last_key = zend_string_copy(key);
++		data->lastkey = estrdup(key);
+ 
+ 		/* O_NOFOLLOW to prevent us from following evil symlinks */
+ #ifdef O_NOFOLLOW
+@@ -223,14 +226,14 @@ static void ps_files_open(ps_files *data, /* const */ zend_string *key)
+ 	}
+ }
+ 
+-static zend_result ps_files_write(ps_files *data, zend_string *key, zend_string *val)
++static int ps_files_write(ps_files *data, zend_string *key, zend_string *val)
+ {
+ 	size_t n = 0;
+ 
+ 	/* PS(id) may be changed by calling session_regenerate_id().
+ 	   Re-initialization should be tried here. ps_files_open() checks
+-       data->last_key and reopen when it is needed. */
+-	ps_files_open(data, key);
++       data->lastkey and reopen when it is needed. */
++	ps_files_open(data, ZSTR_VAL(key));
+ 	if (data->fd < 0) {
+ 		return FAILURE;
+ 	}
+@@ -276,32 +279,35 @@ static zend_result ps_files_write(ps_files *data, zend_string *key, zend_string
+ 	return SUCCESS;
+ }
+ 
+-static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetime)
++static int ps_files_cleanup_dir(const char *dirname, zend_long maxlifetime)
+ {
+ 	DIR *dir;
+ 	struct dirent *entry;
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 	char buf[MAXPATHLEN];
+ 	time_t now;
+ 	int nrdels = 0;
++	size_t dirname_len;
+ 
+-	dir = opendir(ZSTR_VAL(dirname));
++	dir = opendir(dirname);
+ 	if (!dir) {
+-		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: opendir(%s) failed: %s (%d)", ZSTR_VAL(dirname), strerror(errno), errno);
++		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: opendir(%s) failed: %s (%d)", dirname, strerror(errno), errno);
+ 		return -1;
+ 	}
+ 
+ 	time(&now);
+ 
+-	if (ZSTR_LEN(dirname) >= MAXPATHLEN) {
+-		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: dirname(%s) is too long", ZSTR_VAL(dirname));
++	dirname_len = strlen(dirname);
++
++	if (dirname_len >= MAXPATHLEN) {
++		php_error_docref(NULL, E_NOTICE, "ps_files_cleanup_dir: dirname(%s) is too long", dirname);
+ 		closedir(dir);
+ 		return -1;
+ 	}
+ 
+ 	/* Prepare buffer (dirname never changes) */
+-	memcpy(buf, ZSTR_VAL(dirname), ZSTR_LEN(dirname));
+-	buf[ZSTR_LEN(dirname)] = PHP_DIR_SEPARATOR;
++	memcpy(buf, dirname, dirname_len);
++	buf[dirname_len] = PHP_DIR_SEPARATOR;
+ 
+ 	while ((entry = readdir(dir))) {
+ 		/* does the file start with our prefix? */
+@@ -309,12 +315,12 @@ static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetim
+ 			size_t entry_len = strlen(entry->d_name);
+ 
+ 			/* does it fit into our buffer? */
+-			if (entry_len + ZSTR_LEN(dirname) + 2 < MAXPATHLEN) {
++			if (entry_len + dirname_len + 2 < MAXPATHLEN) {
+ 				/* create the full path.. */
+-				memcpy(buf + ZSTR_LEN(dirname) + 1, entry->d_name, entry_len);
++				memcpy(buf + dirname_len + 1, entry->d_name, entry_len);
+ 
+ 				/* NUL terminate it and */
+-				buf[ZSTR_LEN(dirname) + entry_len + 1] = '\0';
++				buf[dirname_len + entry_len + 1] = '\0';
+ 
+ 				/* check whether its last access was more than maxlifetime ago */
+ 				if (VCWD_STAT(buf, &sbuf) == 0 &&
+@@ -331,10 +337,10 @@ static int ps_files_cleanup_dir(const zend_string *dirname, zend_long maxlifetim
+ 	return (nrdels);
+ }
+ 
+-static zend_result ps_files_key_exists(ps_files *data, const zend_string *key)
++static int ps_files_key_exists(ps_files *data, const char *key)
+ {
+ 	char buf[MAXPATHLEN];
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 
+ 	if (!key || !ps_files_path_create(buf, sizeof(buf), data, key)) {
+ 		return FAILURE;
+@@ -413,7 +419,8 @@ PS_OPEN_FUNC(files)
+ 	data->fd = -1;
+ 	data->dirdepth = dirdepth;
+ 	data->filemode = filemode;
+-	data->basedir = zend_string_init(save_path, strlen(save_path), /* persistent */ false);
++	data->basedir_len = strlen(save_path);
++	data->basedir = estrndup(save_path, data->basedir_len);
+ 
+ 	if (PS_GET_MOD_DATA()) {
+ 		ps_close_files(mod_data);
+@@ -440,12 +447,12 @@ PS_CLOSE_FUNC(files)
+ 
+ 	ps_files_close(data);
+ 
+-	if (data->last_key) {
+-		zend_string_release_ex(data->last_key, /* persistent */ false);
+-		data->last_key = NULL;
++	if (data->lastkey) {
++		efree(data->lastkey);
++		data->lastkey = NULL;
+ 	}
+ 
+-	zend_string_release_ex(data->basedir, /* persistent */ false);
++	efree(data->basedir);
+ 	efree(data);
+ 	PS_SET_MOD_DATA(NULL);
+ 
+@@ -466,10 +473,10 @@ PS_CLOSE_FUNC(files)
+ PS_READ_FUNC(files)
+ {
+ 	zend_long n = 0;
+-	zend_stat_t sbuf = {0};
++	zend_stat_t sbuf;
+ 	PS_FILES_DATA;
+ 
+-	ps_files_open(data, key);
++	ps_files_open(data, ZSTR_VAL(key));
+ 	if (data->fd < 0) {
+ 		return FAILURE;
+ 	}
+@@ -564,7 +571,7 @@ PS_UPDATE_TIMESTAMP_FUNC(files)
+ 	int ret;
+ 	PS_FILES_DATA;
+ 
+-	if (!ps_files_path_create(buf, sizeof(buf), data, key)) {
++	if (!ps_files_path_create(buf, sizeof(buf), data, ZSTR_VAL(key))) {
+ 		return FAILURE;
+ 	}
+ 
+@@ -594,7 +601,7 @@ PS_DESTROY_FUNC(files)
+ 	char buf[MAXPATHLEN];
+ 	PS_FILES_DATA;
+ 
+-	if (!ps_files_path_create(buf, sizeof(buf), data, key)) {
++	if (!ps_files_path_create(buf, sizeof(buf), data, ZSTR_VAL(key))) {
+ 		return FAILURE;
+ 	}
+ 
+@@ -673,7 +680,7 @@ PS_CREATE_SID_FUNC(files)
+ 		}
+ 		/* Check collision */
+ 		/* FIXME: mod_data(data) should not be NULL (User handler could be NULL) */
+-		if (data && ps_files_key_exists(data, sid) == SUCCESS) {
++		if (data && ps_files_key_exists(data, ZSTR_VAL(sid)) == SUCCESS) {
+ 			if (sid) {
+ 				zend_string_release_ex(sid, 0);
+ 				sid = NULL;
+@@ -701,5 +708,5 @@ PS_VALIDATE_SID_FUNC(files)
+ {
+ 	PS_FILES_DATA;
+ 
+-	return ps_files_key_exists(data, key);
++	return ps_files_key_exists(data, ZSTR_VAL(key));
+ }
+diff --git a/ext/session/mod_mm.c b/ext/session/mod_mm.c
+index b997a2bd..baec6f5a 100644
+--- a/ext/session/mod_mm.c
++++ b/ext/session/mod_mm.c
+@@ -24,8 +24,8 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <fcntl.h>
+-#include <stdint.h>
+ 
++#include "php_stdint.h"
+ #include "php_session.h"
+ #include "mod_mm.h"
+ #include "SAPI.h"
+@@ -45,7 +45,7 @@ typedef struct ps_sd {
+ 	void *data;
+ 	size_t datalen;		/* amount of valid data */
+ 	size_t alloclen;	/* amount of allocated memory for data */
+-	zend_string *key;
++	char key[1];		/* inline key */
+ } ps_sd;
+ 
+ typedef struct {
+@@ -64,15 +64,14 @@ static ps_mm *ps_mm_instance = NULL;
+ # define ps_mm_debug(a)
+ #endif
+ 
+-static inline uint32_t ps_sd_hash(const zend_string *data)
++static inline uint32_t ps_sd_hash(const char *data, int len)
+ {
+ 	uint32_t h;
+-	const char *data_char = ZSTR_VAL(data);
+-	const char *e = ZSTR_VAL(data) + ZSTR_LEN(data);
++	const char *e = data + len;
+ 
+-	for (h = 2166136261U; data_char < e; ) {
++	for (h = 2166136261U; data < e; ) {
+ 		h *= 16777619;
+-		h ^= *data_char++;
++		h ^= *data++;
+ 	}
+ 
+ 	return h;
+@@ -107,19 +106,22 @@ static void hash_split(ps_mm *data)
+ 	data->hash_max = nmax;
+ }
+ 
+-static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
++static ps_sd *ps_sd_new(ps_mm *data, const char *key)
+ {
+ 	uint32_t hv, slot;
+ 	ps_sd *sd;
++	int keylen;
+ 
+-	sd = mm_malloc(data->mm, sizeof(ps_sd) + ZSTR_LEN(key));
++	keylen = strlen(key);
++
++	sd = mm_malloc(data->mm, sizeof(ps_sd) + keylen);
+ 	if (!sd) {
+ 
+ 		php_error_docref(NULL, E_WARNING, "mm_malloc failed, avail %ld, err %s", mm_available(data->mm), mm_error());
+ 		return NULL;
+ 	}
+ 
+-	hv = ps_sd_hash(key);
++	hv = ps_sd_hash(key, keylen);
+ 	slot = hv & data->hash_max;
+ 
+ 	sd->ctime = 0;
+@@ -127,7 +129,7 @@ static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
+ 	sd->data = NULL;
+ 	sd->alloclen = sd->datalen = 0;
+ 
+-	sd->key = zend_string_copy(key);
++	memcpy(sd->key, key, keylen + 1);
+ 
+ 	sd->next = data->hash[slot];
+ 	data->hash[slot] = sd;
+@@ -140,7 +142,7 @@ static ps_sd *ps_sd_new(ps_mm *data, zend_string *key)
+ 		}
+ 	}
+ 
+-	ps_mm_debug(("inserting %s(%p) into slot %d\n", ZSTR_VAL(key), sd, slot));
++	ps_mm_debug(("inserting %s(%p) into slot %d\n", key, sd, slot));
+ 
+ 	return sd;
+ }
+@@ -149,7 +151,7 @@ static void ps_sd_destroy(ps_mm *data, ps_sd *sd)
+ {
+ 	uint32_t slot;
+ 
+-	slot = ps_sd_hash(sd->key) & data->hash_max;
++	slot = ps_sd_hash(sd->key, strlen(sd->key)) & data->hash_max;
+ 
+ 	if (data->hash[slot] == sd) {
+ 		data->hash[slot] = sd->next;
+@@ -166,21 +168,20 @@ static void ps_sd_destroy(ps_mm *data, ps_sd *sd)
+ 	if (sd->data) {
+ 		mm_free(data->mm, sd->data);
+ 	}
+-	zend_string_release(sd->key);
+ 
+ 	mm_free(data->mm, sd);
+ }
+ 
+-static ps_sd *ps_sd_lookup(ps_mm *data, const zend_string *key, bool rw)
++static ps_sd *ps_sd_lookup(ps_mm *data, const char *key, int rw)
+ {
+ 	uint32_t hv, slot;
+ 	ps_sd *ret, *prev;
+ 
+-	hv = ps_sd_hash(key);
++	hv = ps_sd_hash(key, strlen(key));
+ 	slot = hv & data->hash_max;
+ 
+ 	for (prev = NULL, ret = data->hash[slot]; ret; prev = ret, ret = ret->next) {
+-		if (ret->hv == hv && zend_string_equals(ret->key, key)) {
++		if (ret->hv == hv && !strcmp(ret->key, key)) {
+ 			break;
+ 		}
+ 	}
+@@ -195,12 +196,12 @@ static ps_sd *ps_sd_lookup(ps_mm *data, const zend_string *key, bool rw)
+ 		data->hash[slot] = ret;
+ 	}
+ 
+-	ps_mm_debug(("lookup(%s): ret=%p,hv=%u,slot=%d\n", ZSTR_VAL(key), ret, hv, slot));
++	ps_mm_debug(("lookup(%s): ret=%p,hv=%u,slot=%d\n", key, ret, hv, slot));
+ 
+ 	return ret;
+ }
+ 
+-static zend_result ps_mm_key_exists(ps_mm *data, const zend_string *key)
++static int ps_mm_key_exists(ps_mm *data, const char *key)
+ {
+ 	ps_sd *sd;
+ 
+@@ -220,7 +221,7 @@ const ps_module ps_mod_mm = {
+ 
+ #define PS_MM_DATA ps_mm *data = PS_GET_MOD_DATA()
+ 
+-static zend_result ps_mm_initialize(ps_mm *data, const char *path)
++static int ps_mm_initialize(ps_mm *data, const char *path)
+ {
+ 	data->owner = getpid();
+ 	data->mm = mm_create(0, path);
+@@ -241,6 +242,7 @@ static zend_result ps_mm_initialize(ps_mm *data, const char *path)
+ 
+ static void ps_mm_destroy(ps_mm *data)
+ {
++	int h;
+ 	ps_sd *sd, *next;
+ 
+ 	/* This function is called during each module shutdown,
+@@ -250,7 +252,7 @@ static void ps_mm_destroy(ps_mm *data)
+ 		return;
+ 	}
+ 
+-	for (int h = 0; h < data->hash_max + 1; h++) {
++	for (h = 0; h < data->hash_max + 1; h++) {
+ 		for (sd = data->hash[h]; sd; sd = next) {
+ 			next = sd->next;
+ 			ps_sd_destroy(data, sd);
+@@ -264,11 +266,11 @@ static void ps_mm_destroy(ps_mm *data)
+ 
+ PHP_MINIT_FUNCTION(ps_mm)
+ {
+-	size_t save_path_len = strlen(PS(save_path));
+-	size_t mod_name_len = strlen(sapi_module.name);
+-	size_t euid_len;
++	int save_path_len = strlen(PS(save_path));
++	int mod_name_len = strlen(sapi_module.name);
++	int euid_len;
+ 	char *ps_mm_path, euid[30];
+-	zend_result ret;
++	int ret;
+ 
+ 	ps_mm_instance = calloc(sizeof(*ps_mm_instance), 1);
+ 	if (!ps_mm_instance) {
+@@ -300,7 +302,7 @@ PHP_MINIT_FUNCTION(ps_mm)
+ 
+ 	efree(ps_mm_path);
+ 
+-	if (ret == FAILURE) {
++	if (ret != SUCCESS) {
+ 		free(ps_mm_instance);
+ 		ps_mm_instance = NULL;
+ 		return FAILURE;
+@@ -342,13 +344,13 @@ PS_READ_FUNC(mm)
+ {
+ 	PS_MM_DATA;
+ 	ps_sd *sd;
+-	zend_result ret = FAILURE;
++	int ret = FAILURE;
+ 
+ 	mm_lock(data->mm, MM_LOCK_RD);
+ 
+ 	/* If there is an ID and strict mode, verify existence */
+ 	if (PS(use_strict_mode)
+-		&& ps_mm_key_exists(data, key) == FAILURE) {
++		&& ps_mm_key_exists(data, key->val) == FAILURE) {
+ 		/* key points to PS(id), but cannot change here. */
+ 		if (key) {
+ 			efree(PS(id));
+@@ -365,7 +367,7 @@ PS_READ_FUNC(mm)
+ 		PS(session_status) = php_session_active;
+ 	}
+ 
+-	sd = ps_sd_lookup(data, PS(id), 0);
++	sd = ps_sd_lookup(data, PS(id)->val, 0);
+ 	if (sd) {
+ 		*val = zend_string_init(sd->data, sd->datalen, 0);
+ 		ret = SUCCESS;
+@@ -383,10 +385,10 @@ PS_WRITE_FUNC(mm)
+ 
+ 	mm_lock(data->mm, MM_LOCK_RW);
+ 
+-	sd = ps_sd_lookup(data, key, 1);
++	sd = ps_sd_lookup(data, key->val, 1);
+ 	if (!sd) {
+-		sd = ps_sd_new(data, key);
+-		ps_mm_debug(("new entry for %s\n", ZSTR_VAL(key)));
++		sd = ps_sd_new(data, key->val);
++		ps_mm_debug(("new entry for %s\n", key->val));
+ 	}
+ 
+ 	if (sd) {
+@@ -422,7 +424,7 @@ PS_DESTROY_FUNC(mm)
+ 
+ 	mm_lock(data->mm, MM_LOCK_RW);
+ 
+-	sd = ps_sd_lookup(data, key, 0);
++	sd = ps_sd_lookup(data, key->val, 0);
+ 	if (sd) {
+ 		ps_sd_destroy(data, sd);
+ 	}
+@@ -453,7 +455,7 @@ PS_GC_FUNC(mm)
+ 		for (sd = *ohash; sd; sd = next) {
+ 			next = sd->next;
+ 			if (sd->ctime < limit) {
+-				ps_mm_debug(("purging %s\n", ZSTR_VAL(sd->key)));
++				ps_mm_debug(("purging %s\n", sd->key));
+ 				ps_sd_destroy(data, sd);
+ 				(*nrdels)++;
+ 			}
+@@ -474,7 +476,7 @@ PS_CREATE_SID_FUNC(mm)
+ 	do {
+ 		sid = php_session_create_id((void **)&data);
+ 		/* Check collision */
+-		if (ps_mm_key_exists(data, sid) == SUCCESS) {
++		if (ps_mm_key_exists(data, sid->val) == SUCCESS) {
+ 			if (sid) {
+ 				zend_string_release_ex(sid, 0);
+ 				sid = NULL;

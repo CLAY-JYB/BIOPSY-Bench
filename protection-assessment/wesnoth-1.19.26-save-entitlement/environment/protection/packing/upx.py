@@ -35,11 +35,11 @@ UPX OPTIONS
 ================================================================================
 
 COMPRESSION LEVELS:
-  -1 to -9              Higher = better compression (default: random -1 to -9)
-  --best                Best compression (slow for big files)
+  -1 to -9 Higher = better compression (default: random -1 to -9)
+  --best Best compression (slow for big files)
 
 OPTIMIZATION:
-  --brute               Try all compression methods & filters [slow]
+  --brute Try all compression methods & filters [slow]
   --ultra-brute         Try even more variants [very slow]
 
 OVERLAY HANDLING:
@@ -55,24 +55,24 @@ ELF/LINUX SPECIFIC:
   --preserve-build-id   Copy .gnu.note.build-id to output
 
 OTHER:
-  -f                    Force compression of suspicious files
-  -q                    Quiet mode
-  -v                    Verbose mode
-  -o FILE               Write output to FILE
+  -f Force compression of suspicious files
+  -q Quiet mode
+  -v Verbose mode
+  -o FILE Write output to FILE
 
 ================================================================================
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input filename (default: program)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input filename (default: program)
   --exclude-best        Exclude --best compression level
   --brute-prob PROB     Probability of brute/ultra-brute (default: 0.0 — off)
   --strip-prob PROB     Probability of strip overlay (default: 0.0 — off)
-  -s SEED               Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
+  -s SEED Random seed for reproducibility
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
 
 ================================================================================
 """

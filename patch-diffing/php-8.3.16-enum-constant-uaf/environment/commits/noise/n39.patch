@@ -1,0 +1,220 @@
+diff --git a/Zend/tests/gh8548_2.phpt b/Zend/tests/gh8548_2.phpt
+deleted file mode 100644
+index 75cc871d..00000000
+--- a/Zend/tests/gh8548_2.phpt
++++ /dev/null
+@@ -1,56 +0,0 @@
+---TEST--
+-GH-8548: Test stream_wrapper_unregister() for directories
+---FILE--
+-<?php
+-
+-class Wrapper
+-{
+-    public $context;
+-
+-    public function dir_opendir(string $path, int $options): bool
+-    {
+-        return true;
+-    }
+-
+-    public function stream_eof(): bool
+-    {
+-        return true;
+-    }
+-}
+-
+-function test() {
+-    if (!stream_wrapper_register('foo', \Wrapper::class)) {
+-        throw new \Exception('Could not register stream wrapper');
+-    }
+-
+-    $dir = opendir('foo://bar');
+-
+-    if (!stream_wrapper_unregister('foo')) {
+-        throw new \Exception('Could not unregister stream wrapper');
+-    }
+-
+-    $wrapper = stream_get_meta_data($dir)['wrapper_data'];
+-    if (!$wrapper instanceof Wrapper) {
+-        throw new \Exception('Wrapper is not of expected type');
+-    }
+-
+-    closedir($dir);
+-    unset($dir);
+-}
+-
+-// The first iterations will allocate space for things like the resource list
+-for ($i = 0; $i < 10; $i++) {
+-    test();
+-}
+-
+-$before = memory_get_usage();
+-for ($i = 0; $i < 1000; $i++) {
+-    test();
+-}
+-$after = memory_get_usage();
+-
+-var_dump($before === $after);
+-
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/Zend/tests/gh8810_1.phpt b/Zend/tests/gh8810_1.phpt
+deleted file mode 100644
+index ec48d4df..00000000
+--- a/Zend/tests/gh8810_1.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line function call
+---FILE--
+-<?php
+-
+-function foo($bar, $baz) {
+-    throw new Exception();
+-}
+-
+-foo
+-(
+-    'bar',
+-    'baz',
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(7): foo('bar', 'baz')
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_2.phpt b/Zend/tests/gh8810_2.phpt
+deleted file mode 100644
+index df37057c..00000000
+--- a/Zend/tests/gh8810_2.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line method call
+---FILE--
+-<?php
+-
+-class A {
+-    public function b() {
+-        throw new Exception();
+-    }
+-}
+-
+-(new A())
+-    ->
+-    b
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:5
+-Stack trace:
+-#0 %s(11): A->b()
+-#1 {main}
+-  thrown in %s on line 5
+diff --git a/Zend/tests/gh8810_3.phpt b/Zend/tests/gh8810_3.phpt
+deleted file mode 100644
+index 99fb449c..00000000
+--- a/Zend/tests/gh8810_3.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line closure call
+---FILE--
+-<?php
+-
+-(function () {
+-    throw new Exception();
+-})
+-(
+-    'foo',
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(6): {closure}('foo')
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_4.phpt b/Zend/tests/gh8810_4.phpt
+deleted file mode 100644
+index 9abb317f..00000000
+--- a/Zend/tests/gh8810_4.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line dynamic call
+---FILE--
+-<?php
+-
+-function foo() {
+-    throw new Exception();
+-}
+-
+-'foo'
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:4
+-Stack trace:
+-#0 %s(8): foo()
+-#1 {main}
+-  thrown in %s on line 4
+diff --git a/Zend/tests/gh8810_5.phpt b/Zend/tests/gh8810_5.phpt
+deleted file mode 100644
+index 1b3a9831..00000000
+--- a/Zend/tests/gh8810_5.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line assert call
+---FILE--
+-<?php
+-
+-assert(
+-    false,
+-);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught AssertionError: assert(false) in %s:3
+-Stack trace:
+-#0 %s(3): assert(false, 'assert(false)')
+-#1 {main}
+-  thrown in %s on line 3
+diff --git a/Zend/tests/gh8810_6.phpt b/Zend/tests/gh8810_6.phpt
+deleted file mode 100644
+index 452a859d..00000000
+--- a/Zend/tests/gh8810_6.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-GH-8810: Fix reported line number of multi-line static call
+---FILE--
+-<?php
+-
+-class A {
+-    public static function b() {
+-        throw new Exception();
+-    }
+-}
+-
+-A
+-    ::
+-    b
+-    ();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception in %s:5
+-Stack trace:
+-#0 %s(11): A::b()
+-#1 {main}
+-  thrown in %s on line 5

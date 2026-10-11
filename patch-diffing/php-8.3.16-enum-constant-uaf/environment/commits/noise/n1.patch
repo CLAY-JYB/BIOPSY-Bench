@@ -1,0 +1,582 @@
+diff --git a/.circleci/config.yml b/.circleci/config.yml
+new file mode 100644
+index 00000000..2320d2ba
+--- /dev/null
++++ b/.circleci/config.yml
+@@ -0,0 +1,197 @@
++version: 2.1
++
++jobs:
++  arm:
++    resource_class: arm.medium
++    docker:
++      - image: cimg/base:current-22.04
++      - image: mysql:8
++        environment:
++          MYSQL_ALLOW_EMPTY_PASSWORD: true
++          MYSQL_ROOT_PASSWORD: ''
++          MYSQL_DATABASE: test
++      - image: postgres:16
++        environment:
++          POSTGRES_PASSWORD: postgres
++          POSTGRES_DB: test
++    environment:
++      LANGUAGE: ''
++      LANG: en_US.UTF-8
++      MYSQL_TEST_HOST: '127.0.0.1'
++      MYSQL_TEST_PASSWD: ''
++      MYSQL_TEST_USER: root
++      PDO_MYSQL_TEST_DSN: 'mysql:host=127.0.0.1;dbname=test'
++      PDO_MYSQL_TEST_PASS: ''
++      PDO_MYSQL_TEST_USER: root
++      PDO_PGSQL_TEST_DSN: 'pgsql:host=127.0.0.1 port=5432 dbname=test user=postgres password=postgres'
++    steps:
++      - checkout
++      - run:
++          name: apt
++          command: |
++            export DEBIAN_FRONTEND=noninteractive
++            sudo apt-get update -y
++            sudo apt-get install -y \
++              gcc \
++              g++ \
++              autoconf \
++              bison \
++              re2c \
++              locales \
++              locales-all \
++              ldap-utils \
++              openssl \
++              slapd \
++              libgmp-dev \
++              libicu-dev \
++              libtidy-dev \
++              libenchant-2-dev \
++              libaspell-dev \
++              libpspell-dev \
++              libsasl2-dev \
++              libxpm-dev \
++              libzip-dev \
++              libbz2-dev \
++              libsqlite3-dev \
++              libwebp-dev \
++              libonig-dev \
++              libkrb5-dev \
++              libgssapi-krb5-2 \
++              libcurl4-openssl-dev \
++              libxml2-dev \
++              libxslt1-dev \
++              libpq-dev \
++              libreadline-dev \
++              libldap2-dev \
++              libsodium-dev \
++              libargon2-0-dev \
++              libmm-dev \
++              libsnmp-dev \
++              snmpd \
++              `#snmp-mibs-downloader` \
++              freetds-dev \
++              `#unixodbc-dev` \
++              libc-client-dev \
++              dovecot-core \
++              dovecot-pop3d \
++              dovecot-imapd \
++              sendmail \
++              firebird-dev \
++              liblmdb-dev \
++              libtokyocabinet-dev \
++              libdb-dev \
++              libqdbm-dev \
++              libjpeg-dev \
++              libpng-dev \
++              libfreetype6-dev
++      - run:
++          name: ./configure
++          command: |
++            ./buildconf -f
++            ./configure \
++              --enable-debug \
++              --enable-zts \
++              --enable-option-checking=fatal \
++              --prefix=/usr \
++              --enable-phpdbg \
++              --enable-fpm \
++              --enable-opcache \
++              --with-pdo-mysql=mysqlnd \
++              --with-mysqli=mysqlnd \
++              --with-pgsql \
++              --with-pdo-pgsql \
++              --with-pdo-sqlite \
++              --enable-intl \
++              --without-pear \
++              --enable-gd \
++              --with-jpeg \
++              --with-webp \
++              --with-freetype \
++              --with-xpm \
++              --enable-exif \
++              --with-zip \
++              --with-zlib \
++              --with-zlib-dir=/usr \
++              --enable-soap \
++              --enable-xmlreader \
++              --with-xsl \
++              --with-tidy \
++              --enable-sysvsem \
++              --enable-sysvshm \
++              --enable-shmop \
++              --enable-pcntl \
++              --with-readline \
++              --enable-mbstring \
++              --with-curl \
++              --with-gettext \
++              --enable-sockets \
++              --with-bz2 \
++              --with-openssl \
++              --with-gmp \
++              --enable-bcmath \
++              --enable-calendar \
++              --enable-ftp \
++              --with-pspell=/usr \
++              --with-enchant=/usr \
++              --with-kerberos \
++              --enable-sysvmsg \
++              --with-ffi \
++              --enable-zend-test \
++              --enable-dl-test=shared \
++              --with-ldap \
++              --with-ldap-sasl \
++              --with-password-argon2 \
++              --with-mhash \
++              --with-sodium \
++              --enable-dba \
++              --with-cdb \
++              --enable-flatfile \
++              --enable-inifile \
++              --with-tcadb \
++              --with-lmdb \
++              --with-qdbm \
++              --with-snmp \
++              `#--with-unixODBC` \
++              --with-imap \
++              --with-kerberos \
++              --with-imap-ssl \
++              `#--with-pdo-odbc=unixODBC,/usr` \
++              `#--with-pdo-oci=shared,instantclient,/opt/oracle/instantclient` \
++              `#--with-oci8=shared,instantclient,/opt/oracle/instantclient` \
++              --with-config-file-path=/etc \
++              --with-config-file-scan-dir=/etc/php.d \
++              --with-pdo-firebird \
++              `#--with-pdo-dblib` \
++              --disable-phpdbg \
++              `#--enable-werror`
++      - run:
++          name: make
++          command: make -j2 > /dev/null
++      - run:
++          name: make install
++          command: |
++            sudo make install
++            sudo mkdir -p /etc/php.d
++            sudo chmod 777 /etc/php.d
++            echo opcache.enable_cli=1 > /etc/php.d/opcache.ini
++            echo opcache.protect_memory=1 >> /etc/php.d/opcache.ini
++      - run:
++          name: Test
++          command: |
++            sapi/cli/php run-tests.php \
++              -d zend_extension=opcache.so \
++              -d opcache.enable_cli=1 \
++              -d opcache.jit_buffer_size=16M \
++              -d opcache.jit=tracing \
++              -P -q -x -j2 \
++              -g FAIL,BORK,LEAK,XLEAK \
++              --offline \
++              --show-diff \
++              --show-slow 1000 \
++              --set-timeout 120 \
++              --repeat 2
++
++workflows:
++  push-workflow:
++    jobs:
++      - arm
+diff --git a/.cirrus.yml b/.cirrus.yml
+index cc09b384..dc66631d 100644
+--- a/.cirrus.yml
++++ b/.cirrus.yml
+@@ -26,206 +26,4 @@ freebsd_task:
+   tests_script:
+     - export SKIP_IO_CAPTURE_TESTS=1
+     - export CI_NO_IPV6=1
+-    - sapi/cli/php run-tests.php -P -q -j2 -g FAIL,BORK,LEAK,XLEAK --no-progress --offline --show-diff --show-slow 1000 --set-timeout 120 -d zend_extension=opcache.so
+-
+-arm_task:
+-  name: ARM_DEBUG_NTS
+-  only_if: $CIRRUS_CRON == 'nightly' || $CIRRUS_CHANGE_TITLE =~ '.*\[ci arm\].*'
+-  arm_container:
+-    image: debian:11
+-    additional_containers:
+-      - name: mysql
+-        image: mysql:8
+-        port: 3306
+-        cpu: 1.0
+-        memory: 1G
+-        env:
+-          MYSQL_ALLOW_EMPTY_PASSWORD: true
+-          MYSQL_ROOT_PASSWORD: ""
+-          MYSQL_DATABASE: "test"
+-      - name: postgres
+-        image: postgres:latest
+-        port: 5432
+-        env:
+-          POSTGRES_PASSWORD: "postgres"
+-          POSTGRES_DB: "test"
+-  install_script:
+-    - export DEBIAN_FRONTEND=noninteractive
+-    - apt-get update -y
+-    - >-
+-        apt-get install -y
+-        gcc
+-        g++
+-        autoconf
+-        bison
+-        re2c
+-        locales
+-        locales-all
+-        ldap-utils
+-        openssl
+-        slapd
+-        libgmp-dev
+-        libicu-dev
+-        libtidy-dev
+-        libenchant-2-dev
+-        libaspell-dev
+-        libpspell-dev
+-        libsasl2-dev
+-        libxpm-dev
+-        libzip-dev
+-        libbz2-dev
+-        libsqlite3-dev
+-        libwebp-dev
+-        libonig-dev
+-        libkrb5-dev
+-        libgssapi-krb5-2
+-        libcurl4-openssl-dev
+-        libxml2-dev
+-        libxslt1-dev
+-        libpq-dev
+-        libreadline-dev
+-        libldap2-dev
+-        libsodium-dev
+-        libargon2-0-dev
+-        libmm-dev
+-        libsnmp-dev
+-        snmpd
+-        `#snmp-mibs-downloader`
+-        freetds-dev
+-        `#unixodbc-dev`
+-        libc-client-dev
+-        dovecot-core
+-        dovecot-pop3d
+-        dovecot-imapd
+-        sendmail
+-        firebird-dev
+-        liblmdb-dev
+-        libtokyocabinet-dev
+-        libdb-dev
+-        libqdbm-dev
+-        libjpeg-dev
+-        libpng-dev
+-        libfreetype6-dev
+-  build_script:
+-    - ./buildconf -f
+-    - >-
+-        ./configure
+-        --enable-debug
+-        --enable-zts
+-        --enable-option-checking=fatal
+-        --prefix=/usr
+-        --enable-phpdbg
+-        --enable-fpm
+-        --enable-opcache
+-        --with-pdo-mysql=mysqlnd
+-        --with-mysqli=mysqlnd
+-        --with-pgsql
+-        --with-pdo-pgsql
+-        --with-pdo-sqlite
+-        --enable-intl
+-        --without-pear
+-        --enable-gd
+-        --with-jpeg
+-        --with-webp
+-        --with-freetype
+-        --with-xpm
+-        --enable-exif
+-        --with-zip
+-        --with-zlib
+-        --with-zlib-dir=/usr
+-        --enable-soap
+-        --enable-xmlreader
+-        --with-xsl
+-        --with-tidy
+-        --enable-sysvsem
+-        --enable-sysvshm
+-        --enable-shmop
+-        --enable-pcntl
+-        --with-readline
+-        --enable-mbstring
+-        --with-curl
+-        --with-gettext
+-        --enable-sockets
+-        --with-bz2
+-        --with-openssl
+-        --with-gmp
+-        --enable-bcmath
+-        --enable-calendar
+-        --enable-ftp
+-        --with-pspell=/usr
+-        --with-enchant=/usr
+-        --with-kerberos
+-        --enable-sysvmsg
+-        --with-ffi
+-        --enable-zend-test
+-        --enable-dl-test=shared
+-        --with-ldap
+-        --with-ldap-sasl
+-        --with-password-argon2
+-        --with-mhash
+-        --with-sodium
+-        --enable-dba
+-        --with-cdb
+-        --enable-flatfile
+-        --enable-inifile
+-        --with-tcadb
+-        --with-lmdb
+-        --with-qdbm
+-        --with-snmp
+-        `#--with-unixODBC`
+-        --with-imap
+-        --with-kerberos
+-        --with-imap-ssl
+-        `#--with-pdo-odbc=unixODBC,/usr`
+-        `#--with-pdo-oci=shared,instantclient,/opt/oracle/instantclient`
+-        `#--with-oci8=shared,instantclient,/opt/oracle/instantclient`
+-        --with-config-file-path=/etc
+-        --with-config-file-scan-dir=/etc/php.d
+-        --with-pdo-firebird
+-        `#--with-pdo-dblib`
+-        --disable-phpdbg
+-        `#--enable-werror`
+-    - make -j2 > /dev/null
+-    - make install
+-    - mkdir -p /etc/php.d
+-    - echo opcache.enable_cli=1 > /etc/php.d/opcache.ini
+-    - echo opcache.protect_memory=1 >> /etc/php.d/opcache.ini
+-    # Specify opcache.preload_user as we're running as root.
+-    - echo opcache.preload_user=root >> /etc/php.d/opcache.ini
+-  tests_script:
+-    - export SKIP_IO_CAPTURE_TESTS=1
+-    - export CI_NO_IPV6=1
+-    - export MYSQL_TEST_HOST=127.0.0.1
+-    - export MYSQL_TEST_USER=root
+-    - export MYSQL_TEST_PASSWD=
+-    - export PDO_MYSQL_TEST_DSN="mysql:host=127.0.0.1;dbname=test"
+-    - export PDO_MYSQL_TEST_USER=root
+-    - export PDO_MYSQL_TEST_PASS=
+-    - export PDO_PGSQL_TEST_DSN="pgsql:host=127.0.0.1 port=5432 dbname=test user=postgres password=postgres"
+-    - >-
+-        sapi/cli/php run-tests.php
+-        -d zend_extension=opcache.so
+-        -d opcache.enable_cli=1
+-        -d opcache.jit_buffer_size=16M
+-        -d opcache.jit=function
+-        -P -q -x -j2
+-        -g FAIL,BORK,LEAK,XLEAK
+-        --no-progress
+-        --offline
+-        --show-diff
+-        --show-slow 1000
+-        --set-timeout 120
+-    - >-
+-        sapi/cli/php run-tests.php
+-        -d zend_extension=opcache.so
+-        -d opcache.enable_cli=1
+-        -d opcache.jit_buffer_size=16M
+-        -d opcache.jit=tracing
+-        -P -q -x -j2
+-        -g FAIL,BORK,LEAK,XLEAK
+-        --no-progress
+-        --offline
+-        --show-diff
+-        --show-slow 1000
+-        --set-timeout 120
+-        --repeat 2
++    - sapi/cli/php run-tests.php -P -q -j2 -g FAIL,XFAIL,BORK,WARN,LEAK,XLEAK,SKIP --offline --show-diff --show-slow 1000 --set-timeout 120 -d zend_extension=opcache.so
+diff --git a/.gdbinit b/.gdbinit
+index 61179226..dfe56360 100644
+--- a/.gdbinit
++++ b/.gdbinit
+@@ -318,8 +318,7 @@ define ____print_ht
+ 		set $n = $n - 1
+ 	end
+ 
+-	set $packed = $ht->u.v.flags & 4
+-	if $packed
++	if $ht->u.v.flags & 4
+ 		printf "Packed"
+ 	else
+ 		printf "Hash"
+@@ -330,45 +329,36 @@ define ____print_ht
+ 	set $i = 0
+ 	set $ind = $ind + 1
+ 	while $i < $num
+-		if $packed
+-			set $val = (zval*)($ht->arPacked + $i)
+-			set $key = (zend_string*)0
+-			set $h = $i
+-		else
+-			set $bucket = (Bucket*)($ht->arData + $i)
+-			set $val = &$bucket->val
+-			set $key = $bucket->key
+-			set $h = $bucket->h
+-		end
++		set $p = (Bucket*)($ht->arData + $i)
+ 		set $n = $ind
+-		if $val->u1.v.type > 0
++		if $p->val.u1.v.type > 0
+ 			while $n > 0
+ 				printf "  "
+ 				set $n = $n - 1
+ 			end
+ 			printf "[%d] ", $i
+-			if $key
+-				____print_str $key->val $key->len
++			if $p->key
++				____print_str $p->key->val $p->key->len
+ 				printf " => "
+ 			else
+-				printf "%d => ", $h
++				printf "%d => ", $p->h
+ 			end
+ 			if $arg1 == 0
+-				printf "%p\n", $val
++				printf "%p\n", (zval *)&$p->val
+ 			end
+ 			if $arg1 == 1
+-				set $zval = $val
++				set $zval = (zval *)&$p->val
+ 				____printzv $zval 1
+ 			end
+ 			if $arg1 == 2
+-				printf "%s\n", (char*)$val->value.ptr
++				printf "%s\n", (char*)$p->val.value.ptr
+ 			end
+ 			if $arg1 == 3
+-				set $func = (zend_function*)$val->value.ptr
++				set $func = (zend_function*)$p->val.value.ptr
+ 				printf "\"%s\"\n", $func->common.function_name->val
+ 			end
+ 			if $arg1 == 4
+-				set $const = (zend_constant *)$val->value.ptr
++				set $const = (zend_constant *)$p->val.value.ptr
+ 				____printzv $const 1
+ 			end
+ 		end
+diff --git a/.gitattributes b/.gitattributes
+index f8b91505..5bee19d0 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -13,16 +13,7 @@
+ /UPGRADING           merge=NEWS
+ /UPGRADING.INTERNALS merge=NEWS
+ 
+-# Configure proper diff drivers to improve the context lines in the output
+-# of git diff and to improve token splitting for --word-diff.
+-*.phpt diff=php
+-*.php diff=php
+-*.[ch] diff=cpp
+-
+-# Collapse generated files within a pull request.
+-**/*_arginfo.h linguist-generated
+-/Zend/zend_vm_execute.h linguist-generated
+-/Zend/zend_vm_opcodes.{h,c} linguist-generated
+-
+-# The OSS fuzz files are bunary
+-/ext/date/tests/ossfuzz*.txt binary
++# Enable commit diffs for binary PHP test files. Some PHP test files include
++# special characters, such as ASCII control characters. Git recognizes these as
++# binary and wouldn't generate diffs.
++*.phpt diff
+diff --git a/.github/ISSUE_TEMPLATE/bug_report.yml b/.github/ISSUE_TEMPLATE/bug_report.yml
+deleted file mode 100644
+index acd9c122..00000000
+--- a/.github/ISSUE_TEMPLATE/bug_report.yml
++++ /dev/null
+@@ -1,36 +0,0 @@
+-name: Bug report
+-description: Create a bug report
+-labels: ["Bug", "Status: Needs Triage"]
+-body:
+-  - type: textarea
+-    attributes:
+-      label: Description
+-      description: "Please provide a minimal way to reproduce the problem and describe what the expected vs actual behavior is. Provide a [3v4l.org](https://3v4l.org/) link if possible."
+-      value: |
+-        The following code:
+-
+-        ```php
+-        <?php
+-        ```
+-
+-        Resulted in this output:
+-        ```
+-        ```
+-
+-        But I expected this output instead:
+-        ```
+-        ```
+-    validations:
+-      required: true
+-  - type: input
+-    attributes:
+-      label: PHP Version
+-      description: "The used PHP version. Make sure it is [supported](https://www.php.net/supported-versions.php)."
+-      placeholder: "PHP 8.0.12"
+-    validations:
+-      required: true
+-  - type: input
+-    attributes:
+-      label: Operating System
+-      description: "The used operating system, if relevant."
+-      placeholder: "Ubuntu 20.04"
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+deleted file mode 100644
+index dcb5f4f9..00000000
+--- a/.github/ISSUE_TEMPLATE/config.yml
++++ /dev/null
+@@ -1,8 +0,0 @@
+-blank_issues_enabled: false
+-contact_links:
+-  - name: Documentation issue
+-    url: https://github.com/php/doc-en/issues
+-    about: Please report documentation issues on the doc-en repository.
+-  - name: Security issue
+-    url: https://bugs.php.net/report.php?security_bug
+-    about: Please report security issues in this private bug tracker.
+diff --git a/.github/ISSUE_TEMPLATE/feature_request.yml b/.github/ISSUE_TEMPLATE/feature_request.yml
+deleted file mode 100644
+index 69863bfe..00000000
+--- a/.github/ISSUE_TEMPLATE/feature_request.yml
++++ /dev/null
+@@ -1,10 +0,0 @@
+-name: Feature request
+-description: Create a feature request
+-labels: ["Feature", "Status: Needs Triage"]
+-body:
+-  - type: textarea
+-    attributes:
+-      label: Description
+-      description: "Please describe the requested feature and why it should be included in PHP."
+-    validations:
+-      required: true

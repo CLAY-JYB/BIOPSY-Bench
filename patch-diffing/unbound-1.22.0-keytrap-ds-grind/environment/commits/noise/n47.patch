@@ -1,0 +1,100 @@
+diff --git a/testdata/auth_tls.tdir/auth_tls.nsd.conf b/testdata/auth_tls.tdir/auth_tls.nsd.conf
+new file mode 100644
+index 000000000..c20ed21df
+--- /dev/null
++++ b/testdata/auth_tls.tdir/auth_tls.nsd.conf
+@@ -0,0 +1,21 @@
++server:
++        logfile: "/dev/stderr"
++        xfrdfile: xfrd.state
++	username: ""
++	chroot: ""
++        zonesdir: ""
++	pidfile: "nsd.pid"
++        zonelistfile: "zone.list"
++	verbosity: 5
++	port: @NSD_PORT@
++        interface: 127.0.0.1@@NSD_PORT@
++
++	tls-port: @NSD_PORT@
++	tls-service-key: "nsd_server.key"
++	tls-service-pem: "nsd_server.pem"
++
++zone:
++	name: "example.com"
++	zonefile: "example.com.zone"
++	provide-xfr: 0.0.0.0/0 NOKEY
++	provide-xfr: ::0/0 NOKEY
+diff --git a/testdata/auth_tls.tdir/auth_tls.post b/testdata/auth_tls.tdir/auth_tls.post
+new file mode 100644
+index 000000000..19de9f46f
+--- /dev/null
++++ b/testdata/auth_tls.tdir/auth_tls.post
+@@ -0,0 +1,14 @@
++# #-- auth_tls.post --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# source the test var file when it's there
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++#
++# do your teardown here
++. ../common.sh
++kill_pid $NSD_PID
++kill_pid $UNBOUND_PID
++echo "nsd.log"
++cat nsd.log
++echo "unbound.log"
++cat unbound.log
+diff --git a/testdata/auth_tls.tdir/auth_tls.pre b/testdata/auth_tls.tdir/auth_tls.pre
+new file mode 100644
+index 000000000..ebeee24c5
+--- /dev/null
++++ b/testdata/auth_tls.tdir/auth_tls.pre
+@@ -0,0 +1,47 @@
++# #-- auth_tls.pre--#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++. ../common.sh
++PRE="../.."
++if test -n "$NSD"; then
++	:
++else
++	if `which nsd >/dev/null 2>&1`; then
++		# need nsd >= 4.2.0
++		NSD="nsd"
++	else
++		if test -f $PRE/../nsd/nsd; then
++			NSD="$PRE/../nsd/nsd"
++		else
++			skip_test "need nsd"
++		fi
++	fi
++fi
++echo "NSD=$NSD"
++
++get_random_port 2
++UNBOUND_PORT=$RND_PORT
++NSD_PORT=$(($RND_PORT + 1))
++echo "UNBOUND_PORT=$UNBOUND_PORT" >> .tpkg.var.test
++echo "NSD_PORT=$NSD_PORT" >> .tpkg.var.test
++
++# make config file
++sed -e 's/@UNBOUND_PORT\@/'$UNBOUND_PORT'/' -e 's/@NSD_PORT\@/'$NSD_PORT'/' < auth_tls.ub.conf > ub.conf
++sed -e 's/@UNBOUND_PORT\@/'$UNBOUND_PORT'/' -e 's/@NSD_PORT\@/'$NSD_PORT'/' < auth_tls.nsd.conf > nsd.conf
++
++# start nsd
++$NSD -d -c nsd.conf >nsd.log 2>&1 &
++NSD_PID=$!
++echo "NSD_PID=$NSD_PID" >> .tpkg.var.test
++
++# start unbound in the background
++$PRE/unbound -d -c ub.conf >unbound.log 2>&1 &
++UNBOUND_PID=$!
++echo "UNBOUND_PID=$UNBOUND_PID" >> .tpkg.var.test
++
++cat .tpkg.var.test
++wait_nsd_up nsd.log
++wait_unbound_up unbound.log

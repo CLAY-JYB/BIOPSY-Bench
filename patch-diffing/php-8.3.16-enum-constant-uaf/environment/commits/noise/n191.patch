@@ -1,0 +1,266 @@
+diff --git a/ext/mysqli/tests/mysqli_release_savepoint.phpt b/ext/mysqli/tests/mysqli_release_savepoint.phpt
+index ec969f15..64716524 100644
+--- a/ext/mysqli/tests/mysqli_release_savepoint.phpt
++++ b/ext/mysqli/tests/mysqli_release_savepoint.phpt
+@@ -4,16 +4,20 @@ mysqli_release_savepoint()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+ 
+ if (!have_innodb($link))
+     die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
++    $tmp    = NULL;
++    $link   = NULL;
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[003] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -58,7 +62,7 @@ if (!have_innodb($link))
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli_release_savepoint(): Argument #2 ($name) cannot be empty
+diff --git a/ext/mysqli/tests/mysqli_report.phpt b/ext/mysqli/tests/mysqli_report.phpt
+index 91a88815..d9b4107a 100644
+--- a/ext/mysqli/tests/mysqli_report.phpt
++++ b/ext/mysqli/tests/mysqli_report.phpt
+@@ -4,10 +4,12 @@ mysqli_report()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
+ ?>
+ --FILE--
+ <?php
++    require_once("connect.inc");
++
+     if (true !== ($tmp = mysqli_report(-1)))
+         printf("[002] Expecting boolean/true even for invalid flags, got %s/%s\n", gettype($tmp), $tmp);
+ 
+@@ -26,7 +28,7 @@ require_once 'skipifconnectfailure.inc';
+     if (true !== ($tmp = mysqli_report(MYSQLI_REPORT_OFF)))
+         printf("[008] Expecting boolean/true, got %s/%s\n", gettype($tmp), $tmp);
+ 
+-    require_once 'table.inc';
++    require('table.inc');
+ 
+     /*
+     Internal macro MYSQL_REPORT_ERROR
+@@ -309,7 +311,7 @@ require_once 'skipifconnectfailure.inc';
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Warning: mysqli_multi_query(): (%d/%d): You have an error in your SQL syntax; check the manual that corresponds to your %s server version for the right syntax to use near 'BAR; FOO' at line 1 in %s on line %d
+diff --git a/ext/mysqli/tests/mysqli_report_new.phpt b/ext/mysqli/tests/mysqli_report_new.phpt
+index e544bcb3..9ef80da1 100644
+--- a/ext/mysqli/tests/mysqli_report_new.phpt
++++ b/ext/mysqli/tests/mysqli_report_new.phpt
+@@ -4,9 +4,9 @@ mysqli_report(), change user, MySQL 5.6+
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+     die(sprintf("SKIP Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+         $host, $user, $db, $port, $socket));
+ 
+@@ -16,7 +16,12 @@ if (mysqli_get_server_version($link) < 50600)
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once("connect.inc");
++
++    $tmp    = NULL;
++    $link   = NULL;
++
++    require('table.inc');
+ 
+     /*
+     Internal macro MYSQL_REPORT_ERROR
+@@ -37,7 +42,7 @@ if (mysqli_get_server_version($link) < 50600)
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Warning: mysqli_change_user(): (%d/%d): Access denied for user '%s'@'%s' (using password: %s) in %s on line %d
+diff --git a/ext/mysqli/tests/mysqli_report_wo_ps.phpt b/ext/mysqli/tests/mysqli_report_wo_ps.phpt
+index c757de77..f030051d 100644
+--- a/ext/mysqli/tests/mysqli_report_wo_ps.phpt
++++ b/ext/mysqli/tests/mysqli_report_wo_ps.phpt
+@@ -4,9 +4,9 @@ mysqli_report(), MySQL < 5.6
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+     die(sprintf("SKIP Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+         $host, $user, $db, $port, $socket));
+ 
+@@ -15,6 +15,11 @@ if (mysqli_get_server_version($link) >= 50600)
+ ?>
+ --FILE--
+ <?php
++    require_once("connect.inc");
++
++    $tmp    = NULL;
++    $link   = NULL;
++
+     if (true !== ($tmp = mysqli_report(-1)))
+         printf("[002] Expecting boolean/true even for invalid flags, got %s/%s\n", gettype($tmp), $tmp);
+ 
+@@ -33,7 +38,7 @@ if (mysqli_get_server_version($link) >= 50600)
+     if (true !== ($tmp = mysqli_report(MYSQLI_REPORT_OFF)))
+         printf("[008] Expecting boolean/true, got %s/%s\n", gettype($tmp), $tmp);
+ 
+-    require 'table.inc';
++    require('table.inc');
+ 
+     /*
+     Internal macro MYSQL_REPORT_ERROR
+@@ -101,7 +106,7 @@ if (mysqli_get_server_version($link) >= 50600)
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Warning: mysqli_multi_query(): (%d/%d): You have an error in your SQL syntax; check the manual that corresponds to your %s server version for the right syntax to use near 'BAR; FOO' at line 1 in %s on line %d
+diff --git a/ext/mysqli/tests/mysqli_result_references_mysqlnd.phpt b/ext/mysqli/tests/mysqli_result_references_mysqlnd.phpt
+index 9b7119ac..61a60cb6 100644
+--- a/ext/mysqli/tests/mysqli_result_references_mysqlnd.phpt
++++ b/ext/mysqli/tests/mysqli_result_references_mysqlnd.phpt
+@@ -4,11 +4,15 @@ References to result sets - mysqlnd (no copies but references)
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$IS_MYSQLND)
++    die("skip Test for mysqlnd only");
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     $references = array();
+ 
+@@ -47,10 +51,6 @@ require_once 'skipifconnectfailure.inc';
+     debug_zval_dump($references);
+     print "done!";
+ ?>
+---CLEAN--
+-<?php
+-require_once "clean_table.inc";
+-?>
+ --EXPECTF--
+ array(1) refcount(%d){
+   [0]=>
+diff --git a/ext/mysqli/tests/mysqli_rollback.phpt b/ext/mysqli/tests/mysqli_rollback.phpt
+index 2297a335..0978308e 100644
+--- a/ext/mysqli/tests/mysqli_rollback.phpt
++++ b/ext/mysqli/tests/mysqli_rollback.phpt
+@@ -4,16 +4,18 @@ mysqli_rollback()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++    require_once('skipifconnectfailure.inc');
+ 
+-if (!have_innodb($link))
+-    die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
++    require_once('connect.inc');
++    if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++        die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++
++    if (!have_innodb($link))
++        die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[003] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -57,7 +59,7 @@ if (!have_innodb($link))
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli object is already closed
+diff --git a/ext/mysqli/tests/mysqli_savepoint.phpt b/ext/mysqli/tests/mysqli_savepoint.phpt
+index 71e0b2d2..a34c1aae 100644
+--- a/ext/mysqli/tests/mysqli_savepoint.phpt
++++ b/ext/mysqli/tests/mysqli_savepoint.phpt
+@@ -4,16 +4,18 @@ mysqli_savepoint()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+ 
+ if (!have_innodb($link))
+     die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[003] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -49,7 +51,7 @@ if (!have_innodb($link))
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli_savepoint(): Argument #2 ($name) cannot be empty

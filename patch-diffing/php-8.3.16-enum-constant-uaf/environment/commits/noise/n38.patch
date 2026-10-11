@@ -1,0 +1,183 @@
+diff --git a/Zend/tests/gh7792_2.phpt b/Zend/tests/gh7792_2.phpt
+deleted file mode 100644
+index 41f47a6e..00000000
+--- a/Zend/tests/gh7792_2.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-enum Foo implements Throwable {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo cannot implement interface Throwable in %s on line %d
+diff --git a/Zend/tests/gh7792_3.phpt b/Zend/tests/gh7792_3.phpt
+deleted file mode 100644
+index 67e2c1c9..00000000
+--- a/Zend/tests/gh7792_3.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-interface A {
+-    const FOO = 'foo';
+-}
+-
+-interface B {
+-    const FOO = 'foo';
+-}
+-
+-enum Foo implements A, B {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo inherits both A::FOO and B::FOO, which is ambiguous in %s on line %d
+diff --git a/Zend/tests/gh7792_4.phpt b/Zend/tests/gh7792_4.phpt
+deleted file mode 100644
+index 0d09835d..00000000
+--- a/Zend/tests/gh7792_4.phpt
++++ /dev/null
+@@ -1,12 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-interface A {}
+-
+-enum Foo implements A, A {}
+-
+-?>
+---EXPECTF--
+-Fatal error: Enum Foo cannot implement previously implemented interface A in %s on line %d
+diff --git a/Zend/tests/gh7792_5.phpt b/Zend/tests/gh7792_5.phpt
+deleted file mode 100644
+index 824ed9ed..00000000
+--- a/Zend/tests/gh7792_5.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-7792 (Refer to enum as enum instead of class)
+---FILE--
+-<?php
+-
+-enum Foo implements Traversable {}
+-
+-?>
+---EXPECT--
+-Fatal error: Enum Foo must implement interface Traversable as part of either Iterator or IteratorAggregate in Unknown on line 0
+diff --git a/Zend/tests/gh7900.phpt b/Zend/tests/gh7900.phpt
+deleted file mode 100644
+index a4170fb1..00000000
+--- a/Zend/tests/gh7900.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-GH-7900: Arrow function with never return type compile-time errors
+---INI--
+-zend.assertions=1
+-assert.exception=1
+---FILE--
+-<?php
+-
+-$x = fn(): never => throw new \Exception('Here');
+-
+-try {
+-    var_dump($x());
+-} catch (\Exception $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-try {
+-    assert((fn(): never => 42) && false);
+-} catch (\Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-Here
+-assert(fn(): never => 42 && false)
+diff --git a/Zend/tests/gh8083.phpt b/Zend/tests/gh8083.phpt
+index b3bcfa45..a98de47c 100644
+--- a/Zend/tests/gh8083.phpt
++++ b/Zend/tests/gh8083.phpt
+@@ -13,9 +13,7 @@ var_dump($x);
+ 
+ ?>
+ --EXPECT--
+-object(Closure)#1 (2) {
+-  ["function"]=>
+-  string(4) "func"
++object(Closure)#1 (1) {
+   ["static"]=>
+   array(1) {
+     ["i"]=>
+diff --git a/Zend/tests/gh8548.phpt b/Zend/tests/gh8548.phpt
+deleted file mode 100644
+index 89354f6e..00000000
+--- a/Zend/tests/gh8548.phpt
++++ /dev/null
+@@ -1,56 +0,0 @@
+---TEST--
+-GH-8548: stream_wrapper_unregister() leaks memory
+---FILE--
+-<?php
+-
+-class Wrapper
+-{
+-    public $context;
+-
+-    public function stream_open(string $path, string $mode, int $options): bool
+-    {
+-        return true;
+-    }
+-
+-    public function stream_eof(): bool
+-    {
+-        return true;
+-    }
+-}
+-
+-function test() {
+-    if (!stream_wrapper_register('foo', \Wrapper::class)) {
+-        throw new \Exception('Could not register stream wrapper');
+-    }
+-
+-    $file = fopen('foo://bar', 'r');
+-
+-    if (!stream_wrapper_unregister('foo')) {
+-        throw new \Exception('Could not unregister stream wrapper');
+-    }
+-
+-    $wrapper = stream_get_meta_data($file)['wrapper_data'];
+-    if (!$wrapper instanceof Wrapper) {
+-        throw new \Exception('Wrapper is not of expected type');
+-    }
+-
+-    fclose($file);
+-    unset($file);
+-}
+-
+-// The first iterations will allocate space for things like the resource list
+-for ($i = 0; $i < 10; $i++) {
+-    test();
+-}
+-
+-$before = memory_get_usage();
+-for ($i = 0; $i < 1000; $i++) {
+-    test();
+-}
+-$after = memory_get_usage();
+-
+-var_dump($before === $after);
+-
+-?>
+---EXPECT--
+-bool(true)

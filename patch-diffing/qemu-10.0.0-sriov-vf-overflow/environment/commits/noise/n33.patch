@@ -1,0 +1,319 @@
+diff --git a/scripts/qapi/introspect.py b/scripts/qapi/introspect.py
+index 86c075a6ad..ac14b20f30 100644
+--- a/scripts/qapi/introspect.py
++++ b/scripts/qapi/introspect.py
+@@ -27,8 +27,8 @@ from .gen import QAPISchemaMonolithicCVisitor
+ from .schema import (
+     QAPISchema,
+     QAPISchemaAlternatives,
+-    QAPISchemaBranches,
+     QAPISchemaArrayType,
++    QAPISchemaBranches,
+     QAPISchemaBuiltinType,
+     QAPISchemaEntity,
+     QAPISchemaEnumMember,
+@@ -233,9 +233,9 @@ const QLitObject %(c_name)s = %(c_string)s;
+             typ = type_int
+         elif (isinstance(typ, QAPISchemaArrayType) and
+               typ.element_type.json_type() == 'int'):
+-            type_intList = self._schema.lookup_type('intList')
+-            assert type_intList
+-            typ = type_intList
++            type_intlist = self._schema.lookup_type('intList')
++            assert type_intlist
++            typ = type_intlist
+         # Add type to work queue if new
+         if typ not in self._used_types:
+             self._used_types.append(typ)
+diff --git a/scripts/qapi/parser.py b/scripts/qapi/parser.py
+index 7b13a583ac..adc85b5b39 100644
+--- a/scripts/qapi/parser.py
++++ b/scripts/qapi/parser.py
+@@ -448,7 +448,7 @@ class QAPISchemaParser:
+         indent = must_match(r'\s*', line).end()
+         if not indent:
+             return line
+-        doc.append_line(line[indent:])
++        doc.append_line(line)
+         prev_line_blank = False
+         while True:
+             self.accept(False)
+@@ -465,7 +465,7 @@ class QAPISchemaParser:
+                     self,
+                     "unexpected de-indent (expected at least %d spaces)" %
+                     indent)
+-            doc.append_line(line[indent:])
++            doc.append_line(line)
+             prev_line_blank = True
+ 
+     def get_doc_paragraph(self, doc: 'QAPIDoc') -> Optional[str]:
+@@ -544,9 +544,37 @@ class QAPISchemaParser:
+                         line = self.get_doc_indented(doc)
+                     no_more_args = True
+                 elif match := re.match(
+-                        r'(Returns|Errors|Since|Notes?|Examples?|TODO): *',
+-                        line):
++                        r'(Returns|Errors|Since|Notes?|Examples?|TODO)'
++                        r'(?!::): *',
++                        line,
++                ):
+                     # tagged section
++
++                    # Note: "sections" with two colons are left alone as
++                    # rST markup and not interpreted as a section heading.
++
++                    # TODO: Remove these errors sometime in 2025 or so
++                    # after we've fully transitioned to the new qapidoc
++                    # generator.
++
++                    # See commit message for more markup suggestions O:-)
++                    if 'Note' in match.group(1):
++                        emsg = (
++                            f"The '{match.group(1)}' section is no longer "
++                            "supported. Please use rST's '.. note::' or "
++                            "'.. admonition:: notes' directives, or another "
++                            "suitable admonition instead."
++                        )
++                        raise QAPIParseError(self, emsg)
++
++                    if 'Example' in match.group(1):
++                        emsg = (
++                            f"The '{match.group(1)}' section is no longer "
++                            "supported. Please use the '.. qmp-example::' "
++                            "directive, or other suitable markup instead."
++                        )
++                        raise QAPIParseError(self, emsg)
++
+                     doc.new_tagged_section(self.info, match.group(1))
+                     text = line[match.end():]
+                     if text:
+@@ -583,7 +611,7 @@ class QAPISchemaParser:
+                 line = self.get_doc_line()
+                 first = False
+ 
+-        self.accept(False)
++        self.accept()
+         doc.end()
+         return doc
+ 
+diff --git a/scripts/qapi/schema.py b/scripts/qapi/schema.py
+index 721c470d2b..d65c35f6ee 100644
+--- a/scripts/qapi/schema.py
++++ b/scripts/qapi/schema.py
+@@ -730,6 +730,7 @@ class QAPISchemaVariants:
+         for v in self.variants:
+             v.set_defined_in(name)
+ 
++    # pylint: disable=unused-argument
+     def check(
+             self, schema: QAPISchema, seen: Dict[str, QAPISchemaMember]
+     ) -> None:
+@@ -1166,7 +1167,7 @@ class QAPISchema:
+                 defn.info, "%s is already defined" % other_defn.describe())
+         self._entity_dict[defn.name] = defn
+ 
+-    def lookup_entity(self,name: str) -> Optional[QAPISchemaEntity]:
++    def lookup_entity(self, name: str) -> Optional[QAPISchemaEntity]:
+         return self._entity_dict.get(name)
+ 
+     def lookup_type(self, name: str) -> Optional[QAPISchemaType]:
+@@ -1302,11 +1303,10 @@ class QAPISchema:
+         name = 'q_obj_%s-%s' % (name, role)
+         typ = self.lookup_entity(name)
+         if typ:
+-            assert(isinstance(typ, QAPISchemaObjectType))
++            assert isinstance(typ, QAPISchemaObjectType)
+             # The implicit object type has multiple users.  This can
+             # only be a duplicate definition, which will be flagged
+             # later.
+-            pass
+         else:
+             self._def_definition(QAPISchemaObjectType(
+                 name, info, None, ifcond, None, None, members, None))
+diff --git a/scripts/qapi/visit.py b/scripts/qapi/visit.py
+index e766acaac9..12f92e429f 100644
+--- a/scripts/qapi/visit.py
++++ b/scripts/qapi/visit.py
+@@ -280,8 +280,9 @@ bool visit_type_%(c_name)s(Visitor *v, const char *name,
+         abort();
+     default:
+         assert(visit_is_input(v));
+-        error_setg(errp, "Invalid parameter type for '%%s', expected: %(name)s",
+-                         name ? name : "null");
++        error_setg(errp,
++                   "Invalid parameter type for '%%s', expected: %(name)s",
++                   name ? name : "null");
+         /* Avoid passing invalid *obj to qapi_free_%(c_name)s() */
+         g_free(*obj);
+         *obj = NULL;
+diff --git a/storage-daemon/meson.build b/storage-daemon/meson.build
+index 46267b63e7..5e61a9d1bd 100644
+--- a/storage-daemon/meson.build
++++ b/storage-daemon/meson.build
+@@ -1,6 +1,6 @@
+ qsd_ss = ss.source_set()
+ qsd_ss.add(files('qemu-storage-daemon.c'))
+-qsd_ss.add(blockdev, chardev, qmp, qom, qemuutil, gnutls)
++qsd_ss.add(blockdev, chardev, qmp, qom, qemuutil)
+ 
+ subdir('qapi')
+ 
+@@ -8,6 +8,7 @@ if have_tools
+   qsd_ss = qsd_ss.apply({})
+   qsd = executable('qemu-storage-daemon',
+                    qsd_ss.sources(),
++                   link_args: '@block.syms', link_depends: block_syms,
+                    dependencies: qsd_ss.dependencies(),
+                    install: true)
+ endif
+diff --git a/stubs/blk-exp-close-all.c b/stubs/blk-exp-close-all.c
+index 1c71316763..2f68e06d7d 100644
+--- a/stubs/blk-exp-close-all.c
++++ b/stubs/blk-exp-close-all.c
+@@ -1,7 +1,7 @@
+ #include "qemu/osdep.h"
+ #include "block/export.h"
+ 
+-/* Only used in programs that support block exports (libblockdev.fa) */
++/* Only used in programs that support block exports (libblockdev.a) */
+ void blk_exp_close_all(void)
+ {
+ }
+diff --git a/system/cpus.c b/system/cpus.c
+index d3640c9503..5e3a988a0a 100644
+--- a/system/cpus.c
++++ b/system/cpus.c
+@@ -568,6 +568,22 @@ void cpu_thread_signal_destroyed(CPUState *cpu)
+     qemu_cond_signal(&qemu_cpu_cond);
+ }
+ 
++void cpu_pause(CPUState *cpu)
++{
++    if (qemu_cpu_is_self(cpu)) {
++        qemu_cpu_stop(cpu, true);
++    } else {
++        cpu->stop = true;
++        qemu_cpu_kick(cpu);
++    }
++}
++
++void cpu_resume(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
+ 
+ static bool all_vcpus_paused(void)
+ {
+@@ -588,12 +604,7 @@ void pause_all_vcpus(void)
+ 
+     qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
+     CPU_FOREACH(cpu) {
+-        if (qemu_cpu_is_self(cpu)) {
+-            qemu_cpu_stop(cpu, true);
+-        } else {
+-            cpu->stop = true;
+-            qemu_cpu_kick(cpu);
+-        }
++        cpu_pause(cpu);
+     }
+ 
+     /* We need to drop the replay_lock so any vCPU threads woken up
+@@ -613,13 +624,6 @@ void pause_all_vcpus(void)
+     bql_lock();
+ }
+ 
+-void cpu_resume(CPUState *cpu)
+-{
+-    cpu->stop = false;
+-    cpu->stopped = false;
+-    qemu_cpu_kick(cpu);
+-}
+-
+ void resume_all_vcpus(void)
+ {
+     CPUState *cpu;
+diff --git a/system/memory.c b/system/memory.c
+index 2d69521360..5e6eb459d5 100644
+--- a/system/memory.c
++++ b/system/memory.c
+@@ -1901,19 +1901,6 @@ static int memory_region_update_iommu_notify_flags(IOMMUMemoryRegion *iommu_mr,
+     return ret;
+ }
+ 
+-int memory_region_iommu_set_page_size_mask(IOMMUMemoryRegion *iommu_mr,
+-                                           uint64_t page_size_mask,
+-                                           Error **errp)
+-{
+-    IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_GET_CLASS(iommu_mr);
+-    int ret = 0;
+-
+-    if (imrc->iommu_set_page_size_mask) {
+-        ret = imrc->iommu_set_page_size_mask(iommu_mr, page_size_mask, errp);
+-    }
+-    return ret;
+-}
+-
+ int memory_region_register_iommu_notifier(MemoryRegion *mr,
+                                           IOMMUNotifier *n, Error **errp)
+ {
+diff --git a/system/physmem.c b/system/physmem.c
+index 33d09f7571..9a3b3a7636 100644
+--- a/system/physmem.c
++++ b/system/physmem.c
+@@ -53,7 +53,7 @@
+ #include "sysemu/hostmem.h"
+ #include "sysemu/hw_accel.h"
+ #include "sysemu/xen-mapcache.h"
+-#include "trace/trace-root.h"
++#include "trace.h"
+ 
+ #ifdef CONFIG_FALLOCATE_PUNCH_HOLE
+ #include <linux/falloc.h>
+@@ -1521,7 +1521,7 @@ static void qemu_ram_setup_dump(void *addr, ram_addr_t size)
+         if (ret) {
+             perror("qemu_madvise");
+             fprintf(stderr, "madvise doesn't support MADV_DONTDUMP, "
+-                            "but dump_guest_core=off specified\n");
++                            "but dump-guest-core=off specified\n");
+         }
+     }
+ }
+@@ -1845,11 +1845,14 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
+     }
+ 
+     if (new_block->flags & RAM_GUEST_MEMFD) {
++        int ret;
++
+         assert(kvm_enabled());
+         assert(new_block->guest_memfd < 0);
+ 
+-        if (ram_block_discard_require(true) < 0) {
+-            error_setg_errno(errp, errno,
++        ret = ram_block_discard_require(true);
++        if (ret < 0) {
++            error_setg_errno(errp, -ret,
+                              "cannot set up private guest memory: discard currently blocked");
+             error_append_hint(errp, "Are you using assigned devices?\n");
+             goto out_free;
+@@ -2277,6 +2280,10 @@ RAMBlock *qemu_ram_block_from_host(void *ptr, bool round_offset,
+         ram_addr_t ram_addr;
+         RCU_READ_LOCK_GUARD();
+         ram_addr = xen_ram_addr_from_mapcache(ptr);
++        if (ram_addr == RAM_ADDR_INVALID) {
++            return NULL;
++        }
++
+         block = qemu_get_ram_block(ram_addr);
+         if (block) {
+             *offset = ram_addr - block->offset;
+@@ -3193,6 +3200,8 @@ void *address_space_map(AddressSpace *as,
+     MemoryRegion *mr;
+     FlatView *fv;
+ 
++    trace_address_space_map(as, addr, len, is_write, *(uint32_t *) &attrs);
++
+     if (len == 0) {
+         return NULL;
+     }

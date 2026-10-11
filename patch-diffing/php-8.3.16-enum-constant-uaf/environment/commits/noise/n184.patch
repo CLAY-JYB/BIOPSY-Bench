@@ -1,0 +1,261 @@
+diff --git a/ext/mysqli/tests/mysqli_driver.phpt b/ext/mysqli/tests/mysqli_driver.phpt
+index 79f62cc8..6bc68c8b 100644
+--- a/ext/mysqli/tests/mysqli_driver.phpt
++++ b/ext/mysqli/tests/mysqli_driver.phpt
+@@ -10,7 +10,9 @@ require_once('skipifconnectfailure.inc');
+ <?php
+ require_once('connect.inc');
+ 
+-$driver = new mysqli_driver();
++if (!is_object($driver = new mysqli_driver())) {
++    printf("[001] Failed to create mysqli_driver object\n");
++}
+ 
+ $client_info = mysqli_get_client_info();
+ if (($tmp = $driver->client_info) !== $client_info) {
+@@ -106,6 +108,17 @@ if (MYSQLI_REPORT_ERROR !== $driver->report_mode) {
+ 
+ $driver->report_mode = $report_mode;
+ 
++$reconnect = $driver->reconnect;
++if (!is_bool($reconnect)) {
++    printf("[019] Expecting boolean/any, got %s/%s\n",
++    gettype($reconnect), $reconnect);
++}
++
++/* pointless, but I need more documentation */
++$driver->reconnect = true;
++$driver->reconnect = false;
++$driver->reconnect = $reconnect;
++
+ print "done!";
+ ?>
+ --EXPECTF--
+diff --git a/ext/mysqli/tests/mysqli_execute_query.phpt b/ext/mysqli/tests/mysqli_execute_query.phpt
+deleted file mode 100644
+index 0cb5c29f..00000000
+--- a/ext/mysqli/tests/mysqli_execute_query.phpt
++++ /dev/null
+@@ -1,97 +0,0 @@
+---TEST--
+-mysqli_execute_query()
+---EXTENSIONS--
+-mysqli
+---SKIPIF--
+-<?php
+-require_once 'skipifconnectfailure.inc';
+-?>
+---FILE--
+-<?php
+-
+-require 'table.inc';
+-
+-if (!($tmp = mysqli_execute_query($link, "SELECT id, label FROM test ORDER BY id"))) {
+-    printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-}
+-
+-if (!is_a($tmp, mysqli_result::class)) {
+-    printf("[002] Expecting mysqli_result, got %s/%s\n", gettype($tmp), $tmp);
+-}
+-
+-unset($tmp);
+-
+-// procedural
+-if (!($tmp = mysqli_execute_query($link, "SELECT ? AS a, ? AS b, ? AS c", [42, "foo", null]))) {
+-    printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-}
+-
+-assert($tmp->fetch_assoc() === ['a' => '42', 'b' => 'foo', 'c' => null]);
+-
+-// OO style
+-if (!($tmp = $link->execute_query("SELECT ? AS a, ? AS b, ? AS c", [42, "foo", null]))) {
+-    printf("[004] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-}
+-
+-assert($tmp->fetch_assoc() === ['a' => '42', 'b' => 'foo', 'c' => null]);
+-
+-// prepare error
+-if (!($tmp = $link->execute_query("some random gibberish", [1, "foo"]))) {
+-    printf("[005] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-}
+-
+-// stmt error - duplicate key
+-if (!$link->execute_query("INSERT INTO test(id, label) VALUES (?, ?)", [1, "foo"])) {
+-    printf("[006] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-}
+-
+-// successful update returns true
+-if (!($tmp = $link->execute_query("UPDATE test SET label=? WHERE id=?", ["baz", 1]))) {
+-    printf("[007] Expecting true, got %s/%s\n", gettype($tmp), $tmp);
+-}
+-if ($link->affected_rows <= 0) {
+-    printf("[008] Expecting positive non-zero integer for affected_rows, got %s/%s\n", gettype($link->affected_rows), $link->affected_rows);
+-}
+-
+-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+-
+-// check if value error is properly reported
+-try {
+-    $link->execute_query('SELECT label, ? AS anon, ? AS num FROM test WHERE id=?', ['foo', 42]);
+-} catch (ValueError $e) {
+-    echo '[009] '.$e->getMessage()."\n";
+-}
+-try {
+-    $link->execute_query('SELECT label, ? AS anon, ? AS num FROM test WHERE id=?', ['foo' => 42]);
+-} catch (ValueError $e) {
+-    echo '[010] '.$e->getMessage()."\n";
+-}
+-
+-// check if insert_id is copied
+-$link->execute_query("ALTER TABLE test MODIFY id INT NOT NULL AUTO_INCREMENT");
+-$link->execute_query("INSERT INTO test(label) VALUES (?)", ["foo"]);
+-if ($link->insert_id <= 0) {
+-    printf("[011] Expecting positive non-zero integer for insert_id, got %s/%s\n", gettype($link->insert_id), $link->insert_id);
+-}
+-
+-// bad index
+-mysqli_report(MYSQLI_REPORT_ALL);
+-try {
+-    $link->execute_query("SELECT id FROM test WHERE label = ?", ["foo"]);
+-} catch (mysqli_sql_exception $e) {
+-    echo '[012] '.$e->getMessage()."\n";
+-}
+-
+-print "done!";
+-?>
+---CLEAN--
+-<?php
+-require_once "clean_table.inc";
+-?>
+---EXPECTF--
+-[005] [1064] You have an error in your SQL syntax; check the manual that corresponds to your %s server version for the right syntax to use near 'some random gibberish' at line 1
+-[006] [1062] Duplicate entry '1' for key '%s'
+-[009] mysqli::execute_query(): Argument #2 ($params) must consist of exactly 3 elements, 2 present
+-[010] mysqli::execute_query(): Argument #2 ($params) must be a list array
+-[012] No index used in query/prepared statement SELECT id FROM test WHERE label = ?
+-done!
+diff --git a/ext/mysqli/tests/mysqli_expire_password.phpt b/ext/mysqli/tests/mysqli_expire_password.phpt
+index fa1b9a94..50332d6c 100644
+--- a/ext/mysqli/tests/mysqli_expire_password.phpt
++++ b/ext/mysqli/tests/mysqli_expire_password.phpt
+@@ -26,6 +26,10 @@ if ($link->server_version >= 100000) {
+ 
+ }
+ 
++if  (!$IS_MYSQLND && (mysqli_get_client_version() < 50610)) {
++    die(sprintf("SKIP Needs libmysql 5.6.10 or newer, found  %s\n", mysqli_get_client_version()));
++}
++
+ mysqli_query($link, 'DROP USER expiretest');
+ mysqli_query($link, 'DROP USER expiretest@localhost');
+ 
+diff --git a/ext/mysqli/tests/mysqli_explain_metadata.phpt b/ext/mysqli/tests/mysqli_explain_metadata.phpt
+index af8d153b..f651e573 100644
+--- a/ext/mysqli/tests/mysqli_explain_metadata.phpt
++++ b/ext/mysqli/tests/mysqli_explain_metadata.phpt
+@@ -4,11 +4,15 @@ EXPLAIN - metadata
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once("connect.inc");
++if (!$IS_MYSQLND)
++  die("skip Open libmysql/MySQL issue http://bugs.mysql.com/?id=62350");
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     if (!$res = mysqli_query($link, 'EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2'))
+         printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+@@ -153,7 +157,7 @@ require_once 'skipifconnectfailure.inc';
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!
+diff --git a/ext/mysqli/tests/mysqli_fetch_array.phpt b/ext/mysqli/tests/mysqli_fetch_array.phpt
+index 617ea91f..7b89e206 100644
+--- a/ext/mysqli/tests/mysqli_fetch_array.phpt
++++ b/ext/mysqli/tests/mysqli_fetch_array.phpt
+@@ -176,10 +176,12 @@ require_once('skipifconnectfailure.inc');
+     func_mysqli_fetch_array($link, $engine, "INTEGER UNSIGNED", "4294967295", "4294967295", 230);
+     func_mysqli_fetch_array($link, $engine, "INTEGER UNSIGNED", NULL, NULL, 240);
+ 
+-    func_mysqli_fetch_array($link, $engine, "BIGINT", "-9223372036854775808", "-9223372036854775808", 250);
+-    func_mysqli_fetch_array($link, $engine, "BIGINT", NULL, NULL, 260);
+-    func_mysqli_fetch_array($link, $engine, "BIGINT UNSIGNED", "18446744073709551615", "18446744073709551615", 260);
+-    func_mysqli_fetch_array($link, $engine, "BIGINT UNSIGNED", NULL, NULL, 280);
++    if ($IS_MYSQLND || mysqli_get_server_version($link) >= 51000) {
++        func_mysqli_fetch_array($link, $engine, "BIGINT", "-9223372036854775808", "-9223372036854775808", 250);
++        func_mysqli_fetch_array($link, $engine, "BIGINT", NULL, NULL, 260);
++        func_mysqli_fetch_array($link, $engine, "BIGINT UNSIGNED", "18446744073709551615", "18446744073709551615", 260);
++        func_mysqli_fetch_array($link, $engine, "BIGINT UNSIGNED", NULL, NULL, 280);
++    }
+ 
+     func_mysqli_fetch_array($link, $engine, "FLOAT", (string)(-9223372036854775808 - 1.1), "-9.22337e+18", 290, "/-9\.22337e\+?[0]?18/iu");
+     func_mysqli_fetch_array($link, $engine, "FLOAT", NULL, NULL, 300);
+diff --git a/ext/mysqli/tests/mysqli_fetch_array_oo.phpt b/ext/mysqli/tests/mysqli_fetch_array_oo.phpt
+index 86951663..87dd7ee7 100644
+--- a/ext/mysqli/tests/mysqli_fetch_array_oo.phpt
++++ b/ext/mysqli/tests/mysqli_fetch_array_oo.phpt
+@@ -171,10 +171,12 @@ require_once('skipifconnectfailure.inc');
+     func_mysqli_fetch_array($mysqli, $engine, "INTEGER UNSIGNED", "4294967295", "4294967295", 230);
+     func_mysqli_fetch_array($mysqli, $engine, "INTEGER UNSIGNED", NULL, NULL, 240);
+ 
+-    func_mysqli_fetch_array($mysqli, $engine, "BIGINT", "-9223372036854775808", "-9223372036854775808", 250);
+-    func_mysqli_fetch_array($mysqli, $engine, "BIGINT", NULL, NULL, 260);
+-    func_mysqli_fetch_array($mysqli, $engine, "BIGINT UNSIGNED", "18446744073709551615", "18446744073709551615", 270);
+-    func_mysqli_fetch_array($mysqli, $engine, "BIGINT UNSIGNED", NULL, NULL, 280);
++    if ($IS_MYSQLND || mysqli_get_server_version($link) >= 51000) {
++        func_mysqli_fetch_array($mysqli, $engine, "BIGINT", "-9223372036854775808", "-9223372036854775808", 250);
++        func_mysqli_fetch_array($mysqli, $engine, "BIGINT", NULL, NULL, 260);
++        func_mysqli_fetch_array($mysqli, $engine, "BIGINT UNSIGNED", "18446744073709551615", "18446744073709551615", 270);
++        func_mysqli_fetch_array($mysqli, $engine, "BIGINT UNSIGNED", NULL, NULL, 280);
++    }
+ 
+     func_mysqli_fetch_array($mysqli, $engine, "FLOAT", (string)(-9223372036854775808 - 1.1), "-9.22337e+18", 290, "/-9\.22337e\+?[0]?18/iu");
+     func_mysqli_fetch_array($mysqli, $engine, "FLOAT", NULL, NULL, 300);
+diff --git a/ext/mysqli/tests/mysqli_fetch_assoc_bit.phpt b/ext/mysqli/tests/mysqli_fetch_assoc_bit.phpt
+index 3e2bfea6..cc92737f 100644
+--- a/ext/mysqli/tests/mysqli_fetch_assoc_bit.phpt
++++ b/ext/mysqli/tests/mysqli_fetch_assoc_bit.phpt
+@@ -4,16 +4,17 @@ mysqli_fetch_assoc() - BIT
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++    require_once('skipifconnectfailure.inc');
+ 
+-require_once 'table.inc';
+-if (mysqli_get_server_version($link) < 50003)
+-    // b'001' syntax not supported before 5.0.3
+-    die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
++    require_once('connect.inc');
++    require_once('table.inc');
++    if (mysqli_get_server_version($link) < 50003)
++        // b'001' syntax not supported before 5.0.3
++        die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+ ?>
+ --FILE--
+ <?php
+-    require 'connect.inc';
++    require('connect.inc');
+ 
+     function dec32bin($dec, $bits) {
+ 
+@@ -107,7 +108,7 @@ if (mysqli_get_server_version($link) < 50003)
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!

@@ -1,0 +1,428 @@
+diff --git a/.github/actions/test-libmysqlclient/action.yml b/.github/actions/test-libmysqlclient/action.yml
+index e408d060..c7b1a4b4 100644
+--- a/.github/actions/test-libmysqlclient/action.yml
++++ b/.github/actions/test-libmysqlclient/action.yml
+@@ -16,6 +16,6 @@ runs:
+         export PDO_MYSQL_TEST_PASS=root
+         export REPORT_EXIT_STATUS=no
+         sapi/cli/php run-tests.php -P -q \
+-          -g FAIL,BORK,LEAK,XLEAK \
+-          --no-progress --offline --show-diff --show-slow 1000 --set-timeout 120 \
++          -g FAIL,XFAIL,BORK,WARN,LEAK,XLEAK,SKIP \
++          --offline --show-diff --show-slow 1000 --set-timeout 120 \
+           ext/pdo_mysql
+diff --git a/.github/actions/test-linux/action.yml b/.github/actions/test-linux/action.yml
+index 08dd8715..1dfba394 100644
+--- a/.github/actions/test-linux/action.yml
++++ b/.github/actions/test-linux/action.yml
+@@ -1,8 +1,5 @@
+ name: Test
+ inputs:
+-  testArtifacts:
+-    default: null
+-    required: false
+   runTestsParameters:
+     default: ''
+     required: false
+@@ -32,19 +29,12 @@ runs:
+         export PDO_OCI_TEST_PASS="pass"
+         export PDO_OCI_TEST_DSN="oci:dbname=localhost/XEPDB1;charset=AL32UTF8"
+         export SKIP_IO_CAPTURE_TESTS=1
+-        export TEST_PHP_JUNIT=junit.out.xml
+         sapi/cli/php run-tests.php -P -q ${{ inputs.runTestsParameters }} \
+           -d opcache.jit=${{ inputs.jitType }} \
++          -d opcache.jit_buffer_size=16M \
+           -j$(/usr/bin/nproc) \
+-          -g FAIL,BORK,LEAK,XLEAK \
+-          --no-progress \
++          -g FAIL,XFAIL,BORK,WARN,LEAK,XLEAK,SKIP \
+           --offline \
+           --show-diff \
+           --show-slow 1000 \
+           --set-timeout 120
+-    - uses: actions/upload-artifact@v3
+-      if: always() && inputs.testArtifacts != null
+-      with:
+-        name: ${{ github.job }}_${{ inputs.testArtifacts }}
+-        path: ${{ github.workspace }}/junit.out.xml
+-        retention-days: 5
+diff --git a/.github/actions/test-macos/action.yml b/.github/actions/test-macos/action.yml
+index b81cdc54..3bf0fdb7 100644
+--- a/.github/actions/test-macos/action.yml
++++ b/.github/actions/test-macos/action.yml
+@@ -1,8 +1,5 @@
+ name: Test
+ inputs:
+-  testArtifacts:
+-    default: null
+-    required: false
+   runTestsParameters:
+     default: ''
+     required: false
+@@ -17,19 +14,12 @@ runs:
+         set -x
+         export SKIP_IO_CAPTURE_TESTS=1
+         export CI_NO_IPV6=1
+-        export TEST_PHP_JUNIT=junit.out.xml
+         sapi/cli/php run-tests.php -P -q ${{ inputs.runTestsParameters }} \
+           -d opcache.jit=${{ inputs.jitType }} \
++          -d opcache.jit_buffer_size=16M \
+           -j$(sysctl -n hw.ncpu) \
+-          -g FAIL,BORK,LEAK,XLEAK \
+-          --no-progress \
++          -g FAIL,XFAIL,BORK,WARN,LEAK,XLEAK,SKIP \
+           --offline \
+           --show-diff \
+           --show-slow 1000 \
+           --set-timeout 120
+-    - uses: actions/upload-artifact@v3
+-      if: always() && inputs.testArtifacts != null
+-      with:
+-        name: ${{ github.job }}_${{ inputs.testArtifacts }}
+-        path: ${{ github.workspace }}/junit.out.xml
+-        retention-days: 5
+diff --git a/.github/actions/verify-generated-files/action.yml b/.github/actions/verify-generated-files/action.yml
+index 139dd846..4bd838f6 100644
+--- a/.github/actions/verify-generated-files/action.yml
++++ b/.github/actions/verify-generated-files/action.yml
+@@ -6,10 +6,8 @@ runs:
+       run: |
+         set -x
+         [[ "$OSTYPE" == "darwin"* ]] && export PATH="/usr/local/opt/bison/bin:$PATH"
+-        scripts/dev/credits
+         scripts/dev/genfiles
+         Zend/zend_vm_gen.php
+-        ext/tokenizer/tokenizer_data_gen.php
+         build/gen_stub.php -f
+         build/gen_stub.php --generate-optimizer-info
+-        git add . -N && git diff --exit-code
++        git add . -Nu && git diff --exit-code
+diff --git a/.github/labeler.yml b/.github/labeler.yml
+deleted file mode 100644
+index ddab4850..00000000
+--- a/.github/labeler.yml
++++ /dev/null
+@@ -1,243 +0,0 @@
+-"Category: Engine":
+-- Zend/*
+-
+-"Category: Optimizer":
+-- Zend/Optimizer/**/*
+-
+-"Category: Build System":
+-- build/*
+-- scripts/**/*
+-
+-"Extension: bcmath":
+-- ext/bcmath/**/*
+-
+-"Extension: bz2":
+-- ext/bz2/**/*
+-
+-"Extension: calendar":
+-- ext/calendar/**/*
+-
+-"Extension: com_dotnet":
+-- ext/com_dotnet/**/*
+-
+-"Extension: ctype":
+-- ext/ctype/**/*
+-
+-"Extension: curl":
+-- ext/curl/**/*
+-
+-"Extension: date":
+-- ext/date/**/*
+-
+-"Extension: dba":
+-- ext/dba/**/*
+-
+-"Extension: dom":
+-- ext/dom/**/*
+-
+-"Extension: enchant":
+-- ext/enchant/**/*
+-
+-"Extension: exif":
+-- ext/exif/**/*
+-
+-"Extension: ffi":
+-- ext/ffi/**/*
+-
+-"Extension: fileinfo":
+-- ext/fileinfo/**/*
+-
+-"Extension: filter":
+-- ext/filter/**/*
+-
+-"Extension: ftp":
+-- ext/ftp/**/*
+-
+-"Extension: gd":
+-- ext/gd/**/*
+-
+-"Extension: gettext":
+-- ext/gettext/**/*
+-
+-"Extension: gmp":
+-- ext/gmp/**/*
+-
+-"Extension: hash":
+-- ext/hash/**/*
+-
+-"Extension: iconv":
+-- ext/iconv/**/*
+-
+-"Extension: imap":
+-- ext/imap/**/*
+-
+-"Extension: intl":
+-- ext/intl/**/*
+-
+-"Extension: json":
+-- ext/json/**/*
+-
+-"Extension: ldap":
+-- ext/ldap/**/*
+-
+-"Extension: libxml":
+-- ext/libxml/**/*
+-
+-"Extension: mbstring":
+-- ext/mbstring/**/*
+-
+-"Extension: mysqli":
+-- ext/mysqli/**/*
+-
+-"Extension: mysqlnd":
+-- ext/mysqlnd/**/*
+-
+-"Extension: oci8":
+-- ext/oci8/**/*
+-
+-"Extension: odbc":
+-- ext/odbc/**/*
+-
+-"Extension: opcache":
+-- ext/opcache/**/*
+-
+-"Extension: openssl":
+-- ext/openssl/**/*
+-
+-"Extension: pcntl":
+-- ext/pcntl/**/*
+-
+-"Extension: pcre":
+-- ext/pcre/**/*
+-
+-"Extension: pdo (core)":
+-- ext/pdo/**/*
+-
+-"Extension: pdo_dblib":
+-- ext/pdo_dblib/**/*
+-
+-"Extension: pdo_firebird":
+-- ext/pdo_firebird/**/*
+-
+-"Extension: pdo_mysql":
+-- ext/pdo_mysql/**/*
+-
+-"Extension: pdo_oci":
+-- ext/pdo_oci/**/*
+-
+-"Extension: pdo_odbc":
+-- ext/pdo_odbc/**/*
+-
+-"Extension: pdo_pgsql":
+-- ext/pdo_pgsql/**/*
+-
+-"Extension: pdo_sqlite":
+-- ext/pdo_sqlite/**/*
+-
+-"Extension: pgsql":
+-- ext/pgsql/**/*
+-
+-"Extension: phar":
+-- ext/phar/**/*
+-
+-"Extension: posix":
+-- ext/posix/**/*
+-
+-"Extension: pspell":
+-- ext/pspell/**/*
+-
+-"Extension: random":
+-- ext/random/**/*
+-
+-"Extension: readline":
+-- ext/readline/**/*
+-
+-"Extension: reflection":
+-- ext/reflection/**/*
+-
+-"Extension: session":
+-- ext/session/**/*
+-
+-"Extension: shmop":
+-- ext/shmop/**/*
+-
+-"Extension: simplexml":
+-- ext/simplexml/**/*
+-
+-"Extension: snmp":
+-- ext/snmp/**/*
+-
+-"Extension: soap":
+-- ext/soap/**/*
+-
+-"Extension: sockets":
+-- ext/sockets/**/*
+-
+-"Extension: sodium":
+-- ext/sodium/**/*
+-
+-"Extension: spl":
+-- ext/spl/**/*
+-
+-"Extension: sqlite3":
+-- ext/sqlite3/**/*
+-
+-"Extension: standard":
+-- ext/standard/**/*
+-
+-"Extension: sysvmsg":
+-- ext/sysvmsg/**/*
+-
+-"Extension: sysvsem":
+-- ext/sysvsem/**/*
+-
+-"Extension: sysvshm":
+-- ext/sysvshm/**/*
+-
+-"Extension: tidy":
+-- ext/tidy/**/*
+-
+-"Extension: tokenizer":
+-- ext/tokenizer/**/*
+-
+-"Extension: xml":
+-- ext/xml/**/*
+-
+-"Extension: xmlreader":
+-- ext/xmlreader/**/*
+-
+-"Extension: xmlwriter":
+-- ext/xmlwriter/**/*
+-
+-"Extension: xsl":
+-- ext/xsl/**/*
+-
+-"Extension: zend_test":
+-- ext/zend_test/**/*
+-
+-"Extension: zip":
+-- ext/zip/**/*
+-
+-"Extension: zlib":
+-- ext/zlib/**/*
+-
+-"SAPI: apache2handler":
+-- sapi/apache2handler/**/*
+-
+-"SAPI: cgi":
+-- sapi/cgi/**/*
+-
+-"SAPI: cli":
+-- sapi/cli/**/*
+-
+-"SAPI: fpm":
+-- sapi/fpm/**/*
+-
+-"SAPI: fuzzer":
+-- sapi/fuzzer/**/*
+-
+-"SAPI: litespeed":
+-- sapi/litespeed/**/*
+-
+-"SAPI: phpdbg":
+-- sapi/phpdbg/**/*
+diff --git a/.github/nightly_matrix.php b/.github/nightly_matrix.php
+index e7450878..868ecb41 100644
+--- a/.github/nightly_matrix.php
++++ b/.github/nightly_matrix.php
+@@ -1,6 +1,6 @@
+ <?php
+ 
+-const BRANCHES = ['master', 'PHP-8.2', 'PHP-8.1', 'PHP-8.0'];
++const BRANCHES = ['master', 'PHP-8.1', 'PHP-8.0'];
+ 
+ function get_branch_commit_cache_file_path(): string {
+     return dirname(__DIR__) . '/branch-commit-cache.json';
+diff --git a/.github/scripts/windows/test_task.bat b/.github/scripts/windows/test_task.bat
+index 1c3b3e87..c4ac5c0d 100644
+--- a/.github/scripts/windows/test_task.bat
++++ b/.github/scripts/windows/test_task.bat
+@@ -51,20 +51,6 @@ set ODBC_TEST_PASS=Password12!
+ set ODBC_TEST_DSN=Driver={ODBC Driver 17 for SQL Server};Server=^(local^)\SQLEXPRESS;Database=master;uid=%ODBC_TEST_USER%;pwd=%ODBC_TEST_PASS%
+ set PDOTEST_DSN=odbc:%ODBC_TEST_DSN%
+ 
+-rem setup Firebird related exts
+-curl -sLo Firebird.zip https://github.com/FirebirdSQL/firebird/releases/download/v3.0.9/Firebird-3.0.9.33560-0_x64.zip
+-7z x -oC:\Firebird Firebird.zip
+-set PDO_FIREBIRD_TEST_DATABASE=C:\test.fdb
+-set PDO_FIREBIRD_TEST_DSN=firebird:dbname=%PDO_FIREBIRD_TEST_DATABASE%
+-set PDO_FIREBIRD_TEST_USER=SYSDBA
+-set PDO_FIREBIRD_TEST_PASS=phpfi
+-echo create database '%PDO_FIREBIRD_TEST_DATABASE%' user '%PDO_FIREBIRD_TEST_USER%' password '%PDO_FIREBIRD_TEST_PASS%';> C:\Firebird\setup.sql
+-C:\Firebird\instsvc.exe install -n TestInstance
+-C:\Firebird\isql -q -i C:\Firebird\setup.sql
+-C:\Firebird\instsvc.exe start -n TestInstance
+-if %errorlevel% neq 0 exit /b 3
+-path C:\Firebird;%PATH%
+-
+ rem prepare for ext/openssl
+ rmdir /s /q C:\OpenSSL-Win32 >NUL 2>NUL
+ rmdir /s /q C:\OpenSSL-Win64 >NUL 2>NUL
+@@ -103,19 +89,9 @@ unzip dict.zip
+ del /q dict.zip
+ popd
+ 
+-rem prepare for snmp
+-set MIBDIRS=%DEPS_DIR%\share\mibs
+-start %DEPS_DIR%\bin\snmpd.exe -C -c %APPVEYOR_BUILD_FOLDER%\ext\snmp\tests\snmpd.conf -Ln
+-
+ set PHP_BUILD_DIR=%PHP_BUILD_OBJ_DIR%\Release
+ if "%THREAD_SAFE%" equ "1" set PHP_BUILD_DIR=%PHP_BUILD_DIR%_TS
+ 
+-rem prepare for mail
+-curl -sLo hMailServer.exe https://www.hmailserver.com/download_file/?downloadid=271
+-hMailServer.exe /verysilent
+-cd %APPVEYOR_BUILD_FOLDER%
+-%PHP_BUILD_DIR%\php.exe -dextension_dir=%PHP_BUILD_DIR% -dextension=com_dotnet appveyor\setup_hmailserver.php
+-
+ mkdir %PHP_BUILD_DIR%\test_file_cache
+ rem generate php.ini
+ echo extension_dir=%PHP_BUILD_DIR% > %PHP_BUILD_DIR%\php.ini
+@@ -125,7 +101,7 @@ rem work-around for some spawned PHP processes requiring OpenSSL
+ echo extension=php_openssl.dll >> %PHP_BUILD_DIR%\php.ini
+ 
+ rem remove ext dlls for which tests are not supported
+-for %%i in (ldap oci8_12c pdo_oci) do (
++for %%i in (imap ldap oci8_12c pdo_firebird pdo_oci snmp) do (
+ 	del %PHP_BUILD_DIR%\php_%%i.dll
+ )
+ 
+@@ -135,12 +111,10 @@ mkdir c:\tests_tmp
+ 
+ set TEST_PHP_JUNIT=c:\junit.out.xml
+ 
+-nmake test TESTS="%OPCACHE_OPTS% -g FAIL,BORK,LEAK,XLEAK --no-progress -q --offline --show-diff --show-slow 1000 --set-timeout 120 --temp-source c:\tests_tmp --temp-target c:\tests_tmp --bless %PARALLEL%"
++nmake test TESTS="%OPCACHE_OPTS% -g FAIL,XFAIL,BORK,WARN,LEAK,XLEAK,SKIP -q --offline --show-diff --show-slow 1000 --set-timeout 120 --temp-source c:\tests_tmp --temp-target c:\tests_tmp --bless %PARALLEL%"
+ 
+ set EXIT_CODE=%errorlevel%
+ 
+-taskkill /f /im snmpd.exe
+-
+ if %EXIT_CODE% GEQ 1 (
+ 	git checkout ext\pgsql\tests\config.inc
+ 	git diff > bless_tests.patch

@@ -1,0 +1,191 @@
+diff --git a/Zend/tests/nowdoc.inc b/Zend/tests/nowdoc.inc
+index d2aa5c4a..c903740e 100644
+--- a/Zend/tests/nowdoc.inc
++++ b/Zend/tests/nowdoc.inc
+@@ -4,7 +4,7 @@
+ $a = 1;
+ $b = 2;
+ $c = array( 'c' => 3, );
+-class d { public $d = 4; };
++class d { public function __construct() { $this->d = 4; } };
+ $d = new d;
+ 
+ ?>
+diff --git a/Zend/tests/nullsafe_operator/gh8661.phpt b/Zend/tests/nullsafe_operator/gh8661.phpt
+deleted file mode 100644
+index 9c4d47be..00000000
+--- a/Zend/tests/nullsafe_operator/gh8661.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-GH-8661: Nullsafe in coalesce triggers undefined variable error
+---FILE--
+-<?php
+-
+-var_dump($a?->foo ?? null);
+-
+-?>
+---EXPECT--
+-NULL
+diff --git a/Zend/tests/objects_014.phpt b/Zend/tests/objects_014.phpt
+index 858de748..138fd4f2 100644
+--- a/Zend/tests/objects_014.phpt
++++ b/Zend/tests/objects_014.phpt
+@@ -12,4 +12,4 @@ interface bar extends foo, foo {
+ echo "Done\n";
+ ?>
+ --EXPECTF--
+-Fatal error: Interface bar cannot implement previously implemented interface foo in %s on line %d
++Fatal error: Class bar cannot implement previously implemented interface foo in %s on line %d
+diff --git a/Zend/tests/oss_fuzz_60441.phpt b/Zend/tests/oss_fuzz_60441.phpt
+deleted file mode 100644
+index 7492a754..00000000
+--- a/Zend/tests/oss_fuzz_60441.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-oss-fuzz #60441 (Double compilation of arrow function)
+---FILE--
+-<?php
+-assert(fn()=>y)[y]??=y;
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Undefined constant "y" in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/attributes.phpt b/Zend/tests/prop_const_expr/attributes.phpt
+deleted file mode 100644
+index 96ebb919..00000000
+--- a/Zend/tests/prop_const_expr/attributes.phpt
++++ /dev/null
+@@ -1,44 +0,0 @@
+---TEST--
+-Allow fetching properties in attributes
+---EXTENSIONS--
+-reflection
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case B = 'C';
+-}
+-
+-#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
+-class Attr {
+-    public function __construct(public $value) {}
+-}
+-
+-#[Attr(A::B->name)]
+-#[Attr(A::B->value)]
+-#[Attr(A::B?->name)]
+-#[Attr(A::B?->value)]
+-class C {}
+-
+-foreach ((new ReflectionClass(C::class))->getAttributes() as $reflectionAttribute) {
+-    var_dump($reflectionAttribute->newInstance());
+-}
+-
+-?>
+---EXPECT--
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "B"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "C"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "B"
+-}
+-object(Attr)#1 (1) {
+-  ["value"]=>
+-  string(1) "C"
+-}
+diff --git a/Zend/tests/prop_const_expr/basic.phpt b/Zend/tests/prop_const_expr/basic.phpt
+deleted file mode 100644
+index 7499e7c5..00000000
+--- a/Zend/tests/prop_const_expr/basic.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Allow fetching properties in constant expressions on enums
+---FILE--
+-<?php
+-
+-enum A: string {
+-    case Case = 'A::Case';
+-}
+-
+-const A_name = A::Case->name;
+-const A_value = A::Case->value;
+-
+-var_dump(A_name);
+-var_dump(A_value);
+-
+-const A_name_nullsafe = A::Case?->name;
+-const A_value_nullsafe = A::Case?->value;
+-
+-var_dump(A_name_nullsafe);
+-var_dump(A_value_nullsafe);
+-
+-?>
+---EXPECT--
+-string(4) "Case"
+-string(7) "A::Case"
+-string(4) "Case"
+-string(7) "A::Case"
+diff --git a/Zend/tests/prop_const_expr/basic_nullsafe.phpt b/Zend/tests/prop_const_expr/basic_nullsafe.phpt
+deleted file mode 100644
+index da870c03..00000000
+--- a/Zend/tests/prop_const_expr/basic_nullsafe.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Nullsafe property constant expression
+---FILE--
+-<?php
+-
+-class Printer {
+-    public function __construct() {
+-        echo "Printer\n";
+-    }
+-}
+-
+-const A = (null)?->test;
+-var_dump(A);
+-
+-const B = (null)?->test->test;
+-var_dump(B);
+-
+-const C = (null)->test?->test;
+-var_dump(C);
+-
+-const D = (null)?->test['test'];
+-var_dump(D);
+-
+-const E = (null)['test']?->test;
+-var_dump(E);
+-
+-const F = (null)?->{new Printer};
+-var_dump(F);
+-
+-const G = (null)?->test + (new Printer ? 1 : 0);
+-var_dump(G);
+-
+-?>
+---EXPECTF--
+-NULL
+-NULL
+-
+-Warning: Attempt to read property "test" on null in %s on line %d
+-NULL
+-NULL
+-
+-Warning: Trying to access array offset on value of type null in %s on line %d
+-NULL
+-NULL
+-Printer
+-int(1)

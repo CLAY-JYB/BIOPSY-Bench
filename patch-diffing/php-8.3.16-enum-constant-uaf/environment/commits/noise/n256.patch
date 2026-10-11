@@ -1,0 +1,301 @@
+diff --git a/ext/reflection/tests/ReflectionClass_toString_001.phpt b/ext/reflection/tests/ReflectionClass_toString_001.phpt
+index 3b2c276e..3ca0d9a3 100644
+--- a/ext/reflection/tests/ReflectionClass_toString_001.phpt
++++ b/ext/reflection/tests/ReflectionClass_toString_001.phpt
+@@ -11,11 +11,10 @@ echo $rc;
+ --EXPECT--
+ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Reflector ] {
+ 
+-  - Constants [4] {
++  - Constants [3] {
+     Constant [ public int IS_IMPLICIT_ABSTRACT ] { 16 }
+     Constant [ public int IS_EXPLICIT_ABSTRACT ] { 64 }
+     Constant [ public int IS_FINAL ] { 32 }
+-    Constant [ public int IS_READONLY ] { 65536 }
+   }
+ 
+   - Static properties [0] {
+@@ -28,7 +27,7 @@ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Refle
+     Property [ public string $name ]
+   }
+ 
+-  - Methods [56] {
++  - Methods [55] {
+     Method [ <internal:Reflection> private method __clone ] {
+ 
+       - Parameters [0] {
+@@ -285,13 +284,6 @@ Class [ <internal:Reflection> class ReflectionClass implements Stringable, Refle
+       - Tentative return [ bool ]
+     }
+ 
+-    Method [ <internal:Reflection> public method isReadOnly ] {
+-
+-      - Parameters [0] {
+-      }
+-      - Return [ bool ]
+-    }
+-
+     Method [ <internal:Reflection> public method getModifiers ] {
+ 
+       - Parameters [0] {
+diff --git a/ext/reflection/tests/ReflectionClass_toString_005.phpt b/ext/reflection/tests/ReflectionClass_toString_005.phpt
+deleted file mode 100644
+index 4d417882..00000000
+--- a/ext/reflection/tests/ReflectionClass_toString_005.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-Using ReflectionClass::__toString() on readonly classes
+---FILE--
+-<?php
+-
+-readonly class Foo {
+-    public int $bar;
+-    public readonly int $baz;
+-}
+-
+-echo new ReflectionClass(Foo::class);
+-
+-?>
+---EXPECTF--
+-Class [ <user> readonly class Foo ] {
+-  @@ %s 3-6
+-
+-  - Constants [0] {
+-  }
+-
+-  - Static properties [0] {
+-  }
+-
+-  - Static methods [0] {
+-  }
+-
+-  - Properties [2] {
+-    Property [ public readonly int $bar ]
+-    Property [ public readonly int $baz ]
+-  }
+-
+-  - Methods [0] {
+-  }
+-}
+diff --git a/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt b/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt
+deleted file mode 100644
+index 7a942e31..00000000
+--- a/ext/reflection/tests/ReflectionEnumBackedCase_getBackingValue_002.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-ReflectionEnumBackedCase::getBackingValue() exception
+---FILE--
+-<?php
+-enum Inm:int {
+-    case Foo=y;
+-}
+-try {
+-    var_dump((new ReflectionEnumBackedCase(Inm::class,'Foo'))->getBackingValue());
+-} catch (Error $e) {
+-    echo $e->getMessage() . "\n";
+-}
+-?>
+---EXPECT--
+-Undefined constant "y"
+diff --git a/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt b/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt
+new file mode 100644
+index 00000000..de0c9abe
+--- /dev/null
++++ b/ext/reflection/tests/ReflectionFiber_bug_gh11121_1.phpt
+@@ -0,0 +1,62 @@
++--TEST--
++GH-11121: Segfault when using ReflectionFiber
++--FILE--
++<?php
++function f() {
++    Fiber::suspend();
++}
++
++function g() {
++    (new Fiber(function() {
++        global $f;
++        var_dump((new ReflectionFiber($f))->getTrace());
++    }))->start();
++}
++
++$f = new Fiber(function() { f(); max(...[1,2,3,4,5,6,7,8,9,10,11,12]); g(); });
++$f->start();
++$f->resume();
++
++?>
++--EXPECTF--
++array(3) {
++  [0]=>
++  array(7) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_1.php"
++    ["line"]=>
++    int(10)
++    ["function"]=>
++    string(5) "start"
++    ["class"]=>
++    string(5) "Fiber"
++    ["object"]=>
++    object(Fiber)#3 (0) {
++    }
++    ["type"]=>
++    string(2) "->"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [1]=>
++  array(4) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_1.php"
++    ["line"]=>
++    int(13)
++    ["function"]=>
++    string(1) "g"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [2]=>
++  array(2) {
++    ["function"]=>
++    string(9) "{closure}"
++    ["args"]=>
++    array(0) {
++    }
++  }
++}
+diff --git a/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt b/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt
+new file mode 100644
+index 00000000..b7affb2c
+--- /dev/null
++++ b/ext/reflection/tests/ReflectionFiber_bug_gh11121_2.phpt
+@@ -0,0 +1,63 @@
++--TEST--
++GH-11121: Segfault when using ReflectionFiber
++--FILE--
++<?php
++
++function f() {
++    Fiber::suspend();
++}
++
++function g() {
++    (new Fiber(function() {
++        global $f;
++        var_dump((new ReflectionFiber($f))->getTrace());
++    }))->start();
++}
++
++$f = new Fiber(function() { f(); g(); });
++$f->start();
++$f->resume();
++
++?>
++--EXPECTF--
++array(3) {
++  [0]=>
++  array(7) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_2.php"
++    ["line"]=>
++    int(11)
++    ["function"]=>
++    string(5) "start"
++    ["class"]=>
++    string(5) "Fiber"
++    ["object"]=>
++    object(Fiber)#3 (0) {
++    }
++    ["type"]=>
++    string(2) "->"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [1]=>
++  array(4) {
++    ["file"]=>
++    string(%d) "%sReflectionFiber_bug_gh11121_2.php"
++    ["line"]=>
++    int(14)
++    ["function"]=>
++    string(1) "g"
++    ["args"]=>
++    array(0) {
++    }
++  }
++  [2]=>
++  array(2) {
++    ["function"]=>
++    string(9) "{closure}"
++    ["args"]=>
++    array(0) {
++    }
++  }
++}
+diff --git a/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt b/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt
+deleted file mode 100644
+index 004e0b09..00000000
+--- a/ext/reflection/tests/ReflectionFunction_isAnonymous.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-ReflectionFunction::isAnonymous
+---FILE--
+-<?php
+-$rf = new ReflectionFunction(function() {});
+-var_dump($rf->isAnonymous());
+-
+-$rf = new ReflectionFunction('strlen');
+-var_dump($rf->isAnonymous());
+-
+-$rf = new ReflectionFunction(strlen(...));
+-var_dump($rf->isAnonymous());
+-?>
+---EXPECT--
+-bool(true)
+-bool(false)
+-bool(false)
+diff --git a/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt b/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt
+deleted file mode 100644
+index d94c8962..00000000
+--- a/ext/reflection/tests/ReflectionMethod_hasPrototype_basic.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-public ReflectionMethod ReflectionMethod::hasPrototype ( void );
+---FILE--
+-<?php
+-class Hello {
+-    public function sayHelloTo($name) {
+-        return 'Hello ' . $name;
+-    }
+-}
+-
+-class HelloWorld extends Hello {
+-    public function sayHelloTo($name) {
+-        return 'Hello world: ' . $name;
+-    }
+-
+-    public function sayHiTo($name) {
+-        return 'Hi: ' . $name;
+-    }
+-}
+-
+-$reflectionMethod1 = new ReflectionMethod('HelloWorld', 'sayHelloTo');
+-var_dump($reflectionMethod1->hasPrototype());
+-
+-$reflectionMethod2 = new ReflectionMethod('Hello', 'sayHelloTo');
+-var_dump($reflectionMethod2->hasPrototype());
+-
+-$reflectionMethod3 = new ReflectionMethod('HelloWorld', 'sayHiTo');
+-var_dump($reflectionMethod3->hasPrototype());
+-
+-?>
+---EXPECT--
+-bool(true)
+-bool(false)
+-bool(false)

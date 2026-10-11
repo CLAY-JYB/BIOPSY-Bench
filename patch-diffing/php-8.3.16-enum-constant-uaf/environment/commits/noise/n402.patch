@@ -1,0 +1,363 @@
+diff --git a/ext/zend_test/tests/gh10370_4.phpt b/ext/zend_test/tests/gh10370_4.phpt
+deleted file mode 100644
+index 8cdb2635..00000000
+--- a/ext/zend_test/tests/gh10370_4.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-GH-10370: File corruption in _php_stream_copy_to_stream_ex when using copy_file_range - unlimited copy using stream_copy_to_stream
+---EXTENSIONS--
+-zend_test
+---SKIPIF--
+-<?php
+-if (PHP_OS != 'Linux') {
+-    die('skip For Linux only');
+-}
+-?>
+---INI--
+-zend_test.limit_copy_file_range=4096
+---FILE--
+-<?php
+-/* Note: the value 4096 is chosen so that the mmap in _php_stream_copy_to_stream_ex() will mmap
+- *       at an offset of a multiple of 4096, which is the standard page size in most Linux systems. */
+-
+-$input = fopen(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar', 'r');
+-$output = fopen(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_004_out.tar', 'w');
+-
+-var_dump(stream_copy_to_stream($input, $output));
+-
+-fclose($input);
+-fclose($output);
+-
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370.tar'));
+-var_dump(sha1_file(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_004_out.tar'));
+-?>
+---EXPECT--
+-int(11776)
+-string(40) "edcad8cd6c276f5e318c826ad77a5604d6a6e93d"
+-string(40) "edcad8cd6c276f5e318c826ad77a5604d6a6e93d"
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . DIRECTORY_SEPARATOR . 'gh10370_004_out.tar');
+-?>
+diff --git a/ext/zend_test/tests/gh8575.phpt b/ext/zend_test/tests/gh8575.phpt
+deleted file mode 100644
+index 98305474..00000000
+--- a/ext/zend_test/tests/gh8575.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-CLI: stderr is available in mshutdown
+---SKIPIF--
+-<?php if (php_sapi_name() != "cli") die('skip cli test only'); ?>
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.print_stderr_mshutdown=1
+---FILE--
+-==DONE==
+---EXPECTF--
+-==DONE==
+-[zend-test] MSHUTDOWN
+diff --git a/ext/zend_test/tests/gh9871.phpt b/ext/zend_test/tests/gh9871.phpt
+deleted file mode 100644
+index d2915fff..00000000
+--- a/ext/zend_test/tests/gh9871.phpt
++++ /dev/null
+@@ -1,33 +0,0 @@
+---TEST--
+-Test observing inherited internal functions
+---EXTENSIONS--
+-zend_test
+---INI--
+-opcache.enable_cli=1
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.show_return_value=1
+---FILE--
+-<?php
+-
+-class MyReflectionProperty extends ReflectionProperty {
+-}
+-
+-class A {
+-    protected $protected = 'a';
+-}
+-
+-$property = new MyReflectionProperty('A', 'protected');
+-$property->setAccessible(true);
+-
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init ReflectionProperty::__construct() -->
+-  <ReflectionProperty::__construct>
+-  </ReflectionProperty::__construct:NULL>
+-  <!-- init ReflectionProperty::setAccessible() -->
+-  <ReflectionProperty::setAccessible>
+-  </ReflectionProperty::setAccessible:NULL>
+-</file '%s'>
+diff --git a/ext/zend_test/tests/observer_backtrace_01.phpt b/ext/zend_test/tests/observer_backtrace_01.phpt
+index 7f021bf4..875a04c3 100644
+--- a/ext/zend_test/tests/observer_backtrace_01.phpt
++++ b/ext/zend_test/tests/observer_backtrace_01.phpt
+@@ -48,32 +48,38 @@ var_dump(foo());
+       {main} %s%eobserver_backtrace_%d.php
+   -->
+   <foo>
+-    <!-- init Generator::current() -->
++    <!-- init gen() -->
+     <!--
++        gen()
+         Generator::current()
+         foo()
+         {main} %s%eobserver_backtrace_%d.php
+     -->
+-    <Generator::current>
+-      <!-- init gen() -->
++    <gen>
++      <!-- init TestClass::foo() -->
+       <!--
++          TestClass::foo()
+           gen()
+           Generator::current()
+           foo()
+           {main} %s%eobserver_backtrace_%d.php
+       -->
+-      <gen>
+-        <!-- init TestClass::foo() -->
++      <TestClass::foo>
++        <!-- init TestClass::{closure}() -->
+         <!--
++            TestClass::{closure}()
++            array_map()
+             TestClass::foo()
+             gen()
+             Generator::current()
+             foo()
+             {main} %s%eobserver_backtrace_%d.php
+         -->
+-        <TestClass::foo>
+-          <!-- init array_map() -->
++        <TestClass::{closure}>
++          <!-- init TestClass::bar() -->
+           <!--
++              TestClass::bar()
++              TestClass::{closure}()
+               array_map()
+               TestClass::foo()
+               gen()
+@@ -81,52 +87,20 @@ var_dump(foo());
+               foo()
+               {main} %s%eobserver_backtrace_%d.php
+           -->
+-          <array_map>
+-            <!-- init TestClass::{closure}() -->
+-            <!--
+-                TestClass::{closure}()
+-                array_map()
+-                TestClass::foo()
+-                gen()
+-                Generator::current()
+-                foo()
+-                {main} %s%eobserver_backtrace_%d.php
+-            -->
+-            <TestClass::{closure}>
+-              <!-- init TestClass::bar() -->
+-              <!--
+-                  TestClass::bar()
+-                  TestClass::{closure}()
+-                  array_map()
+-                  TestClass::foo()
+-                  gen()
+-                  Generator::current()
+-                  foo()
+-                  {main} %s%eobserver_backtrace_%d.php
+-              -->
+-              <TestClass::bar>
+-              </TestClass::bar>
+-            </TestClass::{closure}>
+-            <TestClass::{closure}>
+-              <TestClass::bar>
+-              </TestClass::bar>
+-            </TestClass::{closure}>
+-          </array_map>
+-        </TestClass::foo>
+-      </gen>
+-    </Generator::current>
++          <TestClass::bar>
++          </TestClass::bar>
++        </TestClass::{closure}>
++        <TestClass::{closure}>
++          <TestClass::bar>
++          </TestClass::bar>
++        </TestClass::{closure}>
++      </TestClass::foo>
++    </gen>
+   </foo>
+-  <!-- init var_dump() -->
+-  <!--
+-      var_dump()
+-      {main} %s%eobserver_backtrace_%d.php
+-  -->
+-  <var_dump>
+ array(2) {
+   [0]=>
+   int(42)
+   [1]=>
+   int(1337)
+ }
+-  </var_dump>
+ </file '%s%eobserver_backtrace_%d.php'>
+diff --git a/ext/zend_test/tests/observer_basic_01.phpt b/ext/zend_test/tests/observer_basic_01.phpt
+index b208ae23..369339fb 100644
+--- a/ext/zend_test/tests/observer_basic_01.phpt
++++ b/ext/zend_test/tests/observer_basic_01.phpt
+@@ -26,44 +26,30 @@ foo();
+ echo 'DONE' . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s%eobserver_basic_%d.php' -->
+-<file '%s%eobserver_basic_%d.php'>
++<!-- init '%s%eobserver_basic_01.php' -->
++<file '%s%eobserver_basic_01.php'>
+   <!-- init foo() -->
+   <foo>
+ Foo
+     <!-- init bar() -->
+     <bar>
+ Bar
+-      <!-- init array_sum() -->
+-      <array_sum>
+-      </array_sum>
+-      <!-- init var_dump() -->
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </bar>
+   </foo>
+   <foo>
+ Foo
+     <bar>
+ Bar
+-      <array_sum>
+-      </array_sum>
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </bar>
+   </foo>
+   <foo>
+ Foo
+     <bar>
+ Bar
+-      <array_sum>
+-      </array_sum>
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </bar>
+   </foo>
+ DONE
+-</file '%s%eobserver_basic_%d.php'>
++</file '%s%eobserver_basic_01.php'>
+diff --git a/ext/zend_test/tests/observer_basic_02.phpt b/ext/zend_test/tests/observer_basic_02.phpt
+index ac61a8b1..adbdc781 100644
+--- a/ext/zend_test/tests/observer_basic_02.phpt
++++ b/ext/zend_test/tests/observer_basic_02.phpt
+@@ -30,44 +30,30 @@ $test->foo();
+ echo 'DONE' . PHP_EOL;
+ ?>
+ --EXPECTF--
+-<!-- init '%s%eobserver_basic_%d.php' -->
+-<file '%s%eobserver_basic_%d.php'>
++<!-- init '%s%eobserver_basic_02.php' -->
++<file '%s%eobserver_basic_02.php'>
+   <!-- init TestClass::foo() -->
+   <TestClass::foo>
+ Foo
+     <!-- init TestClass::bar() -->
+     <TestClass::bar>
+ Bar
+-      <!-- init array_sum() -->
+-      <array_sum>
+-      </array_sum>
+-      <!-- init var_dump() -->
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </TestClass::bar>
+   </TestClass::foo>
+   <TestClass::foo>
+ Foo
+     <TestClass::bar>
+ Bar
+-      <array_sum>
+-      </array_sum>
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </TestClass::bar>
+   </TestClass::foo>
+   <TestClass::foo>
+ Foo
+     <TestClass::bar>
+ Bar
+-      <array_sum>
+-      </array_sum>
+-      <var_dump>
+ int(6)
+-      </var_dump>
+     </TestClass::bar>
+   </TestClass::foo>
+ DONE
+-</file '%s%eobserver_basic_%d.php'>
++</file '%s%eobserver_basic_02.php'>
+diff --git a/ext/zend_test/tests/observer_basic_06.phpt b/ext/zend_test/tests/observer_basic_06.phpt
+deleted file mode 100644
+index d27c340d..00000000
+--- a/ext/zend_test/tests/observer_basic_06.phpt
++++ /dev/null
+@@ -1,41 +0,0 @@
+---TEST--
+-Observer: Basic observability of functions only (with run-time swapping)
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_function_names=foo
+---FILE--
+-<?php
+-function foo()
+-{
+-    echo 'Foo' . PHP_EOL;
+-}
+-
+-function bar()
+-{
+-    echo 'Bar' . PHP_EOL;
+-}
+-
+-foo();
+-bar();
+-
+-ini_set("zend_test.observer.observe_function_names", "bar");
+-
+-foo();
+-bar();
+-
+-?>
+---EXPECTF--
+-<!-- init '%s%eobserver_basic_06.php' -->
+-<!-- init foo() -->
+-<foo>
+-Foo
+-</foo>
+-<!-- init bar() -->
+-Bar
+-<!-- init ini_set() -->
+-Foo
+-<bar>
+-Bar
+-</bar>

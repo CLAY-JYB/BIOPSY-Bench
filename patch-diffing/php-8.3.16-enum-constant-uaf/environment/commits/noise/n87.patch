@@ -1,0 +1,189 @@
+diff --git a/ext/curl/tests/curl_copy_handle_basic_006.phpt b/ext/curl/tests/curl_copy_handle_basic_006.phpt
+index 5d350584..0aaacb70 100644
+--- a/ext/curl/tests/curl_copy_handle_basic_006.phpt
++++ b/ext/curl/tests/curl_copy_handle_basic_006.phpt
+@@ -26,7 +26,7 @@ curl
+   var_dump( curl_exec($ch) );
+   var_dump( curl_exec($copy) );
+ 
+-  curl_close($ch); // cannot close original handle before curl_exec($copy) since it causes char * inputs to be invalid (see also: http://curl.haxx.se/libcurl/c/curl_easy_duphandle.html)
++  curl_close($ch); // can not close original handle before curl_exec($copy) since it causes char * inputs to be invalid (see also: http://curl.haxx.se/libcurl/c/curl_easy_duphandle.html)
+   curl_close($copy);
+ 
+ ?>
+diff --git a/ext/curl/tests/curl_copy_handle_xferinfo.phpt b/ext/curl/tests/curl_copy_handle_xferinfo.phpt
+deleted file mode 100644
+index 55050551..00000000
+--- a/ext/curl/tests/curl_copy_handle_xferinfo.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Test curl_copy_handle() with CURLOPT_XFERINFOFUNCTION
+---EXTENSIONS--
+-curl
+---FILE--
+-<?php
+-  include 'server.inc';
+-  $host = curl_cli_server_start();
+-
+-  $url = "{$host}/get.inc";
+-  $ch = curl_init($url);
+-
+-  curl_setopt($ch, CURLOPT_NOPROGRESS, 0);
+-  curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+-  curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function() { static $done = false; if (!$done) { echo "Download progress!\n"; $done = true; } });
+-  $ch2 = curl_copy_handle($ch);
+-  echo curl_exec($ch), PHP_EOL;
+-  unset($ch);
+-  echo curl_exec($ch2);
+-
+-?>
+---EXPECT--
+-Download progress!
+-Hello World!
+-Hello World!
+-Hello World!
+-Hello World!
+diff --git a/ext/curl/tests/curl_postfields_array.phpt b/ext/curl/tests/curl_postfields_array.phpt
+deleted file mode 100644
+index 4fe41eb1..00000000
+--- a/ext/curl/tests/curl_postfields_array.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-CURLOPT_POSTFIELDS with multi-value fields
+---EXTENSIONS--
+-curl
+-sockets
+---FILE--
+-<?php
+-$socket = stream_socket_server("tcp://0.0.0.0:29999", $errno, $errstr);
+-
+-if (!$socket) {
+-	echo "$errstr ($errno)<br />\n";
+-	return;
+-}
+-
+-$url = "http://127.0.0.1:29999/get.inc?test=raw";
+-
+-$fields = [
+-	'single' => 'SingleValue',
+-	'multi' => [
+-		'Multi1',
+-		'Multi2',
+-	]
+-];
+-
+-$options = [
+-	CURLOPT_POST => 1,
+-	CURLOPT_HEADER => 0,
+-	CURLOPT_URL => $url,
+-	CURLOPT_FRESH_CONNECT => 1,
+-	CURLOPT_RETURNTRANSFER => 1,
+-	CURLOPT_FORBID_REUSE => 1,
+-	CURLOPT_TIMEOUT => 1,
+-	CURLOPT_POSTFIELDS => $fields,
+-	CURLOPT_HTTPHEADER => [ 'Expect:' ],
+-];
+-
+-$ch = curl_init();
+-curl_setopt_array($ch, $options);
+-
+-$curl_content = curl_exec($ch);
+-curl_close($ch);
+-	
+-$conn = stream_socket_accept($socket);
+-echo stream_get_contents($conn);
+-?>
+---EXPECTF--
+-POST /get.inc?test=raw HTTP/1.1
+-Host: %s
+-Accept: */*
+-Content-Length: %d
+-Content-Type: multipart/form-data; boundary=------------------------%s
+-
+---------------------------%s
+-Content-Disposition: form-data; name="single"
+-
+-SingleValue
+---------------------------%s
+-Content-Disposition: form-data; name="multi"
+-
+-Multi1
+---------------------------%s
+-Content-Disposition: form-data; name="multi"
+-
+-Multi2
+---------------------------%s--
+diff --git a/ext/curl/tests/curl_upkeep_001.phpt b/ext/curl/tests/curl_upkeep_001.phpt
+deleted file mode 100644
+index f0680e5c..00000000
+--- a/ext/curl/tests/curl_upkeep_001.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-curl_upkeep() function
+---EXTENSIONS--
+-curl
+---SKIPIF--
+-<?php
+-if (getenv("SKIP_ONLINE_TESTS")) die("skip online test");
+-if (curl_version()['version_number'] < 0x073e00) die('skip requires curl >= 7.62.0');
+-?>
+---FILE--
+-<?php
+-
+-$url = "https://example.com";
+-
+-$ch = curl_init();
+-curl_setopt($ch,CURLOPT_URL,$url);
+-curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+-curl_setopt($ch,CURLOPT_HTTP_VERSION,CURL_HTTP_VERSION_2_0);
+-curl_setopt($ch,CURLOPT_SSL_VERIFYPEER,false);
+-curl_setopt($ch, CURLOPT_UPKEEP_INTERVAL_MS, 200);
+-if (curl_exec($ch)) {
+-    usleep(300);
+-    var_dump(curl_upkeep($ch));
+-}
+-curl_close($ch);
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/ext/date/config.w32 b/ext/date/config.w32
+index cf9e220c..4223cbcf 100644
+--- a/ext/date/config.w32
++++ b/ext/date/config.w32
+@@ -8,8 +8,7 @@ ADD_FLAG('CFLAGS_DATE', "/wd4244");
+ 
+ var tl_config = FSO.CreateTextFile("ext/date/lib/timelib_config.h", true);
+ tl_config.WriteLine("#include \"config.w32.h\"");
+-tl_config.WriteLine("#include <inttypes.h>");
+-tl_config.WriteLine("#include <stdint.h>");
++tl_config.WriteLine("#include <php_stdint.h>");
+ tl_config.WriteLine("#include \"zend.h\"");
+ tl_config.WriteLine("#define timelib_malloc  emalloc");
+ tl_config.WriteLine("#define timelib_realloc erealloc");
+diff --git a/ext/date/config0.m4 b/ext/date/config0.m4
+index 6b803bf3..18b8106b 100644
+--- a/ext/date/config0.m4
++++ b/ext/date/config0.m4
+@@ -23,8 +23,7 @@ cat > $ext_builddir/lib/timelib_config.h <<EOF
+ #else
+ # include <php_config.h>
+ #endif
+-#include <inttypes.h>
+-#include <stdint.h>
++#include <php_stdint.h>
+ 
+ #include "zend.h"
+ 
+diff --git a/ext/date/lib/README.rst b/ext/date/lib/README.rst
+index 80b959b5..7a6d856c 100644
+--- a/ext/date/lib/README.rst
++++ b/ext/date/lib/README.rst
+@@ -11,4 +11,4 @@ support.
+ Build Requirements
+ ------------------
+ 
+-On Debian: ``apt install libcpputest-dev re2c``
++On Debian: ``apt install libcpputest-dev``

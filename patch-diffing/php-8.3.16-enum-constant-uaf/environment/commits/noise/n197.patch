@@ -1,0 +1,191 @@
+diff --git a/ext/mysqlnd/mysqlnd_structs.h b/ext/mysqlnd/mysqlnd_structs.h
+index 57ab51b8..64420465 100644
+--- a/ext/mysqlnd/mysqlnd_structs.h
++++ b/ext/mysqlnd/mysqlnd_structs.h
+@@ -352,7 +352,7 @@ MYSQLND_CLASS_METHODS_TYPE(mysqlnd_command)
+ 
+ 
+ 
+-typedef void				(*func_mysqlnd_vio__init)(MYSQLND_VIO * const vio, MYSQLND_STATS * const stats, MYSQLND_ERROR_INFO * const error_info);
++typedef enum_func_status	(*func_mysqlnd_vio__init)(MYSQLND_VIO * const vio, MYSQLND_STATS * const stats, MYSQLND_ERROR_INFO * const error_info);
+ typedef void				(*func_mysqlnd_vio__dtor)(MYSQLND_VIO * const vio, MYSQLND_STATS * const conn_stats, MYSQLND_ERROR_INFO * const error_info);
+ 
+ typedef enum_func_status	(*func_mysqlnd_vio__connect)(MYSQLND_VIO * const vio, const MYSQLND_CSTRING scheme, const bool persistent, MYSQLND_STATS * const conn_stats, MYSQLND_ERROR_INFO * const error_info);
+@@ -486,8 +486,8 @@ typedef enum_func_status	(*func_mysqlnd_conn_data__free_reference)(MYSQLND_CONN_
+ typedef enum_func_status	(*func_mysqlnd_conn_data__send_command_do_request)(MYSQLND_CONN_DATA * const conn, const enum php_mysqlnd_server_command command, const zend_uchar * const arg, const size_t arg_len, const bool silent, const bool ignore_upsert_status);
+ typedef enum_func_status	(*func_mysqlnd_conn_data__send_command_handle_response)(MYSQLND_CONN_DATA * const conn, const enum mysqlnd_packet_type ok_packet, const bool silent, const enum php_mysqlnd_server_command command, const bool ignore_upsert_status);
+ 
+-typedef void				(*func_mysqlnd_conn_data__restart_psession)(MYSQLND_CONN_DATA * conn);
+-typedef void				(*func_mysqlnd_conn_data__end_psession)(MYSQLND_CONN_DATA * conn);
++typedef enum_func_status	(*func_mysqlnd_conn_data__restart_psession)(MYSQLND_CONN_DATA * conn);
++typedef enum_func_status	(*func_mysqlnd_conn_data__end_psession)(MYSQLND_CONN_DATA * conn);
+ typedef enum_func_status	(*func_mysqlnd_conn_data__send_close)(MYSQLND_CONN_DATA * conn);
+ 
+ typedef enum_func_status    (*func_mysqlnd_conn_data__ssl_set)(MYSQLND_CONN_DATA * const conn, const char * key, const char * const cert, const char * const ca, const char * const capath, const char * const cipher);
+@@ -632,7 +632,7 @@ typedef void 				(*func_mysqlnd_res__fetch_into)(MYSQLND_RES *result, const unsi
+ typedef MYSQLND_ROW_C 		(*func_mysqlnd_res__fetch_row_c)(MYSQLND_RES *result);
+ typedef uint64_t			(*func_mysqlnd_res__num_rows)(const MYSQLND_RES * const result);
+ typedef unsigned int		(*func_mysqlnd_res__num_fields)(const MYSQLND_RES * const result);
+-typedef void				(*func_mysqlnd_res__skip_result)(MYSQLND_RES * const result);
++typedef enum_func_status	(*func_mysqlnd_res__skip_result)(MYSQLND_RES * const result);
+ typedef enum_func_status	(*func_mysqlnd_res__seek_data)(MYSQLND_RES * const result, const uint64_t row);
+ typedef MYSQLND_FIELD_OFFSET (*func_mysqlnd_res__seek_field)(MYSQLND_RES * const result, const MYSQLND_FIELD_OFFSET field_offset);
+ typedef MYSQLND_FIELD_OFFSET (*func_mysqlnd_res__field_tell)(const MYSQLND_RES * const result);
+@@ -1085,9 +1085,9 @@ typedef struct st_mysqlnd_read_buffer {
+ 
+ 
+ 
+-typedef void				(*func_mysqlnd_pfc__init)(MYSQLND_PFC * const pfc, MYSQLND_STATS * const stats, MYSQLND_ERROR_INFO * const error_info);
++typedef enum_func_status	(*func_mysqlnd_pfc__init)(MYSQLND_PFC * const pfc, MYSQLND_STATS * const stats, MYSQLND_ERROR_INFO * const error_info);
+ typedef void				(*func_mysqlnd_pfc__dtor)(MYSQLND_PFC * const pfc, MYSQLND_STATS * const conn_stats, MYSQLND_ERROR_INFO * const error_info);
+-typedef void				(*func_mysqlnd_pfc__reset)(MYSQLND_PFC * const pfc, MYSQLND_STATS * const conn_stats, MYSQLND_ERROR_INFO * const error_info);
++typedef enum_func_status	(*func_mysqlnd_pfc__reset)(MYSQLND_PFC * const pfc, MYSQLND_STATS * const conn_stats, MYSQLND_ERROR_INFO * const error_info);
+ typedef enum_func_status	(*func_mysqlnd_pfc__set_client_option)(MYSQLND_PFC * const pfc, enum_mysqlnd_client_option option, const char * const value);
+ typedef enum_func_status	(*func_mysqlnd_pfc__decode)(zend_uchar * uncompressed_data, const size_t uncompressed_data_len, const zend_uchar * const compressed_data, const size_t compressed_data_len);
+ typedef enum_func_status	(*func_mysqlnd_pfc__encode)(zend_uchar * compress_buffer, size_t * compress_buffer_len, const zend_uchar * const uncompressed_data, const size_t uncompressed_data_len);
+diff --git a/ext/mysqlnd/mysqlnd_vio.c b/ext/mysqlnd/mysqlnd_vio.c
+index 312bf7e2..cd9c714f 100644
+--- a/ext/mysqlnd/mysqlnd_vio.c
++++ b/ext/mysqlnd/mysqlnd_vio.c
+@@ -672,7 +672,7 @@ MYSQLND_METHOD(mysqlnd_vio, close_stream)(MYSQLND_VIO * const net, MYSQLND_STATS
+ 
+ 
+ /* {{{ mysqlnd_vio::init */
+-static void
++static enum_func_status
+ MYSQLND_METHOD(mysqlnd_vio, init)(MYSQLND_VIO * const net, MYSQLND_STATS * const stats, MYSQLND_ERROR_INFO * const error_info)
+ {
+ 	unsigned int buf_size;
+@@ -684,7 +684,7 @@ MYSQLND_METHOD(mysqlnd_vio, init)(MYSQLND_VIO * const net, MYSQLND_STATS * const
+ 	buf_size = MYSQLND_G(net_read_timeout); /* this is long, cast to unsigned int*/
+ 	net->data->m.set_client_option(net, MYSQL_OPT_READ_TIMEOUT, (char *)&buf_size);
+ 
+-	DBG_VOID_RETURN;
++	DBG_RETURN(PASS);
+ }
+ /* }}} */
+ 
+diff --git a/ext/mysqlnd/mysqlnd_wireprotocol.c b/ext/mysqlnd/mysqlnd_wireprotocol.c
+index 30d7415d..859051db 100644
+--- a/ext/mysqlnd/mysqlnd_wireprotocol.c
++++ b/ext/mysqlnd/mysqlnd_wireprotocol.c
+@@ -582,7 +582,7 @@ size_t php_mysqlnd_auth_write(MYSQLND_CONN_DATA * conn, void * _packet)
+ 			{
+ 				zend_string * key;
+ 				zval * entry_value;
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(packet->connect_attr, key, entry_value) {
++				ZEND_HASH_FOREACH_STR_KEY_VAL(packet->connect_attr, key, entry_value) {
+ 					if (key) { /* HASH_KEY_IS_STRING */
+ 						size_t value_len = Z_STRLEN_P(entry_value);
+ 
+@@ -600,7 +600,7 @@ size_t php_mysqlnd_auth_write(MYSQLND_CONN_DATA * conn, void * _packet)
+ 				{
+ 					zend_string * key;
+ 					zval * entry_value;
+-					ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(packet->connect_attr, key, entry_value) {
++					ZEND_HASH_FOREACH_STR_KEY_VAL(packet->connect_attr, key, entry_value) {
+ 						if (key) { /* HASH_KEY_IS_STRING */
+ 							size_t value_len = Z_STRLEN_P(entry_value);
+ 
+diff --git a/ext/mysqlnd/php_mysqlnd.c b/ext/mysqlnd/php_mysqlnd.c
+index ceea56a8..dd7ded12 100644
+--- a/ext/mysqlnd/php_mysqlnd.c
++++ b/ext/mysqlnd/php_mysqlnd.c
+@@ -34,7 +34,7 @@ mysqlnd_minfo_print_hash(zval *values)
+ 	zval *values_entry;
+ 	zend_string	*string_key;
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(values), string_key, values_entry) {
++	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(values), string_key, values_entry) {
+ 		convert_to_string(values_entry);
+ 		php_info_print_table_row(2, ZSTR_VAL(string_key), Z_STRVAL_P(values_entry));
+ 	} ZEND_HASH_FOREACH_END();
+@@ -66,7 +66,7 @@ mysqlnd_minfo_dump_api_plugins(smart_str * buffer)
+ 	HashTable *ht = mysqlnd_reverse_api_get_api_list();
+ 	MYSQLND_REVERSE_API *ext;
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(ht, ext) {
++	ZEND_HASH_FOREACH_PTR(ht, ext) {
+ 		if (buffer->s) {
+ 			smart_str_appendc(buffer, ',');
+ 		}
+diff --git a/ext/oci8/LICENSE b/ext/oci8/LICENSE
+index dffd7eab..6a15be58 100644
+--- a/ext/oci8/LICENSE
++++ b/ext/oci8/LICENSE
+@@ -1,6 +1,6 @@
+ --------------------------------------------------------------------
+                   The PHP License, version 3.01
+-Copyright (c) 1999 - 2022 The PHP Group. All rights reserved.
++Copyright (c) 1999 - 2021 The PHP Group. All rights reserved.
+ --------------------------------------------------------------------
+ 
+ Redistribution and use in source and binary forms, with or without
+diff --git a/ext/oci8/README.md b/ext/oci8/README.md
+index d0c0c3be..eb2149e2 100644
+--- a/ext/oci8/README.md
++++ b/ext/oci8/README.md
+@@ -4,16 +4,16 @@ Use the OCI8 extension to access Oracle Database.
+ 
+ Documentation is at https://www.php.net/oci8
+ 
+-Use `pecl install oci8` to install for PHP 8.2.
++Use `pecl install oci8` to install for PHP 8.
+ 
+-Use `pecl install oci8-3.2.1` to install for PHP 8.1.
++Use `pecl install oci8-2.2.0` to install for PHP 7.
+ 
+-Use `pecl install oci8-3.0.1` to install for PHP 8.0.
++Use `pecl install oci8-2.0.12` to install for PHP 5.2 - PHP 5.6.
+ 
+-Use `pecl install oci8-2.2.0` to install for PHP 7.
++Use `pecl install oci8-1.4.10` to install for PHP 4.3.9 - PHP 5.1.
+ 
+ The OCI8 extension can be linked with Oracle client libraries from Oracle
+-Database 11.2 or later.  These libraries are found in your database
++Database 10.2 or later.  These libraries are found in your database
+ installation, or in the free Oracle Instant Client from
+ https://www.oracle.com/database/technologies/instant-client.html
+ Install the 'Basic' or 'Basic Light' Instant Client package. If building from
+diff --git a/ext/oci8/config.m4 b/ext/oci8/config.m4
+index 714c655b..89da625e 100644
+--- a/ext/oci8/config.m4
++++ b/ext/oci8/config.m4
+@@ -211,13 +211,7 @@ if test "$PHP_OCI8" != "no"; then
+   oci8_php_version=`expr [$]1 \* 1000000 + [$]2 \* 1000 + [$]3`
+ 
+   if test "$oci8_php_version" -lt "5002000"; then
+-    AC_MSG_ERROR([You need at least PHP 8.1.0 to be able to use this version of OCI8. Use OCI8 1.4 for PHP $php_version])
+-  elif test "$oci8_php_version" -lt "7000000"; then
+-    AC_MSG_ERROR([You need at least PHP 8.1.0 to be able to use this version of OCI8. Use OCI8 2.0 for PHP $php_version])
+-  elif test "$oci8_php_version" -lt "8000000"; then
+-    AC_MSG_ERROR([You need at least PHP 8.1.0 to be able to use this version of OCI8. Use OCI8 2.2 for PHP $php_version])
+-  elif test "$oci8_php_version" -lt "8001000"; then
+-    AC_MSG_ERROR([You need at least PHP 8.1.0 to be able to use this version of OCI8. Use OCI8 3.0 for PHP $php_version])
++    AC_MSG_ERROR([You need at least PHP 5.2.0 to be able to use this version of OCI8. PHP $php_version found])
+   else
+     AC_MSG_RESULT([$php_version, ok])
+   fi
+@@ -340,8 +334,8 @@ if test "$PHP_OCI8" != "no"; then
+     AC_OCI8_ORACLE_VERSION($OCI8_DIR)
+ 
+     case $OCI8_ORACLE_VERSION in
+-      7.3|8.0|8.1|9.0|10.1)
+-	AC_MSG_ERROR([Oracle Client libraries < 11.2 are not supported])
++      7.3|8.0|8.1|9.0)
++	AC_MSG_ERROR([Oracle client libraries < 10 are not supported])
+ 	;;
+     esac
+ 
+@@ -413,11 +407,6 @@ if test "$PHP_OCI8" != "no"; then
+     fi
+ 
+     AC_OCI8IC_VERSION($PHP_OCI8_INSTANT_CLIENT)
+-    case $OCI8_ORACLE_VERSION in
+-      10.1)
+-	AC_MSG_ERROR([Oracle Client libraries < 11.2 are not supported])
+-      ;;
+-    esac
+     PHP_ADD_LIBRARY(clntsh, 1, OCI8_SHARED_LIBADD)
+     PHP_ADD_LIBPATH($PHP_OCI8_INSTANT_CLIENT, OCI8_SHARED_LIBADD)
+ 

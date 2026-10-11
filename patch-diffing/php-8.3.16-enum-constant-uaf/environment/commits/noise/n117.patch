@@ -1,0 +1,279 @@
+diff --git a/ext/dba/tests/dba_db4_handlers.phpt b/ext/dba/tests/dba_db4_handlers.phpt
+index 0358ed63..b0056cf6 100644
+--- a/ext/dba/tests/dba_db4_handlers.phpt
++++ b/ext/dba/tests/dba_db4_handlers.phpt
+@@ -2,8 +2,6 @@
+ DBA DB4 Handler Test
+ --EXTENSIONS--
+ dba
+---CONFLICTS--
+-dba
+ --SKIPIF--
+ <?php
+ $handler="db4";
+diff --git a/ext/dba/tests/dba_db4_optimize.phpt b/ext/dba/tests/dba_db4_optimize.phpt
+index 9c736c41..11895c88 100644
+--- a/ext/dba/tests/dba_db4_optimize.phpt
++++ b/ext/dba/tests/dba_db4_optimize.phpt
+@@ -2,8 +2,6 @@
+ DBA DB4 Optimize Test
+ --EXTENSIONS--
+ dba
+---CONFLICTS--
+-dba
+ --SKIPIF--
+ <?php
+ $handler = "db4";
+diff --git a/ext/dba/tests/dba_db4_sync.phpt b/ext/dba/tests/dba_db4_sync.phpt
+index b7b39aba..50311547 100644
+--- a/ext/dba/tests/dba_db4_sync.phpt
++++ b/ext/dba/tests/dba_db4_sync.phpt
+@@ -2,8 +2,6 @@
+ DBA DB4 Sync Test
+ --EXTENSIONS--
+ dba
+---CONFLICTS--
+-dba
+ --SKIPIF--
+ <?php
+ $handler = "db4";
+diff --git a/ext/dba/tests/dba_dbm.phpt b/ext/dba/tests/dba_dbm.phpt
+index 38403593..17e3d7a9 100644
+--- a/ext/dba/tests/dba_dbm.phpt
++++ b/ext/dba/tests/dba_dbm.phpt
+@@ -4,42 +4,46 @@ DBA DBM handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('dbm');
++    $handler = 'dbm';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_dbm.db';
+-
+-$handler = 'dbm';
+-set_up_db($handler, $db_name, false /* Locking done by the library */);
+-run_standard_tests($handler, $db_name, false /* Locking done by the library */);
+-
++    $handler = 'dbm';
++    require_once __DIR__ .'/test.inc';
++    require_once __DIR__ .'/dba_handler.inc';
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_dbm.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+-key4: Another Content String
+-key2: Content String 2
+-key5: The last content string
+-Total keys: 3
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
++database handler: dbm
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Delete "key4"
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
+ array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+diff --git a/ext/dba/tests/dba_fetch_legacy_signature.phpt b/ext/dba/tests/dba_fetch_legacy_signature.phpt
+deleted file mode 100644
+index 7bb71372..00000000
+--- a/ext/dba/tests/dba_fetch_legacy_signature.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-dba_fetch() legacy signature
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'legacy_fetch_signature.db';
+-
+-$db = get_any_db($name);
+-
+-dba_insert("key1", "This is a test insert", $db);
+-echo dba_fetch("key1", 0, $db), \PHP_EOL, dba_fetch("key1", $db, 0);
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'legacy_fetch_signature.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-This is a test insert
+-This is a test insert
+diff --git a/ext/dba/tests/dba_flags_arg.phpt b/ext/dba/tests/dba_flags_arg.phpt
+deleted file mode 100644
+index 6a387b51..00000000
+--- a/ext/dba/tests/dba_flags_arg.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-DBA new flags ValueError test
+---EXTENSIONS--
+-dba
+---FILE--
+-<?php
+-try {
+-    dba_open('irrelevant', 'c', 'handler', flags: -1);
+-} catch (\ValueError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-?>
+---EXPECT--
+-dba_open(): Argument #6 ($flags) must be greater than or equal to 0
+diff --git a/ext/dba/tests/dba_flatfile.phpt b/ext/dba/tests/dba_flatfile.phpt
+index 9d989e90..955df6d1 100644
+--- a/ext/dba/tests/dba_flatfile.phpt
++++ b/ext/dba/tests/dba_flatfile.phpt
+@@ -4,70 +4,51 @@ DBA FlatFile handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('flatfile');
++    $handler = 'flatfile';
++    require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_flatfile.db';
+-
+-$handler = 'flatfile';
+-run_standard_tests($handler, $db_name);
+-
++    $handler = 'flatfile';
++    require_once(__DIR__ .'/test.inc');
++    require_once(__DIR__ .'/dba_handler.inc');
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_flatfile.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: flatfile
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)

@@ -1,0 +1,412 @@
+diff --git a/Zend/tests/bug81104.phpt b/Zend/tests/bug81104.phpt
+index 8e7d7e7d..fec7a7d2 100644
+--- a/Zend/tests/bug81104.phpt
++++ b/Zend/tests/bug81104.phpt
+@@ -5,7 +5,6 @@ memory_limit=5M
+ report_memleaks=0
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class X {
+     public $x;
+     public function __construct() { $this->x = [$this]; }
+diff --git a/Zend/tests/by_ref_optimization.phpt b/Zend/tests/by_ref_optimization.phpt
+deleted file mode 100644
+index 02431b6c..00000000
+--- a/Zend/tests/by_ref_optimization.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-Don't optimize send opcodes that differ in by-ref behavior
+---FILE--
+-<?php
+-
+-call_user_func('ref', function_exists('strlen'));
+-ref(function_exists('strlen'));
+-
+-function ref(&$x) {
+-    var_dump($x);
+-}
+-
+-?>
+---EXPECTF--
+-Warning: ref(): Argument #1 ($x) must be passed by reference, value given in %s on line %d
+-bool(true)
+-
+-Notice: Only variables should be passed by reference in %s on line %d
+-bool(true)
+diff --git a/Zend/tests/callable_self_parent_static_deprecation.phpt b/Zend/tests/callable_self_parent_static_deprecation.phpt
+deleted file mode 100644
+index d01713d4..00000000
+--- a/Zend/tests/callable_self_parent_static_deprecation.phpt
++++ /dev/null
+@@ -1,300 +0,0 @@
+---TEST--
+-Deprecation of self/parent/static in callables
+---FILE--
+-<?php
+-
+-class A {
+-    public function foo() {}
+-}
+-class B extends A {
+-    public function test() {
+-        // Different callables using self/parent/static
+-        $variants = [
+-            '"self::foo"'            => "self::foo",
+-            '"parent::foo"'          => "parent::foo",
+-            '"static::foo"'          => "static::foo",
+-            '["self", "foo"]'        => ["self", "foo"],
+-            '["parent", "foo"]'      => ["parent", "foo"],
+-            '["static", "foo"]'      => ["static", "foo"],
+-            '["B", "self::foo"]'     => ["B", "self::foo"],
+-            '["B", "parent::foo"]'   => ["B", "parent::foo"],
+-            '["B", "static::foo"]'   => ["B", "static::foo"],
+-            '["B", "A::foo"]'        => ["B", "A::foo"],
+-            '[$this, "self::foo"]'   => [$this, "self::foo"],
+-            '[$this, "parent::foo"]' => [$this, "parent::foo"],
+-            '[$this, "static::foo"]' => [$this, "static::foo"],
+-            '[$this, "A::foo"]'      => [$this, "A::foo"],
+-        ];
+-
+-        echo "==> Test call_user_func\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            call_user_func($callable);
+-        }
+-        echo "\n==> Test call_user_func_array\n";
+-        foreach ($variants as $description => $callable) {
+-                    echo "$description\n";
+-            call_user_func_array($callable, []);
+-        }
+-
+-        // Also applies to other things performing calls
+-        echo "\n==> Test array_map\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            array_map($callable, [1]);
+-        }
+-
+-        echo "\n==> Test is_callable()\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            var_dump(is_callable($callable));
+-        }
+-
+-        echo "\n==> Test callable type hint\n";
+-        foreach ($variants as $description => $callable) {
+-            echo "$description\n";
+-            $this->callableTypeHint($callable);
+-        }
+-    }
+-
+-    public function callableTypeHint(callable $c) {}
+-}
+-
+-$b = new B;
+-$b->test();
+-
+-?>
+---EXPECTF--
+-==> Test call_user_func
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test call_user_func_array
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test array_map
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-
+-==> Test is_callable()
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-bool(true)
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(true)
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-bool(true)
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-bool(true)
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(true)
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-bool(true)
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-bool(true)
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-bool(true)
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-bool(true)
+-
+-==> Test callable type hint
+-"self::foo"
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-"parent::foo"
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-"static::foo"
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["self", "foo"]
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-["parent", "foo"]
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-["static", "foo"]
+-
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
+-["B", "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-["B", "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-["B", "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-["B", "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+-[$this, "self::foo"]
+-
+-Deprecated: Callables of the form ["B", "self::foo"] are deprecated in %s on line %d
+-[$this, "parent::foo"]
+-
+-Deprecated: Callables of the form ["B", "parent::foo"] are deprecated in %s on line %d
+-[$this, "static::foo"]
+-
+-Deprecated: Callables of the form ["B", "static::foo"] are deprecated in %s on line %d
+-[$this, "A::foo"]
+-
+-Deprecated: Callables of the form ["B", "A::foo"] are deprecated in %s on line %d
+diff --git a/Zend/tests/class_alias_009.phpt b/Zend/tests/class_alias_009.phpt
+index bb723125..f17769e1 100644
+--- a/Zend/tests/class_alias_009.phpt
++++ b/Zend/tests/class_alias_009.phpt
+@@ -11,4 +11,4 @@ interface c extends a, b { }
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Interface c cannot implement previously implemented interface a in %s on line %d
++Fatal error: Class c cannot implement previously implemented interface a in %s on line %d
+diff --git a/Zend/tests/closure_020.phpt b/Zend/tests/closure_020.phpt
+index 55a2a01b..7d98dd2d 100644
+--- a/Zend/tests/closure_020.phpt
++++ b/Zend/tests/closure_020.phpt
+@@ -5,7 +5,6 @@ Closure 020: Trying to access private property outside class
+ 
+ class foo {
+     private $test = 3;
+-    public $a;
+ 
+     public function x() {
+         $a = &$this;
+diff --git a/Zend/tests/closure_026.phpt b/Zend/tests/closure_026.phpt
+index c586a7d7..0dba62fc 100644
+--- a/Zend/tests/closure_026.phpt
++++ b/Zend/tests/closure_026.phpt
+@@ -4,7 +4,6 @@ Closure 026: Assigning a closure object to an array in $this
+ <?php
+ 
+ class foo {
+-    public $a;
+     public function __construct() {
+         $a =& $this;
+ 
+diff --git a/Zend/tests/closures/closure_from_callable_basic.phpt b/Zend/tests/closures/closure_from_callable_basic.phpt
+index 7c7fdf5a..88a27c7e 100644
+--- a/Zend/tests/closures/closure_from_callable_basic.phpt
++++ b/Zend/tests/closures/closure_from_callable_basic.phpt
+@@ -96,7 +96,7 @@ echo $fn(" OK".PHP_EOL);
+ 
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ Access public static function OK
+ Access public static function with different case OK
+ Access public static function with colon scheme OK
+@@ -111,17 +111,9 @@ Instance return private static method as callable OK
+ Instance return protected static method as callable OK
+ Subclass closure over parent class protected method OK
+ Subclass closure over parent class static protected method OK
+-Access public instance method of parent object through "parent::" 
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+- OK
+-Access public instance method of self object through "self::" 
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+- OK
+-Access public instance method of parent object through "self::" to parent method
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+- OK
+-Access protected instance method of parent object through "self::" to parent method
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+- OK
++Access public instance method of parent object through "parent::"  OK
++Access public instance method of self object through "self::"  OK
++Access public instance method of parent object through "self::" to parent method OK
++Access protected instance method of parent object through "self::" to parent method OK
+ MagicCall __call instance method __call,nonExistentMethod, OK
+ MagicCall __callStatic static method __callStatic,nonExistentMethod, OK

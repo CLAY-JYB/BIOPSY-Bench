@@ -1,0 +1,446 @@
+diff --git a/ext/dba/tests/dba_db4_013.phpt b/ext/dba/tests/dba_db4_013.phpt
+new file mode 100644
+index 00000000..f0018339
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_013.phpt
+@@ -0,0 +1,42 @@
++--TEST--
++DBA DB4 File open("rl") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_close($db_file);
++}
++
++if (($db_file = dba_popen($db_filename, "rl", $handler)) !== FALSE) {
++    echo "database file opened\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++database file created
++database file opened
++
++Warning: dba_insert(): You cannot perform a modification to a database without proper access in %sdba_db4_013.php on line %d
+diff --git a/ext/dba/tests/dba_db4_014.phpt b/ext/dba/tests/dba_db4_014.phpt
+new file mode 100644
+index 00000000..31e25304
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_014.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 File open("wl") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file = dba_open($db_filename, "wl", $handler)) !== FALSE) {
++    echo "database file opened\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++
++Warning: dba_open(%stest0.dbm,wl): Driver initialization failed for handler: db4: No such file or directory in %sdba_db4_014.php on line %d
++Error creating %stest0.dbm
+diff --git a/ext/dba/tests/dba_db4_015.phpt b/ext/dba/tests/dba_db4_015.phpt
+new file mode 100644
+index 00000000..e3a3332d
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_015.phpt
+@@ -0,0 +1,41 @@
++--TEST--
++DBA DB4 File open("wl") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_close($db_file);
++}
++
++if (($db_file = dba_popen($db_filename, "wl", $handler)) !== FALSE) {
++    echo "database file opened\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++database file opened
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_016.phpt b/ext/dba/tests/dba_db4_016.phpt
+new file mode 100644
+index 00000000..f0550530
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_016.phpt
+@@ -0,0 +1,61 @@
++--TEST--
++DBA DB4 File Creation popen("c") with existing valid file
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        var_dump(dba_insert("key1", "This is a test insert", $db_file));
++        echo dba_fetch("key1", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++// Now test reopening it
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        var_dump(dba_insert("key1", "second open test", $db_file));
++        var_dump(dba_insert("key2", "second open test row 2", $db_file));
++        echo dba_fetch("key1", $db_file), "\n";
++        echo dba_fetch("key2", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++bool(true)
++This is a test insert
++database file created
++bool(false)
++bool(true)
++This is a test insert
++second open test row 2
+diff --git a/ext/dba/tests/dba_db4_017.phpt b/ext/dba/tests/dba_db4_017.phpt
+new file mode 100644
+index 00000000..74e6cb73
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_017.phpt
+@@ -0,0 +1,39 @@
++--TEST--
++DBA DB4 file creation dba_open("cd")
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++if (($db_file = dba_open($db_filename, "cd", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        var_dump(dba_insert("key1", "This is a test insert", $db_file));
++        echo dba_fetch("key1", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++bool(true)
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_018.phpt b/ext/dba/tests/dba_db4_018.phpt
+index dd360a2e..447c6b24 100644
+--- a/ext/dba/tests/dba_db4_018.phpt
++++ b/ext/dba/tests/dba_db4_018.phpt
+@@ -2,8 +2,6 @@
+ DBA DB4 with persistent connections
+ --EXTENSIONS--
+ dba
+---CONFLICTS--
+-dba
+ --SKIPIF--
+ <?php
+ $handler = "db4";
+@@ -56,6 +54,8 @@ echo dba_fetch("key2", $db_file1), "\n";
+ <?php
+     require(__DIR__ .'/clean.inc');
+ ?>
++--XFAIL--
++Test 6 crashes with dba pointer of NULL, bug http://bugs.php.net/bug.php?id=51278
+ --EXPECTF--
+ database handler: db4
+ Test 1
+diff --git a/ext/dba/tests/dba_db4_creation_matrix.phpt b/ext/dba/tests/dba_db4_creation_matrix.phpt
+deleted file mode 100644
+index 2abfde5e..00000000
+--- a/ext/dba/tests/dba_db4_creation_matrix.phpt
++++ /dev/null
+@@ -1,171 +0,0 @@
+---TEST--
+-DBA DB4 opening matrix of combination
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-
+-$handler = 'db4';
+-run_creation_tests($handler);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$handler = 'db4';
+-clean_creation_tests($handler);
+-?>
+---EXPECTF--
+-=== OPENING NON-EXISTING FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "rd":
+-
+-Warning: dba_open(db4_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r":
+-
+-Warning: dba_open(db4_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(db4_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(db4_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-This is a test insert
+-Mode parameter is "cd":
+-This is a test insert
+-Mode parameter is "c-":
+-This is a test insert
+-Mode parameter is "c":
+-This is a test insert
+-Mode parameter is "nl":
+-This is a test insert
+-Mode parameter is "nd":
+-This is a test insert
+-Mode parameter is "n-":
+-This is a test insert
+-Mode parameter is "n":
+-This is a test insert
+-=== OPENING EXISTING DB FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "rd":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r-":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "wl":
+-This is a test insert
+-Mode parameter is "wd":
+-This is a test insert
+-Mode parameter is "w-":
+-This is a test insert
+-Mode parameter is "w":
+-This is a test insert
+-Mode parameter is "cl":
+-This is a test insert
+-Mode parameter is "cd":
+-This is a test insert
+-Mode parameter is "c-":
+-This is a test insert
+-Mode parameter is "c":
+-This is a test insert
+-Mode parameter is "nl":
+-This is a test insert
+-Mode parameter is "nd":
+-This is a test insert
+-Mode parameter is "n-":
+-This is a test insert
+-Mode parameter is "n":
+-This is a test insert
+-=== OPENING EXISTING RANDOM FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "rd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "r-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "r":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: db4: Invalid argument in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-This is a test insert
+-Mode parameter is "nd":
+-This is a test insert
+-Mode parameter is "n-":
+-This is a test insert
+-Mode parameter is "n":
+-This is a test insert

@@ -68,4 +68,4 @@ def run_gate(
 
 # Eager imports so decorators fire.
 from . import adec, aes_stub, budget, constenc, fmerge, mba, seed, strenc  # noqa: E402, F401
-from . import vm, vm_engine, vm_hardened, vm_regenc                 # noqa: E402, F401
+from . import vm, vm_engine, vm_hardened, vm_regenc # noqa: E402, F401

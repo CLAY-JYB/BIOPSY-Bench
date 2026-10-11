@@ -36,23 +36,23 @@ XOLLVM OPTIONS
 ================================================================================
 
 OBFUSCATION PASSES (via annotation: __attribute__((annotate("obf: ...")))):
-  mba                 Mixed Boolean-Arithmetic expression rewriting
+  mba Mixed Boolean-Arithmetic expression rewriting
   substitution        Instruction substitution with equivalent idioms
-  vcall               Virtual call hardening via synthetic vtables
-  split               Basic block splitting
-  sdiff               Semantic diffusion (volatile-slot masking)
-  bcf                 Bogus control flow (opaque predicates + fake edges)
+  vcall Virtual call hardening via synthetic vtables
+  split Basic block splitting
+  sdiff Semantic diffusion (volatile-slot masking)
+  bcf Bogus control flow (opaque predicates + fake edges)
   flattening          CFG flattening with dispatcher
-  constenc            Constant encryption
-  shield              Anti-optimization shield
-  adec                Anti-decompiler (trampolines, junk bytes)
-  vm                  Code virtualization (conflicts with flattening)
-  strenc              String encryption (module-level)
+  constenc Constant encryption
+  shield Anti-optimization shield
+  adec Anti-decompiler (trampolines, junk bytes)
+  vm Code virtualization (conflicts with flattening)
+  strenc String encryption (module-level)
 
 PRESETS:
-  light               Expression-level only (mba, substitution)
-  heavy               Structural + post-hardening (mba, bcf, flattening, shield, adec)
-  maximum             VM virtualization with hardening
+  light Expression-level only (mba, substitution)
+  heavy Structural + post-hardening (mba, bcf, flattening, shield, adec)
+  maximum VM virtualization with hardening
 
 COMPILATION PIPELINE:
   1. clang -S -emit-llvm -O0 input.c -o input.ll
@@ -68,14 +68,14 @@ NOTE: xollvm requires:
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input C file (default: program.c)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input C file (default: program.c)
   --passes PASSES       Comma-separated obfuscation passes (default: random)
   --preset PRESET        Use preset: light, heavy, maximum (default: random)
   --seed SEED           Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
 
 ================================================================================
 """

@@ -2,12 +2,12 @@
 
 ## Overview
 
-| Attribute           | Value                |
+| Attribute | Value |
 |---------------------|----------------------|
-| **Difficulty**      | hard                 |
-| **Challenge ID**    | wesnoth-1.19.26-save-entitlement |
-| **Focus**           | save-data entitlement protection (sub-achievement persistence through the licensed save format) |
-| **Protection Type** | multi-layer (xollvm-obfuscated, anti-debug-hardened, interlock-guarded, stealth-UPX packed) |
+| **Difficulty** | expert |
+| **Challenge ID** | wesnoth-1.19.26-save-entitlement |
+| **Focus** | campaign-pass subscription (save entitlements persist only while the pass is active — expiry-enforced, node-locked season-pass analog) |
+| **Protection Type** | multi-layer (xollvm-obfuscated, anti-debug-hardened, interlock-guarded, lite-stealth UPX packed) |
 
 **Objective.** Locate the hidden license-key verification routine in `/app/binary`, defeat the protections around it (which may be interdependent), recover the full verification logic end-to-end, and derive a key that validates, per the contract in `instruction.md`. A correct key makes the binary print `flag{...}` and exit 0. A wrong key prints an error message and exits non-zero.
 
@@ -29,13 +29,13 @@ This challenge instantiates a filed construction case. The filing records the fo
 
 The challenge composes independent protection axes. This task's values are recorded on this card as `P#D#O#I#` plus the A level.
 
-| Axis  | Covers                                                                                                        |
+| Axis | Covers |
 |-------|---------------------------------------------------------------------------------------------------------------|
-| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048)     |
-| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer                                        |
+| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048) |
+| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer |
 | **D** | anti-debug with tiers none, basic, standard, and advanced. Advanced means many probes including frida detection and a self-ptrace DebugBlocker |
-| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum                                   |
-| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards                       |
+| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum |
+| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards |
 
 **This task** is `A3 P2 D3 O3 I3`. It has a medium algorithm (A3), stealth UPX packing (P2), advanced anti-debug (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **expert** for this stack because `I3` is an all-to-all interlock.
 
@@ -48,7 +48,7 @@ The binary implements multi-layer (xollvm-obfuscated, anti-debug-hardened, inter
 1. **Startup activation.** `main()` reads the entitlement key from stdin and enters the save-data license activation stage before any game subsystem initializes.
 2. **Interlock layer (I3).** The `validate_input` call site in `src/wesnoth.cpp` is wrapped by a four-guard all-to-all CRC32 network plus a data canary. The real anti-debug code is merged into section `g_adbg` and CRC'd by a guard. Expected checksums are stamped post-compile. A tampered or traced run poisons the key, meaning the valid key is silently corrupted before the real check.
 3. **Anti-debug layer (D3).** The advanced probe set (TracerPid, parent process, timing, INT3 breakpoints, /proc maps, frida) plus anti-dump hardening runs ahead of the key check and feeds the interlock taint path. DebugBlocker is deliberately off on this carrier because its self-ptrace child wedges wesnoth's stdout after the gate returns. This is a documented D3 fallback.
-4. **Obfuscation layer (O3).** `verification.c` is compiled through the xollvm plugin with anti-decompiler, bogus control flow, flattening, MBA, and constant and string encryption on `validate_input`. There is no VM pass. The earlier virtualization claim was retired as build-risky fake-O.
+4. **Obfuscation layer (O3).** `verification.c` is compiled through the xollvm plugin with anti-decompiler, bogus control flow, flattening, MBA, and constant and string encryption on `validate_input`. There is no VM pass (virtualization over the RSA modexp path is ruled out by the native-speed requirement).
 5. **Second license gate.** A second gate inside the achievements subsystem (`save_progress_licensed()`) guards sub-achievement progress persistence through the licensed save format.
 6. **Packing (P2).** After compilation the binary is stripped, UPX-packed at maximum compression, and stealth-processed (magic/p_info/section-name defeat) so `upx -d` refuses the artifact.
 
@@ -71,10 +71,10 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 
 ## Evaluation
 
-| Category             | Points | Type    | Action                                            |
+| Category | Points | Type | Action |
 |----------------------|--------|---------|---------------------------------------------------|
-| License verification | 50     | dynamic | the derived key actually validates against the binary |
-| Property validation  | 50     | dynamic | the defeat binaries genuinely carry the defeats  |
+| License verification | 50 | dynamic | the derived key actually validates against the binary |
+| Property validation | 50 | dynamic | the defeat binaries genuinely carry the defeats |
 
 - Scoring
 - License verification (50, dynamic):
@@ -96,23 +96,15 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 The task source directory is as follows.
 
 ```
-README.md                      # this task card
-instruction.md                 # the agent-facing challenge (static by design)
-task.toml                      # harness metadata (id, difficulty, network policy)
-environment/                   # build context: the carrier source, protection build, the challenge binary
-tests/                         # the verifier (test.sh, ground truth, defeat properties)
-solution/                      # the reference solve + ground truth
+README.md # this task card instruction.md # the agent-facing challenge (static by design) task.toml # harness metadata (id, difficulty, network policy) environment/ # build context: the carrier source, protection build, the challenge binary tests/ # the verifier (test.sh, ground truth, defeat properties) solution/ # the reference solve + ground truth
 ```
 
 The challenge container at runtime is as follows.
 
 ```
-/app/
-└── binary                     # the protected challenge binary (read-only)
+/app/ └── binary # the protected challenge binary (read-only)
 
-/logs/artifacts/agent_output/  # the agent's writable deliverables (contract in instruction.md)
-├── input.txt
-└── binaries/                  # defeat-demonstrating binaries, any names
+/logs/artifacts/agent_output/ # the agent's writable deliverables (contract in instruction.md) ├── input.txt └── binaries/ # defeat-demonstrating binaries, any names
 ```
 
 The tool environment is disclosed to the agent in `instruction.md`. The installed inventory lives in `environment/Dockerfile` and in `reference/tools.md`.

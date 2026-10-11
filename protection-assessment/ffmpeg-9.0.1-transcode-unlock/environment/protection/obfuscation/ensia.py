@@ -35,30 +35,30 @@ ENSIA OPTIONS
 ================================================================================
 
 OBFUSCATION PASSES (via -mllvm flag):
-  -ensia                    Enable Ensia obfuscation (required)
+  -ensia Enable Ensia obfuscation (required)
 
 PRESETS:
-  medium                    Medium protection (production-ready)
+  medium Medium protection (production-ready)
                             Includes: math complexity, flattening
                             Avoids: slowest passes
-  maximum                   Maximum protection
+  maximum Maximum protection
                             Enables: all passes at max settings
                             Warning: very slow, large binary size
 
 INDIVIDUAL PASSES (via environment variables):
-  STRCRY=1                  String Encryption (XOR, GF8, Feistel)
-  CSMOBF=1                  Chaos State Machine (logistic-map flattening)
-  MBAOBF=1                  Mixed Boolean-Arithmetic (math complexity)
-  SUBOBF=1                  Instruction Substitution
-  CONSTOBF=1                Constant Encryption
-  VECOBF=1                  Vectorization (SIMD confusion)
-  SYMOBF=1                  Symbol Obfuscation
-  INDOBF=1                  Indirect Branching
-  FCNOBF=1                  Function Call Obfuscation
-  FUNCOBF=1                 Function Obfuscation
-  ANTIHOOK=1                Anti-Hook protection
-  ANTIDBG=1                 Anti-Debug protection
-  ANTIDUMP=1                Anti-Dump protection
+  STRCRY=1 String Encryption (XOR, GF8, Feistel)
+  CSMOBF=1 Chaos State Machine (logistic-map flattening)
+  MBAOBF=1 Mixed Boolean-Arithmetic (math complexity)
+  SUBOBF=1 Instruction Substitution
+  CONSTOBF=1 Constant Encryption
+  VECOBF=1 Vectorization (SIMD confusion)
+  SYMOBF=1 Symbol Obfuscation
+  INDOBF=1 Indirect Branching
+  FCNOBF=1 Function Call Obfuscation
+  FUNCOBF=1 Function Obfuscation
+  ANTIHOOK=1 Anti-Hook protection
+  ANTIDBG=1 Anti-Debug protection
+  ANTIDUMP=1 Anti-Dump protection
 
 COMPILATION PIPELINE:
   clang -mllvm -ensia [-mllvm -enable-medobf|-enable-maxobf] input.c -o output
@@ -78,13 +78,13 @@ OBFUSCATION ORDER (Ensia pipeline):
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input C file (default: program.c)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input C file (default: program.c)
   --preset PRESET       Use preset: medium, maximum (default: random)
   --seed SEED           Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
 
 ================================================================================
 """

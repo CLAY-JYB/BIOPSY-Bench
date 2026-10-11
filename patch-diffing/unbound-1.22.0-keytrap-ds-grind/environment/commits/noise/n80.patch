@@ -1,0 +1,399 @@
+diff --git a/testdata/iter_unverified_glue.rpl b/testdata/iter_unverified_glue.rpl
+new file mode 100644
+index 000000000..017f220b6
+--- /dev/null
++++ b/testdata/iter_unverified_glue.rpl
+@@ -0,0 +1,188 @@
++; config options
++server:
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	minimal-responses: no
++	do-ip6: no
++	harden-unverified-glue: yes
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129 	# K.ROOT-SERVERS.NET.
++CONFIG_END
++
++SCENARIO_BEGIN Test iterative resolve with lame hints.
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 100
++	ADDRESS 193.0.14.129
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS	K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++a.gtld-servers.net. IN A
++SECTION AUTHORITY
++net.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION AUTHORITY
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 100
++	ADDRESS 192.5.6.30
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++a.gtld-servers.net. IN A
++SECTION ANSWER
++a.gtld-servers.net.	IN A	192.5.6.30
++SECTION AUTHORITY
++net.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION AUTHORITY
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.4
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION ANSWER
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++ns1.examplesibling.com. IN A
++SECTION ANSWER
++ns1.examplesibling.com. IN A 1.2.3.5
++ENTRY_END
++RANGE_END
++
++; stale ns1.examplesibling.com.
++RANGE_BEGIN 0 100
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION ANSWER
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.5
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.40
++SECTION AUTHORITY
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.5
++ENTRY_END
++RANGE_END
++
++; actual ns1.examplesibling.com.
++RANGE_BEGIN 0 100
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION ANSWER
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.5
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.50
++SECTION AUTHORITY
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.5
++ENTRY_END
++RANGE_END
++
++STEP 1 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; recursion happens here.
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.50
++SECTION AUTHORITY
++example.com.	IN NS	ns1.examplesibling.com.
++ENTRY_END
++
++SCENARIO_END
+diff --git a/testdata/iter_unverified_glue_fallback.rpl b/testdata/iter_unverified_glue_fallback.rpl
+new file mode 100644
+index 000000000..386186d48
+--- /dev/null
++++ b/testdata/iter_unverified_glue_fallback.rpl
+@@ -0,0 +1,138 @@
++; config options
++server:
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	minimal-responses: no
++	do-ip6: no
++	harden-unverified-glue: yes
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129 	# K.ROOT-SERVERS.NET.
++CONFIG_END
++
++SCENARIO_BEGIN Test iterative resolve with lame hints.
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 100
++	ADDRESS 193.0.14.129
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS	K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++a.gtld-servers.net. IN A
++SECTION AUTHORITY
++net.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION AUTHORITY
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 100
++	ADDRESS 192.5.6.30
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++a.gtld-servers.net. IN A
++SECTION ANSWER
++a.gtld-servers.net.	IN A	192.5.6.30
++SECTION AUTHORITY
++net.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION AUTHORITY
++example.com.	IN NS	ns1.examplesibling.com.
++SECTION ADDITIONAL
++ns1.examplesibling.com.		IN 	A	1.2.3.4
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION ANSWER
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NXDOMAIN
++SECTION QUESTION
++ns1.examplesibling.com. IN A
++ENTRY_END
++RANGE_END
++
++; stale ns1.examplesibling.com.
++RANGE_BEGIN 0 100
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.40
++ENTRY_END
++RANGE_END
++
++STEP 1 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; recursion happens here.
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.40
++ENTRY_END
++
++SCENARIO_END
+diff --git a/testdata/local_cname.rpl b/testdata/local_cname.rpl
+index b8c4a5601..d68a2c40e 100644
+--- a/testdata/local_cname.rpl
++++ b/testdata/local_cname.rpl
+@@ -52,6 +52,10 @@ server:
+ 	local-zone: example.net redirect
+ 	local-data: "example.net. IN CNAME cname.example.org."
+ 
++	# Test setup for synthesized CNAMEs
++	local-zone: synth.cname redirect
++	local-data: "synth.cname. IN CNAME *.from.resolution."
++
+ 	### template zone and tag intended to be used for tests with CNAME and
+ 	### other data.
+ 	##local-zone: ambiguous.example.com redirect
+@@ -133,6 +137,18 @@ SECTION AUTHORITY
+ SECTION ADDITIONAL
+ ENTRY_END
+ 
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.synth.cname.from.resolution. IN A
++SECTION ANSWER
++www.synth.cname.from.resolution. IN A 192.0.2.3
++SECTION AUTHORITY
++SECTION ADDITIONAL
++ENTRY_END
++
+ ENTRY_BEGIN
+ MATCH opcode qtype qname
+ ADJUST copy_id
+@@ -396,6 +412,26 @@ SECTION AUTHORITY
+ SECTION ADDITIONAL
+ ENTRY_END
+ 
++; Check CNAME synthesis
++STEP 201 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.synth.cname. IN A
++ENTRY_END
++
++STEP 202 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.synth.cname. IN A
++SECTION ANSWER
++www.synth.cname. IN CNAME www.synth.cname.from.resolution.
++www.synth.cname.from.resolution. IN A 192.0.2.3
++SECTION AUTHORITY
++SECTION ADDITIONAL
++ENTRY_END
+ 
+ ; Relatively minor cases follow
+ 

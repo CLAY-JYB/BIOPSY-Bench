@@ -1,0 +1,474 @@
+diff --git a/ext/ldap/tests/ldap_delete_basic.phpt b/ext/ldap/tests/ldap_delete_basic.phpt
+index 491c12f6..dd64bfb4 100644
+--- a/ext/ldap/tests/ldap_delete_basic.phpt
++++ b/ext/ldap/tests/ldap_delete_basic.phpt
+@@ -32,7 +32,7 @@ require "connect.inc";
+ 
+ $link = ldap_connect_and_bind($host, $port, $user, $passwd, $protocol_version);
+ 
+-@ldap_delete($link, "dc=my-domain,$base");
++ldap_delete($link, "dc=my-domain,$base");
+ ?>
+ --EXPECT--
+ bool(true)
+diff --git a/ext/ldap/tests/ldap_delete_ext.phpt b/ext/ldap/tests/ldap_delete_ext.phpt
+index 41800cd5..c6b31943 100644
+--- a/ext/ldap/tests/ldap_delete_ext.phpt
++++ b/ext/ldap/tests/ldap_delete_ext.phpt
+@@ -41,7 +41,7 @@ require "connect.inc";
+ 
+ $link = ldap_connect_and_bind($host, $port, $user, $passwd, $protocol_version);
+ 
+-@ldap_delete($link, "dc=my-domain,$base");
++ldap_delete($link, "dc=my-domain,$base");
+ ?>
+ --EXPECTF--
+ object(LDAP\Result)#%d (0) {
+diff --git a/ext/ldap/tests/ldap_mod_del_error.phpt b/ext/ldap/tests/ldap_mod_del_error.phpt
+index 9e6af834..c149d283 100644
+--- a/ext/ldap/tests/ldap_mod_del_error.phpt
++++ b/ext/ldap/tests/ldap_mod_del_error.phpt
+@@ -28,7 +28,7 @@ require "connect.inc";
+ 
+ $link = ldap_connect_and_bind($host, $port, $user, $passwd, $protocol_version);
+ 
+-@ldap_delete($link, "dc=my-domain,$base");
++ldap_delete($link, "dc=my-domain,$base");
+ ?>
+ --EXPECTF--
+ Warning: ldap_mod_del(): Modify: No such object in %s on line %d
+diff --git a/ext/libxml/libxml.c b/ext/libxml/libxml.c
+index 22eb1901..3959b362 100644
+--- a/ext/libxml/libxml.c
++++ b/ext/libxml/libxml.c
+@@ -41,14 +41,12 @@
+ #endif
+ 
+ #include "php_libxml.h"
++#include "libxml_arginfo.h"
+ 
+-#define PHP_LIBXML_LOADED_VERSION ((char *)xmlParserVersion)
+ #define PHP_LIBXML_ERROR 0
+ #define PHP_LIBXML_CTX_ERROR 1
+ #define PHP_LIBXML_CTX_WARNING 2
+ 
+-#include "libxml_arginfo.h"
+-
+ /* a true global for initialization */
+ static int _php_libxml_initialized = 0;
+ static int _php_libxml_per_request_initialization = 1;
+@@ -228,11 +226,23 @@ static PHP_GINIT_FUNCTION(libxml)
+ 	ZVAL_UNDEF(&libxml_globals->stream_context);
+ 	libxml_globals->error_buffer.s = NULL;
+ 	libxml_globals->error_list = NULL;
+-	ZVAL_NULL(&libxml_globals->entity_loader.callback);
++	ZVAL_UNDEF(&libxml_globals->entity_loader.object);
+ 	libxml_globals->entity_loader.fci.size = 0;
+ 	libxml_globals->entity_loader_disabled = 0;
+ }
+ 
++static void _php_libxml_destroy_fci(zend_fcall_info *fci, zval *object)
++{
++	if (fci->size > 0) {
++		zval_ptr_dtor(&fci->function_name);
++		fci->size = 0;
++	}
++	if (!Z_ISUNDEF_P(object)) {
++		zval_ptr_dtor(object);
++		ZVAL_UNDEF(object);
++	}
++}
++
+ /* Channel libxml file io layer through the PHP streams subsystem.
+  * This allows use of ftps:// and https:// urls */
+ 
+@@ -368,9 +378,9 @@ php_libxml_input_buffer_create_filename(const char *URI, xmlCharEncoding enc)
+ 				const char buf[] = "Content-Type:";
+ 				if (Z_TYPE_P(header) == IS_STRING &&
+ 						!zend_binary_strncasecmp(Z_STRVAL_P(header), Z_STRLEN_P(header), buf, sizeof(buf)-1, sizeof(buf)-1)) {
+-					char needle[] = "charset=";
++					char *needle = estrdup("charset=");
+ 					char *haystack = estrndup(Z_STRVAL_P(header), Z_STRLEN_P(header));
+-					char *encoding = php_stristr(haystack, needle, Z_STRLEN_P(header), strlen(needle));
++					char *encoding = php_stristr(haystack, needle, Z_STRLEN_P(header), sizeof("charset=")-1);
+ 
+ 					if (encoding) {
+ 						char *end;
+@@ -398,6 +408,7 @@ php_libxml_input_buffer_create_filename(const char *URI, xmlCharEncoding enc)
+ 						}
+ 					}
+ 					efree(haystack);
++					efree(needle);
+ 					break; /* found content-type */
+ 				}
+ 			} ZEND_HASH_FOREACH_END();
+@@ -790,7 +801,50 @@ static PHP_MINIT_FUNCTION(libxml)
+ {
+ 	php_libxml_initialize();
+ 
+-	register_libxml_symbols(module_number);
++	REGISTER_LONG_CONSTANT("LIBXML_VERSION",			LIBXML_VERSION,			CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("LIBXML_DOTTED_VERSION",	LIBXML_DOTTED_VERSION,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("LIBXML_LOADED_VERSION",	(char *)xmlParserVersion,		CONST_CS | CONST_PERSISTENT);
++
++	/* For use with loading xml */
++	REGISTER_LONG_CONSTANT("LIBXML_NOENT",		XML_PARSE_NOENT,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_DTDLOAD",	XML_PARSE_DTDLOAD,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_DTDATTR",	XML_PARSE_DTDATTR,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_DTDVALID",	XML_PARSE_DTDVALID,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NOERROR",	XML_PARSE_NOERROR,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NOWARNING",	XML_PARSE_NOWARNING,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NOBLANKS",	XML_PARSE_NOBLANKS,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_XINCLUDE",	XML_PARSE_XINCLUDE,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NSCLEAN",	XML_PARSE_NSCLEAN,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NOCDATA",	XML_PARSE_NOCDATA,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NONET",		XML_PARSE_NONET,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_PEDANTIC",	XML_PARSE_PEDANTIC,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_COMPACT",	XML_PARSE_COMPACT,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_NOXMLDECL",	XML_SAVE_NO_DECL,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_PARSEHUGE",	XML_PARSE_HUGE,			CONST_CS | CONST_PERSISTENT);
++#if LIBXML_VERSION >= 20900
++	REGISTER_LONG_CONSTANT("LIBXML_BIGLINES",	XML_PARSE_BIG_LINES,	CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("LIBXML_NOEMPTYTAG",	LIBXML_SAVE_NOEMPTYTAG,	CONST_CS | CONST_PERSISTENT);
++
++	/* Schema validation options */
++#ifdef LIBXML_SCHEMAS_ENABLED
++	REGISTER_LONG_CONSTANT("LIBXML_SCHEMA_CREATE",	XML_SCHEMA_VAL_VC_I_CREATE,	CONST_CS | CONST_PERSISTENT);
++#endif
++
++	/* Additional constants for use with loading html */
++#if LIBXML_VERSION >= 20707
++	REGISTER_LONG_CONSTANT("LIBXML_HTML_NOIMPLIED",	HTML_PARSE_NOIMPLIED,		CONST_CS | CONST_PERSISTENT);
++#endif
++
++#if LIBXML_VERSION >= 20708
++	REGISTER_LONG_CONSTANT("LIBXML_HTML_NODEFDTD",	HTML_PARSE_NODEFDTD,		CONST_CS | CONST_PERSISTENT);
++#endif
++
++	/* Error levels */
++	REGISTER_LONG_CONSTANT("LIBXML_ERR_NONE",		XML_ERR_NONE,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_ERR_WARNING",	XML_ERR_WARNING,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_ERR_ERROR",		XML_ERR_ERROR,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("LIBXML_ERR_FATAL",		XML_ERR_FATAL,		CONST_CS | CONST_PERSISTENT);
+ 
+ 	libxmlerror_class_entry = register_class_LibXMLError();
+ 
+@@ -841,9 +895,7 @@ static PHP_RINIT_FUNCTION(libxml)
+ 
+ static PHP_RSHUTDOWN_FUNCTION(libxml)
+ {
+-	LIBXML(entity_loader).fci.size = 0;
+-	zval_ptr_dtor_nogc(&LIBXML(entity_loader).callback);
+-	ZVAL_NULL(&LIBXML(entity_loader).callback);
++	_php_libxml_destroy_fci(&LIBXML(entity_loader).fci, &LIBXML(entity_loader).object);
+ 
+ 	return SUCCESS;
+ }
+@@ -1063,33 +1115,26 @@ PHP_FUNCTION(libxml_disable_entity_loader)
+ /* {{{ Changes the default external entity loader */
+ PHP_FUNCTION(libxml_set_external_entity_loader)
+ {
+-	zval					*callback;
+ 	zend_fcall_info			fci;
+ 	zend_fcall_info_cache	fcc;
+ 
+ 	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_FUNC_OR_NULL_WITH_ZVAL(fci, fcc, callback)
++		Z_PARAM_FUNC_OR_NULL(fci, fcc)
+ 	ZEND_PARSE_PARAMETERS_END();
+ 
++	_php_libxml_destroy_fci(&LIBXML(entity_loader).fci, &LIBXML(entity_loader).object);
++
+ 	if (ZEND_FCI_INITIALIZED(fci)) { /* argument not null */
+ 		LIBXML(entity_loader).fci = fci;
++		Z_ADDREF(fci.function_name);
++		if (fci.object != NULL) {
++			ZVAL_OBJ(&LIBXML(entity_loader).object, fci.object);
++			Z_ADDREF(LIBXML(entity_loader).object);
++		}
+ 		LIBXML(entity_loader).fcc = fcc;
+-	} else {
+-		LIBXML(entity_loader).fci.size = 0;
+-	}
+-	if (!Z_ISNULL(LIBXML(entity_loader).callback)) {
+-		zval_ptr_dtor_nogc(&LIBXML(entity_loader).callback);
+ 	}
+-	ZVAL_COPY(&LIBXML(entity_loader).callback, callback);
+-	RETURN_TRUE;
+-}
+-/* }}} */
+ 
+-/* {{{ Get the current external entity loader, or null if the default loader is installer. */
+-PHP_FUNCTION(libxml_get_external_entity_loader)
+-{
+-	ZEND_PARSE_PARAMETERS_NONE();
+-	RETURN_COPY(&LIBXML(entity_loader).callback);
++	RETURN_TRUE;
+ }
+ /* }}} */
+ 
+diff --git a/ext/libxml/libxml.stub.php b/ext/libxml/libxml.stub.php
+index 97793f0c..6c638621 100644
+--- a/ext/libxml/libxml.stub.php
++++ b/ext/libxml/libxml.stub.php
+@@ -2,155 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue LIBXML_VERSION
+- */
+-const LIBXML_VERSION = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue LIBXML_DOTTED_VERSION
+- */
+-const LIBXML_DOTTED_VERSION = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue PHP_LIBXML_LOADED_VERSION
+- */
+-const LIBXML_LOADED_VERSION = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NOENT
+- */
+-const LIBXML_NOENT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_DTDLOAD
+- */
+-const LIBXML_DTDLOAD = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_DTDATTR
+- */
+-const LIBXML_DTDATTR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_DTDVALID
+- */
+-const LIBXML_DTDVALID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NOERROR
+- */
+-const LIBXML_NOERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NOWARNING
+- */
+-const LIBXML_NOWARNING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NOBLANKS
+- */
+-const LIBXML_NOBLANKS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_XINCLUDE
+- */
+-const LIBXML_XINCLUDE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NSCLEAN
+- */
+-const LIBXML_NSCLEAN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NOCDATA
+- */
+-const LIBXML_NOCDATA = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_NONET
+- */
+-const LIBXML_NONET = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_PEDANTIC
+- */
+-const LIBXML_PEDANTIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_COMPACT
+- */
+-const LIBXML_COMPACT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_SAVE_NO_DECL
+- */
+-const LIBXML_NOXMLDECL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_PARSE_HUGE
+- */
+-const LIBXML_PARSEHUGE = UNKNOWN;
+-#if LIBXML_VERSION >= 20900
+-/**
+- * @var int
+- * @cvalue XML_PARSE_BIG_LINES
+- */
+-const LIBXML_BIGLINES = UNKNOWN;
+-#endif
+-/**
+- * @var int
+- * @cvalue LIBXML_SAVE_NOEMPTYTAG
+- */
+-const LIBXML_NOEMPTYTAG = UNKNOWN;
+-
+-#ifdef LIBXML_SCHEMAS_ENABLED
+-/**
+- * @var int
+- * @cvalue XML_SCHEMA_VAL_VC_I_CREATE
+- */
+-const LIBXML_SCHEMA_CREATE = UNKNOWN;
+-#endif
+-
+-#if LIBXML_VERSION >= 20707
+-/**
+- * @var int
+- * @cvalue HTML_PARSE_NOIMPLIED
+- */
+-const LIBXML_HTML_NOIMPLIED = UNKNOWN;
+-#endif
+-
+-#if LIBXML_VERSION >= 20708
+-/**
+- * @var int
+- * @cvalue HTML_PARSE_NODEFDTD
+- */
+-const LIBXML_HTML_NODEFDTD = UNKNOWN;
+-#endif
+-
+-/**
+- * @var int
+- * @cvalue XML_ERR_NONE
+- */
+-const LIBXML_ERR_NONE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_ERR_WARNING
+- */
+-const LIBXML_ERR_WARNING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_ERR_ERROR
+- */
+-const LIBXML_ERR_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue XML_ERR_FATAL
+- */
+-const LIBXML_ERR_FATAL = UNKNOWN;
+-
+ class LibXMLError
+ {
+     public int $level;
+@@ -177,5 +28,3 @@ function libxml_clear_errors(): void {}
+ function libxml_disable_entity_loader(bool $disable = true): bool {}
+ 
+ function libxml_set_external_entity_loader(?callable $resolver_function): bool {}
+-
+-function libxml_get_external_entity_loader(): ?callable {}
+diff --git a/ext/libxml/libxml_arginfo.h b/ext/libxml/libxml_arginfo.h
+index bd143cbe..fb0e5edf 100644
+--- a/ext/libxml/libxml_arginfo.h
++++ b/ext/libxml/libxml_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 8fa6f4fa2f3eb8db944626b5b3d814f5e3ae04a3 */
++ * Stub hash: 4bde2f5c4e55b6e0c273b0d8605cb765cc9f8400 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_libxml_set_streams_context, 0, 1, IS_VOID, 0)
+ 	ZEND_ARG_INFO(0, context)
+@@ -26,9 +26,6 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_libxml_set_external_entity_loade
+ 	ZEND_ARG_TYPE_INFO(0, resolver_function, IS_CALLABLE, 1)
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_libxml_get_external_entity_loader, 0, 0, IS_CALLABLE, 1)
+-ZEND_END_ARG_INFO()
+-
+ 
+ ZEND_FUNCTION(libxml_set_streams_context);
+ ZEND_FUNCTION(libxml_use_internal_errors);
+@@ -37,7 +34,6 @@ ZEND_FUNCTION(libxml_get_errors);
+ ZEND_FUNCTION(libxml_clear_errors);
+ ZEND_FUNCTION(libxml_disable_entity_loader);
+ ZEND_FUNCTION(libxml_set_external_entity_loader);
+-ZEND_FUNCTION(libxml_get_external_entity_loader);
+ 
+ 
+ static const zend_function_entry ext_functions[] = {
+@@ -48,7 +44,6 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(libxml_clear_errors, arginfo_libxml_clear_errors)
+ 	ZEND_DEP_FE(libxml_disable_entity_loader, arginfo_libxml_disable_entity_loader)
+ 	ZEND_FE(libxml_set_external_entity_loader, arginfo_libxml_set_external_entity_loader)
+-	ZEND_FE(libxml_get_external_entity_loader, arginfo_libxml_get_external_entity_loader)
+ 	ZEND_FE_END
+ };
+ 
+@@ -57,45 +52,6 @@ static const zend_function_entry class_LibXMLError_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_libxml_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("LIBXML_VERSION", LIBXML_VERSION, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("LIBXML_DOTTED_VERSION", LIBXML_DOTTED_VERSION, CONST_PERSISTENT);
+-	REGISTER_STRING_CONSTANT("LIBXML_LOADED_VERSION", PHP_LIBXML_LOADED_VERSION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOENT", XML_PARSE_NOENT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_DTDLOAD", XML_PARSE_DTDLOAD, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_DTDATTR", XML_PARSE_DTDATTR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_DTDVALID", XML_PARSE_DTDVALID, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOERROR", XML_PARSE_NOERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOWARNING", XML_PARSE_NOWARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOBLANKS", XML_PARSE_NOBLANKS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_XINCLUDE", XML_PARSE_XINCLUDE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NSCLEAN", XML_PARSE_NSCLEAN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOCDATA", XML_PARSE_NOCDATA, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NONET", XML_PARSE_NONET, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_PEDANTIC", XML_PARSE_PEDANTIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_COMPACT", XML_PARSE_COMPACT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_NOXMLDECL", XML_SAVE_NO_DECL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_PARSEHUGE", XML_PARSE_HUGE, CONST_PERSISTENT);
+-#if LIBXML_VERSION >= 20900
+-	REGISTER_LONG_CONSTANT("LIBXML_BIGLINES", XML_PARSE_BIG_LINES, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("LIBXML_NOEMPTYTAG", LIBXML_SAVE_NOEMPTYTAG, CONST_PERSISTENT);
+-#if defined(LIBXML_SCHEMAS_ENABLED)
+-	REGISTER_LONG_CONSTANT("LIBXML_SCHEMA_CREATE", XML_SCHEMA_VAL_VC_I_CREATE, CONST_PERSISTENT);
+-#endif
+-#if LIBXML_VERSION >= 20707
+-	REGISTER_LONG_CONSTANT("LIBXML_HTML_NOIMPLIED", HTML_PARSE_NOIMPLIED, CONST_PERSISTENT);
+-#endif
+-#if LIBXML_VERSION >= 20708
+-	REGISTER_LONG_CONSTANT("LIBXML_HTML_NODEFDTD", HTML_PARSE_NODEFDTD, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("LIBXML_ERR_NONE", XML_ERR_NONE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_ERR_WARNING", XML_ERR_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_ERR_ERROR", XML_ERR_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LIBXML_ERR_FATAL", XML_ERR_FATAL, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_LibXMLError(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/libxml/php_libxml.h b/ext/libxml/php_libxml.h
+index af1cc7d6..c0775a07 100644
+--- a/ext/libxml/php_libxml.h
++++ b/ext/libxml/php_libxml.h
+@@ -43,8 +43,8 @@ ZEND_BEGIN_MODULE_GLOBALS(libxml)
+ 	smart_str error_buffer;
+ 	zend_llist *error_list;
+ 	struct _php_libxml_entity_resolver {
+-		zval 					callback;
+-		zend_fcall_info 		fci;
++		zval                    object;
++		zend_fcall_info			fci;
+ 		zend_fcall_info_cache	fcc;
+ 	} entity_loader;
+ 	bool entity_loader_disabled;

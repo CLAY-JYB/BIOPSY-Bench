@@ -1,0 +1,63 @@
+diff --git a/testdata/cookie_file.tdir/cookie_file.conf b/testdata/cookie_file.tdir/cookie_file.conf
+new file mode 100644
+index 000000000..25dd93f52
+--- /dev/null
++++ b/testdata/cookie_file.tdir/cookie_file.conf
+@@ -0,0 +1,19 @@
++server:
++	verbosity: 7
++	use-syslog: no
++	directory: ""
++	pidfile: "unbound.pid"
++	chroot: ""
++	username: ""
++	do-not-query-localhost: no
++	use-caps-for-id: no
++	port: @SERVER_PORT@
++	interface: 127.0.0.1
++	cookie-secret-file: "cookie_secrets.txt"
++	answer-cookie: yes
++	access-control: 127.0.0.0/8 allow_cookie  # BADCOOKIE for incomplete/invalid cookies
++
++remote-control:
++	control-enable: yes
++	control-port: @CONTROL_PORT@
++	control-use-cert: no
+diff --git a/testdata/cookie_file.tdir/cookie_file.dsc b/testdata/cookie_file.tdir/cookie_file.dsc
+new file mode 100644
+index 000000000..4f321bd2e
+--- /dev/null
++++ b/testdata/cookie_file.tdir/cookie_file.dsc
+@@ -0,0 +1,16 @@
++BaseName: cookie_file
++Version: 1.0
++Description: Check the cookie rollover
++CreationDate: Fri 14 Jun 11:00:00 CEST 2024
++Maintainer:
++Category:
++Component:
++CmdDepends:
++Depends:
++Help:
++Pre: cookie_file.pre
++Post: cookie_file.post
++Test: cookie_file.test
++AuxFiles:
++Passed:
++Failure:
+diff --git a/testdata/cookie_file.tdir/cookie_file.post b/testdata/cookie_file.tdir/cookie_file.post
+new file mode 100644
+index 000000000..b64af9cbd
+--- /dev/null
++++ b/testdata/cookie_file.tdir/cookie_file.post
+@@ -0,0 +1,10 @@
++# #-- cookie_file.post --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# source the test var file when it's there
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++#
++# do your teardown here
++. ../common.sh
++kill_from_pidfile "unbound.pid"
++cat unbound.log

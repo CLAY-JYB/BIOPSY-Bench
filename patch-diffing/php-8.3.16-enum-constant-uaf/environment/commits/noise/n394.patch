@@ -1,0 +1,451 @@
+diff --git a/ext/standard/user_filters.c b/ext/standard/user_filters.c
+index dcbfc381..81123acf 100644
+--- a/ext/standard/user_filters.c
++++ b/ext/standard/user_filters.c
+@@ -111,18 +111,24 @@ PHP_RSHUTDOWN_FUNCTION(user_filters)
+ static void userfilter_dtor(php_stream_filter *thisfilter)
+ {
+ 	zval *obj = &thisfilter->abstract;
++	zval func_name;
+ 	zval retval;
+ 
+-	if (Z_ISUNDEF_P(obj)) {
++	if (obj == NULL) {
+ 		/* If there's no object associated then there's nothing to dispose of */
+ 		return;
+ 	}
+ 
+-	zend_string *func_name = zend_string_init("onclose", sizeof("onclose")-1, 0);
+-	zend_call_method_if_exists(Z_OBJ_P(obj), func_name, &retval, 0, NULL);
+-	zend_string_release(func_name);
++	ZVAL_STRINGL(&func_name, "onclose", sizeof("onclose")-1);
++
++	call_user_function(NULL,
++			obj,
++			&func_name,
++			&retval,
++			0, NULL);
+ 
+ 	zval_ptr_dtor(&retval);
++	zval_ptr_dtor(&func_name);
+ 
+ 	/* kill the object */
+ 	zval_ptr_dtor(obj);
+@@ -244,6 +250,7 @@ static php_stream_filter *user_filter_factory_create(const char *filtername,
+ 	struct php_user_filter_data *fdat = NULL;
+ 	php_stream_filter *filter;
+ 	zval obj;
++	zval func_name;
+ 	zval retval;
+ 	size_t len;
+ 
+@@ -319,9 +326,15 @@ static php_stream_filter *user_filter_factory_create(const char *filtername,
+ 	}
+ 
+ 	/* invoke the constructor */
+-	zend_string *func_name = zend_string_init("oncreate", sizeof("oncreate")-1, 0);
+-	zend_call_method_if_exists(Z_OBJ(obj), func_name, &retval, 0, NULL);
+-	zend_string_release(func_name);
++	ZVAL_STRINGL(&func_name, "oncreate", sizeof("oncreate")-1);
++
++	call_user_function(NULL,
++			&obj,
++			&func_name,
++			&retval,
++			0, NULL);
++
++	zval_ptr_dtor(&func_name);
+ 
+ 	if (Z_TYPE(retval) != IS_UNDEF) {
+ 		if (Z_TYPE(retval) == IS_FALSE) {
+@@ -497,8 +510,8 @@ PHP_FUNCTION(stream_get_filters)
+ 
+ 	filters_hash = php_get_stream_filters_hash();
+ 
+-	if (filters_hash && !HT_IS_PACKED(filters_hash)) {
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(filters_hash, filter_name) {
++	if (filters_hash) {
++		ZEND_HASH_FOREACH_STR_KEY(filters_hash, filter_name) {
+ 			if (filter_name) {
+ 				add_next_index_str(return_value, zend_string_copy(filter_name));
+ 			}
+diff --git a/ext/standard/var.c b/ext/standard/var.c
+index 61abc3dc..aab00e52 100644
+--- a/ext/standard/var.c
++++ b/ext/standard/var.c
+@@ -343,17 +343,15 @@ PHPAPI void php_debug_zval_dump(zval *struc, int level) /* {{{ */
+ 		PUTS("}\n");
+ 		break;
+ 	case IS_OBJECT:
+-		/* Check if this is already recursing on the object before calling zend_get_properties_for,
+-		 * to allow infinite recursion detection to work even if classes return temporary arrays,
+-		 * and to avoid the need to update the properties table in place to reflect the state
+-		 * if the result won't be used. (https://github.com/php/php-src/issues/8044) */
+-		if (Z_IS_RECURSIVE_P(struc)) {
+-			PUTS("*RECURSION*\n");
+-			return;
+-		}
+-		Z_PROTECT_RECURSION_P(struc);
+-
+ 		myht = zend_get_properties_for(struc, ZEND_PROP_PURPOSE_DEBUG);
++		if (myht) {
++			if (GC_IS_RECURSIVE(myht)) {
++				PUTS("*RECURSION*\n");
++				zend_release_properties(myht);
++				return;
++			}
++			GC_PROTECT_RECURSION(myht);
++		}
+ 		class_name = Z_OBJ_HANDLER_P(struc, get_class_name)(Z_OBJ_P(struc));
+ 		php_printf("object(%s)#%d (%d) refcount(%u){\n", ZSTR_VAL(class_name), Z_OBJ_HANDLE_P(struc), myht ? zend_array_count(myht) : 0, Z_REFCOUNT_P(struc));
+ 		zend_string_release_ex(class_name, 0);
+@@ -372,13 +370,13 @@ PHPAPI void php_debug_zval_dump(zval *struc, int level) /* {{{ */
+ 					zval_object_property_dump(prop_info, val, index, key, level);
+ 				}
+ 			} ZEND_HASH_FOREACH_END();
++			GC_UNPROTECT_RECURSION(myht);
+ 			zend_release_properties(myht);
+ 		}
+ 		if (level > 1) {
+ 			php_printf("%*c", level - 1, ' ');
+ 		}
+ 		PUTS("}\n");
+-		Z_UNPROTECT_RECURSION_P(struc);
+ 		break;
+ 	case IS_RESOURCE: {
+ 		const char *type_name = zend_rsrc_list_get_rsrc_type(Z_RES_P(struc));
+@@ -554,17 +552,17 @@ again:
+ 			break;
+ 
+ 		case IS_OBJECT:
+-			/* Check if this is already recursing on the object before calling zend_get_properties_for,
+-			 * to allow infinite recursion detection to work even if classes return temporary arrays,
+-			 * and to avoid the need to update the properties table in place to reflect the state
+-			 * if the result won't be used. (https://github.com/php/php-src/issues/8044) */
+-			if (Z_IS_RECURSIVE_P(struc)) {
+-				smart_str_appendl(buf, "NULL", 4);
+-				zend_error(E_WARNING, "var_export does not handle circular references");
+-				return;
+-			}
+-			Z_PROTECT_RECURSION_P(struc);
+ 			myht = zend_get_properties_for(struc, ZEND_PROP_PURPOSE_VAR_EXPORT);
++			if (myht) {
++				if (GC_IS_RECURSIVE(myht)) {
++					smart_str_appendl(buf, "NULL", 4);
++					zend_error(E_WARNING, "var_export does not handle circular references");
++					zend_release_properties(myht);
++					return;
++				} else {
++					GC_TRY_PROTECT_RECURSION(myht);
++				}
++			}
+ 			if (level > 1) {
+ 				smart_str_appendc(buf, '\n');
+ 				buffer_append_spaces(buf, level - 1);
+@@ -577,7 +575,6 @@ again:
+ 			if (ce == zend_standard_class_def) {
+ 				smart_str_appendl(buf, "(object) array(\n", 16);
+ 			} else {
+-				smart_str_appendc(buf, '\\');
+ 				smart_str_append(buf, ce->name);
+ 				if (is_enum) {
+ 					zend_object *zobj = Z_OBJ_P(struc);
+@@ -595,9 +592,9 @@ again:
+ 						php_object_element_export(val, index, key, level, buf);
+ 					} ZEND_HASH_FOREACH_END();
+ 				}
++				GC_TRY_UNPROTECT_RECURSION(myht);
+ 				zend_release_properties(myht);
+ 			}
+-			Z_UNPROTECT_RECURSION_P(struc);
+ 			if (level > 1 && !is_enum) {
+ 				buffer_append_spaces(buf, level - 1);
+ 			}
+@@ -647,7 +644,7 @@ PHP_FUNCTION(var_export)
+ 	smart_str_0 (&buf);
+ 
+ 	if (return_output) {
+-		RETURN_STR(smart_str_extract(&buf));
++		RETURN_NEW_STR(buf.s);
+ 	} else {
+ 		PHPWRITE(ZSTR_VAL(buf.s), ZSTR_LEN(buf.s));
+ 		smart_str_free(&buf);
+@@ -1326,7 +1323,11 @@ PHP_FUNCTION(serialize)
+ 		RETURN_THROWS();
+ 	}
+ 
+-	RETURN_STR(smart_str_extract(&buf));
++	if (buf.s) {
++		RETURN_NEW_STR(buf.s);
++	} else {
++		RETURN_EMPTY_STRING();
++	}
+ }
+ /* }}} */
+ 
+@@ -1483,14 +1484,6 @@ PHP_FUNCTION(memory_get_peak_usage) {
+ }
+ /* }}} */
+ 
+-/* {{{ Resets the peak PHP memory usage */
+-PHP_FUNCTION(memory_reset_peak_usage) {
+-	ZEND_PARSE_PARAMETERS_NONE();
+-
+-	zend_memory_reset_peak_usage();
+-}
+-/* }}} */
+-
+ PHP_INI_BEGIN()
+ 	STD_PHP_INI_ENTRY("unserialize_max_depth", "4096", PHP_INI_ALL, OnUpdateLong, unserialize_max_depth, php_basic_globals, basic_globals)
+ PHP_INI_END()
+diff --git a/ext/standard/var_unserializer.re b/ext/standard/var_unserializer.re
+index 313d7fad..77f83f34 100644
+--- a/ext/standard/var_unserializer.re
++++ b/ext/standard/var_unserializer.re
+@@ -641,20 +641,6 @@ declared_property:
+ 				int ret = is_property_visibility_changed(obj->ce, &key);
+ 
+ 				if (EXPECTED(!ret)) {
+-					if (UNEXPECTED(obj->ce->ce_flags & ZEND_ACC_NO_DYNAMIC_PROPERTIES)) {
+-						zend_throw_error(NULL, "Cannot create dynamic property %s::$%s",
+-							ZSTR_VAL(obj->ce->name), zend_get_unmangled_property_name(Z_STR_P(&key)));
+-						zval_ptr_dtor_str(&key);
+-						goto failure;
+-					} else if (!(obj->ce->ce_flags & ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES)) {
+-						zend_error(E_DEPRECATED, "Creation of dynamic property %s::$%s is deprecated",
+-							ZSTR_VAL(obj->ce->name), zend_get_unmangled_property_name(Z_STR_P(&key)));
+-						if (EG(exception)) {
+-							zval_ptr_dtor_str(&key);
+-							goto failure;
+-						}
+-					}
+-
+ 					data = zend_hash_add_new(ht, Z_STR(key), &EG(uninitialized_zval));
+ 				} else if (ret < 0) {
+ 					goto failure;
+@@ -743,19 +729,6 @@ static inline int object_custom(UNSERIALIZE_PARAMETER, zend_class_entry *ce)
+ 
+ 	datalen = parse_iv2((*p) + 2, p);
+ 
+-	if (max - (*p) < 2) {
+-		return 0;
+-	}
+-
+-	if ((*p)[0] != ':') {
+-		return 0;
+-	}
+-
+-	if ((*p)[1] != '{') {
+-		(*p) += 1;
+-		return 0;
+-	}
+-
+ 	(*p) += 2;
+ 
+ 	if (datalen < 0 || (max - (*p)) <= datalen) {
+@@ -767,7 +740,6 @@ static inline int object_custom(UNSERIALIZE_PARAMETER, zend_class_entry *ce)
+ 	 * with unserialize reading past the end of the passed buffer if the string is not
+ 	 * appropriately terminated (usually NUL terminated, but '}' is also sufficient.) */
+ 	if ((*p)[datalen] != '}') {
+-		(*p) += datalen;
+ 		return 0;
+ 	}
+ 
+@@ -1229,17 +1201,22 @@ object ":" uiv ":" ["]	{
+ 		/* Try to find class directly */
+ 		BG(serialize_lock)++;
+ 		ce = zend_lookup_class_ex(class_name, lc_name, 0);
+-		BG(serialize_lock)--;
+ 		zend_string_release_ex(lc_name, 0);
++		if (ce) {
++			BG(serialize_lock)--;
++			if (EG(exception)) {
++				zend_string_release_ex(class_name, 0);
++				return 0;
++			}
++			break;
++		}
++		BG(serialize_lock)--;
++
+ 		if (EG(exception)) {
+ 			zend_string_release_ex(class_name, 0);
+ 			return 0;
+ 		}
+ 
+-		if (ce) {
+-			break;
+-		}
+-
+ 		/* Check for unserialize callback */
+ 		if ((PG(unserialize_callback_func) == NULL) || (PG(unserialize_callback_func)[0] == '\0')) {
+ 			incomplete_class = 1;
+@@ -1250,15 +1227,29 @@ object ":" uiv ":" ["]	{
+ 		/* Call unserialize callback */
+ 		ZVAL_STRING(&user_func, PG(unserialize_callback_func));
+ 
+-		ZVAL_STR(&args[0], class_name);
++		ZVAL_STR_COPY(&args[0], class_name);
+ 		BG(serialize_lock)++;
+-		call_user_function(NULL, NULL, &user_func, &retval, 1, args);
++		if (call_user_function(NULL, NULL, &user_func, &retval, 1, args) != SUCCESS) {
++			BG(serialize_lock)--;
++			if (EG(exception)) {
++				zend_string_release_ex(class_name, 0);
++				zval_ptr_dtor(&user_func);
++				zval_ptr_dtor(&args[0]);
++				return 0;
++			}
++			php_error_docref(NULL, E_WARNING, "defined (%s) but not found", Z_STRVAL(user_func));
++			incomplete_class = 1;
++			ce = PHP_IC_ENTRY;
++			zval_ptr_dtor(&user_func);
++			zval_ptr_dtor(&args[0]);
++			break;
++		}
+ 		BG(serialize_lock)--;
+ 		zval_ptr_dtor(&retval);
+-
+ 		if (EG(exception)) {
+ 			zend_string_release_ex(class_name, 0);
+ 			zval_ptr_dtor(&user_func);
++			zval_ptr_dtor(&args[0]);
+ 			return 0;
+ 		}
+ 
+@@ -1272,6 +1263,7 @@ object ":" uiv ":" ["]	{
+ 		BG(serialize_lock)--;
+ 
+ 		zval_ptr_dtor(&user_func);
++		zval_ptr_dtor(&args[0]);
+ 	} while (0);
+ 
+ 	*p = YYCURSOR;
+@@ -1307,16 +1299,6 @@ object ":" uiv ":" ["]	{
+ 		return 0;
+ 	}
+ 
+-	YYCURSOR = *p;
+-
+-	if (*(YYCURSOR) != ':') {
+-		return 0;
+-	}
+-	if (*(YYCURSOR+1) != '{') {
+-		*p = YYCURSOR+1;
+-		return 0;
+-	}
+-
+ 	*p += 2;
+ 
+ 	has_unserialize = !incomplete_class && ce->__unserialize;
+diff --git a/ext/sysvmsg/php_sysvmsg.h b/ext/sysvmsg/php_sysvmsg.h
+index e3be3ed3..b680cd23 100644
+--- a/ext/sysvmsg/php_sysvmsg.h
++++ b/ext/sysvmsg/php_sysvmsg.h
+@@ -27,11 +27,4 @@ extern zend_module_entry sysvmsg_module_entry;
+ 
+ #endif /* HAVE_SYSVMSG */
+ 
+-/* In order to detect MSG_EXCEPT use at run time; we have no way
+- * of knowing what the bit definitions are, so we can't just define
+- * our own MSG_EXCEPT value. */
+-#define PHP_MSG_IPC_NOWAIT  1
+-#define PHP_MSG_NOERROR     2
+-#define PHP_MSG_EXCEPT      4
+-
+ #endif	/* PHP_SYSVMSG_H */
+diff --git a/ext/sysvmsg/sysvmsg.c b/ext/sysvmsg/sysvmsg.c
+index d9146f6e..66385d64 100644
+--- a/ext/sysvmsg/sysvmsg.c
++++ b/ext/sysvmsg/sysvmsg.c
+@@ -44,6 +44,13 @@ struct php_msgbuf {
+ 	char mtext[1];
+ };
+ 
++/* In order to detect MSG_EXCEPT use at run time; we have no way
++ * of knowing what the bit definitions are, so we can't just define
++ * out own MSG_EXCEPT value. */
++#define PHP_MSG_IPC_NOWAIT	1
++#define PHP_MSG_NOERROR		2
++#define PHP_MSG_EXCEPT		4
++
+ /* {{{ sysvmsg_module_entry */
+ zend_module_entry sysvmsg_module_entry = {
+ 	STANDARD_MODULE_HEADER,
+@@ -110,8 +117,11 @@ PHP_MINIT_FUNCTION(sysvmsg)
+ 	sysvmsg_queue_object_handlers.clone_obj = NULL;
+ 	sysvmsg_queue_object_handlers.compare = zend_objects_not_comparable;
+ 
+-	register_sysvmsg_symbols(module_number);
+-
++	REGISTER_LONG_CONSTANT("MSG_IPC_NOWAIT", PHP_MSG_IPC_NOWAIT, CONST_PERSISTENT|CONST_CS);
++	REGISTER_LONG_CONSTANT("MSG_EAGAIN",	 EAGAIN, 	     CONST_PERSISTENT|CONST_CS);
++	REGISTER_LONG_CONSTANT("MSG_ENOMSG",	 ENOMSG, 	     CONST_PERSISTENT|CONST_CS);
++	REGISTER_LONG_CONSTANT("MSG_NOERROR",    PHP_MSG_NOERROR,    CONST_PERSISTENT|CONST_CS);
++	REGISTER_LONG_CONSTANT("MSG_EXCEPT",     PHP_MSG_EXCEPT,     CONST_PERSISTENT|CONST_CS);
+ 	return SUCCESS;
+ }
+ /* }}} */
+diff --git a/ext/sysvmsg/sysvmsg.stub.php b/ext/sysvmsg/sysvmsg.stub.php
+index 6f94167a..efc07ffc 100644
+--- a/ext/sysvmsg/sysvmsg.stub.php
++++ b/ext/sysvmsg/sysvmsg.stub.php
+@@ -2,32 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue PHP_MSG_IPC_NOWAIT
+- */
+-const MSG_IPC_NOWAIT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue EAGAIN
+- */
+-const MSG_EAGAIN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ENOMSG
+- */
+-const MSG_ENOMSG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_MSG_NOERROR
+- */
+-const MSG_NOERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_MSG_EXCEPT
+- */
+-const MSG_EXCEPT = UNKNOWN;
+-
+ /**
+  * @strict-properties
+  * @not-serializable
+diff --git a/ext/sysvmsg/sysvmsg_arginfo.h b/ext/sysvmsg/sysvmsg_arginfo.h
+index d90c83f2..1fd48373 100644
+--- a/ext/sysvmsg/sysvmsg_arginfo.h
++++ b/ext/sysvmsg/sysvmsg_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: ed5b1e4e5dda6a65ce336fc4daa975520c354f17 */
++ * Stub hash: 7acab08abf78d75df333fccd6c47266823a92103 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_msg_get_queue, 0, 1, SysvMessageQueue, MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, key, IS_LONG, 0)
+@@ -69,15 +69,6 @@ static const zend_function_entry class_SysvMessageQueue_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_sysvmsg_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("MSG_IPC_NOWAIT", PHP_MSG_IPC_NOWAIT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("MSG_EAGAIN", EAGAIN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("MSG_ENOMSG", ENOMSG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("MSG_NOERROR", PHP_MSG_NOERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("MSG_EXCEPT", PHP_MSG_EXCEPT, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_SysvMessageQueue(void)
+ {
+ 	zend_class_entry ce, *class_entry;

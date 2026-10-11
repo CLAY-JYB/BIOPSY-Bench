@@ -1,0 +1,415 @@
+diff --git a/sapi/fuzzer/fuzzer-mbregex.c b/sapi/fuzzer/fuzzer-mbregex.c
+deleted file mode 100644
+index 970a7b5b..00000000
+--- a/sapi/fuzzer/fuzzer-mbregex.c
++++ /dev/null
+@@ -1,78 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Stanislav Malyshev <stas@php.net>                           |
+-   +----------------------------------------------------------------------+
+- */
+-
+-
+-#include "fuzzer.h"
+-
+-#include "Zend/zend.h"
+-#include "main/php_config.h"
+-#include "main/php_main.h"
+-#include "oniguruma.h"
+-
+-#include <stdio.h>
+-#include <stdint.h>
+-#include <stdlib.h>
+-
+-#include "fuzzer-sapi.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-#ifdef HAVE_MBREGEX
+-	char *args[2];
+-	char *data = malloc(Size+1);
+-	memcpy(data, Data, Size);
+-	data[Size] = '\0';
+-
+-	if (fuzzer_request_startup() == FAILURE) {
+-		return 0;
+-	}
+-
+-	fuzzer_setup_dummy_frame();
+-
+-	args[0] = data;
+-	args[1] = "test123";
+-	fuzzer_call_php_func("mb_ereg", 2, args);
+-
+-	args[0] = data;
+-	args[1] = "test123";
+-	fuzzer_call_php_func("mb_eregi", 2, args);
+-
+-	args[0] = data;
+-	args[1] = data;
+-	fuzzer_call_php_func("mb_ereg", 2, args);
+-
+-	args[0] = data;
+-	args[1] = data;
+-	fuzzer_call_php_func("mb_eregi", 2, args);
+-
+-	fuzzer_request_shutdown();
+-
+-	free(data);
+-#else
+-	fprintf(stderr, "\n\nERROR:\nPHP built without mbstring, recompile with --enable-mbstring to use this fuzzer\n");
+-	exit(1);
+-#endif
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
+-
+-	/* The default parse depth limit allows stack overflows under asan. */
+-	onig_set_parse_depth_limit(512);
+-
+-	/* fuzzer_shutdown_php(); */
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-mbstring.c b/sapi/fuzzer/fuzzer-mbstring.c
+index 61014b23..142552a3 100644
+--- a/sapi/fuzzer/fuzzer-mbstring.c
++++ b/sapi/fuzzer/fuzzer-mbstring.c
+@@ -15,52 +15,64 @@
+  */
+ 
+ 
+-#include "zend.h"
+ #include "fuzzer.h"
++
++#include "Zend/zend.h"
++#include "main/php_config.h"
++#include "main/php_main.h"
++#include "oniguruma.h"
++
++#include <stdio.h>
++#include <stdint.h>
++#include <stdlib.h>
++
+ #include "fuzzer-sapi.h"
+-#include "ext/mbstring/mbstring.h"
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	const uint8_t *Comma1 = memchr(Data, ',', Size);
+-	if (!Comma1) {
+-		return 0;
+-	}
+-
+-	size_t ToEncodingNameLen = Comma1 - Data;
+-	char *ToEncodingName = estrndup((char *) Data, ToEncodingNameLen);
+-	Data = Comma1 + 1;
+-	Size -= ToEncodingNameLen + 1;
++#ifdef HAVE_MBREGEX
++	char *args[2];
++	char *data = malloc(Size+1);
++	memcpy(data, Data, Size);
++	data[Size] = '\0';
+ 
+-	const uint8_t *Comma2 = memchr(Data, ',', Size);
+-	if (!Comma2) {
+-		efree(ToEncodingName);
++	if (fuzzer_request_startup() == FAILURE) {
+ 		return 0;
+ 	}
+ 
+-	size_t FromEncodingNameLen = Comma2 - Data;
+-	char *FromEncodingName = estrndup((char *) Data, FromEncodingNameLen);
+-	Data = Comma2 + 1;
+-	Size -= FromEncodingNameLen + 1;
++	fuzzer_setup_dummy_frame();
+ 
+-	const mbfl_encoding *ToEncoding = mbfl_name2encoding(ToEncodingName);
+-	const mbfl_encoding *FromEncoding = mbfl_name2encoding(FromEncodingName);
++	args[0] = data;
++	args[1] = "test123";
++	fuzzer_call_php_func("mb_ereg", 2, args);
+ 
+-	if (!ToEncoding || !FromEncoding || fuzzer_request_startup() == FAILURE) {
+-		efree(ToEncodingName);
+-		efree(FromEncodingName);
+-		return 0;
+-	}
++	args[0] = data;
++	args[1] = "test123";
++	fuzzer_call_php_func("mb_eregi", 2, args);
++
++	args[0] = data;
++	args[1] = data;
++	fuzzer_call_php_func("mb_ereg", 2, args);
+ 
+-	zend_string *Result = php_mb_convert_encoding_ex((char *) Data, Size, ToEncoding, FromEncoding);
+-	zend_string_release(Result);
+-	efree(ToEncodingName);
+-	efree(FromEncodingName);
++	args[0] = data;
++	args[1] = data;
++	fuzzer_call_php_func("mb_eregi", 2, args);
+ 
+ 	fuzzer_request_shutdown();
++
++	free(data);
++#else
++	fprintf(stderr, "\n\nERROR:\nPHP built without mbstring, recompile with --enable-mbstring to use this fuzzer\n");
++	exit(1);
++#endif
+ 	return 0;
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
++
++	/* The default parse depth limit allows stack overflows under asan. */
++	onig_set_parse_depth_limit(512);
++
++	/* fuzzer_shutdown_php(); */
+ 	return 0;
+ }
+diff --git a/sapi/fuzzer/fuzzer-parser.c b/sapi/fuzzer/fuzzer-parser.c
+index 28030d95..61cedcfc 100644
+--- a/sapi/fuzzer/fuzzer-parser.c
++++ b/sapi/fuzzer/fuzzer-parser.c
+@@ -26,14 +26,13 @@
+ #include "fuzzer-sapi.h"
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > 6 * 1024) {
+-		/* Large inputs have a large impact on fuzzer performance and may cause stack overflows,
++	if (Size > 32 * 1024) {
++		/* Large inputs have a large impact on fuzzer performance,
+ 		 * but are unlikely to be necessary to reach new codepaths. */
+ 		return 0;
+ 	}
+ 
+-	fuzzer_do_request_from_buffer(
+-		"fuzzer.php", (const char *) Data, Size, /* execute */ 0, /* before_shutdown */ NULL);
++	fuzzer_do_request_from_buffer("fuzzer.php", (const char *) Data, Size, /* execute */ 0);
+ 
+ 	return 0;
+ }
+@@ -43,7 +42,7 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+ 	 * Use tracked allocation mode to avoid leaks in that case. */
+ 	putenv("USE_TRACKED_ALLOC=1");
+ 
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-sapi.c b/sapi/fuzzer/fuzzer-sapi.c
+index 3a79e273..95c2b1ce 100644
+--- a/sapi/fuzzer/fuzzer-sapi.c
++++ b/sapi/fuzzer/fuzzer-sapi.c
+@@ -47,7 +47,7 @@ const char HARDCODED_INI[] =
+ 	"open_basedir=/tmp\n"
+ 	"disable_functions=dl,mail,mb_send_mail"
+ 	",shell_exec,exec,system,proc_open,popen,passthru,pcntl_exec"
+-	",chdir,chgrp,chmod,chown,copy,file_put_contents,lchgrp,lchown,link,mkdir"
++	",chgrp,chmod,chown,copy,file_put_contents,lchgrp,lchown,link,mkdir"
+ 	",move_uploaded_file,rename,rmdir,symlink,tempname,touch,unlink,fopen"
+ 	/* Networking code likes to wait and wait. */
+ 	",fsockopen,pfsockopen"
+@@ -62,7 +62,10 @@ const char HARDCODED_INI[] =
+ 
+ static int startup(sapi_module_struct *sapi_module)
+ {
+-	return php_module_startup(sapi_module, NULL);
++	if (php_module_startup(sapi_module, NULL, 0)==FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ 
+ static size_t ub_write(const char *str, size_t str_length)
+@@ -128,7 +131,7 @@ static sapi_module_struct fuzzer_module = {
+ 	STANDARD_SAPI_MODULE_PROPERTIES
+ };
+ 
+-int fuzzer_init_php(const char *extra_ini)
++int fuzzer_init_php()
+ {
+ #ifdef __SANITIZE_ADDRESS__
+ 	/* We're going to leak all the memory allocated during startup,
+@@ -139,20 +142,8 @@ int fuzzer_init_php(const char *extra_ini)
+ 	sapi_startup(&fuzzer_module);
+ 	fuzzer_module.phpinfo_as_text = 1;
+ 
+-	size_t ini_len = sizeof(HARDCODED_INI);
+-	size_t extra_ini_len = extra_ini ? strlen(extra_ini) : 0;
+-	if (extra_ini) {
+-		ini_len += extra_ini_len + 1;
+-	}
+-	char *p = fuzzer_module.ini_entries = malloc(ini_len + 1);
+-	memcpy(p, HARDCODED_INI, sizeof(HARDCODED_INI) - 1);
+-	p += sizeof(HARDCODED_INI) - 1;
+-	if (extra_ini) {
+-		*p++ = '\n';
+-		memcpy(p, extra_ini, extra_ini_len);
+-		p += extra_ini_len;
+-	}
+-	*p = '\0';
++	fuzzer_module.ini_entries = malloc(sizeof(HARDCODED_INI));
++	memcpy(fuzzer_module.ini_entries, HARDCODED_INI, sizeof(HARDCODED_INI));
+ 
+ 	/*
+ 	 * TODO: we might want to test both Zend and malloc MM, but testing with malloc
+@@ -239,8 +230,7 @@ int fuzzer_shutdown_php(void)
+ }
+ 
+ int fuzzer_do_request_from_buffer(
+-		char *filename, const char *data, size_t data_len, bool execute,
+-		void (*before_shutdown)(void))
++		char *filename, const char *data, size_t data_len, bool execute)
+ {
+ 	int retval = FAILURE; /* failure by default */
+ 
+@@ -263,8 +253,6 @@ int fuzzer_do_request_from_buffer(
+ 		file_handle.primary_script = 1;
+ 		file_handle.buf = estrndup(data, data_len);
+ 		file_handle.len = data_len;
+-		/* Avoid ZEND_HANDLE_FILENAME for opcache. */
+-		file_handle.type = ZEND_HANDLE_STREAM;
+ 
+ 		zend_op_array *op_array = zend_compile_file(&file_handle, ZEND_REQUIRE);
+ 		zend_destroy_file_handle(&file_handle);
+@@ -279,9 +267,6 @@ int fuzzer_do_request_from_buffer(
+ 	} zend_end_try();
+ 
+ 	CG(compiled_filename) = NULL; /* ??? */
+-	if (before_shutdown) {
+-		before_shutdown();
+-	}
+ 	fuzzer_request_shutdown();
+ 
+ 	return (retval == SUCCESS) ? SUCCESS : FAILURE;
+diff --git a/sapi/fuzzer/fuzzer-sapi.h b/sapi/fuzzer/fuzzer-sapi.h
+index 4ee2cb3f..076a5714 100644
+--- a/sapi/fuzzer/fuzzer-sapi.h
++++ b/sapi/fuzzer/fuzzer-sapi.h
+@@ -15,12 +15,11 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-int fuzzer_init_php(const char *extra_ini);
++int fuzzer_init_php(void);
+ int fuzzer_request_startup(void);
+ void fuzzer_request_shutdown(void);
+ void fuzzer_setup_dummy_frame(void);
+ void fuzzer_call_php_func(const char *func_name, int nargs, char **params);
+ void fuzzer_call_php_func_zval(const char *func_name, int nargs, zval *args);
+ int fuzzer_do_request_from_buffer(
+-		char *filename, const char *data, size_t data_len, bool execute,
+-		void (*before_shutdown)(void));
++		char *filename, const char *data, size_t data_len, bool execute);
+diff --git a/sapi/fuzzer/fuzzer-tracing-jit.c b/sapi/fuzzer/fuzzer-tracing-jit.c
+deleted file mode 100644
+index 585bf553..00000000
+--- a/sapi/fuzzer/fuzzer-tracing-jit.c
++++ /dev/null
+@@ -1,77 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include "fuzzer-execute-common.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > MAX_SIZE) {
+-		/* Large inputs have a large impact on fuzzer performance,
+-		 * but are unlikely to be necessary to reach new codepaths. */
+-		return 0;
+-	}
+-
+-	zend_string *jit_option = zend_string_init("opcache.jit", sizeof("opcache.jit") - 1, 1);
+-
+-	/* First run without JIT to determine whether we bail out. We should not run JITed code if
+-	 * we bail out here, as the JIT code may loop infinitely. */
+-	steps_left = MAX_STEPS;
+-	bailed_out = false;
+-	zend_alter_ini_entry_chars(
+-		jit_option, "off", sizeof("off")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-
+-	if (!bailed_out) {
+-		steps_left = MAX_STEPS;
+-		zend_alter_ini_entry_chars(jit_option,
+-			"tracing", sizeof("tracing")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-		zend_execute_ex = orig_execute_ex;
+-		/* Trace & compile */
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, NULL);
+-		/* Execute trace */
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-		zend_execute_ex = fuzzer_execute_ex;
+-	}
+-
+-	zend_string_release(jit_option);
+-
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	char *opcache_path = get_opcache_path();
+-	assert(opcache_path && "Failed to determine opcache path");
+-
+-	char ini_buf[512];
+-	snprintf(ini_buf, sizeof(ini_buf),
+-		"zend_extension=%s\n"
+-		"opcache.validate_timestamps=0\n"
+-		"opcache.file_update_protection=0\n"
+-		"opcache.jit_buffer_size=256M\n"
+-		"opcache.jit_hot_func=1\n"
+-		"opcache.jit_hot_loop=1\n"
+-		"opcache.jit_hot_return=1\n"
+-		"opcache.jit_hot_side_exit=1\n"
+-		"opcache.jit_max_root_traces=32768",
+-		opcache_path);
+-	free(opcache_path);
+-
+-	create_file();
+-	fuzzer_init_php_for_execute(ini_buf);
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-unserialize.c b/sapi/fuzzer/fuzzer-unserialize.c
+index ff26e5b1..efae256a 100644
+--- a/sapi/fuzzer/fuzzer-unserialize.c
++++ b/sapi/fuzzer/fuzzer-unserialize.c
+@@ -60,7 +60,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;

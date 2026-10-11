@@ -1,0 +1,516 @@
+diff --git a/iterator/iter_fwd.h b/iterator/iter_fwd.h
+index e90b74c16..4527d899c 100644
+--- a/iterator/iter_fwd.h
++++ b/iterator/iter_fwd.h
+@@ -43,6 +43,7 @@
+ #ifndef ITERATOR_ITER_FWD_H
+ #define ITERATOR_ITER_FWD_H
+ #include "util/rbtree.h"
++#include "util/locks.h"
+ struct config_file;
+ struct delegpt;
+ 
+@@ -50,6 +51,11 @@ struct delegpt;
+  * Iterator forward zones structure
+  */
+ struct iter_forwards {
++	/** lock on the forwards tree.
++	 * When grabbing both this lock and the anchors.lock, this lock
++	 * is grabbed first. When grabbing both this lock and the hints.lock
++	 * this lock is grabbed first. */
++	lock_rw_type lock;
+ 	/** 
+ 	 * Zones are stored in this tree. Sort order is specially chosen.
+ 	 * first sorted on qclass. Then on dname in nsec-like order, so that
+@@ -106,47 +112,65 @@ int forwards_apply_cfg(struct iter_forwards* fwd, struct config_file* cfg);
+ 
+ /**
+  * Find forward zone exactly by name
++ * The return value is contents of the forwards structure.
++ * Caller should lock and unlock a readlock on the forwards structure if nolock
++ * is set.
++ * Otherwise caller should unlock the readlock on the forwards structure if a
++ * value was returned.
+  * @param fwd: forward storage.
+  * @param qname: The qname of the query.
+  * @param qclass: The qclass of the query.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return: A delegation point or null.
+  */
+ struct delegpt* forwards_find(struct iter_forwards* fwd, uint8_t* qname,
+-	uint16_t qclass);
++	uint16_t qclass, int nolock);
+ 
+ /**
+  * Find forward zone information
+  * For this qname/qclass find forward zone information, returns delegation
+  * point with server names and addresses, or NULL if no forwarding is needed.
++ * The return value is contents of the forwards structure.
++ * Caller should lock and unlock a readlock on the forwards structure if nolock
++ * is set.
++ * Otherwise caller should unlock the readlock on the forwards structure if a
++ * value was returned.
+  *
+  * @param fwd: forward storage.
+  * @param qname: The qname of the query.
+  * @param qclass: The qclass of the query.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return: A delegation point if the query has to be forwarded to that list,
+  *         otherwise null.
+  */
+-struct delegpt* forwards_lookup(struct iter_forwards* fwd, 
+-	uint8_t* qname, uint16_t qclass);
++struct delegpt* forwards_lookup(struct iter_forwards* fwd,
++	uint8_t* qname, uint16_t qclass, int nolock);
+ 
+ /**
+  * Same as forwards_lookup, but for the root only
+  * @param fwd: forward storage.
+  * @param qclass: The qclass of the query.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return: A delegation point if root forward exists, otherwise null.
+  */
+-struct delegpt* forwards_lookup_root(struct iter_forwards* fwd, 
+-	uint16_t qclass);
++struct delegpt* forwards_lookup_root(struct iter_forwards* fwd,
++	uint16_t qclass, int nolock);
+ 
+ /**
+  * Find next root item in forwards lookup tree.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a readlock on the forwards structure.
+  * @param fwd: the forward storage
+  * @param qclass: class to look at next, or higher.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return false if none found, or if true stored in qclass.
+  */
+-int forwards_next_root(struct iter_forwards* fwd, uint16_t* qclass);
++int forwards_next_root(struct iter_forwards* fwd, uint16_t* qclass,
++	int nolock);
+ 
+ /**
+  * Get memory in use by forward storage
++ * Locks and unlocks the structure.
+  * @param fwd: forward storage.
+  * @return bytes in use
+  */
+@@ -158,42 +182,56 @@ int fwd_cmp(const void* k1, const void* k2);
+ /**
+  * Add zone to forward structure. For external use since it recalcs 
+  * the tree parents.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the forwards structure.
+  * @param fwd: the forward data structure
+  * @param c: class of zone
+  * @param dp: delegation point with name and target nameservers for new
+  *	forward zone. malloced.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return false on failure (out of memory);
+  */
+-int forwards_add_zone(struct iter_forwards* fwd, uint16_t c, 
+-	struct delegpt* dp);
++int forwards_add_zone(struct iter_forwards* fwd, uint16_t c,
++	struct delegpt* dp, int nolock);
+ 
+ /**
+  * Remove zone from forward structure. For external use since it 
+  * recalcs the tree parents.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the forwards structure.
+  * @param fwd: the forward data structure
+  * @param c: class of zone
+  * @param nm: name of zone (in uncompressed wireformat).
++ * @param nolock: Skip locking, locking is handled by the caller.
+  */
+-void forwards_delete_zone(struct iter_forwards* fwd, uint16_t c, uint8_t* nm);
++void forwards_delete_zone(struct iter_forwards* fwd, uint16_t c,
++	uint8_t* nm, int nolock);
+ 
+ /**
+  * Add stub hole (empty entry in forward table, that makes resolution skip
+  * a forward-zone because the stub zone should override the forward zone).
+  * Does not add one if not necessary.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the forwards structure.
+  * @param fwd: the forward data structure
+  * @param c: class of zone
+  * @param nm: name of zone (in uncompressed wireformat).
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return false on failure (out of memory);
+  */
+-int forwards_add_stub_hole(struct iter_forwards* fwd, uint16_t c, uint8_t* nm);
++int forwards_add_stub_hole(struct iter_forwards* fwd, uint16_t c,
++	uint8_t* nm, int nolock);
+ 
+ /**
+  * Remove stub hole, if one exists.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the forwards structure.
+  * @param fwd: the forward data structure
+  * @param c: class of zone
+  * @param nm: name of zone (in uncompressed wireformat).
++ * @param nolock: Skip locking, locking is handled by the caller.
+  */
+ void forwards_delete_stub_hole(struct iter_forwards* fwd, uint16_t c,
+-	uint8_t* nm);
++	uint8_t* nm, int nolock);
+ 
+ #endif /* ITERATOR_ITER_FWD_H */
+diff --git a/iterator/iter_hints.c b/iterator/iter_hints.c
+index a60d9a6b1..8b168271c 100644
+--- a/iterator/iter_hints.c
++++ b/iterator/iter_hints.c
+@@ -57,6 +57,8 @@ hints_create(void)
+ 		sizeof(struct iter_hints));
+ 	if(!hints)
+ 		return NULL;
++	lock_rw_init(&hints->lock);
++	lock_protect(&hints->lock, &hints->tree, sizeof(hints->tree));
+ 	return hints;
+ }
+ 
+@@ -83,6 +85,7 @@ hints_delete(struct iter_hints* hints)
+ {
+ 	if(!hints) 
+ 		return;
++	lock_rw_destroy(&hints->lock);
+ 	hints_del_tree(hints);
+ 	free(hints);
+ }
+@@ -129,7 +132,7 @@ compile_time_root_prime(int do_ip4, int do_ip6)
+ 	dp->has_parent_side_NS = 1;
+       if(do_ip4) {
+ 	if(!ah(dp, "A.ROOT-SERVERS.NET.", "198.41.0.4"))	goto failed;
+-	if(!ah(dp, "B.ROOT-SERVERS.NET.", "199.9.14.201")) goto failed;
++	if(!ah(dp, "B.ROOT-SERVERS.NET.", "170.247.170.2"))	goto failed;
+ 	if(!ah(dp, "C.ROOT-SERVERS.NET.", "192.33.4.12"))	goto failed;
+ 	if(!ah(dp, "D.ROOT-SERVERS.NET.", "199.7.91.13"))	goto failed;
+ 	if(!ah(dp, "E.ROOT-SERVERS.NET.", "192.203.230.10")) goto failed;
+@@ -144,7 +147,7 @@ compile_time_root_prime(int do_ip4, int do_ip6)
+       }
+       if(do_ip6) {
+ 	if(!ah(dp, "A.ROOT-SERVERS.NET.", "2001:503:ba3e::2:30")) goto failed;
+-	if(!ah(dp, "B.ROOT-SERVERS.NET.", "2001:500:200::b")) goto failed;
++	if(!ah(dp, "B.ROOT-SERVERS.NET.", "2801:1b8:10::b")) goto failed;
+ 	if(!ah(dp, "C.ROOT-SERVERS.NET.", "2001:500:2::c")) goto failed;
+ 	if(!ah(dp, "D.ROOT-SERVERS.NET.", "2001:500:2d::d")) goto failed;
+ 	if(!ah(dp, "E.ROOT-SERVERS.NET.", "2001:500:a8::e")) goto failed;
+@@ -438,47 +441,70 @@ read_root_hints_list(struct iter_hints* hints, struct config_file* cfg)
+ int 
+ hints_apply_cfg(struct iter_hints* hints, struct config_file* cfg)
+ {
++	int nolock = 1;
++	lock_rw_wrlock(&hints->lock);
+ 	hints_del_tree(hints);
+ 	name_tree_init(&hints->tree);
+-	
++
+ 	/* read root hints */
+-	if(!read_root_hints_list(hints, cfg))
++	if(!read_root_hints_list(hints, cfg)) {
++		lock_rw_unlock(&hints->lock);
+ 		return 0;
++	}
+ 
+ 	/* read stub hints */
+-	if(!read_stubs(hints, cfg))
++	if(!read_stubs(hints, cfg)) {
++		lock_rw_unlock(&hints->lock);
+ 		return 0;
++	}
+ 
+ 	/* use fallback compiletime root hints */
+-	if(!hints_lookup_root(hints, LDNS_RR_CLASS_IN)) {
++	if(!hints_find_root(hints, LDNS_RR_CLASS_IN, nolock)) {
+ 		struct delegpt* dp = compile_time_root_prime(cfg->do_ip4,
+ 			cfg->do_ip6);
+ 		verbose(VERB_ALGO, "no config, using builtin root hints.");
+-		if(!dp) 
++		if(!dp) {
++			lock_rw_unlock(&hints->lock);
+ 			return 0;
+-		if(!hints_insert(hints, LDNS_RR_CLASS_IN, dp, 0))
++		}
++		if(!hints_insert(hints, LDNS_RR_CLASS_IN, dp, 0)) {
++			lock_rw_unlock(&hints->lock);
+ 			return 0;
++		}
+ 	}
+ 
+ 	name_tree_init_parents(&hints->tree);
++	lock_rw_unlock(&hints->lock);
+ 	return 1;
+ }
+ 
+-struct delegpt* 
+-hints_lookup_root(struct iter_hints* hints, uint16_t qclass)
++struct delegpt*
++hints_find(struct iter_hints* hints, uint8_t* qname, uint16_t qclass,
++	int nolock)
+ {
+-	uint8_t rootlab = 0;
+ 	struct iter_hints_stub *stub;
++	size_t len;
++	int has_dp;
++	int labs = dname_count_size_labels(qname, &len);
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&hints->lock); }
+ 	stub = (struct iter_hints_stub*)name_tree_find(&hints->tree,
+-		&rootlab, 1, 1, qclass);
+-	if(!stub)
+-		return NULL;
+-	return stub->dp;
++		qname, len, labs, qclass);
++	has_dp = stub && stub->dp;
++	if(!has_dp && !nolock) { lock_rw_unlock(&hints->lock); }
++	return has_dp?stub->dp:NULL;
++}
++
++struct delegpt*
++hints_find_root(struct iter_hints* hints, uint16_t qclass, int nolock)
++{
++	uint8_t rootlab = 0;
++	return hints_find(hints, &rootlab, qclass, nolock);
+ }
+ 
+ struct iter_hints_stub* 
+-hints_lookup_stub(struct iter_hints* hints, uint8_t* qname, 
+-	uint16_t qclass, struct delegpt* cache_dp)
++hints_lookup_stub(struct iter_hints* hints, uint8_t* qname,
++	uint16_t qclass, struct delegpt* cache_dp, int nolock)
+ {
+ 	size_t len;
+ 	int labs;
+@@ -486,14 +512,20 @@ hints_lookup_stub(struct iter_hints* hints, uint8_t* qname,
+ 
+ 	/* first lookup the stub */
+ 	labs = dname_count_size_labels(qname, &len);
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&hints->lock); }
+ 	r = (struct iter_hints_stub*)name_tree_lookup(&hints->tree, qname,
+ 		len, labs, qclass);
+-	if(!r) return NULL;
++	if(!r) {
++		if(!nolock) { lock_rw_unlock(&hints->lock); }
++		return NULL;
++	}
+ 
+ 	/* If there is no cache (root prime situation) */
+ 	if(cache_dp == NULL) {
+ 		if(r->dp->namelabs != 1)
+ 			return r; /* no cache dp, use any non-root stub */
++		if(!nolock) { lock_rw_unlock(&hints->lock); }
+ 		return NULL;
+ 	}
+ 
+@@ -510,12 +542,18 @@ hints_lookup_stub(struct iter_hints* hints, uint8_t* qname,
+ 	if(dname_strict_subdomain(r->dp->name, r->dp->namelabs,
+ 		cache_dp->name, cache_dp->namelabs))
+ 		return r; /* need to prime this stub */
++	if(!nolock) { lock_rw_unlock(&hints->lock); }
+ 	return NULL;
+ }
+ 
+-int hints_next_root(struct iter_hints* hints, uint16_t* qclass)
++int hints_next_root(struct iter_hints* hints, uint16_t* qclass, int nolock)
+ {
+-	return name_tree_next_root(&hints->tree, qclass);
++	int ret;
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&hints->lock); }
++	ret = name_tree_next_root(&hints->tree, qclass);
++	if(!nolock) { lock_rw_unlock(&hints->lock); }
++	return ret;
+ }
+ 
+ size_t 
+@@ -524,40 +562,52 @@ hints_get_mem(struct iter_hints* hints)
+ 	size_t s;
+ 	struct iter_hints_stub* p;
+ 	if(!hints) return 0;
++	lock_rw_rdlock(&hints->lock);
+ 	s = sizeof(*hints);
+ 	RBTREE_FOR(p, struct iter_hints_stub*, &hints->tree) {
+ 		s += sizeof(*p) + delegpt_get_mem(p->dp);
+ 	}
++	lock_rw_unlock(&hints->lock);
+ 	return s;
+ }
+ 
+ int 
+ hints_add_stub(struct iter_hints* hints, uint16_t c, struct delegpt* dp,
+-	int noprime)
++	int noprime, int nolock)
+ {
+ 	struct iter_hints_stub *z;
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&hints->lock); }
+ 	if((z=(struct iter_hints_stub*)name_tree_find(&hints->tree,
+ 		dp->name, dp->namelen, dp->namelabs, c)) != NULL) {
+ 		(void)rbtree_delete(&hints->tree, &z->node);
+ 		hints_stub_free(z);
+ 	}
+-	if(!hints_insert(hints, c, dp, noprime))
++	if(!hints_insert(hints, c, dp, noprime)) {
++		if(!nolock) { lock_rw_unlock(&hints->lock); }
+ 		return 0;
++	}
+ 	name_tree_init_parents(&hints->tree);
++	if(!nolock) { lock_rw_unlock(&hints->lock); }
+ 	return 1;
+ }
+ 
+ void 
+-hints_delete_stub(struct iter_hints* hints, uint16_t c, uint8_t* nm)
++hints_delete_stub(struct iter_hints* hints, uint16_t c, uint8_t* nm,
++	int nolock)
+ {
+ 	struct iter_hints_stub *z;
+ 	size_t len;
+ 	int labs = dname_count_size_labels(nm, &len);
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&hints->lock); }
+ 	if(!(z=(struct iter_hints_stub*)name_tree_find(&hints->tree,
+-		nm, len, labs, c)))
++		nm, len, labs, c))) {
++		if(!nolock) { lock_rw_unlock(&hints->lock); }
+ 		return; /* nothing to do */
++	}
+ 	(void)rbtree_delete(&hints->tree, &z->node);
+ 	hints_stub_free(z);
+ 	name_tree_init_parents(&hints->tree);
++	if(!nolock) { lock_rw_unlock(&hints->lock); }
+ }
+-
+diff --git a/iterator/iter_hints.h b/iterator/iter_hints.h
+index 06b4b9667..26de323c9 100644
+--- a/iterator/iter_hints.h
++++ b/iterator/iter_hints.h
+@@ -43,6 +43,7 @@
+ #ifndef ITERATOR_ITER_HINTS_H
+ #define ITERATOR_ITER_HINTS_H
+ #include "util/storage/dnstree.h"
++#include "util/locks.h"
+ struct iter_env;
+ struct config_file;
+ struct delegpt;
+@@ -51,6 +52,10 @@ struct delegpt;
+  * Iterator hints structure
+  */
+ struct iter_hints {
++	/** lock on the forwards tree.
++	 * When grabbing both this lock and the anchors.lock, this lock
++	 * is grabbed first. */
++	lock_rw_type lock;
+ 	/** 
+ 	 * Hints are stored in this tree. Sort order is specially chosen.
+ 	 * first sorted on qclass. Then on dname in nsec-like order, so that
+@@ -95,42 +100,70 @@ void hints_delete(struct iter_hints* hints);
+ int hints_apply_cfg(struct iter_hints* hints, struct config_file* cfg);
+ 
+ /**
+- * Find root hints for the given class.
++ * Find hints for the given class.
++ * The return value is contents of the hints structure.
++ * Caller should lock and unlock a readlock on the hints structure if nolock
++ * is set.
++ * Otherwise caller should unlock the readlock on the hints structure if a
++ * value was returned.
+  * @param hints: hint storage.
++ * @param qname: the qname that generated the delegation point.
+  * @param qclass: class for which root hints are requested. host order.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return: NULL if no hints, or a ptr to stored hints.
+  */
+-struct delegpt* hints_lookup_root(struct iter_hints* hints, uint16_t qclass);
++struct delegpt* hints_find(struct iter_hints* hints, uint8_t* qname,
++	uint16_t qclass, int nolock);
++
++/**
++ * Same as hints_lookup, but for the root only.
++ * @param hints: hint storage.
++ * @param qclass: class for which root hints are requested. host order.
++ * @param nolock: Skip locking, locking is handled by the caller.
++ * @return: NULL if no hints, or a ptr to stored hints.
++ */
++struct delegpt* hints_find_root(struct iter_hints* hints,
++	uint16_t qclass, int nolock);
+ 
+ /**
+  * Find next root hints (to cycle through all root hints).
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a readlock on the hints structure.
+  * @param hints: hint storage
+  * @param qclass: class for which root hints are sought.
+  * 	0 means give the first available root hints class.
+  * 	x means, give class x or a higher class if any.
+  * 	returns the found class in this variable.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return true if a root hint class is found.
+  * 	false if not root hint class is found (qclass may have been changed).
+  */
+-int hints_next_root(struct iter_hints* hints, uint16_t* qclass);
++int hints_next_root(struct iter_hints* hints, uint16_t* qclass, int nolock);
+ 
+ /**
+  * Given a qname/qclass combination, and the delegation point from the cache
+  * for this qname/qclass, determine if this combination indicates that a
+  * stub hint exists and must be primed.
++ * The return value is contents of the hints structure.
++ * Caller should lock and unlock a readlock on the hints structure if nolock
++ * is set.
++ * Otherwise caller should unlock the readlock on the hints structure if a
++ * value was returned.
+  *
+  * @param hints: hint storage.
+  * @param qname: The qname that generated the delegation point.
+  * @param qclass: The qclass that generated the delegation point.
+  * @param dp: The cache generated delegation point.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return: A priming delegation point if there is a stub hint that must
+  *         be primed, otherwise null.
+  */
+-struct iter_hints_stub* hints_lookup_stub(struct iter_hints* hints, 
+-	uint8_t* qname, uint16_t qclass, struct delegpt* dp);
++struct iter_hints_stub* hints_lookup_stub(struct iter_hints* hints,
++	uint8_t* qname, uint16_t qclass, struct delegpt* dp, int nolock);
+ 
+ /**
+  * Get memory in use by hints
++ * Locks and unlocks the structure.
+  * @param hints: hint storage.
+  * @return bytes in use
+  */
+@@ -139,23 +172,30 @@ size_t hints_get_mem(struct iter_hints* hints);
+ /**
+  * Add stub to hints structure. For external use since it recalcs 
+  * the tree parents.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the hints structure.
+  * @param hints: the hints data structure
+  * @param c: class of zone
+  * @param dp: delegation point with name and target nameservers for new
+  *	hints stub. malloced.
+  * @param noprime: set noprime option to true or false on new hint stub.
++ * @param nolock: Skip locking, locking is handled by the caller.
+  * @return false on failure (out of memory);
+  */
+ int hints_add_stub(struct iter_hints* hints, uint16_t c, struct delegpt* dp,
+-	int noprime);
++	int noprime, int nolock);
+ 
+ /**
+  * Remove stub from hints structure. For external use since it 
+  * recalcs the tree parents.
++ * Handles its own locking unless nolock is set. In that case the caller
++ * should lock and unlock a writelock on the hints structure.
+  * @param hints: the hints data structure
+  * @param c: class of stub zone
+  * @param nm: name of stub zone (in uncompressed wireformat).
++ * @param nolock: Skip locking, locking is handled by the caller.
+  */
+-void hints_delete_stub(struct iter_hints* hints, uint16_t c, uint8_t* nm);
++void hints_delete_stub(struct iter_hints* hints, uint16_t c,
++	uint8_t* nm, int nolock);
+ 
+ #endif /* ITERATOR_ITER_HINTS_H */

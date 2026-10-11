@@ -1,0 +1,307 @@
+diff --git a/ext/gd/libgd/gd_webp.c b/ext/gd/libgd/gd_webp.c
+index a0d8a0cf..a27398f1 100644
+--- a/ext/gd/libgd/gd_webp.c
++++ b/ext/gd/libgd/gd_webp.c
+@@ -113,7 +113,7 @@ void gdImageWebpCtx (gdImagePtr im, gdIOCtx * outfile, int quality)
+ 	}
+ 
+ 	if (!gdImageTrueColor(im)) {
+-		zend_error(E_ERROR, "Palette image not supported by webp");
++		zend_error(E_ERROR, "Paletter image not supported by webp");
+ 		return;
+ 	}
+ 
+diff --git a/ext/gd/libgd/gdft.c b/ext/gd/libgd/gdft.c
+index 554a656e..b23b7563 100644
+--- a/ext/gd/libgd/gdft.c
++++ b/ext/gd/libgd/gdft.c
+@@ -12,7 +12,7 @@
+ #include "gd.h"
+ #include "gdhelpers.h"
+ 
+-#ifndef _WIN32
++#ifndef MSWIN32
+ #include <unistd.h>
+ #else
+ #include <io.h>
+diff --git a/ext/gd/php_gd.h b/ext/gd/php_gd.h
+index 8d27f8cc..f063f30e 100644
+--- a/ext/gd/php_gd.h
++++ b/ext/gd/php_gd.h
+@@ -55,35 +55,6 @@
+ #define PHP_IMG_TGA  128
+ #define PHP_IMG_AVIF 256
+ 
+-/* Section Filters Declarations */
+-/* IMPORTANT NOTE FOR NEW FILTER
+- * Do not forget to update:
+- * IMAGE_FILTER_MAX: define the last filter index
+- * IMAGE_FILTER_MAX_ARGS: define the biggest amount of arguments
+- * image_filter array in PHP_FUNCTION(imagefilter)
+- * */
+-#define IMAGE_FILTER_NEGATE         0
+-#define IMAGE_FILTER_GRAYSCALE      1
+-#define IMAGE_FILTER_BRIGHTNESS     2
+-#define IMAGE_FILTER_CONTRAST       3
+-#define IMAGE_FILTER_COLORIZE       4
+-#define IMAGE_FILTER_EDGEDETECT     5
+-#define IMAGE_FILTER_EMBOSS         6
+-#define IMAGE_FILTER_GAUSSIAN_BLUR  7
+-#define IMAGE_FILTER_SELECTIVE_BLUR 8
+-#define IMAGE_FILTER_MEAN_REMOVAL   9
+-#define IMAGE_FILTER_SMOOTH         10
+-#define IMAGE_FILTER_PIXELATE       11
+-#define IMAGE_FILTER_SCATTER		12
+-#define IMAGE_FILTER_MAX            12
+-#define IMAGE_FILTER_MAX_ARGS       6
+-
+-#ifdef HAVE_GD_BUNDLED
+-#define GD_BUNDLED 1
+-#else
+-#define GD_BUNDLED 0
+-#endif
+-
+ #ifdef PHP_WIN32
+ #	ifdef PHP_GD_EXPORTS
+ #		define PHP_GD_API __declspec(dllexport)
+diff --git a/ext/gd/tests/bug77269.phpt b/ext/gd/tests/bug77269.phpt
+new file mode 100644
+index 00000000..f9b0b7bf
+--- /dev/null
++++ b/ext/gd/tests/bug77269.phpt
+@@ -0,0 +1,20 @@
++--TEST--
++Bug #77269 (Potential unsigned underflow in gdImageScale)
++--EXTENSIONS--
++gd
++--SKIPIF--
++<?php
++if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
++if (substr(PHP_OS, 0, 3) == 'WIN' && PHP_INT_SIZE === 4) die("skip not for Windows x86");
++?>
++--INI--
++memory_limit=2G
++--FILE--
++<?php
++$im = imagecreate(2**28, 1);
++imagescale($im, 1, 1, IMG_TRIANGLE);
++
++?>
++--EXPECTF--
++Warning: imagescale():%S Product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully
++ in %s on line %d
+diff --git a/ext/gd/tests/imageloadfont_end_of_file_while_reading_header.phpt b/ext/gd/tests/imageloadfont_end_of_file_while_reading_header.phpt
+index ba6eeaee..e033fa42 100644
+--- a/ext/gd/tests/imageloadfont_end_of_file_while_reading_header.phpt
++++ b/ext/gd/tests/imageloadfont_end_of_file_while_reading_header.phpt
+@@ -7,7 +7,7 @@ User Group: PHP-WVL & PHPGent #PHPTestFest
+ gd
+ --FILE--
+ <?php
+-$filename = __DIR__ .  '/imageloadfont_end_of_file_while_reading_header.gdf';
++$filename = __DIR__ .  '/font.gdf';
+ 
+ // End of file while reading header
+ $bin = "\x41\x41\x41\x41\x00\x00\x00\x00\x00\x00";
+@@ -25,7 +25,7 @@ $font = imageloadfont($filename);
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__.'/imageloadfont_end_of_file_while_reading_header.gdf');
++unlink(__DIR__.'/font.gdf');
+ ?>
+ --EXPECTF--
+ Warning: imageloadfont(): End of file while reading header in %s on line %d
+diff --git a/ext/gd/tests/imageloadfont_invalid.phpt b/ext/gd/tests/imageloadfont_invalid.phpt
+index 9d9ff7d6..05d89a83 100644
+--- a/ext/gd/tests/imageloadfont_invalid.phpt
++++ b/ext/gd/tests/imageloadfont_invalid.phpt
+@@ -4,7 +4,7 @@ imageloadfont() function crashes
+ gd
+ --FILE--
+ <?php
+-$filename = __DIR__ .  '/imageloadfont_invalid.gdf';
++$filename = __DIR__ .  '/font.gdf';
+ $bin = "\x41\x41\x41\x41\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00";
+ $fp = fopen($filename, 'wb');
+ fwrite($fp, $bin);
+diff --git a/ext/gmp/gmp.c b/ext/gmp/gmp.c
+index 02eb30ba..aaab3c9f 100644
+--- a/ext/gmp/gmp.c
++++ b/ext/gmp/gmp.c
+@@ -28,26 +28,11 @@
+ #include "zend_exceptions.h"
+ 
+ #include <gmp.h>
++#include "gmp_arginfo.h"
+ 
+ /* Needed for gmp_random() */
+-#include "ext/random/php_random.h"
+-
+-#define GMP_ROUND_ZERO      0
+-#define GMP_ROUND_PLUSINF   1
+-#define GMP_ROUND_MINUSINF  2
+-
+-#ifdef mpir_version
+-#define GMP_MPIR_VERSION_STRING ((char *) mpir_version)
+-#endif
+-#define GMP_VERSION_STRING ((char *) gmp_version)
+-
+-#define GMP_MSW_FIRST     (1 << 0)
+-#define GMP_LSW_FIRST     (1 << 1)
+-#define GMP_LITTLE_ENDIAN (1 << 2)
+-#define GMP_BIG_ENDIAN    (1 << 3)
+-#define GMP_NATIVE_ENDIAN (1 << 4)
+-
+-#include "gmp_arginfo.h"
++#include "ext/standard/php_rand.h"
++#include "ext/standard/php_lcg.h"
+ 
+ ZEND_DECLARE_MODULE_GLOBALS(gmp)
+ static ZEND_GINIT_FUNCTION(gmp);
+@@ -90,6 +75,16 @@ typedef struct _gmp_temp {
+ 	bool is_used;
+ } gmp_temp_t;
+ 
++#define GMP_ROUND_ZERO      0
++#define GMP_ROUND_PLUSINF   1
++#define GMP_ROUND_MINUSINF  2
++
++#define GMP_MSW_FIRST     (1 << 0)
++#define GMP_LSW_FIRST     (1 << 1)
++#define GMP_LITTLE_ENDIAN (1 << 2)
++#define GMP_BIG_ENDIAN    (1 << 3)
++#define GMP_NATIVE_ENDIAN (1 << 4)
++
+ #define GMP_MAX_BASE 62
+ 
+ #define GMP_51_OR_NEWER \
+@@ -275,7 +270,7 @@ static inline void gmp_create(zval *target, mpz_ptr *gmpnum_target) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result gmp_cast_object(zend_object *readobj, zval *writeobj, int type) /* {{{ */
++static int gmp_cast_object(zend_object *readobj, zval *writeobj, int type) /* {{{ */
+ {
+ 	mpz_ptr gmpnum;
+ 	switch (type) {
+@@ -371,7 +366,7 @@ static void shift_operator_helper(gmp_binary_ui_op_t op, zval *return_value, zva
+ 	}                                   \
+ 	return SUCCESS;
+ 
+-static zend_result gmp_do_operation_ex(zend_uchar opcode, zval *result, zval *op1, zval *op2) /* {{{ */
++static int gmp_do_operation_ex(zend_uchar opcode, zval *result, zval *op1, zval *op2) /* {{{ */
+ {
+ 	switch (opcode) {
+ 	case ZEND_ADD:
+@@ -408,7 +403,7 @@ static zend_result gmp_do_operation_ex(zend_uchar opcode, zval *result, zval *op
+ }
+ /* }}} */
+ 
+-static zend_result gmp_do_operation(zend_uchar opcode, zval *result, zval *op1, zval *op2) /* {{{ */
++static int gmp_do_operation(zend_uchar opcode, zval *result, zval *op1, zval *op2) /* {{{ */
+ {
+ 	zval op1_copy;
+ 	int retval;
+@@ -545,7 +540,19 @@ ZEND_MINIT_FUNCTION(gmp)
+ 	gmp_object_handlers.do_operation = gmp_do_operation;
+ 	gmp_object_handlers.compare = gmp_compare;
+ 
+-	register_gmp_symbols(module_number);
++	REGISTER_LONG_CONSTANT("GMP_ROUND_ZERO", GMP_ROUND_ZERO, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_ROUND_PLUSINF", GMP_ROUND_PLUSINF, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_ROUND_MINUSINF", GMP_ROUND_MINUSINF, CONST_CS | CONST_PERSISTENT);
++#ifdef mpir_version
++	REGISTER_STRING_CONSTANT("GMP_MPIR_VERSION", (char *)mpir_version, CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_STRING_CONSTANT("GMP_VERSION", (char *)gmp_version, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("GMP_MSW_FIRST", GMP_MSW_FIRST, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_LSW_FIRST", GMP_LSW_FIRST, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_LITTLE_ENDIAN", GMP_LITTLE_ENDIAN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_BIG_ENDIAN", GMP_BIG_ENDIAN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("GMP_NATIVE_ENDIAN", GMP_NATIVE_ENDIAN, CONST_CS | CONST_PERSISTENT);
+ 
+ 	return SUCCESS;
+ }
+@@ -862,26 +869,6 @@ static inline void _gmp_unary_opl(INTERNAL_FUNCTION_PARAMETERS, gmp_unary_opl_t
+ }
+ /* }}} */
+ 
+-static bool gmp_verify_base(zend_long base, uint32_t arg_num)
+-{
+-	if (base && (base < 2 || base > GMP_MAX_BASE)) {
+-		zend_argument_value_error(arg_num, "must be between 2 and %d", GMP_MAX_BASE);
+-		return false;
+-	}
+-
+-	return true;
+-}
+-
+-static zend_result gmp_initialize_number(mpz_ptr gmp_number, const zend_string *arg_str, zend_long arg_l, zend_long base)
+-{
+-	if (arg_str) {
+-		return convert_zstr_to_gmp(gmp_number, arg_str, base, 1);
+-	}
+-
+-	mpz_set_si(gmp_number, arg_l);
+-	return SUCCESS;
+-}
+-
+ /* {{{ Initializes GMP number */
+ ZEND_FUNCTION(gmp_init)
+ {
+@@ -896,14 +883,18 @@ ZEND_FUNCTION(gmp_init)
+ 		Z_PARAM_LONG(base)
+ 	ZEND_PARSE_PARAMETERS_END();
+ 
+-	if (!gmp_verify_base(base, 2)) {
++	if (base && (base < 2 || base > GMP_MAX_BASE)) {
++		zend_argument_value_error(2, "must be between 2 and %d", GMP_MAX_BASE);
+ 		RETURN_THROWS();
+ 	}
+ 
+ 	INIT_GMP_RETVAL(gmp_number);
+-
+-	if (gmp_initialize_number(gmp_number, arg_str, arg_l, base) == FAILURE) {
+-		RETURN_THROWS();
++	if (arg_str) {
++		if (convert_zstr_to_gmp(gmp_number, arg_str, base, 1) == FAILURE) {
++			RETURN_THROWS();
++		}
++	} else {
++		mpz_set_si(gmp_number, arg_l);
+ 	}
+ }
+ /* }}} */
+@@ -2037,30 +2028,6 @@ ZEND_FUNCTION(gmp_scan1)
+ }
+ /* }}} */
+ 
+-ZEND_METHOD(GMP, __construct)
+-{
+-	zend_string *arg_str = NULL;
+-	zend_long arg_l = 0;
+-	zend_long base = 0;
+-
+-	ZEND_PARSE_PARAMETERS_START(0, 2)
+-		Z_PARAM_OPTIONAL
+-		Z_PARAM_STR_OR_LONG(arg_str, arg_l)
+-		Z_PARAM_LONG(base)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	if (!gmp_verify_base(base, 2)) {
+-		RETURN_THROWS();
+-	}
+-
+-	return_value = ZEND_THIS;
+-	mpz_ptr gmp_number = GET_GMP_FROM_ZVAL(ZEND_THIS);
+-
+-	if (gmp_initialize_number(gmp_number, arg_str, arg_l, base) == FAILURE) {
+-		RETURN_THROWS();
+-	}
+-}
+-
+ ZEND_METHOD(GMP, __serialize)
+ {
+ 	ZEND_PARSE_PARAMETERS_NONE();

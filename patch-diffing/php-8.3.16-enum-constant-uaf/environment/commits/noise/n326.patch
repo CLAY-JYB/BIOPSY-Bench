@@ -1,0 +1,409 @@
+diff --git a/ext/standard/config.w32 b/ext/standard/config.w32
+index 282189c5..3de43d04 100644
+--- a/ext/standard/config.w32
++++ b/ext/standard/config.w32
+@@ -25,19 +25,18 @@ ADD_FLAG("LIBS_STANDARD", "iphlpapi.lib");
+ 
+ EXTENSION("standard", "array.c base64.c basic_functions.c browscap.c \
+ 	crc32.c crypt.c crypt_freesec.c crypt_blowfish.c crypt_sha256.c \
+-	crypt_sha512.c  php_crypt_r.c " + (TARGET_ARCH != 'arm64'? " crc32_x86.c" : "") + " \
++	crypt_sha512.c  php_crypt_r.c crc32_x86.c \
+ 	datetime.c dir.c dl.c dns.c dns_win32.c exec.c \
+ 	file.c filestat.c formatted_print.c fsock.c head.c html.c image.c \
+-	info.c iptc.c link.c mail.c math.c md5.c metaphone.c microtime.c \
+-	net.c pack.c pageinfo.c quot_print.c soundex.c \
++	info.c iptc.c lcg.c link.c mail.c math.c md5.c metaphone.c microtime.c \
++	net.c pack.c pageinfo.c quot_print.c rand.c mt_rand.c soundex.c \
+ 	string.c scanf.c syslog.c type.c uniqid.c url.c var.c \
+ 	versioning.c assert.c strnatcmp.c levenshtein.c incomplete_class.c \
+ 	url_scanner_ex.c ftp_fopen_wrapper.c http_fopen_wrapper.c \
+ 	php_fopen_wrapper.c credits.c css.c var_unserializer.c ftok.c sha1.c \
+ 	user_filters.c uuencode.c filters.c proc_open.c password.c \
+-	streamsfuncs.c http.c flock_compat.c hrtime.c", false /* never shared */,
++	streamsfuncs.c http.c flock_compat.c random.c hrtime.c", false /* never shared */,
+ 	'/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+-ADD_SOURCES("ext/standard/libavifinfo", "avifinfo.c", "standard");
+ PHP_STANDARD = "yes";
+ ADD_MAKEFILE_FRAGMENT();
+ PHP_INSTALL_HEADERS("", "ext/standard");
+diff --git a/ext/standard/crc32.c b/ext/standard/crc32.c
+index 374fee38..221b864b 100644
+--- a/ext/standard/crc32.c
++++ b/ext/standard/crc32.c
+@@ -19,10 +19,8 @@
+ #include "crc32.h"
+ #include "crc32_x86.h"
+ 
+-#ifdef HAVE_AARCH64_CRC32
+-#ifndef PHP_WIN32
++#if HAVE_AARCH64_CRC32
+ # include <arm_acle.h>
+-#endif
+ # if defined(__linux__)
+ #  include <sys/auxv.h>
+ #  include <asm/hwcap.h>
+@@ -55,22 +53,15 @@ static inline int has_crc32_insn() {
+ 	if (sysctlbyname("hw.optional.armv8_crc32", &res, &reslen, NULL, 0) < 0)
+ 		res = 0;
+ 	return res;
+-# elif defined(WIN32)
+-	res = (int)IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE);
+-	return res;
+ # else
+ 	res = 0;
+ 	return res;
+ # endif
+ }
+ 
+-# if defined(__GNUC__)
+-#  if!defined(__clang__)
+-#   pragma GCC push_options
+-#   pragma GCC target ("+nothing+crc")
+-#  else
+-#   pragma clang attribute push(__attribute__((target("+nothing+crc"))), apply_to=function)
+-#  endif
++# if defined(__GNUC__) && !defined(__clang__)
++#  pragma GCC push_options
++#  pragma GCC target ("+nothing+crc")
+ # endif
+ static uint32_t crc32_aarch64(uint32_t crc, const char *p, size_t nr) {
+ 	while (nr >= sizeof(uint64_t)) {
+@@ -93,18 +84,14 @@ static uint32_t crc32_aarch64(uint32_t crc, const char *p, size_t nr) {
+ 	}
+ 	return crc;
+ }
+-# if defined(__GNUC__)
+-#  if !defined(__clang__)
+-#   pragma GCC pop_options
+-#  else
+-#   pragma clang attribute pop
+-#  endif
++# if defined(__GNUC__) && !defined(__clang__)
++#  pragma GCC pop_options
+ # endif
+ #endif
+ 
+ PHPAPI uint32_t php_crc32_bulk_update(uint32_t crc, const char *p, size_t nr)
+ {
+-#ifdef HAVE_AARCH64_CRC32
++#if HAVE_AARCH64_CRC32
+ 	if (has_crc32_insn()) {
+ 		crc = crc32_aarch64(crc, p, nr);
+ 		return crc;
+diff --git a/ext/standard/credits_ext.h b/ext/standard/credits_ext.h
+index 093e56f2..a1ccc899 100644
+--- a/ext/standard/credits_ext.h
++++ b/ext/standard/credits_ext.h
+@@ -55,7 +55,6 @@ CREDIT_LINE("Posix", "Kristian Koehntopp");
+ CREDIT_LINE("PostgreSQL driver for PDO", "Edin Kadribasic, Ilia Alshanetsky");
+ CREDIT_LINE("PostgreSQL", "Jouni Ahto, Zeev Suraski, Yasuo Ohgaki, Chris Kings-Lynne");
+ CREDIT_LINE("Pspell", "Vlad Krupin");
+-CREDIT_LINE("random", "Go Kudo, Tim Düsterhus, Guilliam Xavier, Christoph M. Becker, Jakub Zelenka, Bob Weinand, Máté Kocsis, and Original RNG implementators");
+ CREDIT_LINE("Readline", "Thies C. Arntzen");
+ CREDIT_LINE("Reflection", "Marcus Boerger, Timm Friebe, George Schlossnagle, Andrei Zmievski, Johannes Schlueter");
+ CREDIT_LINE("Sessions", "Sascha Schumann, Andrei Zmievski");
+diff --git a/ext/standard/crypt.c b/ext/standard/crypt.c
+index baa2fa62..14694faf 100644
+--- a/ext/standard/crypt.c
++++ b/ext/standard/crypt.c
+@@ -21,14 +21,14 @@
+ 
+ #include "php.h"
+ 
+-#ifdef HAVE_UNISTD_H
++#if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+ #if PHP_USE_PHP_CRYPT_R
+ # include "php_crypt_r.h"
+ # include "crypt_freesec.h"
+ #else
+-# ifdef HAVE_CRYPT_H
++# if HAVE_CRYPT_H
+ #  if defined(CRYPT_R_GNU_SOURCE) && !defined(_GNU_SOURCE)
+ #   define _GNU_SOURCE
+ #  endif
+@@ -43,7 +43,7 @@
+ #endif
+ 
+ #include "php_crypt.h"
+-#include "ext/random/php_random.h"
++#include "php_random.h"
+ 
+ /* sha512 crypt has the maximal salt length of 123 characters */
+ #define PHP_MAX_SALT_LEN 123
+diff --git a/ext/standard/crypt_freesec.c b/ext/standard/crypt_freesec.c
+index 6b37d393..6e943226 100644
+--- a/ext/standard/crypt_freesec.c
++++ b/ext/standard/crypt_freesec.c
+@@ -69,25 +69,25 @@
+ 
+ #define _PASSWORD_EFMT1 '_'
+ 
+-static const uint8_t IP[64] = {
++static const u_char	IP[64] = {
+ 	58, 50, 42, 34, 26, 18, 10,  2, 60, 52, 44, 36, 28, 20, 12,  4,
+ 	62, 54, 46, 38, 30, 22, 14,  6, 64, 56, 48, 40, 32, 24, 16,  8,
+ 	57, 49, 41, 33, 25, 17,  9,  1, 59, 51, 43, 35, 27, 19, 11,  3,
+ 	61, 53, 45, 37, 29, 21, 13,  5, 63, 55, 47, 39, 31, 23, 15,  7
+ };
+ 
+-static const uint8_t key_perm[56] = {
++static const u_char	key_perm[56] = {
+ 	57, 49, 41, 33, 25, 17,  9,  1, 58, 50, 42, 34, 26, 18,
+ 	10,  2, 59, 51, 43, 35, 27, 19, 11,  3, 60, 52, 44, 36,
+ 	63, 55, 47, 39, 31, 23, 15,  7, 62, 54, 46, 38, 30, 22,
+ 	14,  6, 61, 53, 45, 37, 29, 21, 13,  5, 28, 20, 12,  4
+ };
+ 
+-static const uint8_t key_shifts[16] = {
++static const u_char	key_shifts[16] = {
+ 	1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1
+ };
+ 
+-static const uint8_t comp_perm[48] = {
++static const u_char	comp_perm[48] = {
+ 	14, 17, 11, 24,  1,  5,  3, 28, 15,  6, 21, 10,
+ 	23, 19, 12,  4, 26,  8, 16,  7, 27, 20, 13,  2,
+ 	41, 52, 31, 37, 47, 55, 30, 40, 51, 45, 33, 48,
+@@ -98,7 +98,7 @@ static const uint8_t comp_perm[48] = {
+  *	No E box is used, as it's replaced by some ANDs, shifts, and ORs.
+  */
+ 
+-static const uint8_t sbox[8][64] = {
++static const u_char	sbox[8][64] = {
+ 	{
+ 		14,  4, 13,  1,  2, 15, 11,  8,  3, 10,  6, 12,  5,  9,  0,  7,
+ 		 0, 15,  7,  4, 14,  2, 13,  1, 10,  6, 12, 11,  9,  5,  3,  8,
+@@ -149,7 +149,7 @@ static const uint8_t sbox[8][64] = {
+ 	}
+ };
+ 
+-static const uint8_t pbox[32] = {
++static const u_char	pbox[32] = {
+ 	16,  7, 20, 21, 29, 12, 28, 17,  1, 15, 23, 26,  5, 18, 31, 10,
+ 	 2,  8, 24, 14, 32, 27,  3,  9, 19, 13, 30,  6, 22, 11,  4, 25
+ };
+@@ -166,12 +166,12 @@ static const uint32_t bits32[32] =
+ 	0x00000008, 0x00000004, 0x00000002, 0x00000001
+ };
+ 
+-static const uint8_t bits8[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
++static const u_char	bits8[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
+ 
+ static const unsigned char	ascii64[] =
+ 	 "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+ 
+-static uint8_t m_sbox[4][4096];
++static u_char m_sbox[4][4096];
+ static uint32_t psbox[4][256];
+ static uint32_t ip_maskl[8][256], ip_maskr[8][256];
+ static uint32_t fp_maskl[8][256], fp_maskr[8][256];
+@@ -211,11 +211,11 @@ _crypt_extended_init(void)
+ 	int i, j, b, k, inbit, obit;
+ 	uint32_t *p, *il, *ir, *fl, *fr;
+ 	const uint32_t *bits28, *bits24;
+-	uint8_t inv_key_perm[64];
+-	uint8_t inv_comp_perm[56];
+-	uint8_t init_perm[64], final_perm[64];
+-	uint8_t u_sbox[8][64];
+-	uint8_t un_pbox[32];
++	u_char inv_key_perm[64];
++	u_char inv_comp_perm[56];
++	u_char init_perm[64], final_perm[64];
++	u_char u_sbox[8][64];
++	u_char un_pbox[32];
+ 
+ 	bits24 = (bits28 = bits32 + 4) + 4;
+ 
+@@ -374,15 +374,15 @@ des_setkey(const char *key, struct php_crypt_extended_data *data)
+ 	int	shifts, round;
+ 
+ 	rawkey0 =
+-		(uint32_t)(uint8_t)key[3] |
+-		((uint32_t)(uint8_t)key[2] << 8) |
+-		((uint32_t)(uint8_t)key[1] << 16) |
+-		((uint32_t)(uint8_t)key[0] << 24);
++		(uint32_t)(u_char)key[3] |
++		((uint32_t)(u_char)key[2] << 8) |
++		((uint32_t)(u_char)key[1] << 16) |
++		((uint32_t)(u_char)key[0] << 24);
+ 	rawkey1 =
+-		(uint32_t)(uint8_t)key[7] |
+-		((uint32_t)(uint8_t)key[6] << 8) |
+-		((uint32_t)(uint8_t)key[5] << 16) |
+-		((uint32_t)(uint8_t)key[4] << 24);
++		(uint32_t)(u_char)key[7] |
++		((uint32_t)(u_char)key[6] << 8) |
++		((uint32_t)(u_char)key[5] << 16) |
++		((uint32_t)(u_char)key[4] << 24);
+ 
+ 	if ((rawkey0 | rawkey1)
+ 	    && rawkey0 == data->old_rawkey0
+@@ -580,15 +580,15 @@ des_cipher(const char *in, char *out, uint32_t salt, int count,
+ 	setup_salt(salt, data);
+ 
+ 	rawl =
+-		(uint32_t)(uint8_t)in[3] |
+-		((uint32_t)(uint8_t)in[2] << 8) |
+-		((uint32_t)(uint8_t)in[1] << 16) |
+-		((uint32_t)(uint8_t)in[0] << 24);
++		(uint32_t)(u_char)in[3] |
++		((uint32_t)(u_char)in[2] << 8) |
++		((uint32_t)(u_char)in[1] << 16) |
++		((uint32_t)(u_char)in[0] << 24);
+ 	rawr =
+-		(uint32_t)(uint8_t)in[7] |
+-		((uint32_t)(uint8_t)in[6] << 8) |
+-		((uint32_t)(uint8_t)in[5] << 16) |
+-		((uint32_t)(uint8_t)in[4] << 24);
++		(uint32_t)(u_char)in[7] |
++		((uint32_t)(u_char)in[6] << 8) |
++		((uint32_t)(u_char)in[5] << 16) |
++		((uint32_t)(u_char)in[4] << 24);
+ 
+ 	retval = do_des(rawl, rawr, &l_out, &r_out, count, data);
+ 
+@@ -610,7 +610,7 @@ _crypt_extended_r(const unsigned char *key, const char *setting,
+ {
+ 	int		i;
+ 	uint32_t	count, salt, l, r0, r1, keybuf[2];
+-	uint8_t		*p, *q;
++	u_char		*p, *q;
+ 
+ 	if (!data->initialized)
+ 		des_init_local(data);
+@@ -619,8 +619,8 @@ _crypt_extended_r(const unsigned char *key, const char *setting,
+ 	 * Copy the key, shifting each character up by one bit
+ 	 * and padding with zeros.
+ 	 */
+-	q = (uint8_t *) keybuf;
+-	while ((size_t)(q - (uint8_t *) keybuf) < sizeof(keybuf)) {
++	q = (u_char *) keybuf;
++	while ((size_t)(q - (u_char *) keybuf) < sizeof(keybuf)) {
+ 		*q++ = *key << 1;
+ 		if (*key)
+ 			key++;
+@@ -660,8 +660,8 @@ _crypt_extended_r(const unsigned char *key, const char *setting,
+ 			/*
+ 			 * And XOR with the next 8 characters of the key.
+ 			 */
+-			q = (uint8_t *) keybuf;
+-			while ((size_t)(q - (uint8_t *) keybuf) < sizeof(keybuf) && *key)
++			q = (u_char *) keybuf;
++			while ((size_t)(q - (u_char *) keybuf) < sizeof(keybuf) && *key)
+ 				*q++ ^= *key++ << 1;
+ 
+ 			if (des_setkey((char *) keybuf, data))
+@@ -669,7 +669,7 @@ _crypt_extended_r(const unsigned char *key, const char *setting,
+ 		}
+ 		memcpy(data->output, setting, 9);
+ 		data->output[9] = '\0';
+-		p = (uint8_t *) data->output + 9;
++		p = (u_char *) data->output + 9;
+ 	} else {
+ 		/*
+ 		 * "old"-style:
+@@ -686,7 +686,7 @@ _crypt_extended_r(const unsigned char *key, const char *setting,
+ 
+ 		data->output[0] = setting[0];
+ 		data->output[1] = setting[1];
+-		p = (uint8_t *) data->output + 2;
++		p = (u_char *) data->output + 2;
+ 	}
+ 	setup_salt(salt, data);
+ 	/*
+diff --git a/ext/standard/crypt_freesec.h b/ext/standard/crypt_freesec.h
+index 33bca146..69271f23 100644
+--- a/ext/standard/crypt_freesec.h
++++ b/ext/standard/crypt_freesec.h
+@@ -1,7 +1,13 @@
+ #ifndef _CRYPT_FREESEC_H
+ #define _CRYPT_FREESEC_H
+ 
+-#include <stdint.h>
++#ifdef PHP_WIN32
++# ifndef inline
++# define inline __inline
++# endif
++#endif
++
++#include "php_stdint.h"
+ 
+ #define MD5_HASH_MAX_LEN 120
+ 
+diff --git a/ext/standard/crypt_sha256.c b/ext/standard/crypt_sha256.c
+index 9e86db60..7221acd5 100644
+--- a/ext/standard/crypt_sha256.c
++++ b/ext/standard/crypt_sha256.c
+@@ -10,6 +10,7 @@
+ 
+ #ifdef PHP_WIN32
+ # define __alignof__ __alignof
++# define alloca _alloca
+ #else
+ # ifndef HAVE_ALIGNOF
+ #  include <stddef.h>
+@@ -369,23 +370,16 @@ char * php_sha256_crypt_r(const char *key, const char *salt, char *buffer, int b
+ 
+ 	salt_len = MIN(strcspn(salt, "$"), SALT_LEN_MAX);
+ 	key_len = strlen(key);
+-	char *tmp_key = NULL;
+-	ALLOCA_FLAG(use_heap_key);
+-	char *tmp_salt = NULL;
+-	ALLOCA_FLAG(use_heap_salt);
+-
+-	SET_ALLOCA_FLAG(use_heap_key);
+-	SET_ALLOCA_FLAG(use_heap_salt);
+ 
+ 	if ((uintptr_t)key % __alignof__ (uint32_t) != 0) {
+-		tmp_key = (char *) do_alloca(key_len + __alignof__(uint32_t), use_heap_key);
+-		key = copied_key = memcpy(tmp_key + __alignof__(uint32_t) - (uintptr_t)tmp_key % __alignof__(uint32_t), key, key_len);
++		char *tmp = (char *) alloca(key_len + __alignof__(uint32_t));
++		key = copied_key = memcpy(tmp + __alignof__(uint32_t) - (uintptr_t)tmp  % __alignof__(uint32_t), key, key_len);
+ 	}
+ 
+ 	if ((uintptr_t)salt % __alignof__(uint32_t) != 0) {
+-		tmp_salt = (char *) do_alloca(salt_len + 1 + __alignof__(uint32_t), use_heap_salt);
++		char *tmp = (char *) alloca(salt_len + 1 + __alignof__(uint32_t));
+ 		salt = copied_salt =
+-		memcpy(tmp_salt + __alignof__(uint32_t) - (uintptr_t)tmp_salt % __alignof__ (uint32_t), salt, salt_len);
++		memcpy(tmp + __alignof__(uint32_t) - (uintptr_t)tmp % __alignof__ (uint32_t), salt, salt_len);
+ 		copied_salt[salt_len] = 0;
+ 	}
+ 
+@@ -449,8 +443,7 @@ char * php_sha256_crypt_r(const char *key, const char *salt, char *buffer, int b
+ 	sha256_finish_ctx(&alt_ctx, temp_result);
+ 
+ 	/* Create byte sequence P.  */
+-	ALLOCA_FLAG(use_heap_p_bytes);
+-	cp = p_bytes = do_alloca(key_len, use_heap_p_bytes);
++	cp = p_bytes = alloca(key_len);
+ 	for (cnt = key_len; cnt >= 32; cnt -= 32) {
+ 		cp = __php_mempcpy((void *)cp, (const void *)temp_result, 32);
+ 	}
+@@ -468,8 +461,7 @@ char * php_sha256_crypt_r(const char *key, const char *salt, char *buffer, int b
+ 	sha256_finish_ctx(&alt_ctx, temp_result);
+ 
+ 	/* Create byte sequence S.  */
+-	ALLOCA_FLAG(use_heap_s_bytes);
+-	cp = s_bytes = do_alloca(salt_len, use_heap_s_bytes);
++	cp = s_bytes = alloca(salt_len);
+ 	for (cnt = salt_len; cnt >= 32; cnt -= 32) {
+ 		cp = __php_mempcpy(cp, temp_result, 32);
+ 	}
+@@ -579,14 +571,6 @@ char * php_sha256_crypt_r(const char *key, const char *salt, char *buffer, int b
+ 	if (copied_salt != NULL) {
+ 		ZEND_SECURE_ZERO(copied_salt, salt_len);
+ 	}
+-	if (tmp_key != NULL) {
+-		free_alloca(tmp_key, use_heap_key);
+-	}
+-	if (tmp_salt != NULL) {
+-		free_alloca(tmp_salt, use_heap_salt);
+-	}
+-	free_alloca(p_bytes, use_heap_p_bytes);
+-	free_alloca(s_bytes, use_heap_s_bytes);
+ 
+ 	return buffer;
+ }

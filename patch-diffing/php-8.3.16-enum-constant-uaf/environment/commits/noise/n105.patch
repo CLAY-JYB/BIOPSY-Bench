@@ -1,0 +1,1043 @@
+diff --git a/ext/dba/dba_arginfo.h b/ext/dba/dba_arginfo.h
+index 447f1ff3..33a8be8c 100644
+--- a/ext/dba/dba_arginfo.h
++++ b/ext/dba/dba_arginfo.h
+@@ -1,13 +1,11 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 1a02eaf9da45edb40720620e3beef43fd19dd520 */
++ * Stub hash: 670f79f43896b4f0cfd45396bdd8d7a06af1b613 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_dba_popen, 0, 0, 2)
+-	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, mode, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, handler, IS_STRING, 1, "null")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, permission, IS_LONG, 0, "0644")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, map_size, IS_LONG, 0, "0")
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 1, "null")
++	ZEND_ARG_INFO(0, path)
++	ZEND_ARG_INFO(0, mode)
++	ZEND_ARG_INFO(0, handler)
++	ZEND_ARG_VARIADIC_INFO(0, handler_params)
+ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_dba_open arginfo_dba_popen
+@@ -17,14 +15,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_close, 0, 1, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_exists, 0, 2, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
+ 	ZEND_ARG_INFO(0, dba)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dba_fetch, 0, 2, MAY_BE_STRING|MAY_BE_FALSE)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
++	ZEND_ARG_INFO(0, skip)
+ 	ZEND_ARG_INFO(0, dba)
+-	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, skip, "0")
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dba_key_split, 0, 1, MAY_BE_ARRAY|MAY_BE_FALSE)
+@@ -40,7 +38,7 @@ ZEND_END_ARG_INFO()
+ #define arginfo_dba_delete arginfo_dba_exists
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dba_insert, 0, 3, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_STRING|MAY_BE_ARRAY, NULL)
++	ZEND_ARG_INFO(0, key)
+ 	ZEND_ARG_TYPE_INFO(0, value, IS_STRING, 0)
+ 	ZEND_ARG_INFO(0, dba)
+ ZEND_END_ARG_INFO()
+@@ -96,13 +94,3 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(dba_list, arginfo_dba_list)
+ 	ZEND_FE_END
+ };
+-
+-static void register_dba_symbols(int module_number)
+-{
+-#if defined(DBA_LMDB)
+-	REGISTER_LONG_CONSTANT("DBA_LMDB_USE_SUB_DIR", 0, CONST_PERSISTENT);
+-#endif
+-#if defined(DBA_LMDB)
+-	REGISTER_LONG_CONSTANT("DBA_LMDB_NO_SUB_DIR", MDB_NOSUBDIR, CONST_PERSISTENT);
+-#endif
+-}
+diff --git a/ext/dba/dba_cdb.c b/ext/dba/dba_cdb.c
+index 5af9121b..44517811 100644
+--- a/ext/dba/dba_cdb.c
++++ b/ext/dba/dba_cdb.c
+@@ -21,7 +21,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_CDB
++#if DBA_CDB
+ #include "php_cdb.h"
+ 
+ #include <sys/types.h>
+@@ -145,30 +145,32 @@ DBA_CLOSE_FUNC(cdb)
+ DBA_FETCH_FUNC(cdb)
+ {
+ 	CDB_INFO;
+-	zend_string *fetched_val = NULL;
+ 	unsigned int len;
++	char *new_entry = NULL;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+ 		return NULL; /* database was opened writeonly */
+ #endif
+-	if (php_cdb_find(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) == 1) {
++	if (php_cdb_find(&cdb->c, key, keylen) == 1) {
+ 		while(skip--) {
+-			if (php_cdb_findnext(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) != 1) {
++			if (php_cdb_findnext(&cdb->c, key, keylen) != 1) {
+ 				return NULL;
+ 			}
+ 		}
+ 		len = cdb_datalen(&cdb->c);
+-		fetched_val = zend_string_alloc(len, /* persistent */ false);
++		new_entry = safe_emalloc(len, 1, 1);
+ 
+-		if (php_cdb_read(&cdb->c, ZSTR_VAL(fetched_val), len, cdb_datapos(&cdb->c)) == -1) {
+-			zend_string_release_ex(fetched_val, /* persistent */ false);
++		if (php_cdb_read(&cdb->c, new_entry, len, cdb_datapos(&cdb->c)) == -1) {
++			efree(new_entry);
+ 			return NULL;
+ 		}
+-		ZSTR_VAL(fetched_val)[len] = 0;
++		new_entry[len] = 0;
++		if (newlen)
++			*newlen = len;
+ 	}
+ 
+-	return fetched_val;
++	return new_entry;
+ }
+ 
+ DBA_UPDATE_FUNC(cdb)
+@@ -180,7 +182,7 @@ DBA_UPDATE_FUNC(cdb)
+ 		return FAILURE; /* database was opened readonly */
+ 	if (!mode)
+ 		return FAILURE; /* cdb_make doesn't know replace */
+-	if (cdb_make_add(&cdb->m, ZSTR_VAL(key), ZSTR_LEN(key), ZSTR_VAL(val), ZSTR_LEN(val)) != -1)
++	if (cdb_make_add(&cdb->m, key, keylen, val, vallen) != -1)
+ 		return SUCCESS;
+ #endif
+ 	return FAILURE;
+@@ -194,7 +196,7 @@ DBA_EXISTS_FUNC(cdb)
+ 	if (cdb->make)
+ 		return FAILURE; /* database was opened writeonly */
+ #endif
+-	if (php_cdb_find(&cdb->c, ZSTR_VAL(key), ZSTR_LEN(key)) == 1)
++	if (php_cdb_find(&cdb->c, key, keylen) == 1)
+ 		return SUCCESS;
+ 	return FAILURE;
+ }
+@@ -241,7 +243,7 @@ DBA_FIRSTKEY_FUNC(cdb)
+ 	CDB_INFO;
+ 	uint32 klen, dlen;
+ 	char buf[8];
+-	zend_string *key;
++	char *key;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+@@ -262,12 +264,13 @@ DBA_FIRSTKEY_FUNC(cdb)
+ 	uint32_unpack(buf, &klen);
+ 	uint32_unpack(buf + 4, &dlen);
+ 
+-	key = zend_string_alloc(klen, /* persistent */ false);
+-	if (cdb_file_read(cdb->file, ZSTR_VAL(key), klen) < klen) {
+-		zend_string_release_ex(key, /* persistent */ false);
++	key = safe_emalloc(klen, 1, 1);
++	if (cdb_file_read(cdb->file, key, klen) < klen) {
++		efree(key);
+ 		key = NULL;
+ 	} else {
+-		ZSTR_VAL(key)[klen] = 0;
++		key[klen] = '\0';
++		if (newlen) *newlen = klen;
+ 	}
+ 
+ 	/*       header + klenlen + dlenlen + klen + dlen */
+@@ -281,7 +284,7 @@ DBA_NEXTKEY_FUNC(cdb)
+ 	CDB_INFO;
+ 	uint32 klen, dlen;
+ 	char buf[8];
+-	zend_string *key;
++	char *key;
+ 
+ #if DBA_CDB_BUILTIN
+ 	if (cdb->make)
+@@ -293,12 +296,13 @@ DBA_NEXTKEY_FUNC(cdb)
+ 	uint32_unpack(buf, &klen);
+ 	uint32_unpack(buf + 4, &dlen);
+ 
+-	key = zend_string_alloc(klen, /* persistent */ false);
+-	if (cdb_file_read(cdb->file, ZSTR_VAL(key), klen) < klen) {
+-		zend_string_release_ex(key, /* persistent */ false);
++	key = safe_emalloc(klen, 1, 1);
++	if (cdb_file_read(cdb->file, key, klen) < klen) {
++		efree(key);
+ 		key = NULL;
+ 	} else {
+-		ZSTR_VAL(key)[klen] = 0;
++		key[klen] = '\0';
++		if (newlen) *newlen = klen;
+ 	}
+ 
+ 	cdb->pos += 8 + klen + dlen;
+diff --git a/ext/dba/dba_db1.c b/ext/dba/dba_db1.c
+index 3a95cea4..202c05ab 100644
+--- a/ext/dba/dba_db1.c
++++ b/ext/dba/dba_db1.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB1
++#if DBA_DB1
+ #include "php_db1.h"
+ 
+ #ifdef DB1_INCLUDE_FILE
+@@ -31,6 +31,9 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define DB1_DATA dba_db1_data *dba = info->dbf
++#define DB1_GKEY DBT gkey; gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB  *dbp;
+ } dba_db1_data;
+@@ -41,7 +44,11 @@ DBA_OPEN_FUNC(db1)
+ 	DB		*db;
+ 
+ 	int gmode;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
++
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
+ 
+ 	gmode = 0;
+ 	switch (info->mode) {
+@@ -77,91 +84,82 @@ DBA_OPEN_FUNC(db1)
+ 
+ DBA_CLOSE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
++	DB1_DATA;
+ 	dba->dbp->close(dba->dbp);
+ 	pefree(info->dbf, info->flags&DBA_PERSISTENT);
+ }
+ 
+ DBA_FETCH_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (dba->dbp->get(dba->dbp, &gkey, &gval, 0) == RET_SUCCESS) {
+-		return zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		return estrndup(gval.data, gval.size);
+ 	}
+ 	return NULL;
+ }
+ 
+ DBA_UPDATE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
++	DB1_DATA;
++	DB1_GKEY;
+ 
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
+-
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	return dba->dbp->put(dba->dbp, &gkey, &gval, mode == 1 ? R_NOOVERWRITE : 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_EXISTS_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	return dba->dbp->get(dba->dbp, &gkey, &gval, 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_DELETE_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB1_DATA;
++	DB1_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, &gkey, 0) != RET_SUCCESS ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gkey;
+ 	DBT gval;
++	DB1_DATA;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->dbp->seq(dba->dbp, &gkey, &gval, R_FIRST) == RET_SUCCESS) {
+-		return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++		if (newlen) *newlen = gkey.size;
++		return estrndup(gkey.data, gkey.size);
+ 	}
+ 	return NULL;
+ }
+ 
+ DBA_NEXTKEY_FUNC(db1)
+ {
+-	dba_db1_data *dba = info->dbf;
+ 	DBT gkey;
+ 	DBT gval;
++	DB1_DATA;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->dbp->seq(dba->dbp, &gkey, &gval, R_NEXT) == RET_SUCCESS) {
+-		return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++		if (newlen) *newlen = gkey.size;
++		return estrndup(gkey.data, gkey.size);
+ 	}
+ 	return NULL;
+ }
+diff --git a/ext/dba/dba_db2.c b/ext/dba/dba_db2.c
+index 8f6d47a9..2c1cb43b 100644
+--- a/ext/dba/dba_db2.c
++++ b/ext/dba/dba_db2.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB2
++#if DBA_DB2
+ #include "php_db2.h"
+ #include <sys/stat.h>
+ 
+@@ -29,6 +29,12 @@
+ #include DB2_INCLUDE_FILE
+ #endif
+ 
++#define DB2_DATA dba_db2_data *dba = info->dbf
++#define DB2_GKEY \
++	DBT gkey = {0}; \
++	gkey.data = (char *) key; \
++	gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -39,7 +45,7 @@ DBA_OPEN_FUNC(db2)
+ 	DB *dbp;
+ 	DBTYPE type;
+ 	int gmode = 0;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -61,6 +67,10 @@ DBA_OPEN_FUNC(db2)
+ 		return FAILURE;/* not possible */
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ 	if (db_open(info->path, type, gmode, filemode, NULL, NULL, &dbp)) {
+ 		return FAILURE;
+ 	}
+@@ -73,7 +83,7 @@ DBA_OPEN_FUNC(db2)
+ 
+ DBA_CLOSE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	if (dba->cursor)
+ 		dba->cursor->c_close(dba->cursor);
+@@ -83,31 +93,26 @@ DBA_CLOSE_FUNC(db2)
+ 
+ DBA_FETCH_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	if (dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+ 		return NULL;
+ 	}
+ 
+-	return zend_string_init(gval.data, gval.size, /* persistent */ false);
++	if (newlen) *newlen = gval.size;
++	return estrndup(gval.data, gval.size);
+ }
+ 
+ DBA_UPDATE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
++	DB2_DATA;
++	DB2_GKEY;
+ 
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
+-
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -118,12 +123,9 @@ DBA_UPDATE_FUNC(db2)
+ 
+ DBA_EXISTS_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+ 	DBT gval = {0};
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	if (dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+ 		return FAILURE;
+@@ -133,18 +135,15 @@ DBA_EXISTS_FUNC(db2)
+ 
+ DBA_DELETE_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
+-	DBT gkey = {0};
+-
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB2_DATA;
++	DB2_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -159,20 +158,21 @@ DBA_FIRSTKEY_FUNC(db2)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db2(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db2(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 	DBT gkey = {0}, gval = {0};
+ 
+ 	if (dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT)
+-			|| !gkey.data) {
++			|| !gkey.data)
+ 		return NULL;
+-	}
+ 
+-	return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++	if (newlen) *newlen = gkey.size;
++	return estrndup(gkey.data, gkey.size);
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db2)
+@@ -182,7 +182,7 @@ DBA_OPTIMIZE_FUNC(db2)
+ 
+ DBA_SYNC_FUNC(db2)
+ {
+-	dba_db2_data *dba = info->dbf;
++	DB2_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_db3.c b/ext/dba/dba_db3.c
+index d9e948a6..2f05901b 100644
+--- a/ext/dba/dba_db3.c
++++ b/ext/dba/dba_db3.c
+@@ -20,7 +20,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB3
++#if DBA_DB3
+ #include "php_db3.h"
+ #include <sys/stat.h>
+ 
+@@ -41,6 +41,12 @@ static void php_dba_db3_errcall_fcn(
+ 	php_error_docref(NULL, E_NOTICE, "%s%s", errpfx?errpfx:"", msg);
+ }
+ 
++#define DB3_DATA dba_db3_data *dba = info->dbf
++#define DB3_GKEY \
++	DBT gkey; \
++	memset(&gkey, 0, sizeof(gkey)); \
++	gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -51,7 +57,7 @@ DBA_OPEN_FUNC(db3)
+ 	DB *dbp = NULL;
+ 	DBTYPE type;
+ 	int gmode = 0, err;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -73,6 +79,10 @@ DBA_OPEN_FUNC(db3)
+ 		return FAILURE; /* not possible */
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ #ifdef DB_FCNTL_LOCKING
+ 	gmode |= DB_FCNTL_LOCKING;
+ #endif
+@@ -106,7 +116,7 @@ DBA_OPEN_FUNC(db3)
+ 
+ DBA_CLOSE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	if (dba->cursor) dba->cursor->c_close(dba->cursor);
+ 	dba->dbp->close(dba->dbp, 0);
+@@ -115,34 +125,28 @@ DBA_CLOSE_FUNC(db3)
+ 
+ DBA_FETCH_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	char *new = NULL;
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+-		return zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		new = estrndup(gval.data, gval.size);
+ 	}
+-	return NULL;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (!dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -153,13 +157,9 @@ DBA_UPDATE_FUNC(db3)
+ 
+ DBA_EXISTS_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+@@ -170,19 +170,15 @@ DBA_EXISTS_FUNC(db3)
+ 
+ DBA_DELETE_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB3_DATA;
++	DB3_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -193,24 +189,27 @@ DBA_FIRSTKEY_FUNC(db3)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db3(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db3(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 	DBT gkey, gval;
++	char *nkey = NULL;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+ 
+ 	if (dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT) == 0) {
+ 		if (gkey.data) {
+-			return zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++			nkey = estrndup(gkey.data, gkey.size);
++			if (newlen) *newlen = gkey.size;
+ 		}
+ 	}
+ 
+-	return NULL;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db3)
+@@ -220,7 +219,7 @@ DBA_OPTIMIZE_FUNC(db3)
+ 
+ DBA_SYNC_FUNC(db3)
+ {
+-	dba_db3_data *dba = info->dbf;
++	DB3_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_db4.c b/ext/dba/dba_db4.c
+index 3de66a42..93dd36d5 100644
+--- a/ext/dba/dba_db4.c
++++ b/ext/dba/dba_db4.c
+@@ -21,7 +21,7 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DB4
++#if DBA_DB4
+ #include "php_db4.h"
+ #include <sys/stat.h>
+ 
+@@ -55,6 +55,12 @@ static void php_dba_db4_errcall_fcn(
+ 	php_error_docref(NULL, E_NOTICE, "%s%s", errpfx?errpfx:"", msg);
+ }
+ 
++#define DB4_DATA dba_db4_data *dba = info->dbf
++#define DB4_GKEY \
++	DBT gkey; \
++	memset(&gkey, 0, sizeof(gkey)); \
++	gkey.data = (char *) key; gkey.size = keylen
++
+ typedef struct {
+ 	DB *dbp;
+ 	DBC *cursor;
+@@ -65,7 +71,7 @@ DBA_OPEN_FUNC(db4)
+ 	DB *dbp = NULL;
+ 	DBTYPE type;
+ 	int gmode = 0, err;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
+ 	struct stat check_stat;
+ 	int s = VCWD_STAT(info->path, &check_stat);
+ 
+@@ -106,6 +112,10 @@ DBA_OPEN_FUNC(db4)
+ 		gmode |= DB_THREAD;
+ 	}
+ 
++	if (info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
++
+ 	if ((err=db_create(&dbp, NULL, 0)) == 0) {
+ 	    dbp->set_errcall(dbp, php_dba_db4_errcall_fcn);
+ 	    if (
+@@ -135,7 +145,7 @@ DBA_OPEN_FUNC(db4)
+ 
+ DBA_CLOSE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	if (dba->cursor) dba->cursor->c_close(dba->cursor);
+ 	dba->dbp->close(dba->dbp, 0);
+@@ -144,41 +154,34 @@ DBA_CLOSE_FUNC(db4)
+ 
+ DBA_FETCH_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-	zend_string *fetched_value = NULL;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	char *new = NULL;
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 	if (info->flags & DBA_PERSISTENT) {
+ 		gval.flags |= DB_DBT_MALLOC;
+ 	}
+ 	if (!dba->dbp->get(dba->dbp, NULL, &gkey, &gval, 0)) {
+-		fetched_value = zend_string_init(gval.data, gval.size, /* persistent */ false);
++		if (newlen) *newlen = gval.size;
++		new = estrndup(gval.data, gval.size);
+ 		if (info->flags & DBA_PERSISTENT) {
+ 			free(gval.data);
+ 		}
+ 	}
+-	return fetched_value;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+-	gval.data = ZSTR_VAL(val);
+-	gval.size = ZSTR_LEN(val);
++	gval.data = (char *) val;
++	gval.size = vallen;
+ 
+ 	if (!dba->dbp->put(dba->dbp, NULL, &gkey, &gval,
+ 				mode == 1 ? DB_NOOVERWRITE : 0)) {
+@@ -189,13 +192,9 @@ DBA_UPDATE_FUNC(db4)
+ 
+ DBA_EXISTS_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+ 	DBT gval;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	memset(&gval, 0, sizeof(gval));
+ 
+@@ -214,19 +213,15 @@ DBA_EXISTS_FUNC(db4)
+ 
+ DBA_DELETE_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
+-	DBT gkey;
+-
+-	memset(&gkey, 0, sizeof(gkey));
+-	gkey.data = ZSTR_VAL(key);
+-	gkey.size = ZSTR_LEN(key);
++	DB4_DATA;
++	DB4_GKEY;
+ 
+ 	return dba->dbp->del(dba->dbp, NULL, &gkey, 0) ? FAILURE : SUCCESS;
+ }
+ 
+ DBA_FIRSTKEY_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	if (dba->cursor) {
+ 		dba->cursor->c_close(dba->cursor);
+@@ -237,14 +232,15 @@ DBA_FIRSTKEY_FUNC(db4)
+ 		return NULL;
+ 	}
+ 
+-	return dba_nextkey_db4(info);
++	/* we should introduce something like PARAM_PASSTHRU... */
++	return dba_nextkey_db4(info, newlen);
+ }
+ 
+ DBA_NEXTKEY_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 	DBT gkey, gval;
+-	zend_string *key = NULL;
++	char *nkey = NULL;
+ 
+ 	memset(&gkey, 0, sizeof(gkey));
+ 	memset(&gval, 0, sizeof(gval));
+@@ -255,7 +251,8 @@ DBA_NEXTKEY_FUNC(db4)
+ 	}
+ 	if (dba->cursor && dba->cursor->c_get(dba->cursor, &gkey, &gval, DB_NEXT) == 0) {
+ 		if (gkey.data) {
+-			key = zend_string_init(gkey.data, gkey.size, /* persistent */ false);
++			nkey = estrndup(gkey.data, gkey.size);
++			if (newlen) *newlen = gkey.size;
+ 		}
+ 		if (info->flags & DBA_PERSISTENT) {
+ 			if (gkey.data) {
+@@ -267,7 +264,7 @@ DBA_NEXTKEY_FUNC(db4)
+ 		}
+ 	}
+ 
+-	return key;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(db4)
+@@ -277,7 +274,7 @@ DBA_OPTIMIZE_FUNC(db4)
+ 
+ DBA_SYNC_FUNC(db4)
+ {
+-	dba_db4_data *dba = info->dbf;
++	DB4_DATA;
+ 
+ 	return dba->dbp->sync(dba->dbp, 0) ? FAILURE : SUCCESS;
+ }
+diff --git a/ext/dba/dba_dbm.c b/ext/dba/dba_dbm.c
+index afa645cb..3412124c 100644
+--- a/ext/dba/dba_dbm.c
++++ b/ext/dba/dba_dbm.c
+@@ -20,13 +20,13 @@
+ 
+ #include "php.h"
+ 
+-#ifdef DBA_DBM
++#if DBA_DBM
+ #include "php_dbm.h"
+ 
+ #ifdef DBM_INCLUDE_FILE
+ #include DBM_INCLUDE_FILE
+ #endif
+-#ifdef DBA_GDBM
++#if DBA_GDBM
+ #include "php_gdbm.h"
+ #endif
+ 
+@@ -35,6 +35,9 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ 
++#define DBM_DATA dba_dbm_data *dba = info->dbf
++#define DBM_GKEY datum gkey; gkey.dptr = (char *) key; gkey.dsize = keylen
++
+ #define TRUNC_IT(extension, mode) \
+ 	snprintf(buf, MAXPATHLEN, "%s" extension, info->path); \
+ 	buf[MAXPATHLEN-1] = '\0'; \
+@@ -50,7 +53,11 @@ typedef struct {
+ DBA_OPEN_FUNC(dbm)
+ {
+ 	int fd;
+-	int filemode = info->file_permission;
++	int filemode = 0644;
++
++	if(info->argc > 0) {
++		filemode = zval_get_long(&info->argv[0]);
++	}
+ 
+ 	if(info->mode == DBA_TRUNC) {
+ 		char buf[MAXPATHLEN];
+@@ -85,34 +92,32 @@ DBA_CLOSE_FUNC(dbm)
+ DBA_FETCH_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
++	char *new = NULL;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 	gval = fetch(gkey);
+-	if (gval.dptr) {
+-		return zend_string_init(gval.dptr, gval.dsize, /* persistent */ false);
++	if(gval.dptr) {
++		if(newlen) *newlen = gval.dsize;
++		new = estrndup(gval.dptr, gval.dsize);
+ 	}
+-	return NULL;
++	return new;
+ }
+ 
+ DBA_UPDATE_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
+ 
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 
+ 	if (mode == 1) { /* insert */
+ 		gval = fetch(gkey);
+-		if (gval.dptr) {
++		if(gval.dptr) {
+ 			return FAILURE;
+ 		}
+ 	}
+ 
+-	gval.dptr = ZSTR_VAL(val);
+-	gval.dsize = ZSTR_LEN(val);
++	gval.dptr = (char *) val;
++	gval.dsize = vallen;
+ 
+ 	return (store(gkey, gval) == -1 ? FAILURE : SUCCESS);
+ }
+@@ -120,13 +125,10 @@ DBA_UPDATE_FUNC(dbm)
+ DBA_EXISTS_FUNC(dbm)
+ {
+ 	datum gval;
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 
+ 	gval = fetch(gkey);
+-	if (gval.dptr) {
++	if(gval.dptr) {
+ 		return SUCCESS;
+ 	}
+ 	return FAILURE;
+@@ -134,45 +136,42 @@ DBA_EXISTS_FUNC(dbm)
+ 
+ DBA_DELETE_FUNC(dbm)
+ {
+-	datum gkey;
+-
+-	gkey.dptr = ZSTR_VAL(key);
+-	gkey.dsize = ZSTR_LEN(key);
++	DBM_GKEY;
+ 	return(delete(gkey) == -1 ? FAILURE : SUCCESS);
+ }
+ 
+ DBA_FIRSTKEY_FUNC(dbm)
+ {
+-	dba_dbm_data *dba = info->dbf;
++	DBM_DATA;
+ 	datum gkey;
+-	zend_string *key = NULL;
++	char *key = NULL;
+ 
+ 	gkey = firstkey();
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		key = estrndup(gkey.dptr, gkey.dsize);
+ 		dba->nextkey = gkey;
+-	} else {
++	} else
+ 		dba->nextkey.dptr = NULL;
+-	}
+ 	return key;
+ }
+ 
+ DBA_NEXTKEY_FUNC(dbm)
+ {
+-	dba_dbm_data *dba = info->dbf;
++	DBM_DATA;
+ 	datum gkey;
+-	zend_string *key = NULL;
++	char *nkey = NULL;
+ 
+-	if (!dba->nextkey.dptr) { return NULL; }
++	if(!dba->nextkey.dptr) return NULL;
+ 
+ 	gkey = nextkey(dba->nextkey);
+-	if (gkey.dptr) {
+-		key = zend_string_init(gkey.dptr, gkey.dsize, /* persistent */ false);
++	if(gkey.dptr) {
++		if(newlen) *newlen = gkey.dsize;
++		nkey = estrndup(gkey.dptr, gkey.dsize);
+ 		dba->nextkey = gkey;
+-	} else {
++	} else
+ 		dba->nextkey.dptr = NULL;
+-	}
+-	return key;
++	return nkey;
+ }
+ 
+ DBA_OPTIMIZE_FUNC(dbm)

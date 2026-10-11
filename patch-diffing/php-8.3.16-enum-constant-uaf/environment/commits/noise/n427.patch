@@ -1,0 +1,444 @@
+diff --git a/sapi/fpm/fpm/fpm_arrays.h b/sapi/fpm/fpm/fpm_arrays.h
+index 9cdd1e95..82c7cbc0 100644
+--- a/sapi/fpm/fpm/fpm_arrays.h
++++ b/sapi/fpm/fpm/fpm_arrays.h
+@@ -6,8 +6,6 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-#include "php.h"
+-
+ struct fpm_array_s {
+ 	void *data;
+ 	size_t sz;
+@@ -86,7 +84,7 @@ static inline void *fpm_array_push(struct fpm_array_s *a) /* {{{ */
+ 
+ 	if (a->used == a->allocated) {
+ 		size_t new_allocated = a->allocated ? a->allocated * 2 : 20;
+-		void *new_ptr = safe_perealloc(a->data, a->sz, new_allocated, 0, true);
++		void *new_ptr = realloc(a->data, a->sz * new_allocated);
+ 
+ 		if (!new_ptr) {
+ 			return 0;
+diff --git a/sapi/fpm/fpm/fpm_atomic.h b/sapi/fpm/fpm/fpm_atomic.h
+index e3926e70..0584cef5 100644
+--- a/sapi/fpm/fpm/fpm_atomic.h
++++ b/sapi/fpm/fpm/fpm_atomic.h
+@@ -133,7 +133,7 @@ static inline atomic_uint_t atomic_cmp_set(atomic_t *lock, atomic_uint_t old, at
+ 
+ #else
+ 
+-#error Unsupported processor. Please open a bug report (https://github.com/php/php-src/issues).
++#error Unsupported processor. Please open a bug report (bugs.php.net).
+ 
+ #endif
+ 
+diff --git a/sapi/fpm/fpm/fpm_conf.c b/sapi/fpm/fpm/fpm_conf.c
+index ef9b35a9..cc7102ea 100644
+--- a/sapi/fpm/fpm/fpm_conf.c
++++ b/sapi/fpm/fpm/fpm_conf.c
+@@ -34,7 +34,6 @@
+ #include "fpm_status.h"
+ #include "fpm_log.h"
+ #include "fpm_events.h"
+-#include "fpm_unix.h"
+ #include "zlog.h"
+ #ifdef HAVE_SYSTEMD
+ #include "fpm_systemd.h"
+@@ -126,9 +125,6 @@ static struct ini_value_parser_s ini_fpm_pool_options[] = {
+ 	{ "listen.group",              &fpm_conf_set_string,      WPO(listen_group) },
+ 	{ "listen.mode",               &fpm_conf_set_string,      WPO(listen_mode) },
+ 	{ "listen.allowed_clients",    &fpm_conf_set_string,      WPO(listen_allowed_clients) },
+-#ifdef SO_SETFIB
+-	{ "listen.setfib",             &fpm_conf_set_integer,     WPO(listen_setfib) },
+-#endif
+ 	{ "process.priority",          &fpm_conf_set_integer,     WPO(process_priority) },
+ 	{ "process.dumpable",          &fpm_conf_set_boolean,     WPO(process_dumpable) },
+ 	{ "pm",                        &fpm_conf_set_pm,          WPO(pm) },
+@@ -561,13 +557,11 @@ static char *fpm_conf_set_array(zval *key, zval *value, void **config, int conve
+ 	}
+ 
+ 	memset(kv, 0, sizeof(*kv));
+-	if (key) {
+-		kv->key = strdup(Z_STRVAL_P(key));
++	kv->key = strdup(Z_STRVAL_P(key));
+ 
+-		if (!kv->key) {
+-			free(kv);
+-			return "fpm_conf_set_array: strdup(key) failed";
+-		}
++	if (!kv->key) {
++		free(kv);
++		return "fpm_conf_set_array: strdup(key) failed";
+ 	}
+ 
+ 	if (convert_to_bool) {
+@@ -624,9 +618,6 @@ static void *fpm_worker_pool_config_alloc(void)
+ 	wp->config->process_dumpable = 0;
+ 	wp->config->clear_env = 1;
+ 	wp->config->decorate_workers_output = 1;
+-#ifdef SO_SETFIB
+-	wp->config->listen_setfib = -1;
+-#endif
+ 
+ 	if (!fpm_worker_all_pools) {
+ 		fpm_worker_all_pools = wp;
+@@ -671,11 +662,6 @@ int fpm_worker_pool_config_free(struct fpm_worker_pool_config_s *wpc) /* {{{ */
+ 	free(wpc->apparmor_hat);
+ #endif
+ 
+-	for (kv = wpc->access_suppress_paths; kv; kv = kv_next) {
+-		kv_next = kv->next;
+-		free(kv->value);
+-		free(kv);
+-	}
+ 	for (kv = wpc->php_values; kv; kv = kv_next) {
+ 		kv_next = kv->next;
+ 		free(kv->key);
+@@ -1511,24 +1497,11 @@ static void fpm_conf_ini_parser_array(zval *name, zval *key, zval *value, void *
+ 	char *err = NULL;
+ 	void *config;
+ 
+-	if (zend_string_equals_literal(Z_STR_P(name), "access.suppress_path")) {
+-		if (!(*Z_STRVAL_P(key) == '\0')) {
+-			zlog(ZLOG_ERROR, "[%s:%d] Keys provided to field 'access.suppress_path' are ignored", ini_filename, ini_lineno);
+-			*error = 1;
+-		}
+-		if (!(*Z_STRVAL_P(value)) || (*Z_STRVAL_P(value) != '/')) {
+-			zlog(ZLOG_ERROR, "[%s:%d] Values provided to field 'access.suppress_path' must begin with '/'", ini_filename, ini_lineno);
+-			*error = 1;
+-		}
+-		if (*error) {
+-			return;
+-		}
+-	} else if (!*Z_STRVAL_P(key)) {
+-		zlog(ZLOG_ERROR, "[%s:%d] You must provide a key for field '%s'", ini_filename, ini_lineno, Z_STRVAL_P(name));
++	if (!Z_STRVAL_P(key) || !Z_STRVAL_P(value) || !*Z_STRVAL_P(key)) {
++		zlog(ZLOG_ERROR, "[%s:%d] Misspelled  array ?", ini_filename, ini_lineno);
+ 		*error = 1;
+ 		return;
+ 	}
+-
+ 	if (!current_wp || !current_wp->config) {
+ 		zlog(ZLOG_ERROR, "[%s:%d] Array are not allowed in the global section", ini_filename, ini_lineno);
+ 		*error = 1;
+@@ -1560,10 +1533,6 @@ static void fpm_conf_ini_parser_array(zval *name, zval *key, zval *value, void *
+ 		config = (char *)current_wp->config + WPO(php_admin_values);
+ 		err = fpm_conf_set_array(key, value, &config, 1);
+ 
+-	} else if (zend_string_equals_literal(Z_STR_P(name), "access.suppress_path")) {
+-		config = (char *)current_wp->config + WPO(access_suppress_paths);
+-		err = fpm_conf_set_array(NULL, value, &config, 0);
+-
+ 	} else {
+ 		zlog(ZLOG_ERROR, "[%s:%d] unknown directive '%s'", ini_filename, ini_lineno, Z_STRVAL_P(name));
+ 		*error = 1;
+@@ -1749,9 +1718,6 @@ static void fpm_conf_dump(void)
+ 		zlog(ZLOG_NOTICE, "\tlisten.group = %s",               STR2STR(wp->config->listen_group));
+ 		zlog(ZLOG_NOTICE, "\tlisten.mode = %s",                STR2STR(wp->config->listen_mode));
+ 		zlog(ZLOG_NOTICE, "\tlisten.allowed_clients = %s",     STR2STR(wp->config->listen_allowed_clients));
+-#ifdef SO_SETFIB
+-		zlog(ZLOG_NOTICE, "\tlisten.setfib = %d",              wp->config->listen_setfib);
+-#endif
+ 		if (wp->config->process_priority == 64) {
+ 			zlog(ZLOG_NOTICE, "\tprocess.priority = undefined");
+ 		} else {
+@@ -1772,9 +1738,6 @@ static void fpm_conf_dump(void)
+ 		zlog(ZLOG_NOTICE, "\tping.response = %s",              STR2STR(wp->config->ping_response));
+ 		zlog(ZLOG_NOTICE, "\taccess.log = %s",                 STR2STR(wp->config->access_log));
+ 		zlog(ZLOG_NOTICE, "\taccess.format = %s",              STR2STR(wp->config->access_format));
+-		for (kv = wp->config->access_suppress_paths; kv; kv = kv->next) {
+-			zlog(ZLOG_NOTICE, "\taccess.suppress_path[] = %s", kv->value);
+-		}
+ 		zlog(ZLOG_NOTICE, "\tslowlog = %s",                    STR2STR(wp->config->slowlog));
+ 		zlog(ZLOG_NOTICE, "\trequest_slowlog_timeout = %ds",   wp->config->request_slowlog_timeout);
+ 		zlog(ZLOG_NOTICE, "\trequest_slowlog_trace_depth = %d", wp->config->request_slowlog_trace_depth);
+@@ -1855,12 +1818,6 @@ int fpm_conf_init_main(int test_conf, int force_daemon) /* {{{ */
+ 	}
+ 
+ 	if (test_conf) {
+-		for (struct fpm_worker_pool_s *wp = fpm_worker_all_pools; wp; wp = wp->next) {
+-			if (!fpm_unix_test_config(wp)) {
+-				return -1;
+-			}
+-		}
+-
+ 		if (test_conf > 1) {
+ 			fpm_conf_dump();
+ 		}
+diff --git a/sapi/fpm/fpm/fpm_conf.h b/sapi/fpm/fpm/fpm_conf.h
+index 5b354a9b..4c0addc2 100644
+--- a/sapi/fpm/fpm/fpm_conf.h
++++ b/sapi/fpm/fpm/fpm_conf.h
+@@ -79,7 +79,6 @@ struct fpm_worker_pool_config_s {
+ 	char *ping_response;
+ 	char *access_log;
+ 	char *access_format;
+-	struct key_value_s *access_suppress_paths;
+ 	char *slowlog;
+ 	int request_slowlog_timeout;
+ 	int request_slowlog_trace_depth;
+@@ -104,9 +103,6 @@ struct fpm_worker_pool_config_s {
+ 	char *listen_acl_users;
+ 	char *listen_acl_groups;
+ #endif
+-#ifdef SO_SETFIB
+-	int listen_setfib;
+-#endif
+ };
+ 
+ struct ini_value_parser_s {
+diff --git a/sapi/fpm/fpm/fpm_config.h b/sapi/fpm/fpm/fpm_config.h
+index d34f686a..548202fe 100644
+--- a/sapi/fpm/fpm/fpm_config.h
++++ b/sapi/fpm/fpm/fpm_config.h
+@@ -70,7 +70,7 @@
+ # define HAVE_FPM_TRACE 0
+ #endif
+ 
+-#if defined(HAVE_LQ_TCP_INFO) || defined(HAVE_LQ_TCP_CONNECTION_INFO) || defined(HAVE_LQ_SO_LISTENQ)
++#if defined(HAVE_LQ_TCP_INFO) || defined(HAVE_LQ_SO_LISTENQ)
+ # define HAVE_FPM_LQ 1
+ #else
+ # define HAVE_FPM_LQ 0
+diff --git a/sapi/fpm/fpm/fpm_log.c b/sapi/fpm/fpm/fpm_log.c
+index bb66c081..d90d98b5 100644
+--- a/sapi/fpm/fpm/fpm_log.c
++++ b/sapi/fpm/fpm/fpm_log.c
+@@ -27,9 +27,6 @@
+ 
+ static char *fpm_log_format = NULL;
+ static int fpm_log_fd = -1;
+-static struct key_value_s *fpm_access_suppress_paths = NULL;
+-
+-static int fpm_access_log_suppress(struct fpm_scoreboard_proc_s *proc);
+ 
+ int fpm_log_open(int reopen) /* {{{ */
+ {
+@@ -82,17 +79,6 @@ int fpm_log_init_child(struct fpm_worker_pool_s *wp)  /* {{{ */
+ 		}
+ 	}
+ 
+-	for (struct key_value_s *kv = wp->config->access_suppress_paths; kv; kv = kv->next) {
+-		struct key_value_s *kvcopy = calloc(1, sizeof(*kvcopy));
+-		if (kvcopy == NULL) {
+-			zlog(ZLOG_ERROR, "unable to allocate memory while opening the access log");
+-			return -1;
+-		}
+-		kvcopy->value = strdup(kv->value);
+-		kvcopy->next = fpm_access_suppress_paths;
+-		fpm_access_suppress_paths = kvcopy;
+-	}
+-
+ 	if (fpm_log_fd == -1) {
+ 		fpm_log_fd = wp->log_fd;
+ 	}
+@@ -150,10 +136,6 @@ int fpm_log_write(char *log_format) /* {{{ */
+ 		}
+ 		proc = *proc_p;
+ 		fpm_scoreboard_proc_release(proc_p);
+-
+-		if (UNEXPECTED(fpm_access_log_suppress(&proc))) {
+-			return -1;
+-		}
+ 	}
+ 
+ 	token = 0;
+@@ -492,38 +474,3 @@ int fpm_log_write(char *log_format) /* {{{ */
+ 	return 0;
+ }
+ /* }}} */
+-
+-static int fpm_access_log_suppress(struct fpm_scoreboard_proc_s *proc)
+-{
+-	// Never suppress when query string is passed
+-	if (proc->query_string[0] != '\0') {
+-		return 0;
+-	}
+-
+-	// Never suppress if request method is not GET or HEAD
+-	if (
+-		strcmp(proc->request_method, "GET") != 0
+-		&& strcmp(proc->request_method, "HEAD") != 0
+-	) {
+-		return 0;
+-	}
+-
+-	// Never suppress when response code does not indicate success
+-	if (SG(sapi_headers).http_response_code < 200 || SG(sapi_headers).http_response_code > 299) {
+-		return 0;
+-	}
+-
+-	// Never suppress when a body has been sent
+-	if (SG(request_info).content_length > 0) {
+-		return 0;
+-	}
+-
+-	// Suppress when request URI is an exact match for one of our entries
+-	for (struct key_value_s *kv = fpm_access_suppress_paths; kv; kv = kv->next) {
+-		if (kv->value && strcmp(kv->value, proc->request_uri) == 0) {
+-			return 1;
+-		}
+-	}
+-
+-	return 0;
+-}
+\ No newline at end of file
+diff --git a/sapi/fpm/fpm/fpm_main.c b/sapi/fpm/fpm/fpm_main.c
+index b3ae2f69..b91bb8d0 100644
+--- a/sapi/fpm/fpm/fpm_main.c
++++ b/sapi/fpm/fpm/fpm_main.c
+@@ -22,7 +22,6 @@
+ #include "php.h"
+ #include "php_globals.h"
+ #include "php_variables.h"
+-#include "php_ini_builder.h"
+ #include "zend_modules.h"
+ #include "php.h"
+ #include "zend_ini_scanner.h"
+@@ -149,7 +148,6 @@ typedef struct _php_cgi_globals_struct {
+ 	bool force_redirect;
+ 	bool discard_path;
+ 	bool fcgi_logging;
+-	bool fcgi_logging_request_started;
+ 	char *redirect_status_env;
+ 	HashTable user_config_cache;
+ 	char *error_header;
+@@ -202,7 +200,7 @@ static void print_modules(void) /* {{{ */
+ 	zend_hash_init(&sorted_registry, 50, NULL, NULL, 1);
+ 	zend_hash_copy(&sorted_registry, &module_registry, NULL);
+ 	zend_hash_sort(&sorted_registry, module_name_cmp, 0);
+-	ZEND_HASH_MAP_FOREACH_PTR(&sorted_registry, module) {
++	ZEND_HASH_FOREACH_PTR(&sorted_registry, module) {
+ 		php_printf("%s\n", module->name);
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_hash_destroy(&sorted_registry);
+@@ -599,16 +597,11 @@ void sapi_cgi_log_fastcgi(int level, char *message, size_t len)
+ 	 * - logging is enabled (fastcgi.logging in php.ini)
+ 	 * - we are currently dealing with a request
+ 	 * - the message is not empty
++	 * - the fcgi_write did not fail
+ 	 */
+-	if (CGIG(fcgi_logging) && request && message && len > 0) {
+-		if (CGIG(fcgi_logging_request_started)) {
+-			fcgi_write(request, FCGI_STDERR, "; ", 2);
+-		} else {
+-			CGIG(fcgi_logging_request_started) = true;
+-		}
+-		if (fcgi_write(request, FCGI_STDERR, message, len) < 0) {
+-			php_handle_aborted_connection();
+-		}
++	if (CGIG(fcgi_logging) && request && message && len > 0
++			&& fcgi_write(request, FCGI_STDERR, message, len) < 0) {
++		php_handle_aborted_connection();
+ 	}
+ }
+ /* }}} */
+@@ -773,7 +766,10 @@ static int sapi_cgi_deactivate(void) /* {{{ */
+ 
+ static int php_cgi_startup(sapi_module_struct *sapi_module) /* {{{ */
+ {
+-	return php_module_startup(sapi_module, &cgi_module_entry);
++	if (php_module_startup(sapi_module, &cgi_module_entry, 1) == FAILURE) {
++		return FAILURE;
++	}
++	return SUCCESS;
+ }
+ /* }}} */
+ 
+@@ -1429,7 +1425,6 @@ static void php_cgi_globals_ctor(php_cgi_globals_struct *php_cgi_globals)
+ 	php_cgi_globals->fix_pathinfo = 1;
+ 	php_cgi_globals->discard_path = 0;
+ 	php_cgi_globals->fcgi_logging = 1;
+-	php_cgi_globals->fcgi_logging_request_started = false;
+ 	zend_hash_init(&php_cgi_globals->user_config_cache, 0, NULL, user_config_cache_entry_dtor, 1);
+ 	php_cgi_globals->error_header = NULL;
+ 	php_cgi_globals->fpm_config = NULL;
+@@ -1542,7 +1537,7 @@ int main(int argc, char *argv[])
+ 	/* temporary locals */
+ 	int orig_optind = php_optind;
+ 	char *orig_optarg = php_optarg;
+-	struct php_ini_builder ini_builder;
++	int ini_entries_len = 0;
+ 	/* end of temporary locals */
+ 
+ 	int max_requests = 0;
+@@ -1591,8 +1586,6 @@ int main(int argc, char *argv[])
+ 
+ 	fcgi_init();
+ 
+-	php_ini_builder_init(&ini_builder);
+-
+ 	while ((c = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
+ 		switch (c) {
+ 			case 'c':
+@@ -1606,12 +1599,37 @@ int main(int argc, char *argv[])
+ 				cgi_sapi_module.php_ini_ignore = 1;
+ 				break;
+ 
+-			case 'd':
++			case 'd': {
+ 				/* define ini entries on command line */
+-				php_ini_builder_define(&ini_builder, php_optarg);
+-				/* main can terminate without finishing or deiniting the ini builder, call finish each iteration to avoid leaking the buffer */
+-				cgi_sapi_module.ini_entries = php_ini_builder_finish(&ini_builder);
++				int len = strlen(php_optarg);
++				char *val;
++
++				if ((val = strchr(php_optarg, '='))) {
++					val++;
++					if (!isalnum(*val) && *val != '"' && *val != '\'' && *val != '\0') {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\"\"\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, (val - php_optarg));
++						ini_entries_len += (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"", 1);
++						ini_entries_len++;
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, val, len - (val - php_optarg));
++						ini_entries_len += len - (val - php_optarg);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, "\"\n\0", sizeof("\"\n\0"));
++						ini_entries_len += sizeof("\n\0\"") - 2;
++					} else {
++						cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("\n\0"));
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++						memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "\n\0", sizeof("\n\0"));
++						ini_entries_len += len + sizeof("\n\0") - 2;
++					}
++				} else {
++					cgi_sapi_module.ini_entries = realloc(cgi_sapi_module.ini_entries, ini_entries_len + len + sizeof("=1\n\0"));
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len, php_optarg, len);
++					memcpy(cgi_sapi_module.ini_entries + ini_entries_len + len, "=1\n\0", sizeof("=1\n\0"));
++					ini_entries_len += len + sizeof("=1\n\0") - 2;
++				}
+ 				break;
++			}
+ 
+ 			case 'y':
+ 				fpm_config = php_optarg;
+@@ -1704,8 +1722,6 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
+ 
+-	cgi_sapi_module.ini_entries = php_ini_builder_finish(&ini_builder);
+-
+ 	if (php_information) {
+ 		cgi_sapi_module.phpinfo_as_text = 1;
+ 		cgi_sapi_module.startup(&cgi_sapi_module);
+@@ -1849,7 +1865,6 @@ consult the installation file that came with this distribution, or visit \n\
+ 			char *primary_script = NULL;
+ 			request_body_fd = -1;
+ 			SG(server_context) = (void *) request;
+-			CGIG(fcgi_logging_request_started) = false;
+ 			init_request_info();
+ 
+ 			fpm_request_info();
+@@ -1971,7 +1986,9 @@ fastcgi_request_done:
+ 		if (cgi_sapi_module.php_ini_path_override) {
+ 			free(cgi_sapi_module.php_ini_path_override);
+ 		}
+-		php_ini_builder_deinit(&ini_builder);
++		if (cgi_sapi_module.ini_entries) {
++			free(cgi_sapi_module.ini_entries);
++		}
+ 	} zend_catch {
+ 		exit_status = FPM_EXIT_SOFTWARE;
+ 	} zend_end_try();

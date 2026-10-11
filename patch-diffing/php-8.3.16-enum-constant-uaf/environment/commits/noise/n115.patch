@@ -1,0 +1,326 @@
+diff --git a/ext/dba/tests/dba_db4_005.phpt b/ext/dba/tests/dba_db4_005.phpt
+new file mode 100644
+index 00000000..ae6653d9
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_005.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation popen("c") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_006.phpt b/ext/dba/tests/dba_db4_006.phpt
+new file mode 100644
+index 00000000..4da1ac4a
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_006.phpt
+@@ -0,0 +1,34 @@
++--TEST--
++DBA DB4 New File Creation popen("n") & Insert Test
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_popen($db_filename, "n", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_insert("key1", "This is a test insert", $db_file);
++    echo dba_fetch("key1", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_007.phpt b/ext/dba/tests/dba_db4_007.phpt
+new file mode 100644
+index 00000000..daa995ad
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_007.phpt
+@@ -0,0 +1,41 @@
++--TEST--
++DBA DB4 File Creation popen("c") with existing invalid file
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_popen($db_filename, "c", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++int(14)
++
++Warning: dba_popen(%stest0.dbm,c): Driver initialization failed for handler: db4: Invalid argument in %sdba_db4_007.php on line %d
++Error creating %stest0.dbm
+diff --git a/ext/dba/tests/dba_db4_008.phpt b/ext/dba/tests/dba_db4_008.phpt
+new file mode 100644
+index 00000000..e10eb822
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_008.phpt
+@@ -0,0 +1,42 @@
++--TEST--
++DBA DB4 Truncate Existing File popen("n")
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++
++var_dump(file_put_contents($db_filename, "Dummy contents"));
++
++if (($db_file = dba_popen($db_filename, "n", $handler)) !== FALSE) {
++    if (file_exists($db_filename)) {
++        echo "database file created\n";
++        dba_insert("key1", "This is a test insert", $db_file);
++        echo dba_fetch("key1", $db_file), "\n";
++        dba_close($db_file);
++    } else {
++        echo "File did not get created\n";
++    }
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++int(14)
++database file created
++This is a test insert
+diff --git a/ext/dba/tests/dba_db4_009.phpt b/ext/dba/tests/dba_db4_009.phpt
+index bc47c350..e4dd2954 100644
+--- a/ext/dba/tests/dba_db4_009.phpt
++++ b/ext/dba/tests/dba_db4_009.phpt
+@@ -4,32 +4,50 @@ DBA DB4 Multiple File Creation Test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
+ ?>
+ --FILE--
+ <?php
+ $handler = "db4";
++require_once(__DIR__ .'/test.inc');
+ echo "database handler: $handler\n";
+-$db_file1 = __DIR__.'/test1.dbm';
+-$db_file2 = __DIR__.'/test2.dbm';
+-$db_file1 = dba_open($db_file1, "n", $handler);
+-$db_file2 = dba_open($db_file2, "n", $handler);
++$db_file1 = $db_filename1 = __DIR__.'/test1.dbm';
++$db_file2 = $db_filename2 = __DIR__.'/test2.dbm';
++if (($db_file=dba_open($db_file, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
++if (($db_file1=dba_open($db_file1, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
++if (($db_file2=dba_open($db_file2, "n", $handler))!==FALSE) {
++    echo "database file created\n";
++} else {
++    echo "$db_file does not exist\n";
++}
+ var_dump(dba_list());
+-dba_close($db_file1);
+-dba_close($db_file2);
++dba_close($db_file);
+ 
++@unlink($db_filename1);
++@unlink($db_filename2);
+ ?>
+ --CLEAN--
+ <?php
+-$db_filename1 = __DIR__.'/test1.dbm';
+-$db_filename2 = __DIR__.'/test2.dbm';
+-@unlink($db_filename1);
+-@unlink($db_filename2);
++require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECTF--
+ database handler: db4
+-array(2) {
++database file created
++database file created
++database file created
++array(3) {
++  [%d]=>
++  string(%d) "%stest0.dbm"
+   [%d]=>
+   string(%d) "%stest1.dbm"
+   [%d]=>
+diff --git a/ext/dba/tests/dba_db4_011.phpt b/ext/dba/tests/dba_db4_011.phpt
+new file mode 100644
+index 00000000..78252e97
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_011.phpt
+@@ -0,0 +1,38 @@
++--TEST--
++DBA DB4 with repeated key
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file=dba_open($db_filename, "c", $handler))!==FALSE) {
++    var_dump(dba_insert("key1", "Content String 1", $db_file));
++    var_dump(dba_insert("key2", "Content String 2", $db_file));
++    var_dump(dba_insert("key2", "Same key", $db_file));
++    echo dba_fetch("key1", $db_file), "\n";
++    echo dba_fetch("key2", $db_file), "\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating database\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++database handler: db4
++bool(true)
++bool(true)
++bool(false)
++Content String 1
++Content String 2
+diff --git a/ext/dba/tests/dba_db4_012.phpt b/ext/dba/tests/dba_db4_012.phpt
+new file mode 100644
+index 00000000..1ab5dab7
+--- /dev/null
++++ b/ext/dba/tests/dba_db4_012.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++DBA DB4 New File Creation open("rl")
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "db4";
++require_once(__DIR__ .'/skipif.inc');
++die("info $HND handler used");
++?>
++--FILE--
++<?php
++
++$handler = "db4";
++require_once(__DIR__ .'/test.inc');
++echo "database handler: $handler\n";
++if (($db_file = dba_open($db_filename, "rl", $handler)) !== FALSE) {
++    echo "database file created\n";
++    dba_close($db_file);
++} else {
++    echo "Error creating $db_filename\n";
++}
++
++?>
++--CLEAN--
++<?php
++require(__DIR__ .'/clean.inc');
++?>
++--EXPECTF--
++database handler: db4
++
++Warning: dba_open(%stest0.dbm,rl): Driver initialization failed for handler: db4: No such file or directory in %sdba_db4_012.php on line %d
++Error creating %stest0.dbm

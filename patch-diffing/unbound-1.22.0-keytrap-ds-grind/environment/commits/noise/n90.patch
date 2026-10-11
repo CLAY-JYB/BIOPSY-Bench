@@ -1,0 +1,956 @@
+diff --git a/testdata/rpz_cname_tag.rpl b/testdata/rpz_cname_tag.rpl
+new file mode 100644
+index 000000000..fb782b685
+--- /dev/null
++++ b/testdata/rpz_cname_tag.rpl
+@@ -0,0 +1,281 @@
++; config options
++server:
++	module-config: "respip validator iterator"
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	access-control: 192.0.0.0/8 allow
++	access-control: 193.0.0.0/8 allow
++	define-tag: "internal server"
++	access-control-tag: 192.0.0.0/8 "internal"
++	access-control-tag: 127.0.0.0/8 "server"
++	; 193.0.0.0/8 has no tags
++
++rpz:
++	name: "rpz.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz.example.com"
++	tags: "internal"
++	zonefile:
++TEMPFILE_NAME rpz.example.com
++TEMPFILE_CONTENTS rpz.example.com
++$ORIGIN example.com.
++rpz	3600	IN	SOA	ns1.rpz.example.com. hostmaster.rpz.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz.example.com.
++	3600	IN	NS	ns2.rpz.example.com.
++$ORIGIN rpz.example.com.
++www.gotham.a A 1.2.3.61
++www.gotham2.a CNAME g2.target.a.
++g2.target.a A 1.2.3.62
++www.gotham3.a CNAME g3.target.a.
++g3.target.a CNAME g3b.target.a.
++g3b.target.a A 1.2.3.63
++www.gotham4.a CNAME g4.target.a.
++g4.target.a CNAME g4b.target.a.
++g4b.target.a CNAME g4c.target.a.
++g4c.target.a A 1.2.3.64
++; server for a.
++32.40.30.20.10.rpz-nsip A 1.2.3.68
++www.gotham5.a TXT "txt5"
++TEMPFILE_END
++
++stub-zone:
++	name: "a."
++	stub-addr: 10.20.30.40
++CONFIG_END
++
++SCENARIO_BEGIN Test RPZ handling of CNAMEs and tags.
++
++; a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.40
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++target.a. IN A
++SECTION ANSWER
++target.a. IN A 1.2.3.6
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham.a. IN A
++SECTION ANSWER
++www.gotham.a. IN A 1.2.3.5
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham2.a. IN A
++SECTION ANSWER
++www.gotham2.a. IN A 1.2.3.52
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham3.a. IN A
++SECTION ANSWER
++www.gotham3.a. IN A 1.2.3.53
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham4.a. IN A
++SECTION ANSWER
++www.gotham4.a. IN A 1.2.3.54
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham5.a. IN TXT
++SECTION ANSWER
++www.gotham5.a. IN TXT "gotham5"
++ENTRY_END
++RANGE_END
++
++; Test with zero rpz CNAMEs, no tag match for rpz answer.
++STEP 10 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham.a.	IN	A
++ENTRY_END
++
++STEP 11 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham.a.	IN	A
++SECTION ANSWER
++www.gotham.a. A 1.2.3.5
++ENTRY_END
++
++; Test with one rpz CNAME, no tag match for rpz answer.
++STEP 20 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham2.a.	IN	A
++ENTRY_END
++
++STEP 21 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham2.a.	IN	A
++SECTION ANSWER
++www.gotham2.a. A 1.2.3.52
++ENTRY_END
++
++; Test with two rpz CNAMEs, no tag match for rpz answer.
++STEP 30 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham3.a.	IN	A
++ENTRY_END
++
++STEP 31 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham3.a.	IN	A
++SECTION ANSWER
++www.gotham3.a. A 1.2.3.53
++ENTRY_END
++
++; Test with three rpz CNAMEs, no tag match for rpz answer.
++STEP 40 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham4.a.	IN	A
++ENTRY_END
++
++STEP 41 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham4.a.	IN	A
++SECTION ANSWER
++www.gotham4.a. A 1.2.3.54
++ENTRY_END
++
++; Test with zero rpz CNAMEs, rpz answer. Tag "internal"
++STEP 50 QUERY ADDRESS 192.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham.a.	IN	A
++ENTRY_END
++
++STEP 51 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham.a.	IN	A
++SECTION ANSWER
++www.gotham.a. A 1.2.3.61
++ENTRY_END
++
++; Test with one rpz CNAME, rpz answer. Tag "internal"
++STEP 60 QUERY ADDRESS 192.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham2.a.	IN	A
++ENTRY_END
++
++STEP 61 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham2.a.	IN	A
++SECTION ANSWER
++www.gotham2.a. CNAME g2.target.a.
++g2.target.a. A 1.2.3.62
++ENTRY_END
++
++; Test with two rpz CNAMEs, rpz answer. Tag "internal"
++STEP 70 QUERY ADDRESS 192.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham3.a.	IN	A
++ENTRY_END
++
++STEP 71 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham3.a.	IN	A
++SECTION ANSWER
++www.gotham3.a. CNAME g3.target.a.
++g3.target.a. CNAME g3b.target.a.
++g3b.target.a. A 1.2.3.63
++ENTRY_END
++
++; Test with three rpz CNAMEs, rpz answer. Tag "internal"
++STEP 80 QUERY ADDRESS 192.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham4.a.	IN	A
++ENTRY_END
++
++STEP 81 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham4.a.	IN	A
++SECTION ANSWER
++www.gotham4.a. CNAME g4.target.a.
++g4.target.a. CNAME g4b.target.a.
++g4b.target.a. CNAME g4c.target.a.
++g4c.target.a. A 1.2.3.64
++ENTRY_END
++
++; Test with zero rpz CNAMEs, no tags for the query, and so no rpz answer.
++STEP 90 QUERY ADDRESS 193.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham5.a.	IN	TXT
++ENTRY_END
++
++STEP 91 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham5.a.	IN	TXT
++SECTION ANSWER
++www.gotham5.a. IN TXT "gotham5"
++ENTRY_END
++
++SCENARIO_END
+diff --git a/testdata/rpz_nsdname_override.rpl b/testdata/rpz_nsdname_override.rpl
+new file mode 100644
+index 000000000..d662e55c7
+--- /dev/null
++++ b/testdata/rpz_nsdname_override.rpl
+@@ -0,0 +1,325 @@
++; config options
++server:
++	module-config: "respip validator iterator"
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	access-control: 192.0.0.0/8 allow
++
++rpz:
++	name: "rpz.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz.example.com"
++	rpz-action-override: "nxdomain"
++	zonefile:
++TEMPFILE_NAME rpz.example.com
++TEMPFILE_CONTENTS rpz.example.com
++$ORIGIN example.com.
++rpz	3600	IN	SOA	ns1.rpz.example.com. hostmaster.rpz.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz.example.com.
++	3600	IN	NS	ns2.rpz.example.com.
++$ORIGIN rpz.example.com.
++ns1.gotham.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz2.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz2.example.com"
++	rpz-action-override: "nodata"
++	zonefile:
++TEMPFILE_NAME rpz2.example.com
++TEMPFILE_CONTENTS rpz2.example.com
++$ORIGIN example.com.
++rpz2	3600	IN	SOA	ns1.rpz2.example.com. hostmaster.rpz2.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz2.example.com.
++	3600	IN	NS	ns2.rpz2.example.com.
++$ORIGIN rpz2.example.com.
++ns1.gotham2.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz3.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz3.example.com"
++	rpz-action-override: "passthru"
++	zonefile:
++TEMPFILE_NAME rpz3.example.com
++TEMPFILE_CONTENTS rpz3.example.com
++$ORIGIN example.com.
++rpz3	3600	IN	SOA	ns1.rpz3.example.com. hostmaster.rpz3.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz3.example.com.
++	3600	IN	NS	ns2.rpz3.example.com.
++$ORIGIN rpz3.example.com.
++ns1.gotham3.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz4.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz4.example.com"
++	rpz-action-override: "drop"
++	zonefile:
++TEMPFILE_NAME rpz4.example.com
++TEMPFILE_CONTENTS rpz4.example.com
++$ORIGIN example.com.
++rpz4	3600	IN	SOA	ns1.rpz4.example.com. hostmaster.rpz4.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz4.example.com.
++	3600	IN	NS	ns2.rpz4.example.com.
++$ORIGIN rpz4.example.com.
++ns1.gotham3.a.rpz-nsdname A 1.2.3.5
++ns1.gotham4.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz5.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz5.example.com"
++	rpz-action-override: "cname"
++	rpz-cname-override: "target.a"
++	zonefile:
++TEMPFILE_NAME rpz5.example.com
++TEMPFILE_CONTENTS rpz5.example.com
++$ORIGIN example.com.
++rpz5	3600	IN	SOA	ns1.rpz5.example.com. hostmaster.rpz5.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz5.example.com.
++	3600	IN	NS	ns2.rpz5.example.com.
++$ORIGIN rpz5.example.com.
++ns1.gotham5.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz6.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz6.example.com"
++	rpz-action-override: "disabled"
++	zonefile:
++TEMPFILE_NAME rpz6.example.com
++TEMPFILE_CONTENTS rpz6.example.com
++$ORIGIN example.com.
++rpz6	3600	IN	SOA	ns1.rpz6.example.com. hostmaster.rpz6.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz6.example.com.
++	3600	IN	NS	ns2.rpz6.example.com.
++$ORIGIN rpz6.example.com.
++ns1.gotham6.a.rpz-nsdname A 1.2.3.5
++TEMPFILE_END
++
++stub-zone:
++	name: "a."
++	stub-addr: 10.20.30.40
++CONFIG_END
++
++SCENARIO_BEGIN Test RPZ action override with trigger from nsdname.
++
++; a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.40
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham.a. IN A
++SECTION AUTHORITY
++gotham.a. NS ns1.gotham.a.
++SECTION ADDITIONAL
++ns1.gotham.a. A 10.20.30.41
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham2.a. IN A
++SECTION AUTHORITY
++gotham2.a. NS ns1.gotham2.a.
++SECTION ADDITIONAL
++ns1.gotham2.a. A 10.20.30.42
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham3.a. IN A
++SECTION AUTHORITY
++gotham3.a. NS ns1.gotham3.a.
++SECTION ADDITIONAL
++ns1.gotham3.a. A 10.20.30.43
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham4.a. IN A
++SECTION AUTHORITY
++gotham4.a. NS ns1.gotham4.a.
++SECTION ADDITIONAL
++ns1.gotham4.a. A 10.20.30.44
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham5.a. IN A
++SECTION AUTHORITY
++gotham5.a. NS ns1.gotham5.a.
++SECTION ADDITIONAL
++ns1.gotham5.a. A 10.20.30.45
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham6.a. IN A
++SECTION AUTHORITY
++gotham6.a. NS ns1.gotham6.a.
++SECTION ADDITIONAL
++ns1.gotham6.a. A 10.20.30.46
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++target.a. IN A
++SECTION ANSWER
++target.a. IN A 1.2.3.6
++ENTRY_END
++RANGE_END
++
++; gotham3.a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.43
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham3.a. IN A
++SECTION ANSWER
++www.gotham3.a. A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++; gotham6.a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.46
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham6.a. IN A
++SECTION ANSWER
++www.gotham6.a. A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++STEP 10 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham.a.	IN	A
++ENTRY_END
++
++STEP 11 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NXDOMAIN
++SECTION QUESTION
++www.gotham.a.	IN	A
++SECTION ANSWER
++ENTRY_END
++
++STEP 20 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham2.a.	IN	A
++ENTRY_END
++
++STEP 21 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham2.a.	IN	A
++SECTION ANSWER
++ENTRY_END
++
++STEP 30 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham3.a.	IN	A
++ENTRY_END
++
++STEP 31 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham3.a.	IN	A
++SECTION ANSWER
++www.gotham3.a. A 1.2.3.4
++ENTRY_END
++
++STEP 40 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham4.a.	IN	A
++ENTRY_END
++;dropped
++
++STEP 50 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham5.a.	IN	A
++ENTRY_END
++
++STEP 51 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham5.a.	IN	A
++SECTION ANSWER
++www.gotham5.a. CNAME target.a
++target.a A 1.2.3.6
++ENTRY_END
++
++STEP 60 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham6.a.	IN	A
++ENTRY_END
++
++STEP 61 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham6.a.	IN	A
++SECTION ANSWER
++www.gotham6.a. A 1.2.3.4
++ENTRY_END
++
++SCENARIO_END
+diff --git a/testdata/rpz_nsip_override.rpl b/testdata/rpz_nsip_override.rpl
+new file mode 100644
+index 000000000..8c3b20be3
+--- /dev/null
++++ b/testdata/rpz_nsip_override.rpl
+@@ -0,0 +1,332 @@
++; config options
++server:
++	module-config: "respip validator iterator"
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	access-control: 192.0.0.0/8 allow
++
++rpz:
++	name: "rpz.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz.example.com"
++	rpz-action-override: "nxdomain"
++	zonefile:
++TEMPFILE_NAME rpz.example.com
++TEMPFILE_CONTENTS rpz.example.com
++$ORIGIN example.com.
++rpz	3600	IN	SOA	ns1.rpz.example.com. hostmaster.rpz.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz.example.com.
++	3600	IN	NS	ns2.rpz.example.com.
++$ORIGIN rpz.example.com.
++; ns1.gotham.a
++32.41.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz2.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz2.example.com"
++	rpz-action-override: "nodata"
++	zonefile:
++TEMPFILE_NAME rpz2.example.com
++TEMPFILE_CONTENTS rpz2.example.com
++$ORIGIN example.com.
++rpz2	3600	IN	SOA	ns1.rpz2.example.com. hostmaster.rpz2.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz2.example.com.
++	3600	IN	NS	ns2.rpz2.example.com.
++$ORIGIN rpz2.example.com.
++; ns1.gotham2.a
++32.42.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz3.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz3.example.com"
++	rpz-action-override: "passthru"
++	zonefile:
++TEMPFILE_NAME rpz3.example.com
++TEMPFILE_CONTENTS rpz3.example.com
++$ORIGIN example.com.
++rpz3	3600	IN	SOA	ns1.rpz3.example.com. hostmaster.rpz3.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz3.example.com.
++	3600	IN	NS	ns2.rpz3.example.com.
++$ORIGIN rpz3.example.com.
++; ns1.gotham3.a
++32.43.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz4.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz4.example.com"
++	rpz-action-override: "drop"
++	zonefile:
++TEMPFILE_NAME rpz4.example.com
++TEMPFILE_CONTENTS rpz4.example.com
++$ORIGIN example.com.
++rpz4	3600	IN	SOA	ns1.rpz4.example.com. hostmaster.rpz4.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz4.example.com.
++	3600	IN	NS	ns2.rpz4.example.com.
++$ORIGIN rpz4.example.com.
++; ns1.gotham3.a
++32.43.30.20.10.rpz-nsip A 1.2.3.5
++; ns1.gotham4.a
++32.44.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz5.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz5.example.com"
++	rpz-action-override: "cname"
++	rpz-cname-override: "target.a"
++	zonefile:
++TEMPFILE_NAME rpz5.example.com
++TEMPFILE_CONTENTS rpz5.example.com
++$ORIGIN example.com.
++rpz5	3600	IN	SOA	ns1.rpz5.example.com. hostmaster.rpz5.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz5.example.com.
++	3600	IN	NS	ns2.rpz5.example.com.
++$ORIGIN rpz5.example.com.
++; ns1.gotham5.a
++32.45.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++rpz:
++	name: "rpz6.example.com."
++	rpz-log: yes
++	rpz-log-name: "rpz6.example.com"
++	rpz-action-override: "disabled"
++	zonefile:
++TEMPFILE_NAME rpz6.example.com
++TEMPFILE_CONTENTS rpz6.example.com
++$ORIGIN example.com.
++rpz6	3600	IN	SOA	ns1.rpz6.example.com. hostmaster.rpz6.example.com. (
++		1379078166 28800 7200 604800 7200 )
++	3600	IN	NS	ns1.rpz6.example.com.
++	3600	IN	NS	ns2.rpz6.example.com.
++$ORIGIN rpz6.example.com.
++; ns1.gotham6.a
++32.46.30.20.10.rpz-nsip A 1.2.3.5
++TEMPFILE_END
++
++stub-zone:
++	name: "a."
++	stub-addr: 10.20.30.40
++CONFIG_END
++
++SCENARIO_BEGIN Test RPZ action override with trigger from nsip.
++
++; a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.40
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham.a. IN A
++SECTION AUTHORITY
++gotham.a. NS ns1.gotham.a.
++SECTION ADDITIONAL
++ns1.gotham.a. A 10.20.30.41
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham2.a. IN A
++SECTION AUTHORITY
++gotham2.a. NS ns1.gotham2.a.
++SECTION ADDITIONAL
++ns1.gotham2.a. A 10.20.30.42
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham3.a. IN A
++SECTION AUTHORITY
++gotham3.a. NS ns1.gotham3.a.
++SECTION ADDITIONAL
++ns1.gotham3.a. A 10.20.30.43
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham4.a. IN A
++SECTION AUTHORITY
++gotham4.a. NS ns1.gotham4.a.
++SECTION ADDITIONAL
++ns1.gotham4.a. A 10.20.30.44
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham5.a. IN A
++SECTION AUTHORITY
++gotham5.a. NS ns1.gotham5.a.
++SECTION ADDITIONAL
++ns1.gotham5.a. A 10.20.30.45
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham6.a. IN A
++SECTION AUTHORITY
++gotham6.a. NS ns1.gotham6.a.
++SECTION ADDITIONAL
++ns1.gotham6.a. A 10.20.30.46
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++target.a. IN A
++SECTION ANSWER
++target.a. IN A 1.2.3.6
++ENTRY_END
++RANGE_END
++
++; gotham3.a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.43
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham3.a. IN A
++SECTION ANSWER
++www.gotham3.a. A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++; gotham6.a.
++RANGE_BEGIN 0 1000
++	ADDRESS 10.20.30.46
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++www.gotham6.a. IN A
++SECTION ANSWER
++www.gotham6.a. A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++STEP 10 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham.a.	IN	A
++ENTRY_END
++
++STEP 11 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NXDOMAIN
++SECTION QUESTION
++www.gotham.a.	IN	A
++SECTION ANSWER
++ENTRY_END
++
++STEP 20 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham2.a.	IN	A
++ENTRY_END
++
++STEP 21 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA AA NOERROR
++SECTION QUESTION
++www.gotham2.a.	IN	A
++SECTION ANSWER
++ENTRY_END
++
++STEP 30 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham3.a.	IN	A
++ENTRY_END
++
++STEP 31 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham3.a.	IN	A
++SECTION ANSWER
++www.gotham3.a. A 1.2.3.4
++ENTRY_END
++
++STEP 40 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham4.a.	IN	A
++ENTRY_END
++;dropped
++
++STEP 50 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham5.a.	IN	A
++ENTRY_END
++
++STEP 51 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham5.a.	IN	A
++SECTION ANSWER
++www.gotham5.a. CNAME target.a
++target.a A 1.2.3.6
++ENTRY_END
++
++STEP 60 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.gotham6.a.	IN	A
++ENTRY_END
++
++STEP 61 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.gotham6.a.	IN	A
++SECTION ANSWER
++www.gotham6.a. A 1.2.3.4
++ENTRY_END
++
++SCENARIO_END

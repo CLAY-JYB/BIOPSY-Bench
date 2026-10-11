@@ -28,28 +28,28 @@ HARMLESS OPTIONS
 ================================================================================
 
 ARCHITECTURES:
-  x86_64             x86-64 (AMD64) Linux binaries
-  arm64              ARM64 (AArch64) Linux binaries
+  x86_64 x86-64 (AMD64) Linux binaries
+  arm64 ARM64 (AArch64) Linux binaries
 
 ENCRYPTION LAYERS:
-  Layer 1            AES-256-ECB encryption
-  Layer 2            ChaCha20 stream cipher
-  Layer 3            RC4 stream cipher
+  Layer 1 AES-256-ECB encryption
+  Layer 2 ChaCha20 stream cipher
+  Layer 3 RC4 stream cipher
 
 FEATURES:
   memfd_create       In-memory execution via memfd_create
   polymorphic        Every packed binary is bytewise unique
   anti-debug         Built-in anti-debugging and anti-sandbox
-  crc32              Integrity verification
+  crc32 Integrity verification
   direct_syscalls    Bypasses userland hooks
 
 MEMORY WRITE METHODS:
   io_uring           Use io_uring (default, kernel >= 5.1)
-  mmap               Use mmap
-  write              Use write(2)
+  mmap Use mmap
+  write Use write(2)
 
 OTHER OPTIONS:
-  -n                 Number of commands to generate
+  -n Number of commands to generate
   -i INPUT           Input filename
   -o OUTPUT          Output file (print to stdout if not specified)
 
@@ -57,13 +57,13 @@ OTHER OPTIONS:
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input filename (default: program)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input filename (default: program)
   --arch ARCH           Target architecture: x86_64, arm64 (default: x86_64)
   --seed SEED           Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
 
 ================================================================================
 """

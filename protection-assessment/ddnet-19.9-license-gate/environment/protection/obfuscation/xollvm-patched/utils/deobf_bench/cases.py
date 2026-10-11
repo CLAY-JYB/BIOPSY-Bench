@@ -19,9 +19,9 @@ from gates.strenc import SECRET_A, SECRET_B
 @dataclass
 class BenchCase:
     name: str
-    program: str            # dotted programs.render() name
+    program: str # dotted programs.render() name
     passes: List[str]       # obfuscator passes under attack (drives -passes=obfuscation gating via annotation)
-    attack: str              # attacks registry key ("mba", "cfg", "strenc")
+    attack: str # attacks registry key ("mba", "cfg", "strenc")
     annotation: str          # full "obf: ..." function annotation
     ground_truth: Dict[str, Any] = field(default_factory=dict)
     render_kwargs: Dict[str, Any] = field(default_factory=dict)  # extra programs.render() kwargs beyond annotation

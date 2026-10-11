@@ -39,28 +39,32 @@ USAGE EXAMPLES
 gcc program.c -o program
 
 ================================================================================
-DETECTION METHODS (10 Individual Methods)
+DETECTION METHODS (11 Individual Methods)
 ================================================================================
 
 INDIVIDUAL METHODS:
   ld_preload           LD_PRELOAD environment variable detection
-  gdb                  GDB-specific fingerprints (env vars, file descriptors)
-  parent               Parent process name check (gdb, ltrace, strace, valgrind, etc.)
+  gdb GDB-specific fingerprints (env vars, file descriptors)
+  parent Parent process name check (gdb, ltrace, strace, valgrind, etc.)
   tracer_pid           TracerPid check via /proc/self/status
-  sigtrap              SIGTRAP signal handling detection
-  ptrace               ptrace syscall detection (direct syscall, not libc ptrace)
-  proc_maps            /proc/self/maps injected library detection (frida, memfd, ...)
+  sigtrap SIGTRAP signal handling detection
+  ptrace ptrace syscall detection (direct syscall, not libc ptrace)
+  proc_maps /proc/self/maps injected library detection (frida, memfd, ...)
   breakpoint           Software breakpoint detection (INT3 instruction)
-  timing               Timing-based detection (single-step detection)
-  frida                Frida/dynamic instrumentation detection (maps, thread
+  timing Timing-based detection (single-step detection)
+  frida Frida/dynamic instrumentation detection (maps, thread
                        names, default port 27042)
+  sandbox Analysis-sandbox artifacts (Cuckoo/Joe usernames,
+                       /cuckoo paths, harness env markers). Hypervisor cpuid
+                       is deliberately excluded: tasks deploy virtualized and
+                       the probe must never fire on the grader's own run
 
 PREDEFINED COMBINATIONS:
-  basic                ptrace + tracer_pid (fast, basic detection)
-  advanced             All methods except ptrace (for when ptrace is hooked)
-  stealth              tracer_pid + parent + sigtrap (no ptrace, stealthy)
-  standard             ptrace + tracer_pid + parent + gdb (common debuggers)
-  all                  All 10 detection methods (maximum protection)
+  basic ptrace + tracer_pid (fast, basic detection)
+  advanced All methods except ptrace (for when ptrace is hooked)
+  stealth tracer_pid + parent + sigtrap (no ptrace, stealthy)
+  standard ptrace + tracer_pid + parent + gdb (common debuggers)
+  all All 11 detection methods (maximum protection)
 
 ================================================================================
 INJECTION POINTS
@@ -75,7 +79,7 @@ INJECTION POINTS
                        Falls back to --target-function when no call site exists
                        ONLY if --target-function also matches; otherwise exits 1.
 
-  --harden             Also call adbg_apply_hardening() before the checks:
+  --harden Also call adbg_apply_hardening() before the checks:
                        prctl(PR_SET_DUMPABLE, 0) + madvise(MADV_DONTDUMP) on
                        writable private mappings (anti-dump). No OSS packer
                        ships this; it is one syscall per region.
@@ -94,17 +98,17 @@ INJECTION POINTS
 ACTIONS
 ================================================================================
 
-  exit                 Exit with code 1 when debugger detected [default]
-  abort                Call abort() when debugger detected
-  none                 Report only, continue execution (for logging/testing)
+  exit Exit with code 1 when debugger detected [default]
+  abort Call abort() when debugger detected
+  none Report only, continue execution (for logging/testing)
 
 ================================================================================
 MODES
 ================================================================================
 
-  include              Inject #include "adbg.c" (amalgamation) + detection code [default]
-  inline               Inject standalone detection code (no external files)
-  library              Only copy adbg.h and adbg.c to target directory
+  include Inject #include "adbg.c" (amalgamation) + detection code [default]
+  inline Inject standalone detection code (no external files)
+  library Only copy adbg.h and adbg.c to target directory
 """
 
 import argparse
@@ -127,6 +131,7 @@ CHECK_FLAGS = {
     'breakpoint': 'ADBG_CHECK_BREAKPOINT',
     'timing': 'ADBG_CHECK_TIMING',
     'frida': 'ADBG_CHECK_FRIDA',
+    'sandbox': 'ADBG_CHECK_SANDBOX',
 }
 
 # Predefined combinations
@@ -261,26 +266,6 @@ def find_first_call_site(content: str, func_name: str):
     return None
 
 
-def insert_include(content: str) -> str:
-    """Insert #include "adbg.c" (amalgamation) after other includes."""
-    lines = content.split('\n')
-
-    # Find the last #include line
-    last_include = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith('#include'):
-            last_include = i
-
-    if last_include >= 0:
-        # Insert after the last include
-        lines.insert(last_include + 1, ADBG_INCLUDE.strip())
-    else:
-        # No includes found, insert at the beginning
-        lines.insert(0, ADBG_INCLUDE.strip())
-
-    return '\n'.join(lines)
-
-
 def insert_check_in_main(content: str, check_code: str):
     """Insert anti-debug check at the start of main()."""
     return insert_check_in_function(content, check_code, 'main')
@@ -398,11 +383,29 @@ def inject_include_mode(target_file: Path, copy_libs: bool = False,
         content = f.read()
 
     # Check if already has the anti-debug amalgamation include
-    if '#include "adbg.c"' in content:
+    already_has_include = '#include "adbg.c"' in content
+    if already_has_include:
         print(f"[-] {target_file} already includes adbg.c, skipping include insertion")
     else:
-        content = insert_include(content)
-        print(f"[+] Inserted #include \"adbg.c\" (amalgamates detection code into this TU)")
+        # Insert unconditionally at the very top of the file (file scope,
+        # guaranteed textually first) -- NOT "after the last #include
+        # anywhere in the file" (the old behavior) and NOT fused into the
+        # check code at its call-site anchor (block scope: adbg.c's
+        # top-level function DEFINITIONS cannot legally appear nested
+        # inside another function's body -- "invalid storage class for
+        # function ...", confirmed by trying exactly that and compiling).
+        # The old whole-file-scan anchor breaks whenever something
+        # upstream (e.g. interlock_gen.py, run first per SKILL.md's
+        # I-before-D source-stage order) prepends its own genuine call
+        # sites to the wrapped function ahead of the carrier's real
+        # #include block: --insert-at-call then anchors on that early call
+        # site, landing the check textually BEFORE the file's own
+        # #include "adbg.c" -- "'adbg_config_t' was not declared in this
+        # scope". Putting the include at position 0 is always earlier than
+        # any anchor anti-debug.py or anything upstream of it could pick.
+        content = ADBG_INCLUDE + content
+        print(f"[+] Inserted #include \"adbg.c\" at the top of the file "
+              f"(amalgamates detection code into this TU)")
 
     # Check if already has anti-debug check
     if 'adbg_check' in content or 'adbg_detect' in content:
@@ -443,8 +446,7 @@ def inject_include_mode(target_file: Path, copy_libs: bool = False,
         content, inserted = insert_check_in_function(content, check_code, target_function)
         anchor_desc = f"at start of {target_function}()"
 
-    # Write back (even on failure: the include was added above and the
-    # operator may want to place the call manually after inspecting)
+    # Write back
     with open(target_file, 'w') as f:
         f.write(content)
 

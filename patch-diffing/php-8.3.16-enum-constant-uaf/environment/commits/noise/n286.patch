@@ -1,0 +1,354 @@
+diff --git a/ext/spl/spl_fixedarray.stub.php b/ext/spl/spl_fixedarray.stub.php
+index 13f29b7a..7fa9b273 100644
+--- a/ext/spl/spl_fixedarray.stub.php
++++ b/ext/spl/spl_fixedarray.stub.php
+@@ -9,10 +9,6 @@ class SplFixedArray implements IteratorAggregate, ArrayAccess, Countable, JsonSe
+     /** @tentative-return-type */
+     public function __wakeup(): void {}
+ 
+-    public function __serialize(): array {}
+-
+-    public function __unserialize(array $data): void {}
+-
+     /** @tentative-return-type */
+     public function count(): int {}
+ 
+diff --git a/ext/spl/spl_fixedarray_arginfo.h b/ext/spl/spl_fixedarray_arginfo.h
+index 11ea1fdb..10c3fdb2 100644
+--- a/ext/spl/spl_fixedarray_arginfo.h
++++ b/ext/spl/spl_fixedarray_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 0b508ad6499b70c92bf25960b30fefa913532a3c */
++ * Stub hash: 79a13a549d91f0e79c78a125de65fbac4795339f */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_SplFixedArray___construct, 0, 0, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, size, IS_LONG, 0, "0")
+@@ -8,13 +8,6 @@ ZEND_END_ARG_INFO()
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplFixedArray___wakeup, 0, 0, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_SplFixedArray___serialize, 0, 0, IS_ARRAY, 0)
+-ZEND_END_ARG_INFO()
+-
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_SplFixedArray___unserialize, 0, 1, IS_VOID, 0)
+-	ZEND_ARG_TYPE_INFO(0, data, IS_ARRAY, 0)
+-ZEND_END_ARG_INFO()
+-
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_SplFixedArray_count, 0, 0, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+ 
+@@ -52,13 +45,12 @@ ZEND_END_ARG_INFO()
+ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_SplFixedArray_getIterator, 0, 0, Iterator, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#define arginfo_class_SplFixedArray_jsonSerialize arginfo_class_SplFixedArray___serialize
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_SplFixedArray_jsonSerialize, 0, 0, IS_ARRAY, 0)
++ZEND_END_ARG_INFO()
+ 
+ 
+ ZEND_METHOD(SplFixedArray, __construct);
+ ZEND_METHOD(SplFixedArray, __wakeup);
+-ZEND_METHOD(SplFixedArray, __serialize);
+-ZEND_METHOD(SplFixedArray, __unserialize);
+ ZEND_METHOD(SplFixedArray, count);
+ ZEND_METHOD(SplFixedArray, toArray);
+ ZEND_METHOD(SplFixedArray, fromArray);
+@@ -75,8 +67,6 @@ ZEND_METHOD(SplFixedArray, jsonSerialize);
+ static const zend_function_entry class_SplFixedArray_methods[] = {
+ 	ZEND_ME(SplFixedArray, __construct, arginfo_class_SplFixedArray___construct, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(SplFixedArray, __wakeup, arginfo_class_SplFixedArray___wakeup, ZEND_ACC_PUBLIC)
+-	ZEND_ME(SplFixedArray, __serialize, arginfo_class_SplFixedArray___serialize, ZEND_ACC_PUBLIC)
+-	ZEND_ME(SplFixedArray, __unserialize, arginfo_class_SplFixedArray___unserialize, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(SplFixedArray, count, arginfo_class_SplFixedArray_count, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(SplFixedArray, toArray, arginfo_class_SplFixedArray_toArray, ZEND_ACC_PUBLIC)
+ 	ZEND_ME(SplFixedArray, fromArray, arginfo_class_SplFixedArray_fromArray, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+diff --git a/ext/spl/spl_functions.c b/ext/spl/spl_functions.c
+index 0fcf3896..0f46c2e8 100644
+--- a/ext/spl/spl_functions.c
++++ b/ext/spl/spl_functions.c
+@@ -19,6 +19,8 @@
+ #endif
+ 
+ #include "php.h"
++#include "php_ini.h"
++#include "ext/standard/info.h"
+ #include "php_spl.h"
+ 
+ /* {{{ spl_add_class_name */
+@@ -39,9 +41,11 @@ void spl_add_class_name(zval *list, zend_class_entry *pce, int allow, int ce_fla
+ /* {{{ spl_add_interfaces */
+ void spl_add_interfaces(zval *list, zend_class_entry * pce, int allow, int ce_flags)
+ {
++	uint32_t num_interfaces;
++
+ 	if (pce->num_interfaces) {
+ 		ZEND_ASSERT(pce->ce_flags & ZEND_ACC_LINKED);
+-		for (uint32_t num_interfaces = 0; num_interfaces < pce->num_interfaces; num_interfaces++) {
++		for (num_interfaces = 0; num_interfaces < pce->num_interfaces; num_interfaces++) {
+ 			spl_add_class_name(list, pce->interfaces[num_interfaces], allow, ce_flags);
+ 		}
+ 	}
+@@ -51,9 +55,10 @@ void spl_add_interfaces(zval *list, zend_class_entry * pce, int allow, int ce_fl
+ /* {{{ spl_add_traits */
+ void spl_add_traits(zval *list, zend_class_entry * pce, int allow, int ce_flags)
+ {
++	uint32_t num_traits;
+ 	zend_class_entry *trait;
+ 
+-	for (uint32_t num_traits = 0; num_traits < pce->num_traits; num_traits++) {
++	for (num_traits = 0; num_traits < pce->num_traits; num_traits++) {
+ 		trait = zend_fetch_class_by_name(pce->trait_names[num_traits].name,
+ 			pce->trait_names[num_traits].lc_name, ZEND_FETCH_CLASS_TRAIT);
+ 		ZEND_ASSERT(trait);
+@@ -64,9 +69,11 @@ void spl_add_traits(zval *list, zend_class_entry * pce, int allow, int ce_flags)
+ 
+ 
+ /* {{{ spl_add_classes */
+-void spl_add_classes(zend_class_entry *pce, zval *list, bool sub, int allow, int ce_flags)
++int spl_add_classes(zend_class_entry *pce, zval *list, int sub, int allow, int ce_flags)
+ {
+-	ZEND_ASSERT(pce);
++	if (!pce) {
++		return 0;
++	}
+ 	spl_add_class_name(list, pce, allow, ce_flags);
+ 	if (sub) {
+ 		spl_add_interfaces(list, pce, allow, ce_flags);
+@@ -75,10 +82,11 @@ void spl_add_classes(zend_class_entry *pce, zval *list, bool sub, int allow, int
+ 			spl_add_classes(pce, list, sub, allow, ce_flags);
+ 		}
+ 	}
++	return 0;
+ }
+ /* }}} */
+ 
+-zend_string * spl_gen_private_prop_name(zend_class_entry *ce, char *prop_name, size_t prop_len) /* {{{ */
++zend_string * spl_gen_private_prop_name(zend_class_entry *ce, char *prop_name, int prop_len) /* {{{ */
+ {
+ 	return zend_mangle_property_name(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), prop_name, prop_len, 0);
+ }
+diff --git a/ext/spl/spl_functions.h b/ext/spl/spl_functions.h
+index c2c3fb8b..e6c3171c 100644
+--- a/ext/spl/spl_functions.h
++++ b/ext/spl/spl_functions.h
+@@ -21,6 +21,9 @@
+ 
+ typedef zend_object* (*create_object_func_t)(zend_class_entry *class_type);
+ 
++#define REGISTER_SPL_CLASS_CONST_LONG(class_name, const_name, value) \
++	zend_declare_class_constant_long(spl_ce_ ## class_name, const_name, sizeof(const_name)-1, (zend_long)value);
++
+ /* sub: whether to allow subclasses/interfaces
+    allow = 0: allow all classes and interfaces
+    allow > 0: allow all that match and mask ce_flags
+@@ -29,9 +32,9 @@ typedef zend_object* (*create_object_func_t)(zend_class_entry *class_type);
+ void spl_add_class_name(zval * list, zend_class_entry * pce, int allow, int ce_flags);
+ void spl_add_interfaces(zval * list, zend_class_entry * pce, int allow, int ce_flags);
+ void spl_add_traits(zval * list, zend_class_entry * pce, int allow, int ce_flags);
+-void spl_add_classes(zend_class_entry *pce, zval *list, bool sub, int allow, int ce_flags);
++int spl_add_classes(zend_class_entry *pce, zval *list, int sub, int allow, int ce_flags);
+ 
+ /* caller must efree(return) */
+-zend_string *spl_gen_private_prop_name(zend_class_entry *ce, char *prop_name, size_t prop_len);
++zend_string *spl_gen_private_prop_name(zend_class_entry *ce, char *prop_name, int prop_len);
+ 
+ #endif /* PHP_FUNCTIONS_H */
+diff --git a/ext/spl/spl_heap.c b/ext/spl/spl_heap.c
+index db35511f..5f38df97 100644
+--- a/ext/spl/spl_heap.c
++++ b/ext/spl/spl_heap.c
+@@ -33,6 +33,11 @@
+ 
+ #define SPL_HEAP_CORRUPTED       0x00000001
+ 
++#define SPL_PQUEUE_EXTR_MASK     0x00000003
++#define SPL_PQUEUE_EXTR_BOTH     0x00000003
++#define SPL_PQUEUE_EXTR_DATA     0x00000001
++#define SPL_PQUEUE_EXTR_PRIORITY 0x00000002
++
+ zend_object_handlers spl_handler_SplHeap;
+ zend_object_handlers spl_handler_SplPriorityQueue;
+ 
+@@ -68,6 +73,12 @@ struct _spl_heap_object {
+ 	zend_object         std;
+ };
+ 
++/* define an overloaded iterator structure */
++struct _spl_heap_it {
++	zend_user_iterator  intern;
++	int                 flags;
++};
++
+ typedef struct _spl_pqueue_elem {
+ 	zval data;
+ 	zval priority;
+@@ -273,7 +284,7 @@ static void spl_ptr_heap_insert(spl_ptr_heap *heap, void *elem, void *cmp_userda
+ 	if (heap->count+1 > heap->max_size) {
+ 		size_t alloc_size = heap->max_size * heap->elem_size;
+ 		/* we need to allocate more memory */
+-		heap->elements  = safe_erealloc(heap->elements, 2, alloc_size, 0);
++		heap->elements  = erealloc(heap->elements, 2 * alloc_size);
+ 		memset((char *) heap->elements + alloc_size, 0, alloc_size);
+ 		heap->max_size *= 2;
+ 	}
+@@ -479,7 +490,7 @@ static zend_object *spl_heap_object_clone(zend_object *old_object) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_result spl_heap_object_count_elements(zend_object *object, zend_long *count) /* {{{ */
++static int spl_heap_object_count_elements(zend_object *object, zend_long *count) /* {{{ */
+ {
+ 	spl_heap_object *intern = spl_heap_from_obj(object);
+ 
+@@ -881,8 +892,10 @@ PHP_METHOD(SplMaxHeap, compare)
+ 
+ static void spl_heap_it_dtor(zend_object_iterator *iter) /* {{{ */
+ {
++	spl_heap_it *iterator = (spl_heap_it *)iter;
++
+ 	zend_user_it_invalidate_current(iter);
+-	zval_ptr_dtor(&iter->data);
++	zval_ptr_dtor(&iterator->intern.it.data);
+ }
+ /* }}} */
+ 
+@@ -1048,7 +1061,7 @@ PHP_METHOD(SplPriorityQueue, current)
+ PHP_METHOD(SplHeap, __debugInfo)
+ {
+ 	if (zend_parse_parameters_none() == FAILURE) {
+-		RETURN_THROWS();
++		return;
+ 	}
+ 
+ 	RETURN_ARR(spl_heap_object_get_debug_info(spl_ce_SplHeap, Z_OBJ_P(ZEND_THIS)));
+@@ -1058,7 +1071,7 @@ PHP_METHOD(SplHeap, __debugInfo)
+ PHP_METHOD(SplPriorityQueue, __debugInfo)
+ {
+ 	if (zend_parse_parameters_none() == FAILURE) {
+-		RETURN_THROWS();
++		return;
+ 	}
+ 
+ 	RETURN_ARR(spl_heap_object_get_debug_info(spl_ce_SplPriorityQueue, Z_OBJ_P(ZEND_THIS)));
+@@ -1089,39 +1102,52 @@ static const zend_object_iterator_funcs spl_pqueue_it_funcs = {
+ 
+ zend_object_iterator *spl_heap_get_iterator(zend_class_entry *ce, zval *object, int by_ref) /* {{{ */
+ {
++	spl_heap_it     *iterator;
++	spl_heap_object *heap_object = Z_SPLHEAP_P(object);
++
+ 	if (by_ref) {
+ 		zend_throw_error(NULL, "An iterator cannot be used with foreach by reference");
+ 		return NULL;
+ 	}
+ 
+-	zend_user_iterator *iterator = emalloc(sizeof(zend_user_iterator));
+-	zend_iterator_init(&iterator->it);
++	iterator = emalloc(sizeof(spl_heap_it));
+ 
+-	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(object));
+-	iterator->it.funcs = &spl_heap_it_funcs;
+-	iterator->ce       = ce;
+-	ZVAL_UNDEF(&iterator->value);
++	zend_iterator_init(&iterator->intern.it);
+ 
+-	return &iterator->it;
++	Z_ADDREF_P(object);
++	ZVAL_OBJ(&iterator->intern.it.data, Z_OBJ_P(object));
++	iterator->intern.it.funcs = &spl_heap_it_funcs;
++	iterator->intern.ce       = ce;
++	iterator->flags           = heap_object->flags;
++	ZVAL_UNDEF(&iterator->intern.value);
++
++	return &iterator->intern.it;
+ }
+ /* }}} */
+ 
+ zend_object_iterator *spl_pqueue_get_iterator(zend_class_entry *ce, zval *object, int by_ref) /* {{{ */
+ {
++	spl_heap_it     *iterator;
++	spl_heap_object *heap_object = Z_SPLHEAP_P(object);
++
+ 	if (by_ref) {
+ 		zend_throw_error(NULL, "An iterator cannot be used with foreach by reference");
+ 		return NULL;
+ 	}
+ 
+-	zend_user_iterator *iterator = emalloc(sizeof(zend_user_iterator));
+-	zend_iterator_init(&iterator->it);
++	iterator = emalloc(sizeof(spl_heap_it));
+ 
+-	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(object));
+-	iterator->it.funcs = &spl_pqueue_it_funcs;
+-	iterator->ce       = ce;
+-	ZVAL_UNDEF(&iterator->value);
++	zend_iterator_init((zend_object_iterator*)iterator);
+ 
+-	return &iterator->it;
++	Z_ADDREF_P(object);
++	ZVAL_OBJ(&iterator->intern.it.data, Z_OBJ_P(object));
++	iterator->intern.it.funcs = &spl_pqueue_it_funcs;
++	iterator->intern.ce       = ce;
++	iterator->flags           = heap_object->flags;
++
++	ZVAL_UNDEF(&iterator->intern.value);
++
++	return &iterator->intern.it;
+ }
+ /* }}} */
+ 
+@@ -1159,6 +1185,10 @@ PHP_MINIT_FUNCTION(spl_heap) /* {{{ */
+ 	spl_handler_SplPriorityQueue.get_gc         = spl_pqueue_object_get_gc;
+ 	spl_handler_SplPriorityQueue.free_obj = spl_heap_object_free_storage;
+ 
++	REGISTER_SPL_CLASS_CONST_LONG(SplPriorityQueue, "EXTR_BOTH",      SPL_PQUEUE_EXTR_BOTH);
++	REGISTER_SPL_CLASS_CONST_LONG(SplPriorityQueue, "EXTR_PRIORITY",  SPL_PQUEUE_EXTR_PRIORITY);
++	REGISTER_SPL_CLASS_CONST_LONG(SplPriorityQueue, "EXTR_DATA",      SPL_PQUEUE_EXTR_DATA);
++
+ 	return SUCCESS;
+ }
+ /* }}} */
+diff --git a/ext/spl/spl_heap.h b/ext/spl/spl_heap.h
+index 42f803ae..12022257 100644
+--- a/ext/spl/spl_heap.h
++++ b/ext/spl/spl_heap.h
+@@ -20,11 +20,6 @@
+ #include "php.h"
+ #include "php_spl.h"
+ 
+-#define SPL_PQUEUE_EXTR_MASK     0x00000003
+-#define SPL_PQUEUE_EXTR_BOTH     0x00000003
+-#define SPL_PQUEUE_EXTR_DATA     0x00000001
+-#define SPL_PQUEUE_EXTR_PRIORITY 0x00000002
+-
+ extern PHPAPI zend_class_entry *spl_ce_SplHeap;
+ extern PHPAPI zend_class_entry *spl_ce_SplMinHeap;
+ extern PHPAPI zend_class_entry *spl_ce_SplMaxHeap;
+diff --git a/ext/spl/spl_heap.stub.php b/ext/spl/spl_heap.stub.php
+index ac9e4151..f34f3e8d 100644
+--- a/ext/spl/spl_heap.stub.php
++++ b/ext/spl/spl_heap.stub.php
+@@ -4,22 +4,6 @@
+ 
+ class SplPriorityQueue implements Iterator, Countable
+ {
+-    /**
+-     * @var int
+-     * @cvalue SPL_PQUEUE_EXTR_BOTH
+-     */
+-    public const EXTR_BOTH = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_PQUEUE_EXTR_PRIORITY
+-     */
+-    public const EXTR_PRIORITY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue SPL_PQUEUE_EXTR_DATA
+-     */
+-    public const EXTR_DATA = UNKNOWN;
+-
+     /** @tentative-return-type */
+     public function compare(mixed $priority1, mixed $priority2): int {}
+ 

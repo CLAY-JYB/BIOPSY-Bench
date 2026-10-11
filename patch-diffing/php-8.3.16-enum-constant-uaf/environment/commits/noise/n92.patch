@@ -1,0 +1,323 @@
+diff --git a/ext/date/tests/DateTimeZone_inherited_serialization.phpt b/ext/date/tests/DateTimeZone_inherited_serialization.phpt
+deleted file mode 100644
+index d70c983b..00000000
+--- a/ext/date/tests/DateTimeZone_inherited_serialization.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Inherited DateTimeZone serialisation with custom properties
+---FILE--
+-<?php
+-date_default_timezone_set("Europe/London");
+-
+-class MyDateTimeZone extends DateTimeZone
+-{
+-	public function __construct(
+-		string $timezone = "Europe/Kyiv",
+-		public ?bool $myProperty = null,
+-	) {
+-		parent::__construct($timezone);
+-	}
+-}
+-
+-$d = new MyDateTimeZone("Europe/London", myProperty: true);
+-$e = unserialize(serialize($d));
+-var_dump($e->myProperty);
+-?>
+---EXPECTF--
+-bool(true)
+diff --git a/ext/date/tests/DateTimeZone_serialization.phpt b/ext/date/tests/DateTimeZone_serialization.phpt
+deleted file mode 100644
+index 60f6f4c5..00000000
+--- a/ext/date/tests/DateTimeZone_serialization.phpt
++++ /dev/null
+@@ -1,58 +0,0 @@
+---TEST--
+-Test DateTimeZone::__serialize and DateTime::__unserialize
+---FILE--
+-<?php
+-$tz = new DateTimeZone("CEST");
+-var_dump($tz->__serialize());
+-
+-$tz = new DateTimeZone("UTC");
+-$tz->__unserialize(
+-	[
+-		'timezone_type' => 3,
+-		'timezone' => 'Europe/London',
+-	]
+-);
+-var_dump($tz);
+-
+-$tz->__unserialize(
+-	[
+-		'timezone_type' => 2,
+-		'timezone' => 'CEST',
+-	]
+-);
+-var_dump($tz);
+-
+-$tz->__unserialize(
+-	[
+-		'timezone_type' => 1,
+-		'timezone' => '+0130',
+-	]
+-);
+-var_dump($tz);
+-
+-?>
+---EXPECTF--
+-array(2) {
+-  ["timezone_type"]=>
+-  int(2)
+-  ["timezone"]=>
+-  string(4) "CEST"
+-}
+-object(DateTimeZone)#%d (%d) {
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-object(DateTimeZone)#%d (%d) {
+-  ["timezone_type"]=>
+-  int(2)
+-  ["timezone"]=>
+-  string(4) "CEST"
+-}
+-object(DateTimeZone)#%d (%d) {
+-  ["timezone_type"]=>
+-  int(1)
+-  ["timezone"]=>
+-  string(6) "+01:30"
+-}
+diff --git a/ext/date/tests/DateTimeZone_serialize_errors.phpt b/ext/date/tests/DateTimeZone_serialize_errors.phpt
+deleted file mode 100644
+index f89e3bfa..00000000
+--- a/ext/date/tests/DateTimeZone_serialize_errors.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Test unserialization of DateTimeZone with null byte 
+---FILE--
+-<?php
+-$serialized = 'O:12:"DateTimeZone":2:{s:13:"timezone_type";i:3;s:8:"timezone";s:17:"Ame' . "\0" .'rica/New_York";}';
+-
+-try {
+-	$tz = unserialize($serialized);
+-} catch (Throwable $e) {
+-	echo $e->getMessage(), "\n";
+-}
+-?>
+---EXPECTF--
+-Warning: DateTimeZone::__unserialize(): Timezone must not contain null bytes in %s on line %d
+-Invalid serialization data for DateTimeZone object
+diff --git a/ext/date/tests/DateTime_clone_basic3.phpt b/ext/date/tests/DateTime_clone_basic3.phpt
+index c57d829f..dd722079 100644
+--- a/ext/date/tests/DateTime_clone_basic3.phpt
++++ b/ext/date/tests/DateTime_clone_basic3.phpt
+@@ -39,10 +39,6 @@ object(DateTime)#%d (3) {
+ }
+ 
+ -- Add some properties --
+-
+-Deprecated: Creation of dynamic property DateTime::$property1 is deprecated in %s on line %d
+-
+-Deprecated: Creation of dynamic property DateTime::$property2 is deprecated in %s on line %d
+ object(DateTime)#%d (5) {
+   ["property1"]=>
+   int(99)
+@@ -71,10 +67,6 @@ object(DateTime)#%d (5) {
+ }
+ 
+ -- Add some more properties --
+-
+-Deprecated: Creation of dynamic property DateTime::$property3 is deprecated in %s on line %d
+-
+-Deprecated: Creation of dynamic property DateTime::$property4 is deprecated in %s on line %d
+ object(DateTime)#%d (7) {
+   ["property1"]=>
+   int(99)
+diff --git a/ext/date/tests/DateTime_diff-fall-type3-type3.phpt b/ext/date/tests/DateTime_diff-fall-type3-type3.phpt
+index d69e3808..c360cd43 100644
+--- a/ext/date/tests/DateTime_diff-fall-type3-type3.phpt
++++ b/ext/date/tests/DateTime_diff-fall-type3-type3.phpt
+@@ -2,6 +2,8 @@
+ DateTime::diff() -- fall type3 type3
+ --CREDITS--
+ Daniel Convissor <danielc@php.net>
++--XFAIL--
++Various bugs exist
+ --FILE--
+ <?php
+ 
+@@ -28,7 +30,7 @@ test_time_fall_type3_redodt_type3_dt: DIFF: 2010-11-07 00:10:20 EDT - 2010-11-07
+ test_time_fall_type3_redodt_type3_redodt: DIFF: 2010-11-07 01:15:35 EDT - 2010-11-07 01:12:33 EDT = **P+0Y0M0DT0H3M2S**
+ test_time_fall_type3_redodt_type3_redost: DIFF: 2010-11-07 01:14:44 EST - 2010-11-07 01:12:33 EDT = **P+0Y0M0DT1H2M11S**
+ test_time_fall_type3_redodt_type3_st: DIFF: 2010-11-07 03:16:55 EST - 2010-11-07 01:12:33 EDT = **P+0Y0M0DT3H4M22S**
+-test_time_fall_type3_redodt_type3_post: DIFF: 2010-11-08 19:59:59 EST - 2010-11-07 01:12:33 EDT = **P+0Y0M1DT18H47M26S**
++test_time_fall_type3_redodt_type3_post: DIFF: 2010-11-08 19:59:59 EST - 2010-11-07 01:12:33 EDT = **P+0Y0M1DT19H47M26S**
+ test_time_fall_type3_redost_type3_prev: DIFF: 2010-11-06 18:38:28 EDT - 2010-11-07 01:14:44 EST = **P-0Y0M0DT7H36M16S**
+ test_time_fall_type3_redost_type3_dt: DIFF: 2010-11-07 00:10:20 EDT - 2010-11-07 01:14:44 EST = **P-0Y0M0DT2H4M24S**
+ test_time_fall_type3_redost_type3_redodt: DIFF: 2010-11-07 01:12:33 EDT - 2010-11-07 01:14:44 EST = **P-0Y0M0DT1H2M11S**
+@@ -43,7 +45,7 @@ test_time_fall_type3_st_type3_st: DIFF: 2010-11-07 05:19:56 EST - 2010-11-07 03:
+ test_time_fall_type3_st_type3_post: DIFF: 2010-11-08 19:59:59 EST - 2010-11-07 03:16:55 EST = **P+0Y0M1DT16H43M4S**
+ test_time_fall_type3_post_type3_prev: DIFF: 2010-11-06 18:38:28 EDT - 2010-11-08 19:59:59 EST = **P-0Y0M2DT1H21M31S**
+ test_time_fall_type3_post_type3_dt: DIFF: 2010-11-07 00:10:20 EDT - 2010-11-08 19:59:59 EST = **P-0Y0M1DT19H49M39S**
+-test_time_fall_type3_post_type3_redodt: DIFF: 2010-11-07 01:12:33 EDT - 2010-11-08 19:59:59 EST = **P-0Y0M1DT18H47M26S**
++test_time_fall_type3_post_type3_redodt: DIFF: 2010-11-07 01:12:33 EDT - 2010-11-08 19:59:59 EST = **P-0Y0M1DT19H47M26S**
+ test_time_fall_type3_post_type3_redost: DIFF: 2010-11-07 01:14:44 EST - 2010-11-08 19:59:59 EST = **P-0Y0M1DT18H45M15S**
+ test_time_fall_type3_post_type3_st: DIFF: 2010-11-07 03:16:55 EST - 2010-11-08 19:59:59 EST = **P-0Y0M1DT16H43M4S**
+ test_time_fall_type3_post_type3_post: DIFF: 2010-11-08 19:59:59 EST - 2010-11-08 18:57:55 EST = **P+0Y0M0DT1H2M4S**
+diff --git a/ext/date/tests/DateTime_inherited_serialization.phpt b/ext/date/tests/DateTime_inherited_serialization.phpt
+deleted file mode 100644
+index 5e910130..00000000
+--- a/ext/date/tests/DateTime_inherited_serialization.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Inherited DateTime serialisation with custom properties
+---FILE--
+-<?php
+-date_default_timezone_set("Europe/London");
+-
+-class MyDateTime extends DateTime
+-{
+-	public function __construct(
+-		string $datetime = "now",
+-		?DateTimeZone $timezone = null,
+-		public ?bool $myProperty = null,
+-	) {
+-		parent::__construct($datetime, $timezone);
+-	}
+-}
+-
+-$d = new MyDateTime("2023-01-25 16:32:55", myProperty: true);
+-$e = unserialize(serialize($d));
+-var_dump($e->myProperty);
+-?>
+---EXPECTF--
+-bool(true)
+diff --git a/ext/date/tests/DateTime_serialization.phpt b/ext/date/tests/DateTime_serialization.phpt
+deleted file mode 100644
+index f7a34bd7..00000000
+--- a/ext/date/tests/DateTime_serialization.phpt
++++ /dev/null
+@@ -1,118 +0,0 @@
+---TEST--
+-Test DateTime::__serialize and DateTime::__unserialize
+---FILE--
+-<?php
+-//Set the default time zone
+-date_default_timezone_set("Europe/London");
+-
+-$d = new DateTime("2022-04-14 11:27:42");
+-echo "Original object:\n";
+-var_dump($d);
+-
+-echo "\n\nSerialised object:\n";
+-$s = serialize($d);
+-var_dump($s);
+-
+-echo "\n\nUnserialised object:\n";
+-$e = unserialize($s);
+-var_dump($e);
+-
+-echo "\n\nCalling __serialize manually:\n";
+-var_dump($d->__serialize());
+-
+-echo "\n\nCalling __unserialize manually:\n";
+-$d = new DateTime;
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 3,
+-		'timezone' => 'UTC',
+-	]
+-);
+-var_dump($d);
+-
+-echo "\n\nCalling __unserialize a few more times, with abbreviations:\n";
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 2,
+-		'timezone' => 'CEST',
+-	]
+-);
+-var_dump($d);
+-$d->__unserialize(
+-	[
+-		'date' => '2022-04-14 11:27:42.541106',
+-		'timezone_type' => 1,
+-		'timezone' => '+0130',
+-	]
+-);
+-var_dump($d);
+-
+-?>
+---EXPECTF--
+-Original object:
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Serialised object:
+-string(125) "O:8:"DateTime":3:{s:4:"date";s:26:"2022-04-14 11:27:42.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:13:"Europe/London";}"
+-
+-
+-Unserialised object:
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Calling __serialize manually:
+-array(3) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(13) "Europe/London"
+-}
+-
+-
+-Calling __unserialize manually:
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-
+-
+-Calling __unserialize a few more times, with abbreviations:
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(2)
+-  ["timezone"]=>
+-  string(4) "CEST"
+-}
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(26) "2022-04-14 11:27:42.541106"
+-  ["timezone_type"]=>
+-  int(1)
+-  ["timezone"]=>
+-  string(6) "+01:30"
+-}

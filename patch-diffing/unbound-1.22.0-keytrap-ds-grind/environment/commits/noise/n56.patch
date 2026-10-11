@@ -1,0 +1,705 @@
+diff --git a/testdata/cachedb_no_store.tdir/cachedb_no_store.test b/testdata/cachedb_no_store.tdir/cachedb_no_store.test
+index 352026844..47a89656c 100644
+--- a/testdata/cachedb_no_store.tdir/cachedb_no_store.test
++++ b/testdata/cachedb_no_store.tdir/cachedb_no_store.test
+@@ -13,7 +13,7 @@ get_ldns_testns
+ # query for a text record that is stored by unbound's cache and cachedb
+ # in the testframe cache.
+ echo "> dig txt1.example.com."
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "example text message" outfile; then
+ 	echo "OK"
+ else
+@@ -31,7 +31,7 @@ echo "FWD_PID=$FWD_PID" >> .tpkg.var.test
+ wait_ldns_testns_up fwd2.log
+ 
+ echo "> dig txt1.example.com. from unbound cache"
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "example text message" outfile; then
+ 	echo "OK"
+ else
+@@ -50,7 +50,7 @@ else
+ fi
+ 
+ echo "> dig txt1.example.com. from cachedb"
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "example text message" outfile; then
+ 	echo "OK"
+ else
+@@ -69,7 +69,7 @@ wait_ldns_testns_up fwd3.log
+ 
+ # stop unbound to flush the cachedb cache
+ echo "> stop unbound"
+-kill_pid `cat unbound.pid`
++kill_from_pidfile "unbound.pid"
+ 
+ echo ""
+ echo "> config unbound with cachedb-no-store: yes"
+@@ -84,7 +84,7 @@ wait_unbound_up unbound2.log
+ 
+ echo ""
+ echo "> dig txt1.example.com."
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "example text message" outfile; then
+ 	echo "OK"
+ else
+@@ -102,7 +102,7 @@ echo "FWD_PID=$FWD_PID" >> .tpkg.var.test
+ wait_ldns_testns_up fwd4.log
+ 
+ echo "> dig txt1.example.com. from unbound cache"
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "example text message" outfile; then
+ 	echo "OK"
+ else
+@@ -121,7 +121,7 @@ else
+ fi
+ 
+ echo "> dig txt1.example.com. from cachedb, but that has no message stored"
+-dig @localhost -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT txt1.example.com. TXT | tee outfile
+ if grep "SERVFAIL" outfile; then
+ 	echo "OK"
+ else
+diff --git a/testdata/cachedb_subnet_change.crpl b/testdata/cachedb_subnet_change.crpl
+new file mode 100644
+index 000000000..73584305c
+--- /dev/null
++++ b/testdata/cachedb_subnet_change.crpl
+@@ -0,0 +1,304 @@
++; config options
++server:
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	minimal-responses: no
++	serve-expired: yes
++	serve-expired-reply-ttl: 30
++
++	; disable the serve expired client timeout.
++	serve-expired-client-timeout: 0
++	send-client-subnet: 1.2.3.4
++	max-client-subnet-ipv4: 17
++	; subnetcache is to the left of cachedb, because it sets no cache
++	; store for edns subnet content for modules to the right of it.
++	; this keeps subnet content out of cachedb as global content.
++	module-config: "subnetcache cachedb iterator"
++
++cachedb:
++	backend: "testframe"
++	secret-seed: "testvalue"
++	cachedb-check-when-serve-expired: yes
++
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129
++CONFIG_END
++
++SCENARIO_BEGIN Test cachedb, subnet and serve-expired, with a domain change from global to subnet.
++; So the CNAME first points to a global record, then points to a subnet record.
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 400
++	ADDRESS 193.0.14.129
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET.     IN      A       193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION AUTHORITY
++com. IN NS a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN	A	192.5.6.30
++ENTRY_END
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 400
++	ADDRESS 192.5.6.30
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION AUTHORITY
++example.com. IN NS ns2.example.com.
++SECTION ADDITIONAL
++ns2.example.com.	IN	A	1.2.3.5
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++foo.com. IN NS
++SECTION AUTHORITY
++foo.com. IN NS ns.foo.com.
++SECTION ADDITIONAL
++ns.foo.com.	IN	A	1.2.3.4
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++initial.com. IN NS
++SECTION AUTHORITY
++initial.com. IN NS ns.initial.com.
++SECTION ADDITIONAL
++ns.initial.com.	IN	A	1.2.3.6
++ENTRY_END
++RANGE_END
++
++; ns2.example.com.
++RANGE_BEGIN 0 30
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME www.initial.com.
++ENTRY_END
++RANGE_END
++
++; ns2.example.com. - after change
++RANGE_BEGIN 40 80
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++ENTRY_END
++RANGE_END
++
++; ns.initial.com.
++RANGE_BEGIN 0 400
++	ADDRESS 1.2.3.6
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.initial.com. IN A
++SECTION ANSWER
++www.initial.com. 10 IN A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++; ns.foo.com.
++RANGE_BEGIN 40 80
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qname qtype ednsdata
++REPLY QR AA NOERROR
++SECTION QUESTION
++example.foo.com. IN A
++SECTION ANSWER
++example.foo.com. 10 IN A 1.2.3.5
++SECTION ADDITIONAL
++	HEX_EDNSDATA_BEGIN
++				; client is 127.0.0.1
++		00 08 		; OPC
++		00 07 		; option length
++		00 01 		; Family
++		11 00 		; source mask, scopemask
++		7f 00 00 	; address
++	HEX_EDNSDATA_END
++ENTRY_END
++RANGE_END
++
++; ns2.example.com. - later
++RANGE_BEGIN 90 200
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++ENTRY_END
++RANGE_END
++
++; ns.foo.com. - later
++RANGE_BEGIN 90 200
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qname qtype ednsdata
++REPLY QR AA NOERROR
++SECTION QUESTION
++example.foo.com. IN A
++SECTION ANSWER
++example.foo.com. 10 IN A 1.2.3.6
++SECTION ADDITIONAL
++	HEX_EDNSDATA_BEGIN
++				; client is 127.0.0.1
++		00 08 		; OPC
++		00 07 		; option length
++		00 01 		; Family
++		11 00 		; source mask, scopemask
++		7f 00 00 	; address
++	HEX_EDNSDATA_END
++ENTRY_END
++RANGE_END
++
++; make time not 0
++STEP 2 TIME_PASSES ELAPSE 212
++
++; Get an entry in cache.
++STEP 4 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; get the answer for it
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME www.initial.com.
++www.initial.com. 10 IN A 1.2.3.4
++ENTRY_END
++
++; now valid in cache and valid in cachedb, without subnet.
++STEP 30 TIME_PASSES ELAPSE 20
++
++; now the cache and cachedb have an expired entry.
++; the upstream is updated to CNAME to a subnet zone A record.
++
++STEP 40 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; the expired answer, while the ECS answer is looked up.
++STEP 50 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 30 IN CNAME www.initial.com.
++www.initial.com. 30 IN A 1.2.3.4
++ENTRY_END
++
++; check that subnet has the query in cache.
++STEP 58 TIME_PASSES ELAPSE 2
++STEP 60 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 70 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 8 IN CNAME example.foo.com.
++example.foo.com. 8 IN A 1.2.3.5
++ENTRY_END
++
++; everything is expired, cache, subnetcache and cachedb.
++STEP 80 TIME_PASSES ELAPSE 20
++
++STEP 90 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 100 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++example.foo.com. 10 IN A 1.2.3.6
++ENTRY_END
++
++; see the entry now in cache, from the subnetcache.
++STEP 142 TIME_PASSES ELAPSE 2
++STEP 150 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 160 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 8 IN CNAME example.foo.com.
++example.foo.com. 8 IN A 1.2.3.6
++ENTRY_END
++
++SCENARIO_END
+diff --git a/testdata/cachedb_subnet_expired.crpl b/testdata/cachedb_subnet_expired.crpl
+new file mode 100644
+index 000000000..eddff1002
+--- /dev/null
++++ b/testdata/cachedb_subnet_expired.crpl
+@@ -0,0 +1,322 @@
++; config options
++server:
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: no
++	minimal-responses: no
++	serve-expired: yes
++	serve-expired-reply-ttl: 30
++	; at least one second, so we can time skip past the timer in the
++	; testbound script steps, but also reply within the time.
++	serve-expired-client-timeout: 1200
++	send-client-subnet: 1.2.3.4
++	max-client-subnet-ipv4: 17
++	; subnetcache is to the left of cachedb, because it sets no cache
++	; store for edns subnet content for modules to the right of it.
++	; this keeps subnet content out of cachedb as global content.
++	module-config: "subnetcache cachedb iterator"
++	discard-timeout: 3000
++
++cachedb:
++	backend: "testframe"
++	secret-seed: "testvalue"
++	cachedb-check-when-serve-expired: yes
++
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129
++CONFIG_END
++
++SCENARIO_BEGIN Test cachedb, subnet and serve-expired-client-timeout.
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 400
++	ADDRESS 193.0.14.129
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET.     IN      A       193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION AUTHORITY
++com. IN NS a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN	A	192.5.6.30
++ENTRY_END
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 400
++	ADDRESS 192.5.6.30
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION AUTHORITY
++example.com. IN NS ns2.example.com.
++SECTION ADDITIONAL
++ns2.example.com.	IN	A	1.2.3.5
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++foo.com. IN NS
++SECTION AUTHORITY
++foo.com. IN NS ns.foo.com.
++SECTION ADDITIONAL
++ns.foo.com.	IN	A	1.2.3.4
++ENTRY_END
++RANGE_END
++
++; ns2.example.com.
++RANGE_BEGIN 0 30
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++; ns2.example.com. - after change
++RANGE_BEGIN 40 100
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++ENTRY_END
++RANGE_END
++
++; ns.foo.com.
++RANGE_BEGIN 40 100
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qname qtype ednsdata
++REPLY QR AA NOERROR
++SECTION QUESTION
++example.foo.com. IN A
++SECTION ANSWER
++example.foo.com. 10 IN A 1.2.3.5
++SECTION ADDITIONAL
++	HEX_EDNSDATA_BEGIN
++				; client is 127.0.0.1
++		00 08 		; OPC
++		00 07 		; option length
++		00 01 		; Family
++		11 00 		; source mask, scopemask
++		7f 00 00 	; address
++	HEX_EDNSDATA_END
++ENTRY_END
++RANGE_END
++
++; ns2.example.com. and ns.foo.com - no answer in 110-130.
++
++; ns2.example.com. - later
++RANGE_BEGIN 140 200
++	ADDRESS 1.2.3.5
++ENTRY_BEGIN
++MATCH opcode qname qtype
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++ENTRY_END
++RANGE_END
++
++; ns.foo.com. - later
++RANGE_BEGIN 140 200
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qname qtype ednsdata
++REPLY QR AA NOERROR
++SECTION QUESTION
++example.foo.com. IN A
++SECTION ANSWER
++example.foo.com. 10 IN A 1.2.3.6
++SECTION ADDITIONAL
++	HEX_EDNSDATA_BEGIN
++				; client is 127.0.0.1
++		00 08 		; OPC
++		00 07 		; option length
++		00 01 		; Family
++		11 00 		; source mask, scopemask
++		7f 00 00 	; address
++	HEX_EDNSDATA_END
++ENTRY_END
++RANGE_END
++
++
++; make time not 0
++STEP 2 TIME_PASSES ELAPSE 212
++
++; Get an entry in cache.
++STEP 4 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; get the answer for it
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN A 1.2.3.4
++ENTRY_END
++
++; now valid in cache and valid in cachedb, without subnet.
++STEP 20 FLUSH_MESSAGE www.example.com. IN A
++STEP 30 TIME_PASSES ELAPSE 20
++
++; now nothing in cache and cachedb has an expired entry.
++; the upstream is updated to CNAME to a subnet zone A record.
++
++STEP 40 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 50 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++example.foo.com. 10 IN A 1.2.3.5
++ENTRY_END
++
++; check that subnet has the query in cache.
++STEP 58 TIME_PASSES ELAPSE 2
++STEP 60 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 70 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 8 IN CNAME example.foo.com.
++example.foo.com. 8 IN A 1.2.3.5
++ENTRY_END
++
++; everything is expired, cache, subnetcache and cachedb.
++STEP 80 TIME_PASSES ELAPSE 20
++
++; send the query, reply arrives quickly.
++STEP 90 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 100 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++example.foo.com. 10 IN A 1.2.3.5
++ENTRY_END
++
++; everything is expired, cache, subnetcache and cachedb.
++STEP 110 TIME_PASSES ELAPSE 20
++
++; send the query, but the reply is late, and there is expired data,
++; the expired entry from cachedb is used to reply with.
++STEP 120 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 122 TIME_PASSES ELAPSE 2
++
++; But the entry has been deleted, so it cannot be served, the reply
++; at step 141 is returned instead.
++;STEP 130 CHECK_ANSWER
++;ENTRY_BEGIN
++;MATCH all
++;REPLY QR RD RA NOERROR
++;SECTION QUESTION
++;www.example.com. IN A
++;SECTION ANSWER
++;www.example.com. 30 IN A 1.2.3.4
++;ENTRY_END
++
++; reply can flow again.
++STEP 140 TRAFFIC
++
++STEP 141 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 10 IN CNAME example.foo.com.
++example.foo.com. 10 IN A 1.2.3.6
++ENTRY_END
++
++; see the entry now in cache, from the subnetcache.
++STEP 142 TIME_PASSES ELAPSE 2
++STEP 150 QUERY ADDRESS 127.0.0.1
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 160 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 8 IN CNAME example.foo.com.
++example.foo.com. 8 IN A 1.2.3.6
++ENTRY_END
++
++SCENARIO_END

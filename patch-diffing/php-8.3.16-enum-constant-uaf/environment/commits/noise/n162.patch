@@ -1,0 +1,165 @@
+diff --git a/ext/mbstring/tests/bug63447_002.phpt b/ext/mbstring/tests/bug63447_002.phpt
+index 85909217..53a8c364 100644
+--- a/ext/mbstring/tests/bug63447_002.phpt
++++ b/ext/mbstring/tests/bug63447_002.phpt
+@@ -13,6 +13,6 @@ a=1&b=2&c=3&d=4&e=5
+ var_dump($_POST);
+ ?>
+ --EXPECT--
+-Warning: PHP Request Startup: Input variables exceeded 4. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
++Warning: Unknown: Input variables exceeded 4. To increase the limit change max_input_vars in php.ini. in Unknown on line 0
+ array(0) {
+ }
+diff --git a/ext/mbstring/tests/bug65045.phpt b/ext/mbstring/tests/bug65045.phpt
+index 772533b7..cf273627 100644
+--- a/ext/mbstring/tests/bug65045.phpt
++++ b/ext/mbstring/tests/bug65045.phpt
+@@ -5,21 +5,25 @@ mbstring
+ --FILE--
+ <?php
+ 
++//declare(encoding = 'UTF-8');
+ mb_internal_encoding('UTF-8');
+ 
+ $str = "\xF0\xA4\xAD".  "\xF0\xA4\xAD\xA2"."\xF0\xA4\xAD\xA2";
++$expected = "\xEF\xBF\xBD"."\xF0\xA4\xAD\xA2"."\xF0\xA4\xAD\xA2";
++
+ $str2 = "\xF0\xA4\xAD\xA2"."\xF0\xA4\xAD\xA2"."\xF0\xA4\xAD";
++$expected2 = "\xF0\xA4\xAD\xA2"."\xF0\xA4\xAD\xA2"."\xEF\xBF\xBD";
+ 
+ mb_substitute_character(0xFFFD);
+-
+-echo bin2hex(htmlspecialchars_decode(htmlspecialchars($str, ENT_SUBSTITUTE, 'UTF-8'))), "\n";
+-echo bin2hex(htmlspecialchars_decode(htmlspecialchars($str2, ENT_SUBSTITUTE, 'UTF-8'))), "\n";
+-echo bin2hex(mb_convert_encoding($str, 'UTF-8', 'UTF-8')), "\n";
+-echo bin2hex(mb_convert_encoding($str2, 'UTF-8', 'UTF-8')), "\n";
+-
++var_dump(
++    $expected === htmlspecialchars_decode(htmlspecialchars($str, ENT_SUBSTITUTE, 'UTF-8')),
++    $expected2 === htmlspecialchars_decode(htmlspecialchars($str2, ENT_SUBSTITUTE, 'UTF-8')),
++    $expected === mb_convert_encoding($str, 'UTF-8', 'UTF-8'),
++    $expected2 === mb_convert_encoding($str2, 'UTF-8', 'UTF-8')
++);
+ ?>
+ --EXPECT--
+-efbfbdf0a4ada2f0a4ada2
+-f0a4ada2f0a4ada2efbfbd
+-efbfbdf0a4ada2f0a4ada2
+-f0a4ada2f0a4ada2efbfbd
++bool(true)
++bool(true)
++bool(true)
++bool(true)
+diff --git a/ext/mbstring/tests/bug71606.phpt b/ext/mbstring/tests/bug71606.phpt
+index 50d1261a..ece8d5d2 100644
+--- a/ext/mbstring/tests/bug71606.phpt
++++ b/ext/mbstring/tests/bug71606.phpt
+@@ -7,6 +7,5 @@ mbstring
+ echo mb_strcut('&quot;', 0, 0, 'HTML-ENTITIES');
+ echo 'DONE', PHP_EOL;
+ ?>
+---EXPECTF--
+-Deprecated: mb_strcut(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s on line %d
++--EXPECT--
+ DONE
+diff --git a/ext/mbstring/tests/cp1252_encoding.phpt b/ext/mbstring/tests/cp1252_encoding.phpt
+index 228dfde9..8705ac2c 100644
+--- a/ext/mbstring/tests/cp1252_encoding.phpt
++++ b/ext/mbstring/tests/cp1252_encoding.phpt
+@@ -11,10 +11,6 @@ if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+ include('encoding_tests.inc');
+ testEncodingFromUTF16ConversionTable(__DIR__ . '/data/CP1252.txt', 'CP1252');
+ 
+-// Test replacement character which cannot be encoded in CP1252
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'CP1252');
+-
+ echo "Done!\n";
+ ?>
+ --EXPECT--
+diff --git a/ext/mbstring/tests/cp1254_encoding.phpt b/ext/mbstring/tests/cp1254_encoding.phpt
+index 08d36ca7..7a4f7be2 100644
+--- a/ext/mbstring/tests/cp1254_encoding.phpt
++++ b/ext/mbstring/tests/cp1254_encoding.phpt
+@@ -16,10 +16,6 @@ mb_substitute_character("long");
+ convertInvalidString("\x81", "%", "CP1254", "UTF-8");
+ convertInvalidString("\x9E", "%", "CP1254", "UTF-8");
+ 
+-// Test replacement character which cannot be encoded in CP1254
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'CP1254');
+-
+ echo "Done!\n";
+ ?>
+ --EXPECT--
+diff --git a/ext/mbstring/tests/cp5022x_encoding.phpt b/ext/mbstring/tests/cp5022x_encoding.phpt
+index f8e5831e..eecb6fb8 100644
+--- a/ext/mbstring/tests/cp5022x_encoding.phpt
++++ b/ext/mbstring/tests/cp5022x_encoding.phpt
+@@ -352,44 +352,6 @@ convertInvalidString("\x1B\$B1", "%", "CP50221", "UTF-8");
+ convertInvalidString("\x1B\$B1", "%", "CP50222", "UTF-8");
+ 
+ echo "Long error markers OK\n";
+-
+-foreach (['CP50220', 'CP50221', 'CP50222'] as $encoding) {
+-  testInvalidString("\x1B", "%", $encoding, "UTF-8");
+-  testInvalidString("\x1BX", "%X", $encoding, "UTF-8");
+-  testInvalidString("\x1B(", "%", $encoding, "UTF-8");
+-  testInvalidString("\x1B(X", "%(X", $encoding, "UTF-8");
+-  testInvalidString("\x1B\$", "%", $encoding, "UTF-8");
+-  testInvalidString("\x1B\$(", "%", $encoding, "UTF-8");
+-  testInvalidString("\x1B\$X", "%\$X", $encoding, "UTF-8");
+-  testInvalidString("\x1B\$(X", "%\$(X", $encoding, "UTF-8");
+-}
+-
+-echo "Invalid escape sequences OK\n";
+-
+-// Regression tests
+-if (mb_convert_encoding("\x1BC\xF5", 'UTF-16BE', 'CP50221') !== "\x00%\x00C\x00%")
+-  die("Bad");
+-
+-// Previously, the CP50220 implementation would eat trailing null bytes
+-$converted = mb_convert_encoding("ab\x00", 'UTF-16BE', 'CP50220');
+-if ($converted !== "\x00a\x00b\x00\x00")
+-  die("Bad handling of trailing null byte (got " . bin2hex($converted) . ")");
+-
+-// Previously, the CP50220 implementation would reorder error markers with
+-// subsequent characters
+-mb_substitute_character(0x3F);
+-$converted = mb_convert_encoding("\xff\xff\x00&", 'CP50220', 'UTF-16BE');
+-if ($converted !== '?&')
+-  die("Bad handling of erroneous codepoint followed by good one (got " . bin2hex($converted) . ")");
+-
+-// In CP50220, two codepoints can be collapsed into a single kuten code in some cases
+-// This should work even on a boundary between separately processed buffers
+-$shouldCollapse = "\xFF\x76\xFF\x9E";
+-$expected = "\x1B\$B%,\x1B(B";
+-for ($i = 0; $i < 256; $i++) {
+-  convertValidString(str_repeat("\x00a", $i) . $shouldCollapse, str_repeat('a', $i) . $expected, 'UTF-16BE', 'CP50220', false);
+-}
+-
+ ?>
+ --EXPECT--
+ ASCII support OK
+@@ -399,4 +361,3 @@ JIS X 0212 support OK
+ Folding of fullwidth katakana for CP50220 OK
+ Invalid Unicode is flagged when converting to CP5022x
+ Long error markers OK
+-Invalid escape sequences OK
+diff --git a/ext/mbstring/tests/cp850_encoding.phpt b/ext/mbstring/tests/cp850_encoding.phpt
+index 726e12f2..01e78c4a 100644
+--- a/ext/mbstring/tests/cp850_encoding.phpt
++++ b/ext/mbstring/tests/cp850_encoding.phpt
+@@ -9,11 +9,7 @@ if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+ --FILE--
+ <?php
+ include('encoding_tests.inc');
+-testEncodingFromUTF16ConversionTable(__DIR__ . '/data/CP850.txt', 'CP850');
+-/* Try replacement character which cannot be encoded in CP850; ? will be used instead */
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'CP850');
+-?>
++testEncodingFromUTF16ConversionTable(__DIR__ . '/data/CP850.txt', 'CP850');?>
+ --EXPECT--
+ Tested CP850 -> UTF-16BE
+ Tested UTF-16BE -> CP850

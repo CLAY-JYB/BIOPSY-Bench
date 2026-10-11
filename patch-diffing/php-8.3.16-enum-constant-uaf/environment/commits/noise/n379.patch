@@ -1,0 +1,171 @@
+diff --git a/ext/standard/tests/serialize/bug69425.phpt b/ext/standard/tests/serialize/bug69425.phpt
+index 1bc79c03..906c7192 100644
+--- a/ext/standard/tests/serialize/bug69425.phpt
++++ b/ext/standard/tests/serialize/bug69425.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #69425 (Use After Free in unserialize())
++Bug #69425: Use After Free in unserialize()
+ --FILE--
+ <?php
+ 
+@@ -22,11 +22,11 @@ $data = unserialize('a:2:{i:0;O:12:"DateInterval":1:{s:1:"y";R:1;}i:1;i:2;}');
+ var_dump($data);
+ 
+ ?>
+---EXPECTF--
++--EXPECT--
+ int(1)
+ array(2) {
+   [0]=>
+-  object(DateInterval)#1 (%d) {
++  object(DateInterval)#1 (16) {
+     ["y"]=>
+     int(-1)
+     ["m"]=>
+@@ -41,12 +41,24 @@ array(2) {
+     int(-1)
+     ["f"]=>
+     float(0)
++    ["weekday"]=>
++    int(-1)
++    ["weekday_behavior"]=>
++    int(-1)
++    ["first_last_day_of"]=>
++    int(-1)
+     ["invert"]=>
+     int(0)
+     ["days"]=>
+     int(-1)
+-    ["from_string"]=>
+-    bool(false)
++    ["special_type"]=>
++    int(0)
++    ["special_amount"]=>
++    int(-1)
++    ["have_weekday_relative"]=>
++    int(0)
++    ["have_special_relative"]=>
++    int(0)
+   }
+   [1]=>
+   int(2)
+diff --git a/ext/standard/tests/serialize/bug72663.phpt b/ext/standard/tests/serialize/bug72663.phpt
+index 9c006d50..c50591ca 100644
+--- a/ext/standard/tests/serialize/bug72663.phpt
++++ b/ext/standard/tests/serialize/bug72663.phpt
+@@ -3,7 +3,6 @@ Bug #72663 (1): Don't call __destruct if __wakeup not called or fails
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test1 {
+     public function __wakeup() {
+         echo "Wakeup\n";
+@@ -13,7 +12,6 @@ class Test1 {
+     }
+ }
+ 
+-#[AllowDynamicProperties]
+ class Test2 {
+     public function __wakeup() {
+         throw new Exception('Unserialization forbidden');
+diff --git a/ext/standard/tests/serialize/bug73341.phpt b/ext/standard/tests/serialize/bug73341.phpt
+index 3bdad064..2f38949c 100644
+--- a/ext/standard/tests/serialize/bug73341.phpt
++++ b/ext/standard/tests/serialize/bug73341.phpt
+@@ -2,13 +2,6 @@
+ Bug #73144 (Use-afte-free in ArrayObject Deserialization)
+ --FILE--
+ <?php
+-try {
+-$token = 'a:2:{i:0;O:1:"0":2:{s:1:"0";i:0;s:1:"0";a:1:{i:0;C:11:"ArrayObject":7:{x:i:0;r}';
+-$obj = unserialize($token);
+-} catch(Exception $e) {
+-    echo $e->getMessage()."\n";
+-}
+-
+ try {
+ $token = 'a:2:{i:0;O:1:"0":2:0s:1:"0";i:0;s:1:"0";a:1:{i:0;C:11:"ArrayObject":7:{x:i:0;r}';
+ $obj = unserialize($token);
+@@ -27,7 +20,5 @@ unserialize($exploit);
+ --EXPECTF--
+ Error at offset 6 of 7 bytes
+ 
+-Notice: unserialize(): Error at offset 19 of 79 bytes in %s on line %d
+-
+ Notice: ArrayObject::unserialize(): Unexpected end of serialized data in %sbug73341.php on line %d
+ Error at offset 24 of 34 bytes
+diff --git a/ext/standard/tests/serialize/bug74111.phpt b/ext/standard/tests/serialize/bug74111.phpt
+index 2062687a..62922bea 100644
+--- a/ext/standard/tests/serialize/bug74111.phpt
++++ b/ext/standard/tests/serialize/bug74111.phpt
+@@ -6,5 +6,5 @@ $s = 'O:8:"stdClass":00000000';
+ var_dump(unserialize($s));
+ ?>
+ --EXPECTF--
+-Notice: unserialize(): Error at offset 23 of 23 bytes in %s on line %d
++Notice: unserialize(): Error at offset 25 of 23 bytes in %s on line %d
+ bool(false)
+diff --git a/ext/standard/tests/serialize/serialization_objects_005.phpt b/ext/standard/tests/serialize/serialization_objects_005.phpt
+index e38ead00..77733514 100644
+--- a/ext/standard/tests/serialize/serialization_objects_005.phpt
++++ b/ext/standard/tests/serialize/serialization_objects_005.phpt
+@@ -5,7 +5,7 @@ Check behaviour of incomplete class
+ $serialized = 'O:1:"C":1:{s:1:"p";i:1;}';
+ 
+ $incomplete = unserialize($serialized);
+-eval('#[AllowDynamicProperties] Class C {}');
++eval('Class C {}');
+ $complete   = unserialize($serialized);
+ 
+ 
+diff --git a/ext/standard/tests/serialize/serialization_objects_008.phpt b/ext/standard/tests/serialize/serialization_objects_008.phpt
+index 650ba563..3670ddde 100644
+--- a/ext/standard/tests/serialize/serialization_objects_008.phpt
++++ b/ext/standard/tests/serialize/serialization_objects_008.phpt
+@@ -3,11 +3,14 @@ Bad unserialize_callback_func
+ --FILE--
+ <?php
+ ini_set('unserialize_callback_func','Nonexistent');
+-try {
+-    unserialize('O:3:"FOO":0:{}');
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
++$o = unserialize('O:3:"FOO":0:{}');
++var_dump($o);
++echo "Done";
+ ?>
+---EXPECT--
+-Invalid callback Nonexistent, function "Nonexistent" not found or invalid function name
++--EXPECTF--
++Warning: unserialize(): defined (Nonexistent) but not found in %s on line %d
++object(__PHP_Incomplete_Class)#%d (1) {
++  ["__PHP_Incomplete_Class_Name"]=>
++  string(3) "FOO"
++}
++Done
+diff --git a/ext/standard/tests/serialize/serialization_objects_017.phpt b/ext/standard/tests/serialize/serialization_objects_017.phpt
+deleted file mode 100644
+index 901d73f2..00000000
+--- a/ext/standard/tests/serialize/serialization_objects_017.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Object serialization / unserialization: Strict format
+---FILE--
+-<?php
+-class A {public $a;}
+-
+-var_dump(unserialize('O:1:"A":1x{s:1:"a";N;}'));
+-                    //0123456789012345678901
+-var_dump(unserialize('O:1:"A":1:xs:1:"a";N;}'));
+-                    //0123456789012345678901
+-?>
+---EXPECTF--
+-Notice: unserialize(): Error at offset 9 of 22 bytes in %s on line %d
+-bool(false)
+-
+-Notice: unserialize(): Error at offset 10 of 22 bytes in %s on line %d
+-bool(false)

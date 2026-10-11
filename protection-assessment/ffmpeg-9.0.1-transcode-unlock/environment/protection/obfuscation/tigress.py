@@ -14,10 +14,10 @@ USAGE EXAMPLES
 ./tigress.py -i program.c
 
 # Generate commands for specific obfuscation categories:
-./tigress.py -i program.c -c data              # Data-based only
+./tigress.py -i program.c -c data # Data-based only
 ./tigress.py -i program.c -c control           # Control-flow only
 ./tigress.py -i program.c -c virtualize        # Virtualization only
-./tigress.py -i program.c -c anti              # Anti-analysis only
+./tigress.py -i program.c -c anti # Anti-analysis only
 ./tigress.py -i program.c -c runtime           # Runtime/JIT only
 
 # Combine multiple categories:
@@ -44,13 +44,13 @@ DATA-BASED: constant expansion, encoding, dead code, arithmetic replacement
   - EncodeData          Encode integer variables
   - EncodeArithmetic    Encode arithmetic operations
   - EncodeExternal      Hide API calls
-  - RndArgs             Randomize function arguments
+  - RndArgs Randomize function arguments
 
 CONTROL-BASED: locality breaking, indirect jumps, opaque predicates, flattening
-  - Flatten             Remove control flow (flattening)
-  - Split               Split function into parts
-  - Merge               Merge multiple functions
-  - Inline              Inline functions
+  - Flatten Remove control flow (flattening)
+  - Split Split function into parts
+  - Merge Merge multiple functions
+  - Inline Inline functions
   - AddOpaque           Add opaque branches (opaque predicates)
   - EncodeBranches      Make branch targets harder to determine
 
@@ -63,25 +63,25 @@ ANTI-ANALYSIS: disrupt static/dynamic analysis tools
   - AntiBranchAnalysis  Disrupt branch analysis
 
 RUNTIME: dynamic transformations
-  - Jit                 Runtime code generation
+  - Jit Runtime code generation
   - JitDynamic          Continuous self-modification
   - SelfModify          Function modifies own code
-  - Checksum            Integrity checkers
+  - Checksum Integrity checkers
 
 ================================================================================
 COMMAND LINE OPTIONS
 ================================================================================
 
-  -h, --help            Show help message
-  -n COUNT              Number of commands to generate (default: 1)
-  -i INPUT              Input C file (default: program.c)
+  -h, --help Show help message
+  -n COUNT Number of commands to generate (default: 1)
+  -i INPUT Input C file (default: program.c)
   -f FUNCTIONS [FUNCS...] Functions to obfuscate (default: main)
   --init-func NAME      Initialization function name (default: init_tigress)
   -c CATEGORIES         Obfuscation categories: data,control,virtualize,anti,runtime
-  -s SEED               Random seed for reproducibility
-  -o OUTPUT             Output file (print to stdout if not specified)
-  --json                Output in JSON format
-  --list                List all obfuscation categories and transformations
+  -s SEED Random seed for reproducibility
+  -o OUTPUT Output file (print to stdout if not specified)
+  --json Output in JSON format
+  --list List all obfuscation categories and transformations
 
 ================================================================================
 """
@@ -191,15 +191,15 @@ TRANSFORMATIONS_BY_CATEGORY = {
         # NOT-ENOUGH-VARS without them.
         "EncodeArithmetic",   # Encode arithmetic operations
         "EncodeExternal",     # Hide API calls
-        "RndArgs",            # Randomize arguments
+        "RndArgs", # Randomize arguments
     ],
 
     # Control-Based Obfuscation (M2): locality breaking, indirect jumps, opaque predicates, flattening
     ObfuscationCategory.CONTROL: [
-        "Flatten",            # Remove control flow
-        "Split",              # Split function into parts
-        "Merge",              # Merge multiple functions
-        "Inline",             # Inline functions
+        "Flatten", # Remove control flow
+        "Split", # Split function into parts
+        "Merge", # Merge multiple functions
+        "Inline", # Inline functions
         "AddOpaque",          # Add opaque branches (opaque predicates)
         "EncodeBranches",     # Make branch targets harder to determine
     ],
@@ -218,7 +218,7 @@ TRANSFORMATIONS_BY_CATEGORY = {
 
     # Cleanup: final transformations
     ObfuscationCategory.CLEANUP: [
-        "CleanUp",            # Clean up generated code
+        "CleanUp", # Clean up generated code
         "Optimize",           # Optimize code
     ],
 
@@ -231,7 +231,7 @@ TRANSFORMATIONS_BY_CATEGORY = {
 
     # Runtime: dynamic transformations
     ObfuscationCategory.RUNTIME: [
-        "Jit",                # Runtime code generation
+        "Jit", # Runtime code generation
         "JitDynamic",         # Continuous self-modification
         "SelfModify",         # Function modifies own code
         "Checksum",           # Integrity checkers

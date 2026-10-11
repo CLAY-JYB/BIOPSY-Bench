@@ -1,0 +1,439 @@
+diff --git a/main/php_ini_builder.c b/main/php_ini_builder.c
+deleted file mode 100644
+index d214a340..00000000
+--- a/main/php_ini_builder.c
++++ /dev/null
+@@ -1,82 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Max Kellermann <max.kellermann@ionos.com>                   |
+-   +----------------------------------------------------------------------+
+-*/
+-
+-#include "php_ini_builder.h"
+-
+-#include <ctype.h>
+-#include <string.h>
+-
+-PHPAPI void php_ini_builder_prepend(struct php_ini_builder *b, const char *src, size_t length)
+-{
+-	php_ini_builder_realloc(b, length);
+-	if (b->length > 0)
+-		memmove(b->value + length, b->value, b->length);
+-	memcpy(b->value, src, length);
+-	b->length += length;
+-}
+-
+-PHPAPI void php_ini_builder_unquoted(struct php_ini_builder *b, const char *name, size_t name_length, const char *value, size_t value_length)
+-{
+-	php_ini_builder_realloc(b, name_length + 1 + value_length + 1);
+-
+-	memcpy(b->value + b->length, name, name_length);
+-	b->length += name_length;
+-
+-	b->value[b->length++] = '=';
+-
+-	memcpy(b->value + b->length, value, value_length);
+-	b->length += value_length;
+-
+-	b->value[b->length++] = '\n';
+-}
+-
+-PHPAPI void php_ini_builder_quoted(struct php_ini_builder *b, const char *name, size_t name_length, const char *value, size_t value_length)
+-{
+-	php_ini_builder_realloc(b, name_length + 2 + value_length + 2);
+-
+-	memcpy(b->value + b->length, name, name_length);
+-	b->length += name_length;
+-
+-	b->value[b->length++] = '=';
+-	b->value[b->length++] = '"';
+-
+-	memcpy(b->value + b->length, value, value_length);
+-	b->length += value_length;
+-
+-	b->value[b->length++] = '"';
+-	b->value[b->length++] = '\n';
+-}
+-
+-PHPAPI void php_ini_builder_define(struct php_ini_builder *b, const char *arg)
+-{
+-	const size_t len = strlen(arg);
+-	const char *val = strchr(arg, '=');
+-
+-	if (val != NULL) {
+-		val++;
+-		if (!isalnum(*val) && *val != '"' && *val != '\'' && *val != '\0') {
+-			php_ini_builder_quoted(b, arg, val - arg - 1, val, arg + len - val);
+-		} else {
+-			php_ini_builder_realloc(b, len + strlen("\n"));
+-			memcpy(b->value + b->length, arg, len);
+-			b->length += len;
+-			b->value[b->length++] = '\n';
+-		}
+-	} else {
+-		php_ini_builder_unquoted(b, arg, len, "1", 1);
+-	}
+-}
+-
+diff --git a/main/php_ini_builder.h b/main/php_ini_builder.h
+deleted file mode 100644
+index 7f5be81c..00000000
+--- a/main/php_ini_builder.h
++++ /dev/null
+@@ -1,95 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Max Kellermann <max.kellermann@ionos.com>                   |
+-   +----------------------------------------------------------------------+
+-*/
+-
+-#ifndef PHP_INI_BUILDER_H
+-#define PHP_INI_BUILDER_H
+-
+-#include "php.h"
+-
+-/**
+- * A class which helps with constructing INI entries from the command
+- * line.
+- */
+-struct php_ini_builder {
+-	char *value;
+-	size_t length;
+-};
+-
+-BEGIN_EXTERN_C()
+-
+-static inline void php_ini_builder_init(struct php_ini_builder *b)
+-{
+-	b->value = NULL;
+-	b->length = 0;
+-}
+-
+-static inline void php_ini_builder_deinit(struct php_ini_builder *b)
+-{
+-	free(b->value);
+-}
+-
+-/**
+- * Null-terminate the buffer and return it.
+- */
+-static inline char *php_ini_builder_finish(struct php_ini_builder *b)
+-{
+-	if (b->value != NULL) {
+-		/* null-terminate the string */
+-		b->value[b->length] = '\0';
+-	}
+-
+-	return b->value;
+-}
+-
+-/**
+- * Make room for more data.
+- *
+- * @param delta the number of bytes to be appended
+- */
+-static inline void php_ini_builder_realloc(struct php_ini_builder *b, size_t delta)
+-{
+-	/* reserve enough space for the null terminator */
+-	b->value = realloc(b->value, b->length + delta + 1);
+-}
+-
+-/**
+- * Prepend a string.
+- *
+- * @param src the source string
+- * @param length the size of the source string
+- */
+-PHPAPI void php_ini_builder_prepend(struct php_ini_builder *b, const char *src, size_t length);
+-
+-#define php_ini_builder_prepend_literal(b, l) php_ini_builder_prepend(b, l, strlen(l))
+-
+-/**
+- * Append an unquoted name/value pair.
+- */
+-PHPAPI void php_ini_builder_unquoted(struct php_ini_builder *b, const char *name, size_t name_length, const char *value, size_t value_length);
+-
+-/**
+- * Append a quoted name/value pair.
+- */
+-PHPAPI void php_ini_builder_quoted(struct php_ini_builder *b, const char *name, size_t name_length, const char *value, size_t value_length);
+-
+-/**
+- * Parse an INI entry from the command-line option "--define".
+- */
+-PHPAPI void php_ini_builder_define(struct php_ini_builder *b, const char *arg);
+-
+-END_EXTERN_C()
+-
+-#endif
+diff --git a/main/php_main.h b/main/php_main.h
+index 98f58b13..661c8844 100644
+--- a/main/php_main.h
++++ b/main/php_main.h
+@@ -23,23 +23,24 @@
+ #include "SAPI.h"
+ 
+ BEGIN_EXTERN_C()
+-PHPAPI zend_result php_request_startup(void);
++PHPAPI int php_request_startup(void);
+ PHPAPI void php_request_shutdown(void *dummy);
+-PHPAPI zend_result php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_module);
++PHPAPI int php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_modules, uint32_t num_additional_modules);
+ PHPAPI void php_module_shutdown(void);
+ PHPAPI int php_module_shutdown_wrapper(sapi_module_struct *sapi_globals);
+ 
+-PHPAPI zend_result php_register_extensions(zend_module_entry * const * ptr, int count);
++PHPAPI int php_register_extensions(zend_module_entry * const * ptr, int count);
+ 
+-PHPAPI bool php_execute_script(zend_file_handle *primary_file);
++PHPAPI int php_execute_script(zend_file_handle *primary_file);
+ PHPAPI int php_execute_simple_script(zend_file_handle *primary_file, zval *ret);
+-PHPAPI zend_result php_lint_script(zend_file_handle *file);
++PHPAPI int php_handle_special_queries(void);
++PHPAPI int php_lint_script(zend_file_handle *file);
+ 
+ PHPAPI void php_handle_aborted_connection(void);
+ PHPAPI int php_handle_auth_data(const char *auth);
+ 
+ PHPAPI void php_html_puts(const char *str, size_t siz);
+-PHPAPI zend_result php_stream_open_for_zend_ex(zend_file_handle *handle, int mode);
++PHPAPI int php_stream_open_for_zend_ex(zend_file_handle *handle, int mode);
+ 
+ /* environment module */
+ extern int php_init_environ(void);
+@@ -47,7 +48,7 @@ extern int php_shutdown_environ(void);
+ 
+ #ifdef ZTS
+ PHPAPI void php_reserve_tsrm_memory(void);
+-PHPAPI bool php_tsrm_startup(void);
++PHPAPI int php_tsrm_startup(void);
+ #endif
+ 
+ END_EXTERN_C()
+diff --git a/main/php_odbc_utils.c b/main/php_odbc_utils.c
+deleted file mode 100644
+index 5caa734e..00000000
+--- a/main/php_odbc_utils.c
++++ /dev/null
+@@ -1,117 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Calvin Buckley <calvin@cmpct.info>                          |
+-   +----------------------------------------------------------------------+
+-*/
+-
+-#ifdef HAVE_CONFIG_H
+-#include "config.h"
+-#endif
+-
+-#include "php.h"
+-
+-/*
+- * This files contains functions shared between ext/pdo_odbc and ext/odbc,
+- * relating to i.e. connection string quoting rules.
+- *
+- * The declarations are PHPAPI due to being available for shared/static
+- * versions.
+- */
+-
+-/**
+- * Determines if a string matches the ODBC quoting rules.
+- *
+- * A valid quoted string begins with a '{', ends with a '}', and has no '}'
+- * inside of the string that aren't repeated (as to be escaped).
+- *
+- * These rules are what .NET also follows.
+- */
+-PHPAPI bool php_odbc_connstr_is_quoted(const char *str)
+-{
+-	/* ODBC quotes are curly braces */
+-	if (str[0] != '{') {
+-		return false;
+-	}
+-	/* Check for } that aren't doubled up or at the end of the string */
+-	size_t length = strlen(str);
+-	for (size_t i = 0; i < length; i++) {
+-		if (str[i] == '}' && str[i + 1] == '}') {
+-			/* Skip over so we don't count it again */
+-			i++;
+-		} else if (str[i] == '}' && str[i + 1] != '\0') {
+-			/* If not at the end, not quoted */
+-			return false;
+-		}
+-	}
+-	return true;
+-}
+-
+-/**
+- * Determines if a value for a connection string should be quoted.
+- *
+- * The ODBC specification mentions:
+- * "Because of connection string and initialization file grammar, keywords and
+- * and attribute values that contain the characters []{}(),;?*=!@ not enclosed
+- * with braces should be avoided."
+- *
+- * Note that it assumes that the string is *not* already quoted. You should
+- * check beforehand.
+- */
+-PHPAPI bool php_odbc_connstr_should_quote(const char *str)
+-{
+-	return strpbrk(str, "[]{}(),;?*=!@") != NULL;
+-}
+-
+-/**
+- * Estimates the worst-case scenario for a quoted version of a string's size.
+- */
+-PHPAPI size_t php_odbc_connstr_estimate_quote_length(const char *in_str)
+-{
+-	/* Assume all '}'. Include '{,' '}', and the null terminator too */
+-	return (strlen(in_str) * 2) + 3;
+-}
+-
+-/**
+- * Quotes a string with ODBC rules.
+- *
+- * Some characters (curly braces, semicolons) are special and must be quoted.
+- * In the case of '}' in a quoted string, they must be escaped SQL style; that
+- * is, repeated.
+- */
+-PHPAPI size_t php_odbc_connstr_quote(char *out_str, const char *in_str, size_t out_str_size)
+-{
+-	*out_str++ = '{';
+-	out_str_size--;
+-	while (out_str_size > 2) {
+-		if (*in_str == '\0') {
+-			break;
+-		} else if (*in_str == '}' && out_str_size - 1 > 2) {
+-			/* enough room to append */
+-			*out_str++ = '}';
+-			*out_str++ = *in_str++;
+-			out_str_size -= 2;
+-		} else if (*in_str == '}') {
+-			/* not enough, truncate here */
+-			break;
+-		} else {
+-			*out_str++ = *in_str++;
+-			out_str_size--;
+-		}
+-	}
+-	/* append termination */
+-	*out_str++ = '}';
+-	*out_str++ = '\0';
+-	out_str_size -= 2;
+-	/* return how many characters were left */
+-	return strlen(in_str);
+-}
+diff --git a/main/php_output.h b/main/php_output.h
+index edd0a3e5..4a8659e6 100644
+--- a/main/php_output.h
++++ b/main/php_output.h
+@@ -241,4 +241,22 @@ PHPAPI int php_output_handler_alias_register(const char *handler_name, size_t ha
+ 
+ END_EXTERN_C()
+ 
++
++PHP_FUNCTION(ob_start);
++PHP_FUNCTION(ob_flush);
++PHP_FUNCTION(ob_clean);
++PHP_FUNCTION(ob_end_flush);
++PHP_FUNCTION(ob_end_clean);
++PHP_FUNCTION(ob_get_flush);
++PHP_FUNCTION(ob_get_clean);
++PHP_FUNCTION(ob_get_contents);
++PHP_FUNCTION(ob_get_length);
++PHP_FUNCTION(ob_get_level);
++PHP_FUNCTION(ob_get_status);
++PHP_FUNCTION(ob_implicit_flush);
++PHP_FUNCTION(ob_list_handlers);
++
++PHP_FUNCTION(output_add_rewrite_var);
++PHP_FUNCTION(output_reset_rewrite_vars);
++
+ #endif
+diff --git a/main/php_odbc_utils.h b/main/php_stdint.h
+similarity index 50%
+rename from main/php_odbc_utils.h
+rename to main/php_stdint.h
+index 183957d6..be4ca734 100644
+--- a/main/php_odbc_utils.h
++++ b/main/php_stdint.h
+@@ -10,13 +10,42 @@
+    | obtain it through the world-wide-web, please send a note to          |
+    | license@php.net so we can mail you a copy immediately.               |
+    +----------------------------------------------------------------------+
+-   | Authors: Calvin Buckley <calvin@cmpct.info>                          |
++   | Author: Michael Wallner <mike@php.net>                               |
+    +----------------------------------------------------------------------+
+ */
+ 
+-#include "php.h"
++#ifndef PHP_STDINT_H
++#define PHP_STDINT_H
+ 
+-PHPAPI bool php_odbc_connstr_is_quoted(const char *str);
+-PHPAPI bool php_odbc_connstr_should_quote(const char *str);
+-PHPAPI size_t php_odbc_connstr_estimate_quote_length(const char *in_str);
+-PHPAPI size_t php_odbc_connstr_quote(char *out_str, const char *in_str, size_t out_str_size);
++/* C99 requires these for C++ to get the definitions
++ * of INT64_MAX and other macros used by Zend/zend_long.h
++ * C11 drops this requirement, so these effectively
++ * just backport that piece of behavior.
++ *
++ * These defines are placed here instead of
++ * with the include below, because sys/types
++ * and inttypes may include stdint themselves.
++ * And these definitions MUST come first.
++ */
++#ifdef __cplusplus
++# ifndef __STDC_LIMIT_MACROS
++#  define __STDC_LIMIT_MACROS
++# endif
++# ifndef __STDC_CONSTANT_MACROS
++#  define __STDC_CONSTANT_MACROS
++# endif
++# ifndef __STDC_FORMAT_MACROS
++#  define __STDC_FORMAT_MACROS
++# endif
++#endif
++
++#include <inttypes.h>
++#include <stdint.h>
++
++#if defined(_MSC_VER)
++# ifndef u_char
++typedef unsigned __int8   u_char;
++# endif
++#endif /* !_MSC_VER */
++
++#endif /* PHP_STDINT_H */

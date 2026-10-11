@@ -1,0 +1,380 @@
+diff --git a/ext/mysqli/tests/mysqli_query_stored_proc.phpt b/ext/mysqli/tests/mysqli_query_stored_proc.phpt
+index 6f71ed0b..fec2228d 100644
+--- a/ext/mysqli/tests/mysqli_query_stored_proc.phpt
++++ b/ext/mysqli/tests/mysqli_query_stored_proc.phpt
+@@ -4,9 +4,10 @@ mysqli_query() - Stored Procedures
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50000) {
+     die(sprintf('skip Needs MySQL 5.0+, found version %d.', mysqli_get_server_version($link)));
+@@ -14,7 +15,8 @@ if (mysqli_get_server_version($link) <= 50000) {
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     if (!mysqli_query($link, 'DROP PROCEDURE IF EXISTS p'))
+         printf("[001] [%d] %s.\n", mysqli_errno($link), mysqli_error($link));
+@@ -151,7 +153,7 @@ END;')) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/mysqli_query_unicode.phpt b/ext/mysqli/tests/mysqli_query_unicode.phpt
+index c8c9e052..98624b1a 100644
+--- a/ext/mysqli/tests/mysqli_query_unicode.phpt
++++ b/ext/mysqli/tests/mysqli_query_unicode.phpt
+@@ -4,8 +4,9 @@ mysqli_query() - unicode (cyrillic)
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
+-require_once 'table.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++require_once('table.inc');
+ if (!$res = mysqli_query($link, "SHOW CHARACTER SET LIKE 'utf8'"))
+     die("skip UTF8 chatset seems not available");
+ mysqli_free_result($res);
+@@ -13,7 +14,9 @@ mysqli_close($link);
+ ?>
+ --FILE--
+ <?php
+-    require_once 'table.inc';
++    include_once("connect.inc");
++
++    require_once('table.inc');
+ 
+     if (TRUE !== ($tmp = @mysqli_query($link, "set names utf8")))
+         printf("[002.5] Expecting TRUE, got %s/%s\n", gettype($tmp), $tmp);
+diff --git a/ext/mysqli/tests/mysqli_real_connect.phpt b/ext/mysqli/tests/mysqli_real_connect.phpt
+index d5851363..d5320160 100644
+--- a/ext/mysqli/tests/mysqli_real_connect.phpt
++++ b/ext/mysqli/tests/mysqli_real_connect.phpt
+@@ -113,30 +113,32 @@ mysqli.allow_local_infile=1
+     mysqli_close($link);
+     var_dump($link);
+ 
+-    ini_set('mysqli.default_host', 'p:' . $host);
+-    $link = mysqli_init();
+-    if (!@mysqli_real_connect($link)) {
+-        printf("[022] Usage of mysqli.default_host=p:%s (persistent) failed\n", $host) ;
+-    } else {
+-        if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
+-            printf("[023] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-        $tmp = mysqli_fetch_assoc($res);
+-        if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
+-            printf("[024] Result looks strange - check manually, [%d] %s\n",
+-                mysqli_errno($link), mysqli_error($link));
+-            var_dump($tmp);
++    if ($IS_MYSQLND) {
++        ini_set('mysqli.default_host', 'p:' . $host);
++        $link = mysqli_init();
++        if (!@mysqli_real_connect($link)) {
++            printf("[022] Usage of mysqli.default_host=p:%s (persistent) failed\n", $host) ;
++        } else {
++            if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
++                printf("[023] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++            $tmp = mysqli_fetch_assoc($res);
++            if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
++                printf("[024] Result looks strange - check manually, [%d] %s\n",
++                    mysqli_errno($link), mysqli_error($link));
++                var_dump($tmp);
++            }
++            mysqli_free_result($res);
++            mysqli_close($link);
+         }
+-        mysqli_free_result($res);
+-        mysqli_close($link);
+-    }
+ 
+-    ini_set('mysqli.default_host', 'p:');
+-    $link = mysqli_init();
+-    if (@mysqli_real_connect($link)) {
+-        printf("[025] Usage of mysqli.default_host=p: did not fail\n") ;
+-        mysqli_close($link);
++        ini_set('mysqli.default_host', 'p:');
++        $link = mysqli_init();
++        if (@mysqli_real_connect($link)) {
++            printf("[025] Usage of mysqli.default_host=p: did not fail\n") ;
++            mysqli_close($link);
++        }
++        @mysqli_close($link);
+     }
+-    @mysqli_close($link);
+ 
+     try {
+         mysqli_real_connect($link, $host, $user, $passwd, $db, $port, $socket);
+diff --git a/ext/mysqli/tests/mysqli_real_connect_pconn.phpt b/ext/mysqli/tests/mysqli_real_connect_pconn.phpt
+index b2bd6197..294340a9 100644
+--- a/ext/mysqli/tests/mysqli_real_connect_pconn.phpt
++++ b/ext/mysqli/tests/mysqli_real_connect_pconn.phpt
+@@ -4,7 +4,10 @@ mysqli_real_connect() - persistent connections
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$IS_MYSQLND)
++    die("skip mysqlnd only test");
+ ?>
+ --INI--
+ mysqli.allow_local_infile=1
+@@ -12,7 +15,7 @@ mysqli.allow_persistent=1
+ mysqli.max_persistent=10
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+     $host = 'p:' . $host;
+ 
+     if (!$link = mysqli_init())
+@@ -114,27 +117,29 @@ mysqli.max_persistent=10
+ 
+     mysqli_close($link);
+ 
+-    $link = mysqli_init();
+-    if (!@mysqli_real_connect($link)) {
+-        printf("[022] Usage of mysqli.default_host=p:%s (persistent) failed\n", $host) ;
+-    } else {
+-        if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
+-            printf("[023] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-        $tmp = mysqli_fetch_assoc($res);
+-        if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
+-            printf("[024] Result looks strange - check manually, [%d] %s\n",
+-                mysqli_errno($link), mysqli_error($link));
+-            var_dump($tmp);
++    if ($IS_MYSQLND) {
++        $link = mysqli_init();
++        if (!@mysqli_real_connect($link)) {
++            printf("[022] Usage of mysqli.default_host=p:%s (persistent) failed\n", $host) ;
++        } else {
++            if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
++                printf("[023] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++            $tmp = mysqli_fetch_assoc($res);
++            if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
++                printf("[024] Result looks strange - check manually, [%d] %s\n",
++                    mysqli_errno($link), mysqli_error($link));
++                var_dump($tmp);
++            }
++            mysqli_free_result($res);
++            mysqli_close($link);
+         }
+-        mysqli_free_result($res);
+-        mysqli_close($link);
+-    }
+ 
+-    ini_set('mysqli.default_host', 'p:');
+-    $link = mysqli_init();
+-    if (@mysqli_real_connect($link)) {
+-        printf("[025] Usage of mysqli.default_host=p: did not fail\n") ;
+-        mysqli_close($link);
++        ini_set('mysqli.default_host', 'p:');
++        $link = mysqli_init();
++        if (@mysqli_real_connect($link)) {
++            printf("[025] Usage of mysqli.default_host=p: did not fail\n") ;
++            mysqli_close($link);
++        }
+     }
+ 
+     if (NULL === ($tmp = mysqli_real_connect($link, $host, $user, $passwd, $db, $port, $socket)))
+@@ -144,7 +149,7 @@ mysqli.max_persistent=10
+ ?>
+ --CLEAN--
+ <?php
+-	require_once "clean_table.inc";
++	require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Warning: mysqli_real_connect(): (%s/%d): Access denied for user '%s'@'%s' %r(\(using password: \w+\) ){0,1}%rin %s on line %d
+diff --git a/ext/mysqli/tests/mysqli_reap_async_query.phpt b/ext/mysqli/tests/mysqli_reap_async_query.phpt
+index 49398a45..2f4a09e1 100644
+--- a/ext/mysqli/tests/mysqli_reap_async_query.phpt
++++ b/ext/mysqli/tests/mysqli_reap_async_query.phpt
+@@ -4,7 +4,11 @@ mysqli_reap_async_query()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('connect.inc');
++require_once('skipifconnectfailure.inc');
++
++if (!$IS_MYSQLND)
++    die("skip mysqlnd only feature, compile PHP using --with-mysqli=mysqlnd");
+ ?>
+ --FILE--
+ <?php
+@@ -54,7 +58,7 @@ require_once 'skipifconnectfailure.inc';
+ 
+     }
+ 
+-    // Connections on which no query has been sent - 1
++    // Connections on which no query has been send - 1
+     $link = get_connection();
+     $link->query("SELECT 1 AS _one", MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
+     $links = array($link);
+diff --git a/ext/mysqli/tests/mysqli_reap_async_query_error.phpt b/ext/mysqli/tests/mysqli_reap_async_query_error.phpt
+index e7a48eaf..d5672ba1 100644
+--- a/ext/mysqli/tests/mysqli_reap_async_query_error.phpt
++++ b/ext/mysqli/tests/mysqli_reap_async_query_error.phpt
+@@ -26,6 +26,6 @@ try {
+ 
+ print "done!";
+ ?>
+---EXPECTF--
+-You have an error in your SQL syntax; check the manual that corresponds to your %s server version for the right syntax to use near ')' at line 1
++--EXPECT--
++You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ')' at line 1
+ done!
+diff --git a/ext/mysqli/tests/mysqli_reconnect.phpt b/ext/mysqli/tests/mysqli_reconnect.phpt
+new file mode 100644
+index 00000000..6cb13c5e
+--- /dev/null
++++ b/ext/mysqli/tests/mysqli_reconnect.phpt
+@@ -0,0 +1,130 @@
++--TEST--
++Trying implicit reconnect after wait_timeout and KILL using mysqli_ping()
++--EXTENSIONS--
++mysqli
++--SKIPIF--
++<?php
++require_once('skipifconnectfailure.inc');
++if (stristr(mysqli_get_client_info(), 'mysqlnd'))
++    die("skip: test for libmysql");
++?>
++--INI--
++mysqli.reconnect=1
++--FILE--
++<?php
++    require_once("connect.inc");
++    require_once("table.inc");
++
++    if (!$link2 = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++        printf("[001] Cannot create second database connection, [%d] %s\n",
++            mysqli_connect_errno(), mysqli_connect_error());
++
++    $thread_id_timeout = mysqli_thread_id($link);
++    $thread_id_control = mysqli_thread_id($link2);
++
++    if (!$res = mysqli_query($link2, "SHOW FULL PROCESSLIST"))
++        printf("[002] Cannot get full processlist, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    $running_threads = array();
++    while ($row = mysqli_fetch_assoc($res))
++        $running_threads[$row['Id']] = $row;
++    mysqli_free_result($res);
++
++    if (!isset($running_threads[$thread_id_timeout]) ||
++            !isset($running_threads[$thread_id_control]))
++        printf("[003] Processlist is borked, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    if (!mysqli_query($link, "SET SESSION wait_timeout = 2"))
++        printf("[004] Cannot set wait_timeout, [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    if (!$res = mysqli_query($link, "SHOW VARIABLES LIKE 'wait_timeout'"))
++        printf("[005] Cannot check if wait_timeout has been set, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    if (!$row = mysqli_fetch_assoc($res))
++        printf("[006] Cannot get wait_timeout, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++    mysqli_free_result($res);
++
++    if ($row['Value'] != 2)
++        printf("[007] Failed setting the wait_timeout, test will not work, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    // after 2+ seconds the server should kill the connection
++    sleep(3);
++
++    if (!$res = mysqli_query($link2, "SHOW FULL PROCESSLIST"))
++        printf("[008] Cannot get full processlist, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    $running_threads = array();
++    while ($row = mysqli_fetch_assoc($res))
++        $running_threads[$row['Id']] = $row;
++    mysqli_free_result($res);
++
++    if (isset($running_threads[$thread_id_timeout]))
++        printf("[009] Server should have killed the timeout connection, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    if (true !== mysqli_ping($link))
++        printf("[010] Reconnect should have happened");
++
++    if (!$res = mysqli_query($link, "SELECT DATABASE() as _dbname"))
++        printf("[011] Cannot get database name, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    if (!$row = mysqli_fetch_assoc($res))
++        printf("[012] Cannot get database name, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    mysqli_free_result($res);
++    if ($row['_dbname'] != $db)
++        printf("[013] Connection should has been made to DB/Schema '%s', expecting '%s', [%d] %s\n",
++            $row['_dbname'], $db, mysqli_errno($link), mysqli_error($link));
++
++    // ... and now we try KILL
++    $thread_id_timeout = mysqli_thread_id($link);
++
++    if (!mysqli_query($link2, sprintf('KILL %d', $thread_id_timeout)))
++        printf("[014] Cannot KILL timeout connection, [%d] %s\n", mysqli_errno($link2), mysqli_error($link2));
++    // Give the server a second to really kill the other thread...
++    sleep(1);
++
++    if (!$res = mysqli_query($link2, "SHOW FULL PROCESSLIST"))
++        printf("[015] Cannot get full processlist, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    $running_threads = array();
++    while ($row = mysqli_fetch_assoc($res))
++        $running_threads[$row['Id']] = $row;
++    mysqli_free_result($res);
++
++    if (isset($running_threads[$thread_id_timeout]) ||
++            !isset($running_threads[$thread_id_control]))
++        printf("[016] Processlist is borked, [%d] %s\n",
++            mysqli_errno($link2), mysqli_error($link));
++
++    if (true !== ($tmp = mysqli_ping($link)))
++        printf("[017] Expecting boolean/true got %s/%s\n", gettype($tmp), $tmp);
++
++    if (!$res = mysqli_query($link, "SELECT DATABASE() as _dbname"))
++        printf("[018] Cannot get database name, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    if (!$row = mysqli_fetch_assoc($res))
++        printf("[019] Cannot get database name, [%d] %s\n",
++            mysqli_errno($link), mysqli_error($link));
++
++    mysqli_free_result($res);
++    if ($row['_dbname'] != $db)
++        printf("[020] Connection should has been made to DB/Schema '%s', expecting '%s', [%d] %s\n",
++            $row['_dbname'], $db, mysqli_errno($link), mysqli_error($link));
++
++    mysqli_close($link);
++    mysqli_close($link2);
++    print "done!";
++?>
++--EXPECT--
++done!

@@ -1,0 +1,314 @@
+diff --git a/sapi/fpm/tests/bug68591-conf-test-user.phpt b/sapi/fpm/tests/bug68591-conf-test-user.phpt
+deleted file mode 100644
+index 5627151f..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-user.phpt
++++ /dev/null
+@@ -1,38 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test user existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-user = aaaaaa
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECT--
+-ERROR: [pool unconfined] cannot get uid for user 'aaaaaa'
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt b/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt
+deleted file mode 100644
+index c4c7adf3..00000000
+--- a/sapi/fpm/tests/bug77106-fcgi-missing-nl.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-FPM: bug77106 - Missing new lines in FCGI error stream
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR}}
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 1
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-php_admin_flag[log_errors] = 1
+-EOT;
+-
+-$code = <<<EOT
+-<?php
+-echo \$a;
+-echo \$a;
+-EOT;
+-
+-$tester = new FPM\Tester($cfg, $code);
+-$tester->start();
+-$tester->expectLogStartNotices();
+-$tester->request()->expectErrorPattern(
+-    '/Undefined variable \$a in .+ on line \d+; PHP message: PHP Warning:/'
+-);
+-$tester->terminate();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug80669-uid-user-groups.phpt b/sapi/fpm/tests/bug80669-uid-user-groups.phpt
+deleted file mode 100644
+index 9a694730..00000000
+--- a/sapi/fpm/tests/bug80669-uid-user-groups.phpt
++++ /dev/null
+@@ -1,52 +0,0 @@
+---TEST--
+-FPM: Process user setting ignored when FPM is not running as root
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-FPM\Tester::skipIfNotRoot();
+-FPM\Tester::skipIfUserDoesNotExist('www-data');
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$pw = posix_getpwnam('www-data');
+-$uid = $pw['uid'];
+-$gid = $pw['gid'];
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR}}
+-user = $uid
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 1
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$code = <<<EOT
+-<?php
+-echo posix_getgid();
+-EOT;
+-
+-$tester = new FPM\Tester($cfg, $code);
+-$tester->start();
+-$tester->expectLogStartNotices();
+-$tester->request()->expectBody((string) $gid);
+-$tester->terminate();
+-$tester->expectLogTerminatingNotices();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-php-value-key.phpt b/sapi/fpm/tests/config-array-validation-php-value-key.phpt
+deleted file mode 100644
+index 53daec70..00000000
+--- a/sapi/fpm/tests/config-array-validation-php-value-key.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - php_value array must be passed a key
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-php_value[] = E_ALL
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] You must provide a key for field 'php_value'");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt
+deleted file mode 100644
+index 68ef0c32..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-key-2.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path doesn't accept key with forward slash
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[/] = test
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Keys provided to field 'access.suppress_path' are ignored");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt
+deleted file mode 100644
+index 5b7a141a..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-key.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path doesn't allow key
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[pingpath] = /ping
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Keys provided to field 'access.suppress_path' are ignored");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt b/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt
+deleted file mode 100644
+index 400c3621..00000000
+--- a/sapi/fpm/tests/config-array-validation-suppress-path-starts-slash.phpt
++++ /dev/null
+@@ -1,34 +0,0 @@
+---TEST--
+-FPM: Validates arrays in configuration are correctly set - access.suppress_path begins with forward slash
+---SKIPIF--
+-<?php include "skipif.inc"; ?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[unconfined]
+-listen = {{ADDR}}
+-access.suppress_path[] = needs / to start with a slash
+-pm = static
+-pm.max_children = 5
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogError("\[%s:%d\] Values provided to field 'access.suppress_path' must begin with '\/'");
+-
+-?>
+-Done
+---EXPECT--
+-
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>

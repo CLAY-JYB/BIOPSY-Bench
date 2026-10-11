@@ -1,0 +1,514 @@
+diff --git a/ext/reflection/tests/property_exists.phpt b/ext/reflection/tests/property_exists.phpt
+index 879b9c4a..3af7bc4c 100644
+--- a/ext/reflection/tests/property_exists.phpt
++++ b/ext/reflection/tests/property_exists.phpt
+@@ -3,7 +3,6 @@ Reflection and property_exists()
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class A
+ {
+     public    $a = 1;
+diff --git a/ext/reflection/tests/readonly_class.phpt b/ext/reflection/tests/readonly_class.phpt
+deleted file mode 100644
+index dd685b90..00000000
+--- a/ext/reflection/tests/readonly_class.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Readonly class reflection
+---FILE--
+-<?php
+-
+-class Foo {
+-}
+-
+-readonly class Bar {
+-}
+-
+-$foo = new ReflectionClass(Foo::class);
+-var_dump($foo->isReadOnly());
+-var_dump(($foo->getModifiers() & ReflectionClass::IS_READONLY) != 0);
+-
+-$bar = new ReflectionClass(Bar::class);
+-var_dump($bar->isReadOnly());
+-var_dump(($bar->getModifiers() & ReflectionClass::IS_READONLY) != 0);
+-
+-?>
+---EXPECT--
+-bool(false)
+-bool(false)
+-bool(true)
+-bool(true)
+diff --git a/ext/reflection/tests/types/ReflectionType_001.phpt b/ext/reflection/tests/types/ReflectionType_001.phpt
+deleted file mode 100644
+index b4baf535..00000000
+--- a/ext/reflection/tests/types/ReflectionType_001.phpt
++++ /dev/null
+@@ -1,222 +0,0 @@
+---TEST--
+-ReflectionParameter::get/hasType and ReflectionType tests
+---FILE--
+-<?php
+-function foo(stdClass $a, array $b, callable $c, string $f, bool $g, int $h, float $i, NotExisting $j, stdClass $d = null, $e = null) { }
+-
+-function bar(): stdClass { return new stdClass; }
+-
+-class c extends stdClass {
+-  function bar(self $x): int { return 1; }
+-  function pbar(parent $x): int { return 1; }
+-  function factory(): self { return new c; }
+-  function pfactory(): parent { return new stdClass; }
+-}
+-
+-$closure = function (Test $a): Test { return $a; };
+-
+-echo "*** functions\n";
+-
+-foreach ([
+-  new ReflectionFunction('foo'),
+-  new ReflectionFunction($closure),
+-] as $idx => $rf) {
+-  foreach ($rf->getParameters() as $idx2 => $rp) {
+-    echo "** Function $idx - Parameter $idx2\n";
+-    var_dump($rp->hasType());
+-    $ra = $rp->getType();
+-    if ($ra) {
+-      var_dump($ra->allowsNull());
+-      var_dump($ra->isBuiltin());
+-      var_dump($ra->getName());
+-    }
+-  }
+-}
+-
+-echo "\n*** methods\n";
+-
+-foreach ([
+-  new ReflectionMethod('SplObserver', 'update'),
+-  new ReflectionMethod('c', 'bar'),
+-  new ReflectionMethod('c', 'pbar'),
+-  new ReflectionMethod($closure, '__invoke'),
+-] as $idx => $rm) {
+-  foreach ($rm->getParameters() as $idx2 => $rp) {
+-    echo "** Method $idx - parameter $idx2\n";
+-    var_dump($rp->hasType());
+-    $ra = $rp->getType();
+-    if ($ra) {
+-      var_dump($ra->allowsNull());
+-      var_dump($ra->isBuiltin());
+-      var_dump($ra->getName());
+-    }
+-  }
+-}
+-
+-echo "\n*** return types\n";
+-
+-foreach ([
+-  new ReflectionMethod('SplObserver', 'update'),
+-  new ReflectionFunction('bar'),
+-  new ReflectionMethod('c', 'bar'),
+-  new ReflectionMethod('c', 'factory'),
+-  new ReflectionMethod('c', 'pfactory'),
+-  new ReflectionFunction($closure),
+-  new ReflectionMethod($closure, '__invoke'),
+-] as $idx => $rf) {
+-  echo "** Function/method return type $idx\n";
+-  var_dump($rf->hasReturnType());
+-  $ra = $rf->getReturnType();
+-  if ($ra) {
+-    var_dump($ra->allowsNull());
+-    var_dump($ra->isBuiltin());
+-    var_dump($ra->getName());
+-  }
+-}
+-
+-echo "\n*** property types\n";
+-
+-class PropTypeTest {
+-    public int $int;
+-    public string $string;
+-    public array $arr;
+-    public stdClass $std;
+-    public OtherThing $other;
+-    public $mixed;
+-}
+-
+-$reflector = new ReflectionClass(PropTypeTest::class);
+-
+-foreach ($reflector->getProperties() as $name => $property) {
+-    if ($property->hasType()) {
+-        printf("public %s $%s;\n",
+-            $property->getType()->getName(), $property->getName());
+-    } else printf("public $%s;\n", $property->getName());
+-}
+-
+-echo "*** resolved property types\n";
+-$obj = new PropTypeTest;
+-$obj->std = new stdClass;
+-$r = (new ReflectionProperty($obj, 'std'))->getType();
+-var_dump($r->getName());
+-?>
+---EXPECT--
+-*** functions
+-** Function 0 - Parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(8) "stdClass"
+-** Function 0 - Parameter 1
+-bool(true)
+-bool(false)
+-bool(true)
+-string(5) "array"
+-** Function 0 - Parameter 2
+-bool(true)
+-bool(false)
+-bool(true)
+-string(8) "callable"
+-** Function 0 - Parameter 3
+-bool(true)
+-bool(false)
+-bool(true)
+-string(6) "string"
+-** Function 0 - Parameter 4
+-bool(true)
+-bool(false)
+-bool(true)
+-string(4) "bool"
+-** Function 0 - Parameter 5
+-bool(true)
+-bool(false)
+-bool(true)
+-string(3) "int"
+-** Function 0 - Parameter 6
+-bool(true)
+-bool(false)
+-bool(true)
+-string(5) "float"
+-** Function 0 - Parameter 7
+-bool(true)
+-bool(false)
+-bool(false)
+-string(11) "NotExisting"
+-** Function 0 - Parameter 8
+-bool(true)
+-bool(true)
+-bool(false)
+-string(8) "stdClass"
+-** Function 0 - Parameter 9
+-bool(false)
+-** Function 1 - Parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "Test"
+-
+-*** methods
+-** Method 0 - parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(10) "SplSubject"
+-** Method 1 - parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "self"
+-** Method 2 - parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(6) "parent"
+-** Method 3 - parameter 0
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "Test"
+-
+-*** return types
+-** Function/method return type 0
+-bool(false)
+-** Function/method return type 1
+-bool(true)
+-bool(false)
+-bool(false)
+-string(8) "stdClass"
+-** Function/method return type 2
+-bool(true)
+-bool(false)
+-bool(true)
+-string(3) "int"
+-** Function/method return type 3
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "self"
+-** Function/method return type 4
+-bool(true)
+-bool(false)
+-bool(false)
+-string(6) "parent"
+-** Function/method return type 5
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "Test"
+-** Function/method return type 6
+-bool(true)
+-bool(false)
+-bool(false)
+-string(4) "Test"
+-
+-*** property types
+-public int $int;
+-public string $string;
+-public array $arr;
+-public stdClass $std;
+-public OtherThing $other;
+-public $mixed;
+-*** resolved property types
+-string(8) "stdClass"
+diff --git a/ext/reflection/tests/types/ReflectionType_002.phpt b/ext/reflection/tests/types/ReflectionType_002.phpt
+deleted file mode 100644
+index fba766e5..00000000
+--- a/ext/reflection/tests/types/ReflectionType_002.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-ReflectionType leak
+---FILE--
+-<?php
+-
+-$closure = function(Test $x): Test2 { return new Test2($x); };
+-$rm = new ReflectionMethod($closure, '__invoke');
+-$rp = $rm->getParameters()[0];
+-$rt = $rp->getType();
+-$rrt = $rm->getReturnType();
+-unset($rm, $rp);
+-var_dump($rt->getName(), $rrt->getName());
+-?>
+---EXPECT--
+-string(4) "Test"
+-string(5) "Test2"
+diff --git a/ext/reflection/tests/types/ReflectionType_possible_types.phpt b/ext/reflection/tests/types/ReflectionType_possible_types.phpt
+deleted file mode 100644
+index 45a2d438..00000000
+--- a/ext/reflection/tests/types/ReflectionType_possible_types.phpt
++++ /dev/null
+@@ -1,37 +0,0 @@
+---TEST--
+-ReflectionType possible types
+---FILE--
+-<?php
+-
+-$functions = [
+-    function(): void {},
+-    function(): int {},
+-    function(): float {},
+-    function(): string {},
+-    function(): bool {},
+-    function(): array {},
+-    function(): callable {},
+-    function(): null {},
+-    function(): false {},
+-    function(): true {},
+-    function(): StdClass {}
+-];
+-
+-foreach ($functions as $function) {
+-    $reflectionFunc = new ReflectionFunction($function);
+-    $returnType = $reflectionFunc->getReturnType();
+-    var_dump($returnType->getName());
+-}
+-?>
+---EXPECT--
+-string(4) "void"
+-string(3) "int"
+-string(5) "float"
+-string(6) "string"
+-string(4) "bool"
+-string(5) "array"
+-string(8) "callable"
+-string(4) "null"
+-string(5) "false"
+-string(4) "true"
+-string(8) "StdClass"
+diff --git a/ext/reflection/tests/types/dnf_types.phpt b/ext/reflection/tests/types/dnf_types.phpt
+deleted file mode 100644
+index 46f3ab0f..00000000
+--- a/ext/reflection/tests/types/dnf_types.phpt
++++ /dev/null
+@@ -1,85 +0,0 @@
+---TEST--
+-Disjunctive Normal Form types in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-            echo $str_indent . "  Allows Null: " . json_encode($type->allowsNull()) . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function test1(): (X&Y)|(Z&Traversable)|Countable { }
+-
+-class Test {
+-    public (X&Y)|Countable $prop;
+-}
+-
+-dumpType((new ReflectionFunction('test1'))->getReturnType());
+-
+-$rc = new ReflectionClass(Test::class);
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-/* Force CE resolution of the property type */
+-
+-interface y {}
+-class x implements Y, Countable {
+-    public function count(): int { return 0; }
+-}
+-$test = new Test;
+-$test->prop = new x;
+-
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|(Z&Traversable)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Type Z&Traversable is ReflectionIntersectionType:
+-    Name: Z
+-    String: Z
+-    Allows Null: false
+-    Name: Traversable
+-    String: Traversable
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type (X&Y)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+-Type (X&Y)|Countable is ReflectionUnionType:
+-  Type X&Y is ReflectionIntersectionType:
+-    Name: X
+-    String: X
+-    Allows Null: false
+-    Name: Y
+-    String: Y
+-    Allows Null: false
+-  Name: Countable
+-  String: Countable
+-  Allows Null: false
+diff --git a/ext/reflection/tests/types/dnf_types_with_null.phpt b/ext/reflection/tests/types/dnf_types_with_null.phpt
+deleted file mode 100644
+index ade21993..00000000
+--- a/ext/reflection/tests/types/dnf_types_with_null.phpt
++++ /dev/null
+@@ -1,81 +0,0 @@
+---TEST--
+-Disjunctive Normal Form types in reflection
+---FILE--
+-<?php
+-
+-function dumpType(ReflectionType $rt, int $indent = 0) {
+-    $str_indent = str_repeat(' ', 2 * $indent);
+-    echo $str_indent . "Type $rt is " . $rt::class . ":\n";
+-    echo $str_indent . "Allows Null: " . json_encode($rt->allowsNull()) . "\n";
+-    foreach ($rt->getTypes() as $type) {
+-        if ($type instanceof ReflectionNamedType) {
+-            echo $str_indent . "  Name: " . $type->getName() . "\n";
+-            echo $str_indent . "  String: " . (string) $type . "\n";
+-        } else {
+-            dumpType($type, $indent+1);
+-        }
+-    }
+-}
+-
+-function test1(): (X&Y)|(Z&Traversable)|null { }
+-
+-class Test {
+-    public (X&Y)|null $prop;
+-}
+-
+-dumpType((new ReflectionFunction('test1'))->getReturnType());
+-
+-$rc = new ReflectionClass(Test::class);
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-/* Force CE resolution of the property type */
+-
+-interface y {}
+-class x implements Y, Countable {
+-    public function count(): int { return 0; }
+-}
+-$test = new Test;
+-$test->prop = new x;
+-
+-$rp = $rc->getProperty('prop');
+-dumpType($rp->getType());
+-
+-?>
+---EXPECT--
+-Type (X&Y)|(Z&Traversable)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Type Z&Traversable is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: Z
+-    String: Z
+-    Name: Traversable
+-    String: Traversable
+-  Name: null
+-  String: null
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null
+-Type (X&Y)|null is ReflectionUnionType:
+-Allows Null: true
+-  Type X&Y is ReflectionIntersectionType:
+-  Allows Null: false
+-    Name: X
+-    String: X
+-    Name: Y
+-    String: Y
+-  Name: null
+-  String: null

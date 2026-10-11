@@ -1,0 +1,162 @@
+diff --git a/Zend/tests/get_mangled_object_vars.phpt b/Zend/tests/get_mangled_object_vars.phpt
+index d8a885e1..f9ad008a 100644
+--- a/Zend/tests/get_mangled_object_vars.phpt
++++ b/Zend/tests/get_mangled_object_vars.phpt
+@@ -3,7 +3,6 @@ get_mangled_object_vars() function
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class A {
+     public $pub = 1;
+     protected $prot = 2;
+@@ -20,7 +19,6 @@ $obj->{"6"} = 6;
+ var_export(get_mangled_object_vars($obj));
+ echo "\n";
+ 
+-#[AllowDynamicProperties]
+ class AO extends ArrayObject {
+     private $priv = 1;
+ }
+diff --git a/Zend/tests/gh10251.phpt b/Zend/tests/gh10251.phpt
+index da8d8767..eb942824 100644
+--- a/Zend/tests/gh10251.phpt
++++ b/Zend/tests/gh10251.phpt
+@@ -2,7 +2,6 @@
+ GH-10251 (Assertion `(flag & (1<<3)) == 0' failed.)
+ --FILE--
+ <?php
+-#[\AllowDynamicProperties]
+ class A
+ {
+     function __set($o, $l)
+diff --git a/Zend/tests/gh10346.phpt b/Zend/tests/gh10346.phpt
+deleted file mode 100644
+index 74fce28e..00000000
+--- a/Zend/tests/gh10346.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-GH-10346 (Observer: enum tryFrom() run_time_cache properly assigned)
+---CREDITS--
+-Florian Sowade
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+---FILE--
+-<?php
+-enum Card : string
+-{
+-    case HEART = 'H';
+-}
+-
+-var_dump(Card::tryFrom('H'));
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init Card::tryFrom() -->
+-  <Card::tryFrom>
+-  </Card::tryFrom>
+-  <!-- init var_dump() -->
+-  <var_dump>
+-enum(Card::HEART)
+-  </var_dump>
+-</file '%s'>
+diff --git a/Zend/tests/gh11152.phpt b/Zend/tests/gh11152.phpt
+deleted file mode 100644
+index 4f0b7d9c..00000000
+--- a/Zend/tests/gh11152.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-GH-11152: Allow aliasing namespaces containing reserved class names
+---FILE--
+-<?php
+-
+-namespace string;
+-
+-use string as StringAlias;
+-
+-class C {}
+-
+-function test(StringAlias\C $o) {
+-    var_dump($o::class);
+-}
+-
+-test(new C());
+-
+-?>
+---EXPECT--
+-string(8) "string\C"
+diff --git a/Zend/tests/gh11735_1.phpt b/Zend/tests/gh11735_1.phpt
+deleted file mode 100644
+index 3ddf0185..00000000
+--- a/Zend/tests/gh11735_1.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-GH-11735: Use-after-free when unregistering user stream wrapper from user stream wrapper
+---FILE--
+-<?php
+-class FooWrapper {
+-    public $context;
+-    public function stream_open($path, $mode, $options, &$opened_path) {
+-        stream_wrapper_unregister('foo');
+-        return true;
+-    }
+-}
+-stream_wrapper_register('foo', 'FooWrapper');
+-var_dump(fopen('foo://bar', 'r'));
+-?>
+---EXPECTF--
+-resource(%d) of type (stream)
+diff --git a/Zend/tests/gh11735_2.phpt b/Zend/tests/gh11735_2.phpt
+deleted file mode 100644
+index b568b6f6..00000000
+--- a/Zend/tests/gh11735_2.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-GH-11735: Use-after-free when unregistering user stream wrapper from user stream wrapper
+---FILE--
+-<?php
+-class FooWrapper {
+-    public $context;
+-    public function stream_open($path, $mode, $options, &$opened_path) {
+-        stream_wrapper_unregister('foo');
+-        return false;
+-    }
+-}
+-stream_wrapper_register('foo', 'FooWrapper');
+-var_dump(fopen('foo://bar', 'r'));
+-?>
+---EXPECTF--
+-Warning: fopen(foo://bar): Failed to open stream: "FooWrapper::stream_open" call failed in %s on line %d
+-bool(false)
+diff --git a/Zend/tests/gh12468_1.phpt b/Zend/tests/gh12468_1.phpt
+new file mode 100644
+index 00000000..a02a28c3
+--- /dev/null
++++ b/Zend/tests/gh12468_1.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++GH-12468: Double-free of doc_comment when overriding static property via trait
++--FILE--
++<?php
++trait T {
++	/** some doc */
++	static protected $a = 0;
++}
++class A {
++	use T;
++}
++class B extends A {
++	use T;
++}
++?>
++===DONE===
++--EXPECT--
++===DONE===

@@ -1,0 +1,306 @@
+diff --git a/testcode/unitauth.c b/testcode/unitauth.c
+index 11eeb43b2..23c57e095 100644
+--- a/testcode/unitauth.c
++++ b/testcode/unitauth.c
+@@ -279,14 +279,14 @@ static struct q_ans example_com_queries[] = {
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir.example.com.	3600	IN	DNAME	redir.example.org.\n"
+-"abc.redir.example.com.	0	IN	CNAME	abc.redir.example.org.\n"
++"abc.redir.example.com.	3600	IN	CNAME	abc.redir.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "foo.abc.redir.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir.example.com.	3600	IN	DNAME	redir.example.org.\n"
+-"foo.abc.redir.example.com.	0	IN	CNAME	foo.abc.redir.example.org.\n"
++"foo.abc.redir.example.com.	3600	IN	CNAME	foo.abc.redir.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "redir2.example.com. DNAME", "",
+@@ -299,42 +299,42 @@ static struct q_ans example_com_queries[] = {
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"abc.redir2.example.com.	0	IN	CNAME	abc.redir2.example.org.\n"
++"abc.redir2.example.com.	3600	IN	CNAME	abc.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "obscured.redir2.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"obscured.redir2.example.com.	0	IN	CNAME	obscured.redir2.example.org.\n"
++"obscured.redir2.example.com.	3600	IN	CNAME	obscured.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "under2.redir2.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"under2.redir2.example.com.	0	IN	CNAME	under2.redir2.example.org.\n"
++"under2.redir2.example.com.	3600	IN	CNAME	under2.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "doubleobscured.under2.redir2.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"doubleobscured.under2.redir2.example.com.	0	IN	CNAME	doubleobscured.under2.redir2.example.org.\n"
++"doubleobscured.under2.redir2.example.com.	3600	IN	CNAME	doubleobscured.under2.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "foo.doubleobscured.under2.redir2.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"foo.doubleobscured.under2.redir2.example.com.	0	IN	CNAME	foo.doubleobscured.under2.redir2.example.org.\n"
++"foo.doubleobscured.under2.redir2.example.com.	3600	IN	CNAME	foo.doubleobscured.under2.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "foo.under2.redir2.example.com. A", "",
+ ";flags QR AA rcode NOERROR\n"
+ ";answer section\n"
+ "redir2.example.com.	3600	IN	DNAME	redir2.example.org.\n"
+-"foo.under2.redir2.example.com.	0	IN	CNAME	foo.under2.redir2.example.org.\n"
++"foo.under2.redir2.example.com.	3600	IN	CNAME	foo.under2.redir2.example.org.\n"
+ 	},
+ 
+ 	{ "example.com", "sub.example.com. NS", "",
+diff --git a/testcode/unitdoq.c b/testcode/unitdoq.c
+new file mode 100644
+index 000000000..2b9160970
+--- /dev/null
++++ b/testcode/unitdoq.c
+@@ -0,0 +1,84 @@
++/*
++ * testcode/unitdoq.c - unit test for doq routines.
++ *
++ * Copyright (c) 2022, NLnet Labs. All rights reserved.
++ *
++ * This software is open source.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ *
++ * Redistributions of source code must retain the above copyright notice,
++ * this list of conditions and the following disclaimer.
++ *
++ * Redistributions in binary form must reproduce the above copyright notice,
++ * this list of conditions and the following disclaimer in the documentation
++ * and/or other materials provided with the distribution.
++ *
++ * Neither the name of the NLNET LABS nor the names of its contributors may
++ * be used to endorse or promote products derived from this software without
++ * specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
++ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
++ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ *
++ */
++
++/**
++ * \file
++ * Calls doq related unit tests. Exits with code 1 on a failure.
++ */
++
++#include "config.h"
++
++#ifdef HAVE_NGTCP2
++
++#include "util/netevent.h"
++#include "services/listen_dnsport.h"
++#include "testcode/unitmain.h"
++
++/** check the size of a connection for doq */
++static void
++doq_size_conn_check()
++{
++	/* Printout the size of one doq connection, in memory usage.
++	 * A connection with a couple cids, of type doq_conid, and
++	 * it has one stream, and that has a query and an answer. */
++	size_t answer_size = 233; /* size of www.nlnetlabs.nl minimal answer
++		with dnssec and one A record. The unsigned answer is 176 with
++		additional data, 61 bytes minimal response one A record. */
++	size_t query_size = 45; /* size of query for www.nlnetlabs.nl, with
++		an EDNS record with DO flag. */
++	size_t conn_size = sizeof(struct doq_conn);
++	size_t conid_size = sizeof(struct doq_conid);
++	size_t stream_size = sizeof(struct doq_stream);
++
++	conn_size += 16; /* DCID len in the conn key */
++	conn_size += 0; /* the size of the ngtcp2_conn */
++	conn_size += 0; /* the size of the SSL record */
++	conn_size += 0; /* size of the close pkt,
++		but we do not count it here. Only if the conn gets closed. */
++	conid_size += 16; /* the dcid of the conn key */
++	conid_size += 16; /* the cid */
++	stream_size += query_size; /* size of in buffer */
++	stream_size += answer_size; /* size of out buffer */
++	printf("doq connection size %u bytes\n", (unsigned)(conn_size +
++		conid_size*3 + stream_size));
++}
++
++void doq_test(void)
++{
++	unit_show_feature("doq");
++	doq_size_conn_check();
++}
++#endif /* HAVE_NGTCP2 */
+diff --git a/testcode/unitmain.c b/testcode/unitmain.c
+index 647cbca3b..653d3efbe 100644
+--- a/testcode/unitmain.c
++++ b/testcode/unitmain.c
+@@ -1117,7 +1117,7 @@ static void edns_ede_encode_encodedecode(struct query_info* qinfo,
+ 	sldns_buffer_skip(pkt, 2 + 2);
+ 	/* decode */
+ 	unit_assert(parse_edns_from_query_pkt(pkt, edns, NULL, NULL, NULL, 0,
+-		region) == 0);
++		region, NULL) == 0);
+ }
+ 
+ static void edns_ede_encode_check(struct edns_data* edns, int* found_ede,
+@@ -1232,7 +1232,7 @@ static void edns_ede_answer_encode_test(void)
+ 	unit_assert(region);
+ 	rep = construct_reply_info_base(region,
+ 		LDNS_RCODE_NOERROR | BIT_QR, 1,
+-		3600, 3600, 3600,
++		3600, 3600, 3600, 0,
+ 		0, 0, 0, 0,
+ 		sec_status_unchecked, LDNS_EDE_NONE);
+ 	unit_assert(rep);
+@@ -1252,6 +1252,109 @@ static void edns_ede_answer_encode_test(void)
+ 	regional_destroy(region);
+ }
+ 
++#include "services/localzone.h"
++/* Utility function that compares two localzone trees */
++static void compare_localzone_trees(struct local_zones* z1,
++	struct local_zones* z2)
++{
++	struct local_zone *node1, *node2;
++	lock_rw_rdlock(&z1->lock);
++	lock_rw_rdlock(&z2->lock);
++	/* size should be the same */
++	unit_assert(z1->ztree.count == z2->ztree.count);
++	for(node1=(struct local_zone*)rbtree_first(&z1->ztree),
++		node2=(struct local_zone*)rbtree_first(&z2->ztree);
++		(rbnode_type*)node1 != RBTREE_NULL &&
++		(rbnode_type*)node2 != RBTREE_NULL;
++		node1=(struct local_zone*)rbtree_next((rbnode_type*)node1),
++		node2=(struct local_zone*)rbtree_next((rbnode_type*)node2)) {
++		int labs;
++		/* the same zone should be at the same nodes */
++		unit_assert(!dname_lab_cmp(
++			node1->name, node1->namelabs,
++			node2->name, node2->namelabs,
++			&labs));
++		/* the zone's parent should be the same on both nodes */
++		unit_assert(
++			(node1->parent == NULL && node2->parent == NULL) ||
++			(node1->parent != NULL && node2->parent != NULL));
++		if(node1->parent) {
++			unit_assert(!dname_lab_cmp(
++				node1->parent->name, node1->parent->namelabs,
++				node2->parent->name, node2->parent->namelabs,
++				&labs));
++		}
++	}
++	lock_rw_unlock(&z1->lock);
++	lock_rw_unlock(&z2->lock);
++}
++
++/* test that zone addition results in the same tree from both the configuration
++ * file and the unbound-control commands */
++static void localzone_parents_test(void)
++{
++	struct local_zones *z1, *z2;
++	size_t i;
++	char* zone_data[] = {
++		"one",
++		"a.b.c.one",
++		"b.c.one",
++		"c.one",
++		"two",
++		"c.two",
++		"b.c.two",
++		"a.b.c.two",
++		"a.b.c.three",
++		"b.c.three",
++		"c.three",
++		"three",
++		"c.four",
++		"b.c.four",
++		"a.b.c.four",
++		"four",
++		"."
++	};
++	unit_show_feature("localzones parent calculation");
++	z1 = local_zones_create();
++	z2 = local_zones_create();
++	/* parse test data */
++	for(i=0; i<sizeof(zone_data)/sizeof(zone_data[0]); i++) {
++		uint8_t* nm;
++		int nmlabs;
++		size_t nmlen;
++		struct local_zone* z;
++
++		/* This is the config way */
++		z = lz_enter_zone(z1, zone_data[i], "always_nxdomain",
++			LDNS_RR_CLASS_IN);
++		(void)z;  /* please compiler when no threading and no lock
++		code; the following line disappears and z stays unused */
++		lock_rw_unlock(&z->lock);
++		lz_init_parents(z1);
++
++		/* This is the unbound-control way */
++		nm = sldns_str2wire_dname(zone_data[i], &nmlen);
++		if(!nm) unit_assert(0);
++		nmlabs = dname_count_size_labels(nm, &nmlen);
++		lock_rw_wrlock(&z2->lock);
++		local_zones_add_zone(z2, nm, nmlen, nmlabs, LDNS_RR_CLASS_IN,
++			local_zone_always_nxdomain);
++		lock_rw_unlock(&z2->lock);
++	}
++	/* The trees should be the same, iterate and check the nodes */
++	compare_localzone_trees(z1, z2);
++
++	/* cleanup */
++	local_zones_delete(z1);
++	local_zones_delete(z2);
++}
++
++/** localzone unit tests */
++static void localzone_test(void)
++{
++	localzone_parents_test();
++}
++
+ void unit_show_func(const char* file, const char* func)
+ {
+ 	printf("test %s:%s\n", file, func);
+@@ -1325,9 +1428,13 @@ main(int argc, char* argv[])
+ 	tcpreuse_test();
+ 	msgparse_test();
+ 	edns_ede_answer_encode_test();
++	localzone_test();
+ #ifdef CLIENT_SUBNET
+ 	ecs_test();
+ #endif /* CLIENT_SUBNET */
++#ifdef HAVE_NGTCP2
++	doq_test();
++#endif /* HAVE_NGTCP2 */
+ 	if(log_get_lock()) {
+ 		lock_basic_destroy((lock_basic_type*)log_get_lock());
+ 	}

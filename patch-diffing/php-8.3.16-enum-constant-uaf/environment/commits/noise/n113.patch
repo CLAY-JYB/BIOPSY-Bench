@@ -1,0 +1,530 @@
+diff --git a/ext/dba/tests/dba_array_keys_var_non_string.phpt b/ext/dba/tests/dba_array_keys_var_non_string.phpt
+deleted file mode 100644
+index 1ba64ec4..00000000
+--- a/ext/dba/tests/dba_array_keys_var_non_string.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-DBA check behaviour of key as an array with non string elements
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'array_keys_non_string.db';
+-
+-$db = get_any_db($name);
+-
+-$key = [5, 5.21];
+-
+-var_dump($key);
+-var_dump(dba_insert($key, 'Test', $db));
+-var_dump($key);
+-var_dump(dba_fetch($key, $db));
+-var_dump($key);
+-
+-dba_close($db);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'array_keys_non_string.db';
+-cleanup_standard_db($db_name);
+-?>
+---EXPECTF--
+-Using handler: "%s"
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+-bool(true)
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+-string(4) "Test"
+-array(2) {
+-  [0]=>
+-  int(5)
+-  [1]=>
+-  float(5.21)
+-}
+diff --git a/ext/dba/tests/dba_cdb.phpt b/ext/dba/tests/dba_cdb.phpt
+index 6b0c7c66..0cdbea3f 100644
+--- a/ext/dba/tests/dba_cdb.phpt
++++ b/ext/dba/tests/dba_cdb.phpt
+@@ -4,34 +4,25 @@ DBA CDB handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb');
++    $handler = 'cdb';
++    require_once(__DIR__ .'/skipif.inc');
++    die('info CDB does not support replace or delete');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_cdb.db';
+-
+-set_up_cdb_db_and_run($db_name);
+-
++    $handler = 'cdb';
++    require_once(__DIR__ .'/test.inc');
++    require_once(__DIR__ .'/dba_handler.inc');
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_cdb.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+-Key 1 exists? Y
+-Key 2 exists? Y
+-Key 3 exists? Y
+-Key 4 exists? Y
+-Key 5 exists? Y
+-array(8) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++database handler: cdb
++5YYYYY
++Content String 2
++array(5) {
+   ["key1"]=>
+   string(16) "Content String 1"
+   ["key2"]=>
+@@ -42,20 +33,11 @@ array(8) {
+   string(22) "Another Content String"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+ --NO-LOCK--
+-Key 1 exists? Y
+-Key 2 exists? Y
+-Key 3 exists? Y
+-Key 4 exists? Y
+-Key 5 exists? Y
+-array(8) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++5YYYYY
++Content String 2
++array(5) {
+   ["key1"]=>
+   string(16) "Content String 1"
+   ["key2"]=>
+@@ -66,6 +48,4 @@ array(8) {
+   string(22) "Another Content String"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+diff --git a/ext/dba/tests/dba_cdb_001.phpt b/ext/dba/tests/dba_cdb_001.phpt
+index 5aa5d615..6a143106 100644
+--- a/ext/dba/tests/dba_cdb_001.phpt
++++ b/ext/dba/tests/dba_cdb_001.phpt
+@@ -8,8 +8,6 @@ $handler = 'cdb';
+ require_once(__DIR__ .'/skipif.inc');
+ die('info CDB does not support replace or delete');
+ ?>
+---CONFLICTS--
+-dba
+ --FILE--
+ <?php
+ 
+@@ -80,12 +78,12 @@ bool(true)
+ bool(true)
+ Test 1
+ 
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
++Warning: dba_open(%stest0.dbm,c): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
+ Failed to open DB
+ Test 2
+ 
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %sdba_cdb_001.php on line %d
++Warning: dba_insert(): You cannot perform a modification to a database without proper access in %sdba_cdb_001.php on line %d
+ Test 3
+ 
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
++Warning: dba_open(%stest0.dbm,w): Driver initialization failed for handler: cdb: Update operations are not supported in %sdba_cdb_001.php on line %d
+ Failed to open DB
+diff --git a/ext/dba/tests/dba_cdb_creation_matrix.phpt b/ext/dba/tests/dba_cdb_creation_matrix.phpt
+deleted file mode 100644
+index 36880911..00000000
+--- a/ext/dba/tests/dba_cdb_creation_matrix.phpt
++++ /dev/null
+@@ -1,195 +0,0 @@
+---TEST--
+-DBA CDB opening matrix of combination
+---EXTENSIONS--
+-dba
+---SKIPIF--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb');
+-?>
+---FILE--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-
+-$handler = 'cdb';
+-run_creation_tests($handler);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$handler = 'cdb';
+-clean_creation_tests($handler);
+-?>
+---EXPECTF--
+-=== OPENING NON-EXISTING FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "rd":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r-":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "r":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(cdb_not_existing.db): Failed to open stream: No such file or directory in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+-=== OPENING EXISTING DB FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "rd":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r-":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+-=== OPENING EXISTING RANDOM FILE ===
+-Mode parameter is "rl":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "rd":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r-":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "r":
+-
+-Warning: dba_insert(): Cannot perform a modification on a readonly database in %s on line %d
+-Insertion failed
+-Mode parameter is "wl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "wd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "w":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cl":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "cd":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c-":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "c":
+-
+-Warning: dba_open(): Driver initialization failed for handler: cdb: Update operations are not supported in %s on line %d
+-Opening DB failed
+-Mode parameter is "nl":
+-Cannot fetch insertion
+-Mode parameter is "nd":
+-Cannot fetch insertion
+-Mode parameter is "n-":
+-Cannot fetch insertion
+-Mode parameter is "n":
+-Cannot fetch insertion
+diff --git a/ext/dba/tests/dba_cdb_make.phpt b/ext/dba/tests/dba_cdb_make.phpt
+index 447daf30..8063d079 100644
+--- a/ext/dba/tests/dba_cdb_make.phpt
++++ b/ext/dba/tests/dba_cdb_make.phpt
+@@ -4,15 +4,14 @@ DBA CDB_MAKE handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb_make');
++    $handler = 'cdb_make';
++    require_once(__DIR__ .'/skipif.inc');
++    die('info CDB_MAKE does not support reading');
+ ?>
+---CONFLICTS--
+-test.cdb
+ --FILE--
+ <?php
+     $handler = 'cdb_make';
+-    $db_file = 'recreate_testcdb.cdb';
++    require_once(__DIR__ .'/test.inc');
+     echo "database handler: $handler\n";
+     // print md5 checksum of test.cdb which is generated by cdb_make program
+     var_dump(md5_file(__DIR__.'/test.cdb'));
+@@ -35,9 +34,7 @@ test.cdb
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'recreate_testcdb.cdb';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECT--
+ database handler: cdb_make
+diff --git a/ext/dba/tests/dba_cdb_read.phpt b/ext/dba/tests/dba_cdb_read.phpt
+index 9d67e170..40a7dc91 100644
+--- a/ext/dba/tests/dba_cdb_read.phpt
++++ b/ext/dba/tests/dba_cdb_read.phpt
+@@ -4,11 +4,9 @@ DBA CDB handler test (read only)
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('cdb_make');
++    $handler = 'cdb_make';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+---CONFLICTS--
+-test.cdb
+ --FILE--
+ <?php
+     echo "database handler: cdb\n";
+diff --git a/ext/dba/tests/dba_db1.phpt b/ext/dba/tests/dba_db1.phpt
+index 69ab820b..07f28e03 100644
+--- a/ext/dba/tests/dba_db1.phpt
++++ b/ext/dba/tests/dba_db1.phpt
+@@ -4,70 +4,47 @@ DBA DB1 handler test
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db1');
++    $handler = 'db1';
++    require_once __DIR__ .'/skipif.inc';
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db1.db';
+-
+-$handler = 'db1';
+-run_standard_tests($handler, $db_name);
+-
+-?>
+---CLEAN--
+-<?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'dba_db1.db';
+-cleanup_standard_db($db_name);
++    $handler = 'db1';
++    require_once __DIR__ .'/test.inc';
++    require_once __DIR__ .'/dba_handler.inc';
+ ?>
+ --EXPECT--
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: db1
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write: not allowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)

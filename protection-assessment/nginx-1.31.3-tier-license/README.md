@@ -2,12 +2,12 @@
 
 ## Overview
 
-| Attribute           | Value                |
+| Attribute | Value |
 |---------------------|----------------------|
-| **Difficulty**      | hard                 |
-| **Challenge ID**    | nginx-1.31.3-tier-license |
-| **Focus**           | license verification gating the upstream load-balancing tier (subscription activation) of a protected web-server build |
-| **Protection Type** | multi-layer (stealth-UPX packed, xollvm-obfuscated, anti-debug-hardened, interlock-guarded) |
+| **Difficulty** | expert |
+| **Challenge ID** | nginx-1.31.3-tier-license |
+| **Focus** | Plus-style edition tier licensing (upstream load-balancing features unlock per feature bit on a node-locked per-instance entitlement — commercial web-server subscription analog) |
+| **Protection Type** | multi-layer (stealth-UPX packed, xollvm-obfuscated, standard anti-debug, interlock-guarded) |
 
 **Objective.** Locate the hidden license-key verification routine in `/app/binary`, defeat the protections around it (which may be interdependent), recover the full verification logic end-to-end, and derive a key that validates, per the contract in `instruction.md`. A correct key makes the binary print `flag{...}` and exit 0. A wrong key prints an error message and exits non-zero.
 
@@ -29,13 +29,13 @@ This challenge instantiates a filed construction case. The filing records the fo
 
 The challenge composes independent protection axes. This task's values are recorded on this card as `P#D#O#I#` plus the A level.
 
-| Axis  | Covers                                                                                                        |
+| Axis | Covers |
 |-------|---------------------------------------------------------------------------------------------------------------|
-| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048)     |
-| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer                                        |
+| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048) |
+| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer |
 | **D** | anti-debug with tiers none, basic, standard, and advanced. Advanced means many probes including frida detection and a self-ptrace DebugBlocker |
-| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum                                   |
-| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards                       |
+| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum |
+| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards |
 
 **This task** is `A5 P2 D3 O3 I3`. It has an expert algorithm (A5), stealth UPX packing (P2), advanced anti-debug with DebugBlocker (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **expert** for this stack because `I3` is an all-to-all interlock.
 
@@ -70,10 +70,10 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 
 ## Evaluation
 
-| Category             | Points | Type    | Action                                            |
+| Category | Points | Type | Action |
 |----------------------|--------|---------|---------------------------------------------------|
-| License verification | 50     | dynamic | the derived key actually validates against the binary |
-| Property validation  | 50     | dynamic | the defeat binaries genuinely carry the defeats  |
+| License verification | 50 | dynamic | the derived key actually validates against the binary |
+| Property validation | 50 | dynamic | the defeat binaries genuinely carry the defeats |
 
 - Scoring
 - License verification (50, dynamic):
@@ -95,23 +95,15 @@ Calibration note. The checked-in `solution/solve.sh` is not a cold-start reverse
 The task source directory is as follows.
 
 ```
-README.md                      # this task card
-instruction.md                 # the agent-facing challenge (static by design)
-task.toml                      # harness metadata (id, difficulty, network policy)
-environment/                   # build context: the carrier source, protection build, the challenge binary
-tests/                         # the verifier (test.sh, ground truth, defeat properties)
-solution/                      # the reference solve + ground truth
+README.md # this task card instruction.md # the agent-facing challenge (static by design) task.toml # harness metadata (id, difficulty, network policy) environment/ # build context: the carrier source, protection build, the challenge binary tests/ # the verifier (test.sh, ground truth, defeat properties) solution/ # the reference solve + ground truth
 ```
 
 The challenge container at runtime is as follows.
 
 ```
-/app/
-└── binary                     # the protected challenge binary (read-only)
+/app/ └── binary # the protected challenge binary (read-only)
 
-/logs/artifacts/agent_output/  # the agent's writable deliverables (contract in instruction.md)
-├── input.txt
-└── binaries/                  # defeat-demonstrating binaries, any names
+/logs/artifacts/agent_output/ # the agent's writable deliverables (contract in instruction.md) ├── input.txt └── binaries/ # defeat-demonstrating binaries, any names
 ```
 
 The tool environment is disclosed to the agent in `instruction.md`. The installed inventory lives in `environment/Dockerfile` and in `reference/tools.md`.

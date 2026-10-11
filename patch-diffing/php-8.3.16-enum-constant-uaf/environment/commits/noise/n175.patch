@@ -1,0 +1,193 @@
+diff --git a/ext/mysqli/tests/067.phpt b/ext/mysqli/tests/067.phpt
+index bb253d1c..5bb8a9f3 100644
+--- a/ext/mysqli/tests/067.phpt
++++ b/ext/mysqli/tests/067.phpt
+@@ -4,10 +4,11 @@ function test: nested selects (cursors)
+ mysqli
+ --SKIPIF--
+ <?php
+-    require_once "connect.inc";
++    require_once('skipifconnectfailure.inc');
++    require_once("connect.inc");
+ 
+-    if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-        die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++    if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++        die("skip Cannot connect to check required version");
+ 
+     /* skip cursor test for server versions < 50009 */
+     if (mysqli_get_server_version($link) < 50009) {
+@@ -28,7 +29,7 @@ mysqli
+         return $stmt;
+     }
+ 
+-    require_once "connect.inc";
++    require_once("connect.inc");
+     $mysql = new my_mysqli($host, $user, $passwd, $db, $port, $socket);
+ 
+     if (mysqli_get_server_version($mysql) < 50009) {
+@@ -64,7 +65,7 @@ mysqli
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/071.phpt b/ext/mysqli/tests/071.phpt
+index 39d8ba77..8a5334d4 100644
+--- a/ext/mysqli/tests/071.phpt
++++ b/ext/mysqli/tests/071.phpt
+@@ -16,8 +16,22 @@ require_once('skipifconnectfailure.inc');
+     var_dump($mysql->ping());
+ 
+     $ret = $mysql->kill($mysql->thread_id);
+-    if ($ret !== true){
+-        printf("[001] Expecting boolean/true got %s/%s\n", gettype($ret), var_export($ret, true));
++    if ($IS_MYSQLND) {
++        if ($ret !== true){
++            printf("[001] Expecting boolean/true got %s/%s\n", gettype($ret), var_export($ret, true));
++        }
++    } else {
++        /* libmysql return value seems to depend on server version */
++        if ((($version >= 50123) || ($version <= 40200)) && $version != 50200) {
++            /* TODO: find exact version */
++            if ($ret !== true){
++                printf("[001] Expecting boolean/true got %s/%s @\n", gettype($ret), var_export($ret, true), $version);
++            }
++        } else {
++            if ($ret !== false){
++                printf("[001] Expecting boolean/false got %s/%s @\n", gettype($ret), var_export($ret, true), $version);
++            }
++        }
+     }
+ 
+     var_dump($mysql->ping());
+@@ -29,8 +43,22 @@ require_once('skipifconnectfailure.inc');
+     var_dump(mysqli_ping($mysql));
+ 
+     $ret = $mysql->kill($mysql->thread_id);
+-    if ($ret !== true){
+-        printf("[002] Expecting boolean/true got %s/%s\n", gettype($ret), var_export($ret, true));
++    if ($IS_MYSQLND) {
++        if ($ret !== true){
++            printf("[002] Expecting boolean/true got %s/%s\n", gettype($ret), var_export($ret, true));
++        }
++    } else {
++        /* libmysql return value seems to depend on server version */
++        if ((($version >= 50123) || ($version <= 40200)) && $version != 50200) {
++            /* TODO: find exact version */
++            if ($ret !== true){
++                printf("[002] Expecting boolean/true got %s/%s @\n", gettype($ret), var_export($ret, true), $version);
++            }
++        } else {
++            if ($ret !== false){
++            printf("[002] Expecting boolean/false got %s/%s @\n", gettype($ret), var_export($ret, true), $version);
++            }
++        }
+     }
+ 
+     var_dump(mysqli_ping($mysql));
+diff --git a/ext/mysqli/tests/bug34785.phpt b/ext/mysqli/tests/bug34785.phpt
+index c4bc19d9..88817b65 100644
+--- a/ext/mysqli/tests/bug34785.phpt
++++ b/ext/mysqli/tests/bug34785.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #34785 (Cannot properly subclass mysqli_stmt)
++Bug #34785 (Can not properly subclass mysqli_stmt)
+ --EXTENSIONS--
+ mysqli
+ --SKIPIF--
+diff --git a/ext/mysqli/tests/bug38710.phpt b/ext/mysqli/tests/bug38710.phpt
+index 9d50b979..9c6c7c0f 100644
+--- a/ext/mysqli/tests/bug38710.phpt
++++ b/ext/mysqli/tests/bug38710.phpt
+@@ -16,7 +16,7 @@ $qry->prepare("SELECT REPEAT('a',100000)");
+ $qry->execute();
+ $qry->bind_result($text);
+ $qry->fetch();
+-if ($text !== str_repeat('a', 100000)) {
++if ($text !== str_repeat('a', ($IS_MYSQLND || mysqli_get_server_version($db) > 50110)? 100000:(mysqli_get_server_version($db)>=50000? 8193:8191))) {
+     var_dump(strlen($text));
+ }
+ echo "Done";
+diff --git a/ext/mysqli/tests/bug42548.phpt b/ext/mysqli/tests/bug42548.phpt
+index dccfd589..28d2ca05 100644
+--- a/ext/mysqli/tests/bug42548.phpt
++++ b/ext/mysqli/tests/bug42548.phpt
+@@ -4,8 +4,9 @@ Bug #42548 PROCEDURE xxx can't return a result set in the given context (works i
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+     die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50000) {
+@@ -14,7 +15,7 @@ if (mysqli_get_server_version($link) <= 50000) {
+ ?>
+ --FILE--
+ <?php
+-require_once 'connect.inc';
++require_once('connect.inc');
+ 
+ $mysqli = mysqli_init();
+ $mysqli->real_connect($host, $user, $passwd, $db, $port, $socket);
+@@ -52,7 +53,7 @@ print "done!";
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/bug44897.phpt b/ext/mysqli/tests/bug44897.phpt
+index 50177a72..48ad2ab7 100644
+--- a/ext/mysqli/tests/bug44897.phpt
++++ b/ext/mysqli/tests/bug44897.phpt
+@@ -4,10 +4,14 @@ Bug #44879 (failed to prepare statement)
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++if (!stristr(mysqli_get_client_info(), 'mysqlnd'))
++    die("skip: only available in mysqlnd");
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50000) {
+     die(sprintf('skip Needs MySQL 5.0+, found version %d.', mysqli_get_server_version($link)));
+diff --git a/ext/mysqli/tests/bug45019.phpt b/ext/mysqli/tests/bug45019.phpt
+index a34487fc..f5f2aa37 100644
+--- a/ext/mysqli/tests/bug45019.phpt
++++ b/ext/mysqli/tests/bug45019.phpt
+@@ -33,9 +33,15 @@ require_once('skipifconnectfailure.inc');
+ 
+     $index = 0;
+     while ($stmt->fetch()) {
++        /* NOTE: libmysql - http://bugs.mysql.com/bug.php?id=47483 */
+         if ($data[$index] != $column1) {
+-            printf("[004] Row %d, expecting %s/%s got %s/%s\n",
+-                $index + 1, gettype($data[$index]), $data[$index], gettype($column1), $column1);
++            if ($IS_MYSQLND || $index != 1) {
++                printf("[004] Row %d, expecting %s/%s got %s/%s\n",
++                    $index + 1, gettype($data[$index]), $data[$index], gettype($column1), $column1);
++            } else {
++                if ($column1 != "thre")
++                    printf("[005] Got '%s'. Please check if http://bugs.mysql.com/bug.php?id=47483 has been fixed and adapt tests bug45019.phpt/mysqli_ps_select_union.phpt", $column1);
++            }
+         }
+         $index++;
+     }

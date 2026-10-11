@@ -1,0 +1,228 @@
+diff --git a/ext/mysqli/tests/mysqli_local_infile_directory_access_denied.phpt b/ext/mysqli/tests/mysqli_local_infile_directory_access_denied.phpt
+index 35cec6dc..957aeeb6 100644
+--- a/ext/mysqli/tests/mysqli_local_infile_directory_access_denied.phpt
++++ b/ext/mysqli/tests/mysqli_local_infile_directory_access_denied.phpt
+@@ -4,17 +4,17 @@ mysqli.local_infile_directory access denied
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++	die("skip Cannot connect to MySQL");
+ 
+-include_once "local_infile_tools.inc";
++include_once("local_infile_tools.inc");
+ if ($msg = check_local_infile_allowed_by_server($link))
+-    die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
++	die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
+ 
+ mysqli_close($link);
++
+ ?>
+ --INI--
+ open_basedir={PWD}
+@@ -22,7 +22,7 @@ mysqli.allow_local_infile=0
+ mysqli.local_infile_directory={PWD}/foo/bar
+ --FILE--
+ <?php
+-	require_once "connect.inc";
++	require_once("connect.inc");
+ 
+ 	if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+ 		printf("[001] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+@@ -48,14 +48,14 @@ mysqli.local_infile_directory={PWD}/foo/bar
+ ?>
+ --CLEAN--
+ <?php
+-require_once 'connect.inc';
++require_once('connect.inc');
+ 
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+ 	printf("[clean] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+ 		$host, $user, $db, $port, $socket);
+ }
+ 
+-if (!$link->query('DROP TABLE IF EXISTS test')) {
++if (!$link->query($link, 'DROP TABLE IF EXISTS test')) {
+ 	printf("[clean] Failed to drop old test table: [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+ }
+ 
+diff --git a/ext/mysqli/tests/mysqli_local_infile_directory_vs_open_basedir.phpt b/ext/mysqli/tests/mysqli_local_infile_directory_vs_open_basedir.phpt
+index 49776cbf..6349bef4 100644
+--- a/ext/mysqli/tests/mysqli_local_infile_directory_vs_open_basedir.phpt
++++ b/ext/mysqli/tests/mysqli_local_infile_directory_vs_open_basedir.phpt
+@@ -4,17 +4,17 @@ mysqli.local_infile_directory vs open_basedir
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++	die("skip Cannot connect to MySQL");
+ 
+-include_once "local_infile_tools.inc";
++include_once("local_infile_tools.inc");
+ if ($msg = check_local_infile_allowed_by_server($link))
+-    die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
++	die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
+ 
+ mysqli_close($link);
++
+ ?>
+ --INI--
+ open_basedir={PWD}
+@@ -54,7 +54,7 @@ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+ 		$host, $user, $db, $port, $socket);
+ }
+ 
+-if (!$link->query('DROP TABLE IF EXISTS test')) {
++if (!$link->query($link, 'DROP TABLE IF EXISTS test')) {
+ 	printf("[clean] Failed to drop old test table: [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+ }
+ 
+diff --git a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout.phpt b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout.phpt
+index 95e11db9..be8c3aaf 100644
+--- a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout.phpt
++++ b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout.phpt
+@@ -4,7 +4,11 @@ mysqlnd.net_read_timeout limit check
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$IS_MYSQLND)
++    /* The libmysql read_timeout limit default is 365 * 24 * 3600 seconds. It cannot be altered through PHP API calls */
++    die("skip mysqlnd only test");
+ ?>
+ --INI--
+ default_socket_timeout=60
+@@ -12,7 +16,7 @@ max_execution_time=60
+ mysqlnd.net_read_timeout=1
+ --FILE--
+ <?php
+-    include "connect.inc";
++    include ("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+diff --git a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_long.phpt b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_long.phpt
+index 6953fb78..b8b8c284 100644
+--- a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_long.phpt
++++ b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_long.phpt
+@@ -4,9 +4,13 @@ mysqlnd.net_read_timeout > default_socket_timeout
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++if (!$IS_MYSQLND) {
++    die("skip: test applies only to mysqlnd");
++}
++
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+     die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50011) {
+@@ -20,7 +24,7 @@ max_execution_time=12
+ --FILE--
+ <?php
+     set_time_limit(12);
+-    require_once "connect.inc";
++    include ("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+diff --git a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_zero.phpt b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_zero.phpt
+index 54788b32..e0c8278a 100644
+--- a/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_zero.phpt
++++ b/ext/mysqli/tests/mysqli_mysqlnd_read_timeout_zero.phpt
+@@ -4,9 +4,13 @@ mysqlnd.net_read_timeout = 0
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++if (!$IS_MYSQLND) {
++    die("skip: test applies only to mysqlnd");
++}
++
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+     die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50011) {
+@@ -19,7 +23,7 @@ max_execution_time=10
+ mysqlnd.net_read_timeout=0
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    include ("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+diff --git a/ext/mysqli/tests/mysqli_no_reconnect.phpt b/ext/mysqli/tests/mysqli_no_reconnect.phpt
+index 5584b09b..a89b2d38 100644
+--- a/ext/mysqli/tests/mysqli_no_reconnect.phpt
++++ b/ext/mysqli/tests/mysqli_no_reconnect.phpt
+@@ -6,6 +6,8 @@ mysqli
+ <?php
+ require_once('skipifconnectfailure.inc');
+ ?>
++--INI--
++mysqli.reconnect=0
+ --FILE--
+ <?php
+     require_once("connect.inc");
+@@ -83,14 +85,17 @@ require_once('skipifconnectfailure.inc');
+       the server always manages to send a full a reply. Whereas MySQl 5.5
+       may not. The behaviour is undefined. Any return value is fine.
+     */
+-    /*
+-    mysqlnd is a bit more verbose than libmysql. mysqlnd should print:
+-    Warning: mysqli_query(): MySQL server has gone away in %s on line %d
+-
+-    Warning: mysqli_query(): Error reading result set's header in %d on line %d
+-    */
+-    @mysqli_query($link, sprintf('KILL %d', $thread_id_timeout));
+-
++    if ($IS_MYSQLND) {
++        /*
++        mysqlnd is a bit more verbose than libmysql. mysqlnd should print:
++        Warning: mysqli_query(): MySQL server has gone away in %s on line %d
++
++        Warning: mysqli_query(): Error reading result set's header in %d on line %d
++        */
++        @mysqli_query($link, sprintf('KILL %d', $thread_id_timeout));
++    } else {
++        mysqli_query($link, sprintf('KILL %d', $thread_id_timeout));
++    }
+     // Give the server a second to really kill the other thread...
+     sleep(1);
+ 
+diff --git a/ext/mysqli/tests/mysqli_options.phpt b/ext/mysqli/tests/mysqli_options.phpt
+index d6bc4e02..522f6088 100644
+--- a/ext/mysqli/tests/mysqli_options.phpt
++++ b/ext/mysqli/tests/mysqli_options.phpt
+@@ -91,6 +91,9 @@ $link = mysqli_init();
+ // test for error reporting - only mysqlnd reports errors
+ try {
+     mysqli_options($link, MYSQLI_SET_CHARSET_NAME, "foobar");
++    if (!$IS_MYSQLND) {
++        print "Unknown character set\n";
++    }
+ } catch (mysqli_sql_exception $e) {
+     echo $e->getMessage() . "\n";
+ }

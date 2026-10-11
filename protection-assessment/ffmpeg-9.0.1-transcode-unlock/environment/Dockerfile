@@ -432,7 +432,7 @@ WORKDIR /src
 FROM target-deps AS origin-binary
 # BINARY 1: origin_binary — same injected sources, optimized build, NO
 # protection layers. Symbols KEPT (no strip): the chain-depth trace breaks
-# on the stage-probe symbols via gdb (renamed 2026-08-26; keep in
+# on the stage-probe symbols via gdb (keep in
 # sync with gen_verification.py LICENSE_ENTRY/stage_probe naming).
 RUN ./configure --disable-doc --disable-debug --disable-x86asm --extra-cflags="-O2" --extra-cxxflags="-O2" && make -j$(nproc) && \
     mkdir -p /gt/binaries && cp ffmpeg_g /gt/binaries/origin_binary && chmod +x /gt/binaries/origin_binary && \
@@ -493,12 +493,15 @@ RUN python3 /protection/interdependency/interlock_patch.py --binary ffmpeg_g --m
 # no longer needed once the interlock CRCs are stamped), then pack the whole
 # file; ffmpeg's build already strips `ffmpeg` from `ffmpeg_g`, so the
 # symbol-rich ffmpeg_g is the one packed.
+# [stamp 8.06] prepack_binary staged PRE-strip: nm must resolve the scored
+# functions for the rubric stamp (PT_LOAD layout is strip-invariant, so
+# the O-family byte comparison and the ldd closure are unaffected)
+RUN mkdir -p /out && cp ffmpeg_g /out/prepack_binary
 RUN strip --strip-all ffmpeg_g ffprobe && \
     upx --best --overlay=copy --no-backup -q -o ffmpeg_g_packed_0 ffmpeg_g && \
     python3 /protection/packing/upx_stealth.py ffmpeg_g_packed_0 ffmpeg_g_packed_0_stealth
-# Role-named staging: challenge_final (packed) + challenge_ldd (pre-packer ELF)
-RUN mkdir -p /out && cp ffmpeg_g_packed_0_stealth /out/challenge_final && \
-    cp ffmpeg_g /out/challenge_ldd
+# Role-named staging: challenge_final (packed) + prepack_binary (pre-packer, pre-strip)
+RUN cp ffmpeg_g_packed_0_stealth /out/challenge_final
 
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
@@ -717,3 +720,5 @@ CMD ["/bin/bash"]
 # /logs/artifacts/agent_output/     # Agent output directory (owned by agent)
 #     ├── input.txt                 # License key submitted by agent (empty placeholder)
 #     └── binaries/                 # Protection-defeated binaries, any names
+# binding stamp (script/pipeline/regen_verification.sh)
+RUN printf '%s\n' '801689433177dc52be2f81fd5b756110' > /etc/machine-id

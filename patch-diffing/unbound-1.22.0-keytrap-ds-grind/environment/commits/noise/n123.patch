@@ -1,0 +1,95 @@
+diff --git a/winrc/setup.nsi b/winrc/setup.nsi
+index 886d83a99..64e5523f7 100644
+--- a/winrc/setup.nsi
++++ b/winrc/setup.nsi
+@@ -78,6 +78,15 @@ section "Root anchor - DNSSEC" SectionRootKey
+ sectionEnd
+ 
+ section "-hidden.postinstall"
++	# if Unbund is already installed, ask to stop it to allow file replacement
++	IfFileExists "$INSTDIR\unbound-service-remove.exe" 0 service_remove_end
++	MessageBox MB_YESNO|MB_ICONEXCLAMATION "Unbound is already installed!$\r$\n$\r$\nWould you like to stop the service to continue with the update?" /SD IDYES IDNO service_remove_quit # defaults to yes on silent installations
++		nsExec::ExecToLog '"$INSTDIR\unbound-service-remove.exe" stop'
++		Sleep 1000
++		Goto service_remove_end
++	service_remove_quit:
++		Quit
++	service_remove_end:
+ 	# copy files
+ 	SetRegView 64
+ 	setOutPath $INSTDIR
+@@ -134,6 +143,7 @@ section "-hidden.postinstall"
+ 
+ 	# register uninstaller
+ 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound" "DisplayName" "Unbound"
++	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound" "DisplayVersion" "${VERSION}"
+ 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound" "UninstallString" "$\"$INSTDIR\uninst.exe$\""
+ 	WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound" "QuietUninstallString" "$\"$INSTDIR\uninst.exe$\" /S"
+ 	WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound" "NoModify" "1"
+diff --git a/winrc/unbound-control-setup.cmd b/winrc/unbound-control-setup.cmd
+index 8c283fd5c..a5ffe04e9 100644
+--- a/winrc/unbound-control-setup.cmd
++++ b/winrc/unbound-control-setup.cmd
+@@ -48,7 +48,7 @@ rem validity period for certificates
+ set DAYS=7200
+ 
+ rem size of keys in bits
+-set BITS=1536
++set BITS=3072
+ 
+ rem hash algorithm
+ set HASH=sha256
+@@ -98,9 +98,14 @@ echo default_bits=%BITS%>>request.cfg
+ echo default_md=%HASH%>>request.cfg
+ echo prompt=no>>request.cfg
+ echo distinguished_name=req_distinguished_name>>request.cfg
+-echo.>>request.cfg
++echo x509_extensions=v3_ca>>request.cfg
+ echo [req_distinguished_name]>>request.cfg
+ echo commonName=%SERVERNAME%>>request.cfg
++echo [v3_ca]>>request.cfg
++echo subjectKeyIdentifier=hash>>request.cfg
++echo authorityKeyIdentifier=keyid:always,issuer:always>>request.cfg
++echo basicConstraints=critical,CA:TRUE,pathlen:0>>request.cfg
++echo subjectAltName=DNS:%SERVERNAME%>>request.cfg
+ 
+ if not exist request.cfg (
+ echo could not create request.cfg
+@@ -119,9 +124,12 @@ echo default_bits=%BITS%>>request.cfg
+ echo default_md=%HASH%>>request.cfg
+ echo prompt=no>>request.cfg
+ echo distinguished_name=req_distinguished_name>>request.cfg
+-echo.>>request.cfg
++echo req_extensions=v3_req>>request.cfg
+ echo [req_distinguished_name]>>request.cfg
+ echo commonName=%CLIENTNAME%>>request.cfg
++echo [v3_req]>>request.cfg
++echo basicConstraints=critical,CA:FALSE>>request.cfg
++echo subjectAltName=DNS:%CLIENTNAME%>>request.cfg
+ 
+ if not exist request.cfg (
+ echo could not create request.cfg
+@@ -129,7 +137,7 @@ exit 1
+ )
+ 
+ echo create %CTL_BASE%.pem (signed client certificate)
+-"%SSL_PROGRAM%" req -key %CTL_BASE%.key -config request.cfg -new | "%SSL_PROGRAM%" x509 -req -days %DAYS% -CA %SVR_BASE%_trust.pem -CAkey %SVR_BASE%.key -CAcreateserial -%HASH% -out %CTL_BASE%.pem
++"%SSL_PROGRAM%" req -key %CTL_BASE%.key -config request.cfg -new | "%SSL_PROGRAM%" x509 -req -days %DAYS% -CA %SVR_BASE%_trust.pem -CAkey %SVR_BASE%.key -CAcreateserial -%HASH% -extfile request.cfg -extensions v3_req -out %CTL_BASE%.pem
+ 
+ if not exist %CTL_BASE%.pem (
+ echo could not create %CTL_BASE%.pem
+diff --git a/winrc/win_svc.c b/winrc/win_svc.c
+index a87d73bf1..49d4251fa 100644
+--- a/winrc/win_svc.c
++++ b/winrc/win_svc.c
+@@ -352,6 +352,10 @@ service_init(int r, struct daemon** d, struct config_file** c)
+ 	daemon_apply_cfg(daemon, cfg);
+ 
+ 	if(!r) report_status(SERVICE_START_PENDING, NO_ERROR, 2300);
++	if(!r) {
++		if(!daemon_privileged(daemon))
++			fatal_exit("could not do privileged setup");
++	}
+ 	if(!(daemon->rc = daemon_remote_create(cfg))) {
+ 		log_err("could not set up remote-control");
+ 		daemon_delete(daemon);

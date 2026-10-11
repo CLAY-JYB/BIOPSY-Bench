@@ -1,0 +1,550 @@
+diff --git a/ext/intl/uchar/uproperty-enum.h b/ext/intl/uchar/uproperty-enum.h
+new file mode 100644
+index 00000000..59095a49
+--- /dev/null
++++ b/ext/intl/uchar/uproperty-enum.h
+@@ -0,0 +1,114 @@
++/* Generated from http://icu-project.org/apiref/icu4c/uchar_8h.html#ae40d616419e74ecc7c80a9febab03199 */
++UPROPERTY(ALPHABETIC)
++UPROPERTY(BINARY_START)
++UPROPERTY(ASCII_HEX_DIGIT)
++UPROPERTY(BIDI_CONTROL)
++UPROPERTY(BIDI_MIRRORED)
++UPROPERTY(DASH)
++UPROPERTY(DEFAULT_IGNORABLE_CODE_POINT)
++UPROPERTY(DEPRECATED)
++UPROPERTY(DIACRITIC)
++UPROPERTY(EXTENDER)
++UPROPERTY(FULL_COMPOSITION_EXCLUSION)
++UPROPERTY(GRAPHEME_BASE)
++UPROPERTY(GRAPHEME_EXTEND)
++UPROPERTY(GRAPHEME_LINK)
++UPROPERTY(HEX_DIGIT)
++UPROPERTY(HYPHEN)
++UPROPERTY(ID_CONTINUE)
++UPROPERTY(ID_START)
++UPROPERTY(IDEOGRAPHIC)
++UPROPERTY(IDS_BINARY_OPERATOR)
++UPROPERTY(IDS_TRINARY_OPERATOR)
++UPROPERTY(JOIN_CONTROL)
++UPROPERTY(LOGICAL_ORDER_EXCEPTION)
++UPROPERTY(LOWERCASE)
++UPROPERTY(MATH)
++UPROPERTY(NONCHARACTER_CODE_POINT)
++UPROPERTY(QUOTATION_MARK)
++UPROPERTY(RADICAL)
++UPROPERTY(SOFT_DOTTED)
++UPROPERTY(TERMINAL_PUNCTUATION)
++UPROPERTY(UNIFIED_IDEOGRAPH)
++UPROPERTY(UPPERCASE)
++UPROPERTY(WHITE_SPACE)
++UPROPERTY(XID_CONTINUE)
++UPROPERTY(XID_START)
++UPROPERTY(CASE_SENSITIVE)
++UPROPERTY(S_TERM)
++UPROPERTY(VARIATION_SELECTOR)
++UPROPERTY(NFD_INERT)
++UPROPERTY(NFKD_INERT)
++UPROPERTY(NFC_INERT)
++UPROPERTY(NFKC_INERT)
++UPROPERTY(SEGMENT_STARTER)
++UPROPERTY(PATTERN_SYNTAX)
++UPROPERTY(PATTERN_WHITE_SPACE)
++UPROPERTY(POSIX_ALNUM)
++UPROPERTY(POSIX_BLANK)
++UPROPERTY(POSIX_GRAPH)
++UPROPERTY(POSIX_PRINT)
++UPROPERTY(POSIX_XDIGIT)
++UPROPERTY(CASED)
++UPROPERTY(CASE_IGNORABLE)
++UPROPERTY(CHANGES_WHEN_LOWERCASED)
++UPROPERTY(CHANGES_WHEN_UPPERCASED)
++UPROPERTY(CHANGES_WHEN_TITLECASED)
++UPROPERTY(CHANGES_WHEN_CASEFOLDED)
++UPROPERTY(CHANGES_WHEN_CASEMAPPED)
++UPROPERTY(CHANGES_WHEN_NFKC_CASEFOLDED)
++UPROPERTY(BINARY_LIMIT)
++UPROPERTY(BIDI_CLASS)
++UPROPERTY(INT_START)
++UPROPERTY(BLOCK)
++UPROPERTY(CANONICAL_COMBINING_CLASS)
++UPROPERTY(DECOMPOSITION_TYPE)
++UPROPERTY(EAST_ASIAN_WIDTH)
++UPROPERTY(GENERAL_CATEGORY)
++UPROPERTY(JOINING_GROUP)
++UPROPERTY(JOINING_TYPE)
++UPROPERTY(LINE_BREAK)
++UPROPERTY(NUMERIC_TYPE)
++UPROPERTY(SCRIPT)
++UPROPERTY(HANGUL_SYLLABLE_TYPE)
++UPROPERTY(NFD_QUICK_CHECK)
++UPROPERTY(NFKD_QUICK_CHECK)
++UPROPERTY(NFC_QUICK_CHECK)
++UPROPERTY(NFKC_QUICK_CHECK)
++UPROPERTY(LEAD_CANONICAL_COMBINING_CLASS)
++UPROPERTY(TRAIL_CANONICAL_COMBINING_CLASS)
++UPROPERTY(GRAPHEME_CLUSTER_BREAK)
++UPROPERTY(SENTENCE_BREAK)
++UPROPERTY(WORD_BREAK)
++#if U_ICU_VERSION_MAJOR_NUM >= 52
++UPROPERTY(BIDI_PAIRED_BRACKET_TYPE)
++#endif /* ICU >= 52 */
++UPROPERTY(INT_LIMIT)
++UPROPERTY(GENERAL_CATEGORY_MASK)
++UPROPERTY(MASK_START)
++UPROPERTY(MASK_LIMIT)
++UPROPERTY(NUMERIC_VALUE)
++UPROPERTY(DOUBLE_START)
++UPROPERTY(DOUBLE_LIMIT)
++UPROPERTY(AGE)
++UPROPERTY(STRING_START)
++UPROPERTY(BIDI_MIRRORING_GLYPH)
++UPROPERTY(CASE_FOLDING)
++UPROPERTY(ISO_COMMENT)
++UPROPERTY(LOWERCASE_MAPPING)
++UPROPERTY(NAME)
++UPROPERTY(SIMPLE_CASE_FOLDING)
++UPROPERTY(SIMPLE_LOWERCASE_MAPPING)
++UPROPERTY(SIMPLE_TITLECASE_MAPPING)
++UPROPERTY(SIMPLE_UPPERCASE_MAPPING)
++UPROPERTY(TITLECASE_MAPPING)
++UPROPERTY(UNICODE_1_NAME)
++UPROPERTY(UPPERCASE_MAPPING)
++#if U_ICU_VERSION_MAJOR_NUM >= 52
++UPROPERTY(BIDI_PAIRED_BRACKET)
++#endif /* ICU >= 52 */
++UPROPERTY(STRING_LIMIT)
++UPROPERTY(SCRIPT_EXTENSIONS)
++UPROPERTY(OTHER_PROPERTY_START)
++UPROPERTY(OTHER_PROPERTY_LIMIT)
++UPROPERTY(INVALID_CODE)
+diff --git a/ext/json/json.c b/ext/json/json.c
+index e36746f1..13efeb90 100644
+--- a/ext/json/json.c
++++ b/ext/json/json.c
+@@ -37,6 +37,10 @@ PHP_JSON_API zend_class_entry *php_json_exception_ce;
+ 
+ PHP_JSON_API ZEND_DECLARE_MODULE_GLOBALS(json)
+ 
++/* Register constant for options and errors */
++#define PHP_JSON_REGISTER_CONSTANT(_name, _value) \
++	REGISTER_LONG_CONSTANT(_name,  _value, CONST_CS | CONST_PERSISTENT);
++
+ /* {{{ MINIT */
+ static PHP_MINIT_FUNCTION(json)
+ {
+@@ -44,7 +48,42 @@ static PHP_MINIT_FUNCTION(json)
+ 
+ 	php_json_exception_ce = register_class_JsonException(zend_ce_exception);
+ 
+-	register_json_symbols(module_number);
++	/* options for json_encode */
++	PHP_JSON_REGISTER_CONSTANT("JSON_HEX_TAG",  PHP_JSON_HEX_TAG);
++	PHP_JSON_REGISTER_CONSTANT("JSON_HEX_AMP",  PHP_JSON_HEX_AMP);
++	PHP_JSON_REGISTER_CONSTANT("JSON_HEX_APOS", PHP_JSON_HEX_APOS);
++	PHP_JSON_REGISTER_CONSTANT("JSON_HEX_QUOT", PHP_JSON_HEX_QUOT);
++	PHP_JSON_REGISTER_CONSTANT("JSON_FORCE_OBJECT", PHP_JSON_FORCE_OBJECT);
++	PHP_JSON_REGISTER_CONSTANT("JSON_NUMERIC_CHECK", PHP_JSON_NUMERIC_CHECK);
++	PHP_JSON_REGISTER_CONSTANT("JSON_UNESCAPED_SLASHES", PHP_JSON_UNESCAPED_SLASHES);
++	PHP_JSON_REGISTER_CONSTANT("JSON_PRETTY_PRINT", PHP_JSON_PRETTY_PRINT);
++	PHP_JSON_REGISTER_CONSTANT("JSON_UNESCAPED_UNICODE", PHP_JSON_UNESCAPED_UNICODE);
++	PHP_JSON_REGISTER_CONSTANT("JSON_PARTIAL_OUTPUT_ON_ERROR", PHP_JSON_PARTIAL_OUTPUT_ON_ERROR);
++	PHP_JSON_REGISTER_CONSTANT("JSON_PRESERVE_ZERO_FRACTION", PHP_JSON_PRESERVE_ZERO_FRACTION);
++	PHP_JSON_REGISTER_CONSTANT("JSON_UNESCAPED_LINE_TERMINATORS", PHP_JSON_UNESCAPED_LINE_TERMINATORS);
++
++	/* options for json_decode */
++	PHP_JSON_REGISTER_CONSTANT("JSON_OBJECT_AS_ARRAY", PHP_JSON_OBJECT_AS_ARRAY);
++	PHP_JSON_REGISTER_CONSTANT("JSON_BIGINT_AS_STRING", PHP_JSON_BIGINT_AS_STRING);
++
++	/* common options for json_decode and json_encode */
++	PHP_JSON_REGISTER_CONSTANT("JSON_INVALID_UTF8_IGNORE", PHP_JSON_INVALID_UTF8_IGNORE);
++	PHP_JSON_REGISTER_CONSTANT("JSON_INVALID_UTF8_SUBSTITUTE", PHP_JSON_INVALID_UTF8_SUBSTITUTE);
++	PHP_JSON_REGISTER_CONSTANT("JSON_THROW_ON_ERROR", PHP_JSON_THROW_ON_ERROR);
++
++	/* json error constants */
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_NONE", PHP_JSON_ERROR_NONE);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_DEPTH", PHP_JSON_ERROR_DEPTH);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_STATE_MISMATCH", PHP_JSON_ERROR_STATE_MISMATCH);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_CTRL_CHAR", PHP_JSON_ERROR_CTRL_CHAR);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_SYNTAX", PHP_JSON_ERROR_SYNTAX);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_UTF8", PHP_JSON_ERROR_UTF8);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_RECURSION", PHP_JSON_ERROR_RECURSION);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_INF_OR_NAN", PHP_JSON_ERROR_INF_OR_NAN);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_UNSUPPORTED_TYPE", PHP_JSON_ERROR_UNSUPPORTED_TYPE);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_INVALID_PROPERTY_NAME", PHP_JSON_ERROR_INVALID_PROPERTY_NAME);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_UTF16", PHP_JSON_ERROR_UTF16);
++	PHP_JSON_REGISTER_CONSTANT("JSON_ERROR_NON_BACKED_ENUM", PHP_JSON_ERROR_NON_BACKED_ENUM);
+ 
+ 	return SUCCESS;
+ }
+@@ -118,10 +157,10 @@ PHP_JSON_API zend_string *php_json_encode_string(const char *s, size_t len, int
+ 	return smart_str_extract(&buf);
+ }
+ 
+-PHP_JSON_API zend_result php_json_encode_ex(smart_str *buf, zval *val, int options, zend_long depth) /* {{{ */
++PHP_JSON_API int php_json_encode_ex(smart_str *buf, zval *val, int options, zend_long depth) /* {{{ */
+ {
+ 	php_json_encoder encoder;
+-	zend_result return_code;
++	int return_code;
+ 
+ 	php_json_encode_init(&encoder);
+ 	encoder.max_depth = depth;
+@@ -133,7 +172,7 @@ PHP_JSON_API zend_result php_json_encode_ex(smart_str *buf, zval *val, int optio
+ }
+ /* }}} */
+ 
+-PHP_JSON_API zend_result php_json_encode(smart_str *buf, zval *val, int options) /* {{{ */
++PHP_JSON_API int php_json_encode(smart_str *buf, zval *val, int options) /* {{{ */
+ {
+ 	return php_json_encode_ex(buf, val, options, JSON_G(encode_max_depth));
+ }
+@@ -172,7 +211,7 @@ static const char *php_json_get_error_msg(php_json_error_code error_code) /* {{{
+ }
+ /* }}} */
+ 
+-PHP_JSON_API zend_result php_json_decode_ex(zval *return_value, const char *str, size_t str_len, zend_long options, zend_long depth) /* {{{ */
++PHP_JSON_API int php_json_decode_ex(zval *return_value, const char *str, size_t str_len, zend_long options, zend_long depth) /* {{{ */
+ {
+ 	php_json_parser parser;
+ 
+@@ -227,7 +266,11 @@ PHP_FUNCTION(json_encode)
+ 		}
+ 	}
+ 
+-	RETURN_STR(smart_str_extract(&buf));
++	smart_str_0(&buf); /* copy? */
++	if (buf.s) {
++		RETURN_NEW_STR(buf.s);
++	}
++	RETURN_EMPTY_STRING();
+ }
+ /* }}} */
+ 
+diff --git a/ext/json/json.stub.php b/ext/json/json.stub.php
+index 7a8b479a..f28ab1bb 100644
+--- a/ext/json/json.stub.php
++++ b/ext/json/json.stub.php
+@@ -2,155 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue PHP_JSON_HEX_TAG
+- */
+-const JSON_HEX_TAG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_HEX_AMP
+- */
+-const JSON_HEX_AMP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_HEX_APOS
+- */
+-const JSON_HEX_APOS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_HEX_QUOT
+- */
+-const JSON_HEX_QUOT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_FORCE_OBJECT
+- */
+-const JSON_FORCE_OBJECT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_NUMERIC_CHECK
+- */
+-const JSON_NUMERIC_CHECK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_UNESCAPED_SLASHES
+- */
+-const JSON_UNESCAPED_SLASHES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_PRETTY_PRINT
+- */
+-const JSON_PRETTY_PRINT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_UNESCAPED_UNICODE
+- */
+-const JSON_UNESCAPED_UNICODE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_PARTIAL_OUTPUT_ON_ERROR
+- */
+-const JSON_PARTIAL_OUTPUT_ON_ERROR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_PRESERVE_ZERO_FRACTION
+- */
+-const JSON_PRESERVE_ZERO_FRACTION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_UNESCAPED_LINE_TERMINATORS
+- */
+-const JSON_UNESCAPED_LINE_TERMINATORS = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_JSON_OBJECT_AS_ARRAY
+- */
+-const JSON_OBJECT_AS_ARRAY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_BIGINT_AS_STRING
+- */
+-const JSON_BIGINT_AS_STRING = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_JSON_INVALID_UTF8_IGNORE
+- */
+-const JSON_INVALID_UTF8_IGNORE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_INVALID_UTF8_SUBSTITUTE
+- */
+-const JSON_INVALID_UTF8_SUBSTITUTE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_THROW_ON_ERROR
+- */
+-const JSON_THROW_ON_ERROR = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_NONE
+- */
+-const JSON_ERROR_NONE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_DEPTH
+- */
+-const JSON_ERROR_DEPTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_STATE_MISMATCH
+- */
+-const JSON_ERROR_STATE_MISMATCH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_CTRL_CHAR
+- */
+-const JSON_ERROR_CTRL_CHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_SYNTAX
+- */
+-const JSON_ERROR_SYNTAX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_UTF8
+- */
+-const JSON_ERROR_UTF8 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_RECURSION
+- */
+-const JSON_ERROR_RECURSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_INF_OR_NAN
+- */
+-const JSON_ERROR_INF_OR_NAN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_UNSUPPORTED_TYPE
+- */
+-const JSON_ERROR_UNSUPPORTED_TYPE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_INVALID_PROPERTY_NAME
+- */
+-const JSON_ERROR_INVALID_PROPERTY_NAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_UTF16
+- */
+-const JSON_ERROR_UTF16 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_JSON_ERROR_NON_BACKED_ENUM
+- */
+-const JSON_ERROR_NON_BACKED_ENUM = UNKNOWN;
+-
+ /** @refcount 1 */
+ function json_encode(mixed $value, int $flags = 0, int $depth = 512): string|false {}
+ 
+diff --git a/ext/json/json_arginfo.h b/ext/json/json_arginfo.h
+index 53a31f54..c0d672e8 100644
+--- a/ext/json/json_arginfo.h
++++ b/ext/json/json_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 91b1a992a7020081c42e1db876e5cdce94b681dd */
++ * Stub hash: e59995a9cd647f36164468dd2ae4c11239e3405f */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_json_encode, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+@@ -49,39 +49,6 @@ static const zend_function_entry class_JsonException_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_json_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("JSON_HEX_TAG", PHP_JSON_HEX_TAG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_HEX_AMP", PHP_JSON_HEX_AMP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_HEX_APOS", PHP_JSON_HEX_APOS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_HEX_QUOT", PHP_JSON_HEX_QUOT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_FORCE_OBJECT", PHP_JSON_FORCE_OBJECT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_NUMERIC_CHECK", PHP_JSON_NUMERIC_CHECK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_UNESCAPED_SLASHES", PHP_JSON_UNESCAPED_SLASHES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_PRETTY_PRINT", PHP_JSON_PRETTY_PRINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_UNESCAPED_UNICODE", PHP_JSON_UNESCAPED_UNICODE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_PARTIAL_OUTPUT_ON_ERROR", PHP_JSON_PARTIAL_OUTPUT_ON_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_PRESERVE_ZERO_FRACTION", PHP_JSON_PRESERVE_ZERO_FRACTION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_UNESCAPED_LINE_TERMINATORS", PHP_JSON_UNESCAPED_LINE_TERMINATORS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_OBJECT_AS_ARRAY", PHP_JSON_OBJECT_AS_ARRAY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_BIGINT_AS_STRING", PHP_JSON_BIGINT_AS_STRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_INVALID_UTF8_IGNORE", PHP_JSON_INVALID_UTF8_IGNORE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_INVALID_UTF8_SUBSTITUTE", PHP_JSON_INVALID_UTF8_SUBSTITUTE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_THROW_ON_ERROR", PHP_JSON_THROW_ON_ERROR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_NONE", PHP_JSON_ERROR_NONE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_DEPTH", PHP_JSON_ERROR_DEPTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_STATE_MISMATCH", PHP_JSON_ERROR_STATE_MISMATCH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_CTRL_CHAR", PHP_JSON_ERROR_CTRL_CHAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_SYNTAX", PHP_JSON_ERROR_SYNTAX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_UTF8", PHP_JSON_ERROR_UTF8, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_RECURSION", PHP_JSON_ERROR_RECURSION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_INF_OR_NAN", PHP_JSON_ERROR_INF_OR_NAN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_UNSUPPORTED_TYPE", PHP_JSON_ERROR_UNSUPPORTED_TYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_INVALID_PROPERTY_NAME", PHP_JSON_ERROR_INVALID_PROPERTY_NAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_UTF16", PHP_JSON_ERROR_UTF16, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("JSON_ERROR_NON_BACKED_ENUM", PHP_JSON_ERROR_NON_BACKED_ENUM, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_JsonSerializable(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/json/json_encoder.c b/ext/json/json_encoder.c
+index 14fd86d7..f3523ed3 100644
+--- a/ext/json/json_encoder.c
++++ b/ext/json/json_encoder.c
+@@ -67,14 +67,7 @@ static inline void php_json_pretty_print_indent(smart_str *buf, int options, php
+ 
+ /* }}} */
+ 
+-static
+-#if defined(_MSC_VER) && defined(_M_ARM64)
+-// MSVC bug: https://developercommunity.visualstudio.com/t/corrupt-optimization-on-arm64-with-Ox-/10102551
+-zend_never_inline
+-#else
+-inline
+-#endif
+-bool php_json_is_valid_double(double d) /* {{{ */
++static inline int php_json_is_valid_double(double d) /* {{{ */
+ {
+ 	return !zend_isinf(d) && !zend_isnan(d);
+ }
+@@ -110,7 +103,7 @@ static inline void php_json_encode_double(smart_str *buf, double d, int options)
+ 		} \
+ 	} while (0)
+ 
+-static zend_result php_json_encode_array(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
++static int php_json_encode_array(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
+ {
+ 	int i, r, need_comma = 0;
+ 	HashTable *myht, *prop_ht;
+@@ -315,10 +308,11 @@ static zend_result php_json_encode_array(smart_str *buf, zval *val, int options,
+ }
+ /* }}} */
+ 
+-zend_result php_json_escape_string(
++int php_json_escape_string(
+ 		smart_str *buf, const char *s, size_t len,
+ 		int options, php_json_encoder *encoder) /* {{{ */
+ {
++	int status;
+ 	unsigned int us;
+ 	size_t pos, checkpoint;
+ 	char *dst;
+@@ -373,7 +367,7 @@ zend_result php_json_escape_string(
+ 			}
+ 			us = (unsigned char)s[0];
+ 			if (UNEXPECTED(us >= 0x80)) {
+-				zend_result status;
++
+ 				us = php_next_utf8_char((unsigned char *)s, len, &pos, &status);
+ 
+ 				/* check whether UTF8 character is correct */
+@@ -528,12 +522,12 @@ zend_result php_json_escape_string(
+ }
+ /* }}} */
+ 
+-static zend_result php_json_encode_serializable_object(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
++static int php_json_encode_serializable_object(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
+ {
+ 	zend_class_entry *ce = Z_OBJCE_P(val);
+ 	HashTable* myht = Z_OBJPROP_P(val);
+ 	zval retval, fname;
+-	zend_result return_code;
++	int return_code;
+ 
+ 	if (myht && GC_IS_RECURSIVE(myht)) {
+ 		encoder->error_code = PHP_JSON_ERROR_RECURSION;
+@@ -590,7 +584,7 @@ static zend_result php_json_encode_serializable_object(smart_str *buf, zval *val
+ }
+ /* }}} */
+ 
+-static zend_result php_json_encode_serializable_enum(smart_str *buf, zval *val, int options, php_json_encoder *encoder)
++static int php_json_encode_serializable_enum(smart_str *buf, zval *val, int options, php_json_encoder *encoder)
+ {
+ 	zend_class_entry *ce = Z_OBJCE_P(val);
+ 	if (ce->enum_backing_type == IS_UNDEF) {
+@@ -603,7 +597,7 @@ static zend_result php_json_encode_serializable_enum(smart_str *buf, zval *val,
+ 	return php_json_encode_zval(buf, value_zv, options, encoder);
+ }
+ 
+-zend_result php_json_encode_zval(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
++int php_json_encode_zval(smart_str *buf, zval *val, int options, php_json_encoder *encoder) /* {{{ */
+ {
+ again:
+ 	switch (Z_TYPE_P(val))
+diff --git a/ext/json/json_parser.y b/ext/json/json_parser.y
+index 90ff0a7c..862b1bc0 100644
+--- a/ext/json/json_parser.y
++++ b/ext/json/json_parser.y
+@@ -80,7 +80,6 @@ start:
+ 			{
+ 				ZVAL_COPY_VALUE(&$$, &$1);
+ 				ZVAL_COPY_VALUE(parser->return_value, &$1);
+-				(void) php_json_yynerrs;
+ 				YYACCEPT;
+ 			}
+ ;
+diff --git a/ext/json/php_json.h b/ext/json/php_json.h
+index 3973f0f0..f8905b10 100644
+--- a/ext/json/php_json.h
++++ b/ext/json/php_json.h
+@@ -99,11 +99,11 @@ ZEND_TSRMLS_CACHE_EXTERN()
+ 
+ PHP_JSON_API zend_string *php_json_encode_string(const char *s, size_t len, int options);
+ 
+-PHP_JSON_API zend_result php_json_encode_ex(smart_str *buf, zval *val, int options, zend_long depth);
+-PHP_JSON_API zend_result php_json_encode(smart_str *buf, zval *val, int options);
+-PHP_JSON_API zend_result php_json_decode_ex(zval *return_value, const char *str, size_t str_len, zend_long options, zend_long depth);
++PHP_JSON_API int php_json_encode_ex(smart_str *buf, zval *val, int options, zend_long depth);
++PHP_JSON_API int php_json_encode(smart_str *buf, zval *val, int options);
++PHP_JSON_API int php_json_decode_ex(zval *return_value, const char *str, size_t str_len, zend_long options, zend_long depth);
+ 
+-static inline zend_result php_json_decode(zval *return_value, const char *str, size_t str_len, bool assoc, zend_long depth)
++static inline int php_json_decode(zval *return_value, const char *str, int str_len, bool assoc, zend_long depth)
+ {
+ 	return php_json_decode_ex(return_value, str, str_len, assoc ? PHP_JSON_OBJECT_AS_ARRAY : 0, depth);
+ }

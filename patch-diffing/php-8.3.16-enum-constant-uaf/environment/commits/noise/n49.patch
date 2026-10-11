@@ -1,0 +1,272 @@
+diff --git a/Zend/tests/readonly_function.phpt b/Zend/tests/readonly_function.phpt
+index 35102d36..0262b3b7 100644
+--- a/Zend/tests/readonly_function.phpt
++++ b/Zend/tests/readonly_function.phpt
+@@ -7,34 +7,10 @@ function readonly() {
+     echo "Hi!\n";
+ }
+ 
+-class A {
+-    const readonly = 'Const hi!';
+-
+-    static function readonly() {
+-        echo "Static hi!\n";
+-    }
+-}
+-
+-class B {
+-    public $readonly = 'Prop hi!';
+-
+-    function readonly() {
+-        echo "Instance hi!\n";
+-    }
+-}
+-
+-$b = new B();
+-
+ readonly();
+-echo A::readonly, "\n";
+-A::readonly();
+-$b->readonly();
+-echo $b->readonly, "\n";
++readonly ();
+ 
+ ?>
+ --EXPECT--
+ Hi!
+-Const hi!
+-Static hi!
+-Instance hi!
+-Prop hi!
++Hi!
+diff --git a/Zend/tests/return_types/generators001.phpt b/Zend/tests/return_types/generators001.phpt
+index 615dabc2..64793eaa 100644
+--- a/Zend/tests/return_types/generators001.phpt
++++ b/Zend/tests/return_types/generators001.phpt
+@@ -26,10 +26,6 @@ function test6() : object|callable {
+     yield 6;
+ }
+ 
+-function test7() : iterable {
+-    yield 7;
+-}
+-
+ var_dump(
+     test1(),
+     test2(),
+@@ -37,7 +33,6 @@ var_dump(
+     test4(),
+     test5(),
+     test6(),
+-    test7(),
+ );
+ ?>
+ --EXPECTF--
+@@ -53,5 +48,3 @@ object(Generator)#%d (%d) {
+ }
+ object(Generator)#%d (%d) {
+ }
+-object(Generator)#%d (%d) {
+-}
+diff --git a/Zend/tests/string_offset_as_object.phpt b/Zend/tests/string_offset_as_object.phpt
+deleted file mode 100644
+index 6fdebe93..00000000
+--- a/Zend/tests/string_offset_as_object.phpt
++++ /dev/null
+@@ -1,63 +0,0 @@
+---TEST--
+-Using string offset as object
+---FILE--
+-<?php
+-
+-$str = "x";
+-try {
+-    $str[0]->bar = "xyz";
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar[1] = "bang";
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar += 1;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar = &$b;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    ++$str[0]->bar;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    --$str[0]->bar;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar++;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    $str[0]->bar--;
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-try {
+-    unset($str[0]->bar);
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+-Cannot use string offset as an object
+diff --git a/Zend/tests/string_offset_errors.phpt b/Zend/tests/string_offset_errors.phpt
+index 726dc41f..b709408c 100644
+--- a/Zend/tests/string_offset_errors.phpt
++++ b/Zend/tests/string_offset_errors.phpt
+@@ -8,11 +8,6 @@ function &test() : string {
+     return $str[0];
+ }
+ 
+-function &gen() {
+-    $str = "foo";
+-    yield $str[0];
+-}
+-
+ try {
+     test();
+ } catch (Error $e) {
+@@ -26,14 +21,7 @@ try {
+     echo $e->getMessage(), "\n";
+ }
+ 
+-try {
+-    foreach (gen() as $v) {}
+-} catch (Error $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+ ?>
+ --EXPECT--
+-Cannot create references to/from string offsets
+-Cannot create references to/from string offsets
++Cannot return string offsets by reference
+ Cannot create references to/from string offsets
+diff --git a/Zend/tests/string_offset_optimization.phpt b/Zend/tests/string_offset_optimization.phpt
+deleted file mode 100644
+index 7ccef860..00000000
+--- a/Zend/tests/string_offset_optimization.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-Invalid string offset use where the actual use may be optimized away
+---FILE--
+-<?php
+-function test() {
+-    $a = "";
+-    $c = array(&$a[0]);
+-}
+-test();
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot create references to/from string offsets in %s:%d
+-Stack trace:
+-#0 %s(%d): test()
+-#1 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/temporary_cleaning_013.phpt b/Zend/tests/temporary_cleaning_013.phpt
+index e5f4b73b..ce121d03 100644
+--- a/Zend/tests/temporary_cleaning_013.phpt
++++ b/Zend/tests/temporary_cleaning_013.phpt
+@@ -77,7 +77,6 @@ try {
+ 
+ try {
+     var_dump((function() { return new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     }; })()->foo++);
+@@ -93,7 +92,6 @@ try {
+ 
+ try {
+     var_dump((function() { return new class {
+-        public $bar;
+         function __construct() { $this->bar = new stdClass; }
+         function &__get($x) { return $this->bar; }
+         function __destruct() { throw new Exception; }
+@@ -117,7 +115,6 @@ try {
+ 
+ try {
+     var_dump(++(function() { return new class {
+-        public $bar;
+         function __construct() { $this->bar = new stdClass; }
+         function &__get($x) { return $this->bar; }
+         function __destruct() { throw new Exception; }
+@@ -146,7 +143,6 @@ try {
+ 
+ try {
+     var_dump((new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     })->foo);
+@@ -172,7 +168,6 @@ try {
+ 
+ try {
+     var_dump(isset((new class {
+-        public $foo;
+         function __construct() { $this->foo = new stdClass; }
+         function __destruct() { throw new Exception; }
+     })->foo->bar));
+@@ -283,22 +278,14 @@ caught Exception 2
+ caught Exception 3
+ caught Exception 4
+ caught Exception 5
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 6
+ caught Exception 7
+ caught Exception 8
+ caught Exception 9
+ caught Exception 10
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 11
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 12
+ caught Exception 13
+-
+-Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+ caught Exception 14
+ 
+ Notice: Indirect modification of overloaded element of ArrayAccess@anonymous has no effect in %s on line %d
+diff --git a/Zend/tests/temporary_cleaning_016.phpt b/Zend/tests/temporary_cleaning_016.phpt
+index 8dc4c8ea..cdc9bff0 100644
+--- a/Zend/tests/temporary_cleaning_016.phpt
++++ b/Zend/tests/temporary_cleaning_016.phpt
+@@ -11,6 +11,5 @@ try {
+ }
+ ?>
+ DONE
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ DONE

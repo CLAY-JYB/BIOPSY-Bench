@@ -1,0 +1,184 @@
+diff --git a/ext/spl/tests/SplFileObject_getCurrentLine_invalid_override.phpt b/ext/spl/tests/SplFileObject_getCurrentLine_invalid_override.phpt
+new file mode 100644
+index 00000000..35018163
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_getCurrentLine_invalid_override.phpt
+@@ -0,0 +1,22 @@
++--TEST--
++Invalid SplFileObject::getCurrentLine() return type
++--FILE--
++<?php
++
++class MySplFileObject extends SplFileObject {
++    #[ReturnTypeWillChange]
++    public function getCurrentLine(): array {
++        return [1, 2, 3];
++    }
++}
++
++$obj = new MySplFileObject(__FILE__);
++try {
++    var_dump($obj->current());
++} catch (TypeError $e) {
++    echo $e->getMessage(), "\n";
++}
++
++?>
++--EXPECT--
++MySplFileObject::getCurrentLine(): Return value must be of type string, array returned
+diff --git a/ext/spl/tests/SplFileObject_getchildren_basic.phpt b/ext/spl/tests/SplFileObject_getchildren_basic.phpt
+new file mode 100644
+index 00000000..065e8eae
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_getchildren_basic.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++SPL: SplFileObject::getchildren basic
++--CREDITS--
++Erwin Poeze <erwin.poeze at gmail.com>
++--FILE--
++<?php
++$s = new SplFileObject( __FILE__ );
++var_dump($s->getChildren());
++
++?>
++--EXPECT--
++NULL
+diff --git a/ext/spl/tests/SplFileObject_getflags_basic.phpt b/ext/spl/tests/SplFileObject_getflags_basic.phpt
+new file mode 100644
+index 00000000..88cf6861
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_getflags_basic.phpt
+@@ -0,0 +1,22 @@
++--TEST--
++SPL: SplFileObject::getFlags basic
++--CREDITS--
++Ricardo Oedietram <ricardo@odracir.nl>
++Erwin Poeze <erwin.poeze@gmail.com>
++#PFZ June PHP TestFest 2012
++--FILE--
++<?php
++
++file_put_contents('SplFileObject_getflags_basic.csv', 'eerste;tweede;derde');
++
++$fo = new SplFileObject('SplFileObject_getflags_basic.csv');
++
++$fo->setFlags(SplFileObject::DROP_NEW_LINE);
++var_dump($fo->getFlags());
++?>
++--CLEAN--
++<?php
++unlink('SplFileObject_getflags_basic.csv');
++?>
++--EXPECT--
++int(1)
+diff --git a/ext/spl/tests/SplFileObject_getflags_error001.phpt b/ext/spl/tests/SplFileObject_getflags_error001.phpt
+new file mode 100644
+index 00000000..ca53c857
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_getflags_error001.phpt
+@@ -0,0 +1,26 @@
++--TEST--
++SPL: SplFileObject::getFlags error 001
++--CREDITS--
++Ricardo Oedietram <ricardo@odracir.nl>
++Erwin Poeze <erwin.poeze@gmail.com>
++#PFZ June PHP TestFest 2012
++--FILE--
++<?php
++
++file_put_contents('SplFileObject_getflags_error001.csv', 'eerste;tweede;derde');
++
++
++$fo = new SplFileObject('SplFileObject_getflags_error001.csv');
++$fo->setFlags(SplFileObject::READ_CSV);
++
++$fo->setFlags(SplFileObject::DROP_NEW_LINE);
++
++var_dump($fo->getFlags());
++
++?>
++--CLEAN--
++<?php
++unlink('SplFileObject_getflags_error001.csv');
++?>
++--EXPECT--
++int(1)
+diff --git a/ext/spl/tests/SplFileObject_getflags_variation001.phpt b/ext/spl/tests/SplFileObject_getflags_variation001.phpt
+new file mode 100644
+index 00000000..640de035
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_getflags_variation001.phpt
+@@ -0,0 +1,29 @@
++--TEST--
++SPL: SplFileObject::getFlags
++--CREDITS--
++Ricardo Oedietram <ricardo@odracir.nl>
++Erwin Poeze <erwin.poeze@gmail.com>
++#PFZ June PHP TestFest 2012
++--FILE--
++<?php
++
++$fo = new SplFileObject(__FILE__);
++
++$fo->setFlags(SplFileObject::DROP_NEW_LINE);
++var_dump($fo->getFlags());
++
++$fo->setFlags(SplFileObject::READ_AHEAD);
++var_dump($fo->getFlags());
++
++$fo->setFlags(SplFileObject::SKIP_EMPTY);
++var_dump($fo->getFlags());
++
++$fo->setFlags(SplFileObject::READ_CSV);
++var_dump($fo->getFlags());
++
++?>
++--EXPECT--
++int(1)
++int(2)
++int(4)
++int(8)
+diff --git a/ext/spl/tests/SplFileObject_haschildren_basic.phpt b/ext/spl/tests/SplFileObject_haschildren_basic.phpt
+new file mode 100644
+index 00000000..1ce00bfd
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_haschildren_basic.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++SPL: SplFileObject::haschildren basic
++--CREDITS--
++Erwin Poeze <erwin.poeze at gmail.com>
++--FILE--
++<?php
++$s = new SplFileObject( __FILE__ );
++var_dump($s->hasChildren());
++
++?>
++--EXPECT--
++bool(false)
+diff --git a/ext/spl/tests/SplFileObject_key_basic.phpt b/ext/spl/tests/SplFileObject_key_basic.phpt
+new file mode 100644
+index 00000000..4081d314
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_key_basic.phpt
+@@ -0,0 +1,19 @@
++--TEST--
++SPL: SplFileObject::key basic
++--CREDITS--
++Ricardo Oedietram <ricardo@odracir.nl>
++Erwin Poeze <erwin.poeze@gmail.com>
++#PFZ June PHP TestFest 2012
++--FILE--
++<?php
++//line 2
++//line 3
++//line 4
++//line 5
++$s = new SplFileObject(__FILE__);
++
++$s->seek(3);
++echo $s->key();
++?>
++--EXPECT--
++3

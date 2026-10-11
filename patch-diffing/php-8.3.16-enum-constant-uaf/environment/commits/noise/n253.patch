@@ -1,0 +1,375 @@
+diff --git a/ext/random/tests/03_randomizer/methods/pickArrayKeys_error.phpt b/ext/random/tests/03_randomizer/methods/pickArrayKeys_error.phpt
+deleted file mode 100644
+index 15526327..00000000
+--- a/ext/random/tests/03_randomizer/methods/pickArrayKeys_error.phpt
++++ /dev/null
+@@ -1,49 +0,0 @@
+---TEST--
+-Random: Randomizer: pickArrayKeys(): Parameters are correctly validated
+---FILE--
+-<?php
+-
+-use Random\Randomizer;
+-
+-function randomizer(): Randomizer
+-{
+-    return new Randomizer();
+-}
+-
+-try {
+-    var_dump(randomizer()->pickArrayKeys("foo", 2));
+-} catch (TypeError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->pickArrayKeys([], 0));
+-} catch (ValueError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->pickArrayKeys(range(1, 3), 0));
+-} catch (ValueError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->pickArrayKeys(range(1, 3), -1));
+-} catch (ValueError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->pickArrayKeys(range(1, 3), 10));
+-} catch (ValueError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-Random\Randomizer::pickArrayKeys(): Argument #1 ($array) must be of type array, string given
+-Random\Randomizer::pickArrayKeys(): Argument #1 ($array) cannot be empty
+-Random\Randomizer::pickArrayKeys(): Argument #2 ($num) must be between 1 and the number of elements in argument #1 ($array)
+-Random\Randomizer::pickArrayKeys(): Argument #2 ($num) must be between 1 and the number of elements in argument #1 ($array)
+-Random\Randomizer::pickArrayKeys(): Argument #2 ($num) must be between 1 and the number of elements in argument #1 ($array)
+diff --git a/ext/random/tests/03_randomizer/methods/shuffleArray.phpt b/ext/random/tests/03_randomizer/methods/shuffleArray.phpt
+deleted file mode 100644
+index c0f6d17f..00000000
+--- a/ext/random/tests/03_randomizer/methods/shuffleArray.phpt
++++ /dev/null
+@@ -1,53 +0,0 @@
+---TEST--
+-Random: Randomizer: shuffleArray(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    // This test is slow, test all numbers smaller than 50 and then in steps of 677 (which is prime).
+-    for ($i = 1; $i < 5_000; $i += ($i < 50 ? 1 : 677)) {
+-        $array = range(1, $i);
+-
+-        $result = $randomizer->shuffleArray($array);
+-
+-        sort($result);
+-
+-        if ($result !== $array) {
+-            die("failure: not a permutation at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt b/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt
+deleted file mode 100644
+index d16168d3..00000000
+--- a/ext/random/tests/03_randomizer/methods/shuffleBytes.phpt
++++ /dev/null
+@@ -1,60 +0,0 @@
+---TEST--
+-Random: Randomizer: shuffleBytes(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-function sort_bytes(string $bytes): string
+-{
+-    $bytes = str_split($bytes);
+-    sort($bytes);
+-    return implode('', $bytes);
+-}
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    // This test is slow, test all numbers smaller than 50 and then in steps of 677 (which is prime).
+-    for ($i = 1; $i < 5_000; $i += ($i < 50 ? 1 : 677)) {
+-        $bytes = sort_bytes(random_bytes($i));
+-
+-        $result = $randomizer->shuffleBytes($bytes);
+-
+-        $result = sort_bytes($result);
+-
+-        if ($result !== $bytes) {
+-            die("failure: not a permutation at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/readonly.phpt b/ext/random/tests/03_randomizer/readonly.phpt
+deleted file mode 100644
+index f5cf7cc0..00000000
+--- a/ext/random/tests/03_randomizer/readonly.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-Random: Randomizer: The engine property must be readonly
+---FILE--
+-<?php
+-
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-$randomizer = new Randomizer(new PcgOneseq128XslRr64(1234));
+-$referenceRandomizer = new Randomizer(new PcgOneseq128XslRr64(1234));
+-
+-try {
+-    $randomizer->engine = new Xoshiro256StarStar(1234);
+-} catch (Throwable $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-for ($i = 0; $i < 10_000; $i++) {
+-    if ($randomizer->getInt(0, $i) !== $referenceRandomizer->getInt(0, $i)) {
+-        die("failure: state differs at {$i}");
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Cannot modify readonly property Random\Randomizer::$engine
+-success
+diff --git a/ext/random/tests/03_randomizer/serialize.phpt b/ext/random/tests/03_randomizer/serialize.phpt
+deleted file mode 100644
+index b02bb93c..00000000
+--- a/ext/random/tests/03_randomizer/serialize.phpt
++++ /dev/null
+@@ -1,50 +0,0 @@
+---TEST--
+-Random: Randomizer: Serialization of the Randomizer must preserve the sequence
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(1234, MT_RAND_MT19937);
+-$engines[] = new Mt19937(1234, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64(1234);
+-$engines[] = new Xoshiro256StarStar(1234);
+-$engines[] = new TestShaEngine("1234");
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    for ($i = 0; $i < 10_000; $i++) {
+-        $randomizer->getInt(0, $i);
+-    }
+-
+-    $randomizer2 = unserialize(serialize($randomizer));
+-
+-    for ($i = 0; $i < 10_000; $i++) {
+-        if ($randomizer->getInt(0, $i) !== $randomizer2->getInt(0, $i)) {
+-            $className = $engine::class;
+-
+-            die("failure: state differs at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/serialize_disallowed.phpt b/ext/random/tests/03_randomizer/serialize_disallowed.phpt
+deleted file mode 100644
+index 06f8ea2c..00000000
+--- a/ext/random/tests/03_randomizer/serialize_disallowed.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Random: Randomizer: Serialization of the Randomizer fails if the engine is not serializable
+---FILE--
+-<?php
+-
+-use Random\Engine\Secure;
+-use Random\Randomizer;
+-
+-try {
+-    serialize(new Randomizer(new Secure()));
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-Serialization of 'Random\Engine\Secure' is not allowed
+diff --git a/ext/random/tests/engines.inc b/ext/random/tests/engines.inc
+deleted file mode 100644
+index 909f581d..00000000
+--- a/ext/random/tests/engines.inc
++++ /dev/null
+@@ -1,74 +0,0 @@
+-<?php
+-
+-namespace Random\Engine\Test;
+-
+-use Random\Engine;
+-
+-final class TestShaEngine implements Engine
+-{
+-    private string $state;
+-
+-    public function __construct(?string $state = null)
+-    {
+-        if ($state !== null) {
+-            $this->state = $state;
+-        } else {
+-            $this->state = random_bytes(20);
+-        }
+-    }
+-
+-    public function generate(): string
+-    {
+-        $this->state = sha1($this->state, true);
+-
+-        return substr($this->state, 0, 8);
+-    }
+-}
+-
+-final class TestWrapperEngine implements Engine
+-{
+-    public function __construct(private readonly Engine $engine)
+-    {
+-    }
+-
+-    public function generate(): string
+-    {
+-        return $this->engine->generate();
+-    }
+-}
+-
+-final class TestXoshiro128PlusPlusEngine implements Engine
+-{
+-    public function __construct(
+-        private int $s0,
+-        private int $s1,
+-        private int $s2,
+-        private int $s3
+-    ) {
+-    }
+-
+-    private static function rotl($x, $k)
+-    {
+-        return (($x << $k) | ($x >> (32 - $k))) & 0xFFFFFFFF;
+-    }
+-
+-    public function generate(): string
+-    {
+-        $result = (self::rotl(($this->s0 + $this->s3) & 0xFFFFFFFF, 7) + $this->s0) & 0xFFFFFFFF;
+-
+-        $t = ($this->s1 << 9)  & 0xFFFFFFFF;
+-
+-        $this->s2 ^= $this->s0;
+-        $this->s3 ^= $this->s1;
+-        $this->s1 ^= $this->s2;
+-        $this->s0 ^= $this->s3;
+-
+-        $this->s2 ^= $t;
+-
+-        $this->s3 = self::rotl($this->s3, 11);
+-
+-        return pack('V', $result);
+-    }
+-}
+-
+-?>

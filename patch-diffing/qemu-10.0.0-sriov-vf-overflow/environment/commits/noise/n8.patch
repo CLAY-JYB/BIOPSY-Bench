@@ -1,0 +1,486 @@
+diff --git a/hw/arm/stm32l4x5_soc.c b/hw/arm/stm32l4x5_soc.c
+index 38f7a2d5d9..fac83d349c 100644
+--- a/hw/arm/stm32l4x5_soc.c
++++ b/hw/arm/stm32l4x5_soc.c
+@@ -81,6 +81,10 @@ static const int exti_irq[NUM_EXTI_IRQ] = {
+ #define RCC_BASE_ADDRESS 0x40021000
+ #define RCC_IRQ 5
+ 
++#define EXTI_USART1_IRQ 26
++#define EXTI_UART4_IRQ 29
++#define EXTI_LPUART1_IRQ 31
++
+ static const int exti_or_gates_out[NUM_EXTI_OR_GATES] = {
+     23, 40, 63, 1,
+ };
+@@ -129,10 +133,6 @@ static const hwaddr uart_addr[] = {
+ 
+ #define LPUART_BASE_ADDRESS 0x40008000
+ 
+-static const int usart_irq[] = { 37, 38, 39 };
+-static const int uart_irq[] = { 52, 53 };
+-#define LPUART_IRQ 70
+-
+ static void stm32l4x5_soc_initfn(Object *obj)
+ {
+     Stm32l4x5SocState *s = STM32L4X5_SOC(obj);
+@@ -297,6 +297,7 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+         }
+     }
+ 
++    /* Connect SYSCFG to EXTI */
+     for (unsigned i = 0; i < GPIO_NUM_PINS; i++) {
+         qdev_connect_gpio_out(DEVICE(&s->syscfg), i,
+                               qdev_get_gpio_in(DEVICE(&s->exti), i));
+@@ -322,15 +323,10 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+             return;
+         }
+         sysbus_mmio_map(busdev, 0, usart_addr[i]);
+-        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, usart_irq[i]));
++        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                       EXTI_USART1_IRQ + i));
+     }
+ 
+-    /*
+-     * TODO: Connect the USARTs, UARTs and LPUART to the EXTI once the EXTI
+-     * can handle other gpio-in than the gpios. (e.g. Direct Lines for the
+-     * usarts)
+-     */
+-
+     /* UART devices */
+     for (int i = 0; i < STM_NUM_UARTS; i++) {
+         g_autofree char *name = g_strdup_printf("uart%d-out", STM_NUM_USARTS + i + 1);
+@@ -343,7 +339,8 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+             return;
+         }
+         sysbus_mmio_map(busdev, 0, uart_addr[i]);
+-        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, uart_irq[i]));
++        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                       EXTI_UART4_IRQ + i));
+     }
+ 
+     /* LPUART device*/
+@@ -356,7 +353,8 @@ static void stm32l4x5_soc_realize(DeviceState *dev_soc, Error **errp)
+         return;
+     }
+     sysbus_mmio_map(busdev, 0, LPUART_BASE_ADDRESS);
+-    sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(armv7m, LPUART_IRQ));
++    sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(DEVICE(&s->exti),
++                                                   EXTI_LPUART1_IRQ));
+ 
+     /* APB1 BUS */
+     create_unimplemented_device("TIM2",      0x40000000, 0x400);
+diff --git a/hw/arm/trace-events b/hw/arm/trace-events
+index f1a54a02df..be6c8f720b 100644
+--- a/hw/arm/trace-events
++++ b/hw/arm/trace-events
+@@ -11,13 +11,14 @@ smmu_ptw_page_pte(int stage, int level,  uint64_t iova, uint64_t baseaddr, uint6
+ smmu_ptw_block_pte(int stage, int level, uint64_t baseaddr, uint64_t pteaddr, uint64_t pte, uint64_t iova, uint64_t gpa, int bsize_mb) "stage=%d level=%d base@=0x%"PRIx64" pte@=0x%"PRIx64" pte=0x%"PRIx64" iova=0x%"PRIx64" block address = 0x%"PRIx64" block size = %d MiB"
+ smmu_get_pte(uint64_t baseaddr, int index, uint64_t pteaddr, uint64_t pte) "baseaddr=0x%"PRIx64" index=0x%x, pteaddr=0x%"PRIx64", pte=0x%"PRIx64
+ smmu_iotlb_inv_all(void) "IOTLB invalidate all"
+-smmu_iotlb_inv_asid(uint16_t asid) "IOTLB invalidate asid=%d"
+-smmu_iotlb_inv_vmid(uint16_t vmid) "IOTLB invalidate vmid=%d"
+-smmu_iotlb_inv_iova(uint16_t asid, uint64_t addr) "IOTLB invalidate asid=%d addr=0x%"PRIx64
++smmu_iotlb_inv_asid_vmid(int asid, int vmid) "IOTLB invalidate asid=%d vmid=%d"
++smmu_iotlb_inv_vmid(int vmid) "IOTLB invalidate vmid=%d"
++smmu_iotlb_inv_vmid_s1(int vmid) "IOTLB invalidate vmid=%d"
++smmu_iotlb_inv_iova(int asid, uint64_t addr) "IOTLB invalidate asid=%d addr=0x%"PRIx64
+ smmu_inv_notifiers_mr(const char *name) "iommu mr=%s"
+-smmu_iotlb_lookup_hit(uint16_t asid, uint16_t vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache HIT asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
+-smmu_iotlb_lookup_miss(uint16_t asid, uint16_t vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache MISS asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
+-smmu_iotlb_insert(uint16_t asid, uint16_t vmid, uint64_t addr, uint8_t tg, uint8_t level) "IOTLB ++ asid=%d vmid=%d addr=0x%"PRIx64" tg=%d level=%d"
++smmu_iotlb_lookup_hit(int asid, int vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache HIT asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
++smmu_iotlb_lookup_miss(int asid, int vmid, uint64_t addr, uint32_t hit, uint32_t miss, uint32_t p) "IOTLB cache MISS asid=%d vmid=%d addr=0x%"PRIx64" hit=%d miss=%d hit rate=%d"
++smmu_iotlb_insert(int asid, int vmid, uint64_t addr, uint8_t tg, uint8_t level) "IOTLB ++ asid=%d vmid=%d addr=0x%"PRIx64" tg=%d level=%d"
+ 
+ # smmuv3.c
+ smmuv3_read_mmio(uint64_t addr, uint64_t val, unsigned size, uint32_t r) "addr: 0x%"PRIx64" val:0x%"PRIx64" size: 0x%x(%d)"
+@@ -37,7 +38,7 @@ smmuv3_get_ste(uint64_t addr) "STE addr: 0x%"PRIx64
+ smmuv3_translate_disable(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x bypass (smmu disabled) iova:0x%"PRIx64" is_write=%d"
+ smmuv3_translate_bypass(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x STE bypass iova:0x%"PRIx64" is_write=%d"
+ smmuv3_translate_abort(const char *n, uint16_t sid, uint64_t addr, bool is_write) "%s sid=0x%x abort on iova:0x%"PRIx64" is_write=%d"
+-smmuv3_translate_success(const char *n, uint16_t sid, uint64_t iova, uint64_t translated, int perm) "%s sid=0x%x iova=0x%"PRIx64" translated=0x%"PRIx64" perm=0x%x"
++smmuv3_translate_success(const char *n, uint16_t sid, uint64_t iova, uint64_t translated, int perm, int stage) "%s sid=0x%x iova=0x%"PRIx64" translated=0x%"PRIx64" perm=0x%x stage=%d"
+ smmuv3_get_cd(uint64_t addr) "CD addr: 0x%"PRIx64
+ smmuv3_decode_cd(uint32_t oas) "oas=%d"
+ smmuv3_decode_cd_tt(int i, uint32_t tsz, uint64_t ttb, uint32_t granule_sz, bool had) "TT[%d]:tsz:%d ttb:0x%"PRIx64" granule_sz:%d had:%d"
+@@ -46,14 +47,15 @@ smmuv3_cmdq_cfgi_ste_range(int start, int end) "start=0x%x - end=0x%x"
+ smmuv3_cmdq_cfgi_cd(uint32_t sid) "sid=0x%x"
+ smmuv3_config_cache_hit(uint32_t sid, uint32_t hits, uint32_t misses, uint32_t perc) "Config cache HIT for sid=0x%x (hits=%d, misses=%d, hit rate=%d)"
+ smmuv3_config_cache_miss(uint32_t sid, uint32_t hits, uint32_t misses, uint32_t perc) "Config cache MISS for sid=0x%x (hits=%d, misses=%d, hit rate=%d)"
+-smmuv3_range_inval(int vmid, int asid, uint64_t addr, uint8_t tg, uint64_t num_pages, uint8_t ttl, bool leaf) "vmid=%d asid=%d addr=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" ttl=%d leaf=%d"
+-smmuv3_cmdq_tlbi_nh(void) ""
+-smmuv3_cmdq_tlbi_nh_asid(uint16_t asid) "asid=%d"
+-smmuv3_cmdq_tlbi_s12_vmid(uint16_t vmid) "vmid=%d"
++smmuv3_range_inval(int vmid, int asid, uint64_t addr, uint8_t tg, uint64_t num_pages, uint8_t ttl, bool leaf, int stage) "vmid=%d asid=%d addr=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" ttl=%d leaf=%d stage=%d"
++smmuv3_cmdq_tlbi_nh(int vmid) "vmid=%d"
++smmuv3_cmdq_tlbi_nsnh(void) ""
++smmuv3_cmdq_tlbi_nh_asid(int asid) "asid=%d"
++smmuv3_cmdq_tlbi_s12_vmid(int vmid) "vmid=%d"
+ smmuv3_config_cache_inv(uint32_t sid) "Config cache INV for sid=0x%x"
+ smmuv3_notify_flag_add(const char *iommu) "ADD SMMUNotifier node for iommu mr=%s"
+ smmuv3_notify_flag_del(const char *iommu) "DEL SMMUNotifier node for iommu mr=%s"
+-smmuv3_inv_notifiers_iova(const char *name, uint16_t asid, uint16_t vmid, uint64_t iova, uint8_t tg, uint64_t num_pages) "iommu mr=%s asid=%d vmid=%d iova=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64
++smmuv3_inv_notifiers_iova(const char *name, int asid, int vmid, uint64_t iova, uint8_t tg, uint64_t num_pages, int stage) "iommu mr=%s asid=%d vmid=%d iova=0x%"PRIx64" tg=%d num_pages=0x%"PRIx64" stage=%d"
+ 
+ # strongarm.c
+ strongarm_uart_update_parameters(const char *label, int speed, char parity, int data_bits, int stop_bits) "%s speed=%d parity=%c data=%d stop=%d"
+diff --git a/hw/arm/virt.c b/hw/arm/virt.c
+index 0784ee7f46..b0c68d66a3 100644
+--- a/hw/arm/virt.c
++++ b/hw/arm/virt.c
+@@ -101,33 +101,37 @@ static void arm_virt_compat_set(MachineClass *mc)
+                      arm_virt_compat_len);
+ }
+ 
+-#define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
+-    static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
+-                                                    void *data) \
++#define DEFINE_VIRT_MACHINE_IMPL(latest, ...) \
++    static void MACHINE_VER_SYM(class_init, virt, __VA_ARGS__)( \
++        ObjectClass *oc, \
++        void *data) \
+     { \
+         MachineClass *mc = MACHINE_CLASS(oc); \
+         arm_virt_compat_set(mc); \
+-        virt_machine_##major##_##minor##_options(mc); \
+-        mc->desc = "QEMU " # major "." # minor " ARM Virtual Machine"; \
++        MACHINE_VER_SYM(options, virt, __VA_ARGS__)(mc); \
++        mc->desc = "QEMU " MACHINE_VER_STR(__VA_ARGS__) " ARM Virtual Machine"; \
++        MACHINE_VER_DEPRECATION(__VA_ARGS__); \
+         if (latest) { \
+             mc->alias = "virt"; \
+         } \
+     } \
+-    static const TypeInfo machvirt_##major##_##minor##_info = { \
+-        .name = MACHINE_TYPE_NAME("virt-" # major "." # minor), \
++    static const TypeInfo MACHINE_VER_SYM(info, virt, __VA_ARGS__) = \
++    { \
++        .name = MACHINE_VER_TYPE_NAME("virt", __VA_ARGS__), \
+         .parent = TYPE_VIRT_MACHINE, \
+-        .class_init = virt_##major##_##minor##_class_init, \
++        .class_init = MACHINE_VER_SYM(class_init, virt, __VA_ARGS__), \
+     }; \
+-    static void machvirt_machine_##major##_##minor##_init(void) \
++    static void MACHINE_VER_SYM(register, virt, __VA_ARGS__)(void) \
+     { \
+-        type_register_static(&machvirt_##major##_##minor##_info); \
++        MACHINE_VER_DELETION(__VA_ARGS__); \
++        type_register_static(&MACHINE_VER_SYM(info, virt, __VA_ARGS__)); \
+     } \
+-    type_init(machvirt_machine_##major##_##minor##_init);
++    type_init(MACHINE_VER_SYM(register, virt, __VA_ARGS__));
+ 
+ #define DEFINE_VIRT_MACHINE_AS_LATEST(major, minor) \
+-    DEFINE_VIRT_MACHINE_LATEST(major, minor, true)
++    DEFINE_VIRT_MACHINE_IMPL(true, major, minor)
+ #define DEFINE_VIRT_MACHINE(major, minor) \
+-    DEFINE_VIRT_MACHINE_LATEST(major, minor, false)
++    DEFINE_VIRT_MACHINE_IMPL(false, major, minor)
+ 
+ 
+ /* Number of external interrupt lines to configure the GIC with */
+diff --git a/hw/arm/xilinx_zynq.c b/hw/arm/xilinx_zynq.c
+index c79661bbc1..3c56b9abe1 100644
+--- a/hw/arm/xilinx_zynq.c
++++ b/hw/arm/xilinx_zynq.c
+@@ -38,6 +38,7 @@
+ #include "qom/object.h"
+ #include "exec/tswap.h"
+ #include "target/arm/cpu-qom.h"
++#include "qapi/visitor.h"
+ 
+ #define TYPE_ZYNQ_MACHINE MACHINE_TYPE_NAME("xilinx-zynq-a9")
+ OBJECT_DECLARE_SIMPLE_TYPE(ZynqMachineState, ZYNQ_MACHINE)
+@@ -90,6 +91,7 @@ struct ZynqMachineState {
+     MachineState parent;
+     Clock *ps_clk;
+     ARMCPU *cpu[ZYNQ_MAX_CPUS];
++    uint8_t boot_mode;
+ };
+ 
+ static void zynq_write_board_setup(ARMCPU *cpu,
+@@ -176,6 +178,27 @@ static inline int zynq_init_spi_flashes(uint32_t base_addr, qemu_irq irq,
+     return unit;
+ }
+ 
++static void zynq_set_boot_mode(Object *obj, const char *str,
++                                               Error **errp)
++{
++    ZynqMachineState *m = ZYNQ_MACHINE(obj);
++    uint8_t mode = 0;
++
++    if (!strncasecmp(str, "qspi", 4)) {
++        mode = 1;
++    } else if (!strncasecmp(str, "sd", 2)) {
++        mode = 5;
++    } else if (!strncasecmp(str, "nor", 3)) {
++        mode = 2;
++    } else if (!strncasecmp(str, "jtag", 4)) {
++        mode = 0;
++    } else {
++        error_setg(errp, "%s boot mode not supported", str);
++        return;
++    }
++    m->boot_mode = mode;
++}
++
+ static void zynq_init(MachineState *machine)
+ {
+     ZynqMachineState *zynq_machine = ZYNQ_MACHINE(machine);
+@@ -241,6 +264,7 @@ static void zynq_init(MachineState *machine)
+     /* Create slcr, keep a pointer to connect clocks */
+     slcr = qdev_new("xilinx-zynq_slcr");
+     qdev_connect_clock_in(slcr, "ps_clk", zynq_machine->ps_clk);
++    qdev_prop_set_uint8(slcr, "boot-mode", zynq_machine->boot_mode);
+     sysbus_realize_and_unref(SYS_BUS_DEVICE(slcr), &error_fatal);
+     sysbus_mmio_map(SYS_BUS_DEVICE(slcr), 0, 0xF8000000);
+ 
+@@ -373,6 +397,7 @@ static void zynq_machine_class_init(ObjectClass *oc, void *data)
+         NULL
+     };
+     MachineClass *mc = MACHINE_CLASS(oc);
++    ObjectProperty *prop;
+     mc->desc = "Xilinx Zynq Platform Baseboard for Cortex-A9";
+     mc->init = zynq_init;
+     mc->max_cpus = ZYNQ_MAX_CPUS;
+@@ -380,6 +405,12 @@ static void zynq_machine_class_init(ObjectClass *oc, void *data)
+     mc->ignore_memory_transaction_failures = true;
+     mc->valid_cpu_types = valid_cpu_types;
+     mc->default_ram_id = "zynq.ext_ram";
++    prop = object_class_property_add_str(oc, "boot-mode", NULL,
++                                         zynq_set_boot_mode);
++    object_class_property_set_description(oc, "boot-mode",
++                                          "Supported boot modes:"
++                                          " jtag qspi sd nor");
++    object_property_set_default_str(prop, "qspi");
+ }
+ 
+ static const TypeInfo zynq_machine_type = {
+diff --git a/hw/block/m25p80.c b/hw/block/m25p80.c
+index 8dec134832..9e99107b42 100644
+--- a/hw/block/m25p80.c
++++ b/hw/block/m25p80.c
+@@ -416,6 +416,7 @@ typedef enum {
+     /*
+      * Micron: 0x35 - enable QPI
+      * Spansion: 0x35 - read control register
++     * Winbond: 0x35 - quad enable
+      */
+     RDCR_EQIO = 0x35,
+     RSTQIO = 0xf5,
+@@ -798,6 +799,11 @@ static void complete_collecting_data(Flash *s)
+                 s->four_bytes_address_mode = extract32(s->data[1], 5, 1);
+             }
+             break;
++        case MAN_WINBOND:
++            if (s->len > 1) {
++                s->quad_enable = !!(s->data[1] & 0x02);
++            }
++            break;
+         default:
+             break;
+         }
+@@ -1254,6 +1260,10 @@ static void decode_new_cmd(Flash *s, uint32_t value)
+             s->needed_bytes = 2;
+             s->state = STATE_COLLECTING_VAR_LEN_DATA;
+             break;
++        case MAN_WINBOND:
++            s->needed_bytes = 2;
++            s->state = STATE_COLLECTING_VAR_LEN_DATA;
++            break;
+         default:
+             s->needed_bytes = 1;
+             s->state = STATE_COLLECTING_DATA;
+@@ -1431,6 +1441,12 @@ static void decode_new_cmd(Flash *s, uint32_t value)
+         case MAN_MACRONIX:
+             s->quad_enable = true;
+             break;
++        case MAN_WINBOND:
++            s->data[0] = (!!s->quad_enable) << 1;
++            s->pos = 0;
++            s->len = 1;
++            s->state = STATE_READING_DATA;
++            break;
+         default:
+             break;
+         }
+diff --git a/hw/char/pl011.c b/hw/char/pl011.c
+index 8753b84a84..f8078aa216 100644
+--- a/hw/char/pl011.c
++++ b/hw/char/pl011.c
+@@ -87,6 +87,12 @@ DeviceState *pl011_create(hwaddr addr, qemu_irq irq, Chardev *chr)
+ #define CR_DTR      (1 << 10)
+ #define CR_LBE      (1 << 7)
+ 
++/* Integer Baud Rate Divider, UARTIBRD */
++#define IBRD_MASK 0x3f
++
++/* Fractional Baud Rate Divider, UARTFBRD */
++#define FBRD_MASK 0xffff
++
+ static const unsigned char pl011_id_arm[8] =
+   { 0x11, 0x10, 0x14, 0x00, 0x0d, 0xf0, 0x05, 0xb1 };
+ static const unsigned char pl011_id_luminary[8] =
+@@ -374,11 +380,11 @@ static void pl011_write(void *opaque, hwaddr offset,
+         s->ilpr = value;
+         break;
+     case 9: /* UARTIBRD */
+-        s->ibrd = value;
++        s->ibrd = value & IBRD_MASK;
+         pl011_trace_baudrate_change(s);
+         break;
+     case 10: /* UARTFBRD */
+-        s->fbrd = value;
++        s->fbrd = value & FBRD_MASK;
+         pl011_trace_baudrate_change(s);
+         break;
+     case 11: /* UARTLCR_H */
+@@ -531,6 +537,9 @@ static int pl011_post_load(void *opaque, int version_id)
+         s->read_pos = 0;
+     }
+ 
++    s->ibrd &= IBRD_MASK;
++    s->fbrd &= FBRD_MASK;
++
+     return 0;
+ }
+ 
+diff --git a/hw/core/cpu-common.c b/hw/core/cpu-common.c
+index f131cde2c0..d2e3e4570a 100644
+--- a/hw/core/cpu-common.c
++++ b/hw/core/cpu-common.c
+@@ -192,13 +192,6 @@ static void cpu_common_parse_features(const char *typename, char *features,
+     }
+ }
+ 
+-#ifdef CONFIG_PLUGIN
+-static void qemu_plugin_vcpu_init__async(CPUState *cpu, run_on_cpu_data unused)
+-{
+-    qemu_plugin_vcpu_init_hook(cpu);
+-}
+-#endif
+-
+ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
+     CPUState *cpu = CPU(dev);
+@@ -274,7 +267,7 @@ static void cpu_common_initfn(Object *obj)
+ #ifdef CONFIG_PLUGIN
+     if (tcg_enabled()) {
+         cpu->plugin_state = qemu_plugin_create_vcpu_state();
+-        async_run_on_cpu(cpu, qemu_plugin_vcpu_init__async, RUN_ON_CPU_NULL);
++        qemu_plugin_vcpu_init_hook(cpu);
+     }
+ #endif
+ }
+@@ -283,6 +276,12 @@ static void cpu_common_finalize(Object *obj)
+ {
+     CPUState *cpu = CPU(obj);
+ 
++#ifdef CONFIG_PLUGIN
++    if (tcg_enabled()) {
++        g_free(cpu->plugin_state);
++    }
++#endif
++    free_queued_cpu_work(cpu);
+     g_array_free(cpu->gdb_regs, TRUE);
+     qemu_lockcnt_destroy(&cpu->in_ioctl_lock);
+     qemu_mutex_destroy(&cpu->work_mutex);
+diff --git a/hw/core/loader-fit.c b/hw/core/loader-fit.c
+index 9f20007dbb..7ccc9d5fbc 100644
+--- a/hw/core/loader-fit.c
++++ b/hw/core/loader-fit.c
+@@ -267,7 +267,7 @@ int load_fit(const struct fit_loader *ldr, const char *filename, void *opaque)
+     const char *def_cfg_name;
+     char path[FIT_LOADER_MAX_PATH];
+     int itb_size, configs, cfg_off, off;
+-    hwaddr kernel_end;
++    hwaddr kernel_end = 0;
+     int ret;
+ 
+     itb = load_device_tree(filename, &itb_size);
+diff --git a/hw/core/loader.c b/hw/core/loader.c
+index a3bea1e718..31593a1171 100644
+--- a/hw/core/loader.c
++++ b/hw/core/loader.c
+@@ -845,19 +845,6 @@ ssize_t load_image_gzipped_buffer(const char *filename, uint64_t max_sz,
+     return ret;
+ }
+ 
+-/* Load a gzip-compressed kernel. */
+-ssize_t load_image_gzipped(const char *filename, hwaddr addr, uint64_t max_sz)
+-{
+-    ssize_t bytes;
+-    uint8_t *data;
+-
+-    bytes = load_image_gzipped_buffer(filename, max_sz, &data);
+-    if (bytes != -1) {
+-        rom_add_blob_fixed(filename, data, bytes, addr);
+-        g_free(data);
+-    }
+-    return bytes;
+-}
+ 
+ /* The PE/COFF MS-DOS stub magic number */
+ #define EFI_PE_MSDOS_MAGIC        "MZ"
+@@ -1076,8 +1063,8 @@ ssize_t rom_add_file(const char *file, const char *fw_dir,
+ {
+     MachineClass *mc = MACHINE_GET_CLASS(qdev_get_machine());
+     Rom *rom;
+-    ssize_t rc;
+-    int fd = -1;
++    gsize size;
++    g_autoptr(GError) gerr = NULL;
+     char devpath[100];
+ 
+     if (as && mr) {
+@@ -1095,10 +1082,10 @@ ssize_t rom_add_file(const char *file, const char *fw_dir,
+         rom->path = g_strdup(file);
+     }
+ 
+-    fd = open(rom->path, O_RDONLY | O_BINARY);
+-    if (fd == -1) {
+-        fprintf(stderr, "Could not open option rom '%s': %s\n",
+-                rom->path, strerror(errno));
++    if (!g_file_get_contents(rom->path, (gchar **) &rom->data,
++                             &size, &gerr)) {
++        fprintf(stderr, "rom: file %-20s: error %s\n",
++                rom->name, gerr->message);
+         goto err;
+     }
+ 
+@@ -1107,23 +1094,8 @@ ssize_t rom_add_file(const char *file, const char *fw_dir,
+         rom->fw_file = g_strdup(file);
+     }
+     rom->addr     = addr;
+-    rom->romsize  = lseek(fd, 0, SEEK_END);
+-    if (rom->romsize == -1) {
+-        fprintf(stderr, "rom: file %-20s: get size error: %s\n",
+-                rom->name, strerror(errno));
+-        goto err;
+-    }
+-
++    rom->romsize  = size;
+     rom->datasize = rom->romsize;
+-    rom->data     = g_malloc0(rom->datasize);
+-    lseek(fd, 0, SEEK_SET);
+-    rc = read(fd, rom->data, rom->datasize);
+-    if (rc != rom->datasize) {
+-        fprintf(stderr, "rom: file %-20s: read error: rc=%zd (expected %zd)\n",
+-                rom->name, rc, rom->datasize);
+-        goto err;
+-    }
+-    close(fd);
+     rom_insert(rom);
+     if (rom->fw_file && fw_cfg) {
+         const char *basename;
+@@ -1160,9 +1132,6 @@ ssize_t rom_add_file(const char *file, const char *fw_dir,
+     return 0;
+ 
+ err:
+-    if (fd != -1)
+-        close(fd);
+-
+     rom_free(rom);
+     return -1;
+ }

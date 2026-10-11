@@ -1,0 +1,487 @@
+diff --git a/testdata/cookie_file.tdir/cookie_file.pre b/testdata/cookie_file.tdir/cookie_file.pre
+new file mode 100644
+index 000000000..61da5425a
+--- /dev/null
++++ b/testdata/cookie_file.tdir/cookie_file.pre
+@@ -0,0 +1,24 @@
++# #-- cookie_file.pre--#
++PRE="../.."
++. ../common.sh
++
++get_random_port 2
++SERVER_PORT=$RND_PORT
++CONTROL_PORT=$(($RND_PORT + 1))
++echo "SERVER_PORT=$SERVER_PORT" >> .tpkg.var.test
++echo "CONTROL_PORT=$CONTROL_PORT" >> .tpkg.var.test
++
++# make config file
++sed \
++	-e 's/@SERVER_PORT\@/'$SERVER_PORT'/' \
++	-e 's/@CONTROL_PORT\@/'$CONTROL_PORT'/' \
++	< cookie_file.conf > ub.conf
++
++# empty cookie file
++touch cookie_secrets.txt
++
++# start unbound in the background
++$PRE/unbound -d -c ub.conf > unbound.log 2>&1 &
++
++cat .tpkg.var.test
++wait_unbound_up unbound.log
+diff --git a/testdata/cookie_file.tdir/cookie_file.test b/testdata/cookie_file.tdir/cookie_file.test
+new file mode 100644
+index 000000000..d5d2c2d1f
+--- /dev/null
++++ b/testdata/cookie_file.tdir/cookie_file.test
+@@ -0,0 +1,250 @@
++# #-- cookie_file.test --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++PRE="../.."
++. ../common.sh
++
++first_secret=dd3bdf9344b678b185a6f5cb60fca715
++second_secret=445536bcd2513298075a5d379663c962
++
++
++teststep "Add first secret"
++echo ">> add_cookie_secret $first_secret"
++$PRE/unbound-control -c ub.conf add_cookie_secret $first_secret
++# check secret is persisted
++outfile=cookie_secrets.1
++$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++if ! grep -q "$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "^active.*$first_secret" $outfile
++then
++	cat $outfile
++	echo "First secret was not provisioned"
++	exit 1
++fi
++echo ">> print_cookie_secrets"
++cat $outfile
++
++
++teststep "Get a valid cookie for this secret"
++outfile=dig.output.1
++dig version.server ch txt @127.0.0.1 -p $SERVER_PORT +cookie=3132333435363738 > $outfile
++if ! grep -q "BADCOOKIE" $outfile
++then
++	cat $outfile
++	echo "Did not get a BADCOOKIE response for a client-only cookie"
++	exit 1
++fi
++if ! grep -q "COOKIE: 3132333435363738" $outfile
++then
++	cat $outfile
++	echo "Did not get a cookie in the response"
++	exit 1
++fi
++first_cookie=$(grep "; COOKIE:" $outfile | cut -d ' ' -f 3)
++cat $outfile
++echo "first cookie: $first_cookie"
++
++
++teststep "Verify the first cookie can be reused"
++outfile=dig.output.2
++dig version.server ch txt @127.0.0.1 -p $SERVER_PORT +cookie=$first_cookie > $outfile
++if grep -q "BADCOOKIE" $outfile
++then
++	cat $outfile
++	echo "Got BADCOOKIE response for a valid cookie"
++	exit 1
++fi
++if ! grep -q "COOKIE: $first_cookie" $outfile
++then
++	cat $outfile
++	echo "Did not get the same first cookie in the response"
++	exit 1
++fi
++
++
++teststep "Add second secret"
++outfile=cookie_secrets.2
++echo ">> add_cookie_secret $second_secret"
++$PRE/unbound-control -c ub.conf add_cookie_secret $second_secret
++$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++if ! grep -q "$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "^staging.*$second_secret" $outfile \
++	|| ! grep -q "^active.*$first_secret" $outfile
++then
++		cat $outfile
++		echo "Secrets were not provisioned"
++		exit 1
++fi
++echo ">> print_cookie_secrets"
++cat $outfile
++echo ">> cookie_secrets.txt"
++cat cookie_secrets.txt
++
++
++teststep "Verify the first cookie can be reused"
++outfile=dig.output.3
++dig version.server ch txt @127.0.0.1 -p $SERVER_PORT +cookie=$first_cookie > $outfile
++if grep -q "BADCOOKIE" $outfile
++then
++	cat $outfile
++	echo "Got BADCOOKIE response for a valid cookie"
++	exit 1
++fi
++if ! grep -q "COOKIE: $first_cookie" $outfile
++then
++	cat $outfile
++	echo "Did not get the same first cookie in the response"
++	exit 1
++fi
++
++
++teststep "Secret rollover"
++outfile=cookie_secrets.3
++$PRE/unbound-control -c ub.conf activate_cookie_secret
++$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++if ! grep -q "^active.*$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "^active.*$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "^active.*$second_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if ! grep -q "^active.*$second_secret" $outfile \
++	|| ! grep -q "^staging.*$first_secret" $outfile
++then
++	cat $outfile
++	echo "Second secret was not activated"
++	exit 1
++fi
++echo ">> activate cookie secret, printout"
++cat $outfile
++echo ">> cookie_secrets.txt"
++cat cookie_secrets.txt
++
++
++teststep "Verify the first cookie can be reused but a new cookie is returned from the second secret"
++outfile=dig.output.4
++dig version.server ch txt @127.0.0.1 -p $SERVER_PORT +cookie=$first_cookie > $outfile
++if grep -q "BADCOOKIE" $outfile
++then
++	cat $outfile
++	echo "Got BADCOOKIE response for a valid cookie"
++	exit 1
++fi
++if ! grep -q "COOKIE: 3132333435363738" $outfile
++then
++	cat $outfile
++	echo "Did not get a cookie in the response"
++	exit 1
++fi
++if grep -q "COOKIE: $first_cookie" $outfile
++then
++	cat $outfile
++	echo "Got the same first cookie in the response while the second secret is active"
++	exit 1
++fi
++second_cookie=$(grep "; COOKIE:" $outfile | cut -d ' ' -f 3)
++cat $outfile
++echo "second cookie: $second_cookie"
++
++
++teststep "Drop cookie secret"
++outfile=cookie_secrets.4
++$PRE/unbound-control -c ub.conf drop_cookie_secret
++$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++if grep -q "^staging.*$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if grep -q "^staging.*$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if grep -q "^staging.*$first_secret" $outfile
++then
++	sleep 1
++	$PRE/unbound-control -c ub.conf print_cookie_secrets > $outfile
++fi
++if grep -q "^staging.*$first_secret" $outfile
++then
++	cat $outfile
++	echo "First secret was not dropped"
++	exit 1
++fi
++echo ">> drop cookie secret, printout"
++cat $outfile
++echo ">> cookie_secrets.txt"
++cat cookie_secrets.txt
++
++
++teststep "Verify the first cookie can not be reused and the second cookie is returned instead"
++outfile=dig.output.4
++dig version.server ch txt @127.0.0.1 -p $SERVER_PORT +cookie=$first_cookie > $outfile
++if ! grep -q "BADCOOKIE" $outfile
++then
++	cat $outfile
++	echo "Did not get BADCOOKIE response for an invalid cookie"
++	exit 1
++fi
++if ! grep -q "COOKIE: 3132333435363738" $outfile
++then
++	cat $outfile
++	echo "Did not get a cookie in the response"
++	exit 1
++fi
++if grep -q "COOKIE: $first_cookie" $outfile
++then
++	cat $outfile
++	echo "Got the same first cookie in the response while the second secret is active"
++	exit 1
++fi
++if ! grep -q "COOKIE: .* (good)$" $outfile
++then
++	# dig can generate a different cookie value here than previous cookies.
++	# but make sure the output contains a valid cookie
++	cat $outfile
++	echo "Did not get a valid cookie in the response"
++	exit 1
++fi
++
++exit 0
+diff --git a/testdata/dns64_prefetch_cache.rpl b/testdata/dns64_prefetch_cache.rpl
+new file mode 100644
+index 000000000..a23b92f08
+--- /dev/null
++++ b/testdata/dns64_prefetch_cache.rpl
+@@ -0,0 +1,195 @@
++; config options
++server:
++	target-fetch-policy: "0 0 0 0 0"
++	qname-minimisation: "no"
++	module-config: "dns64 iterator"
++	dns64-prefix: 64:ff9b::0/96
++	minimal-responses: no
++	prefetch: yes
++
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129 	# K.ROOT-SERVERS.NET.
++CONFIG_END
++
++SCENARIO_BEGIN Test dns64 with prefetch and cache store.
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 200
++	ADDRESS 193.0.14.129 
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS	K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET. IN A 193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION AUTHORITY
++com. IN NS a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net. IN A 192.5.6.30
++ENTRY_END
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 200
++	ADDRESS 192.5.6.30
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION ANSWER
++com. IN NS a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net. IN A 192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION AUTHORITY
++example.com. IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. IN A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++; ns.example.com.
++RANGE_BEGIN 0 100
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION ANSWER
++example.com. IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. IN A 1.2.3.4
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. IN A	10.20.30.40
++SECTION AUTHORITY
++example.com. IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. IN A 1.2.3.4
++ENTRY_END
++RANGE_END
++
++STEP 1 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; recursion happens here.
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 3600 IN A	10.20.30.40
++SECTION AUTHORITY
++example.com. 3600 IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. 3600 IN A 1.2.3.4
++ENTRY_END
++
++STEP 20 TIME_PASSES ELAPSE 3500
++
++STEP 30 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++; the prefetch is started, the older cache reply is returned.
++STEP 40 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 100 IN A	10.20.30.40
++SECTION AUTHORITY
++example.com. 100 IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. 100 IN A 1.2.3.4
++ENTRY_END
++
++; check what is in the cache
++STEP 42 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 43 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 3600 IN A	10.20.30.40
++SECTION AUTHORITY
++example.com. 3600 IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. 3600 IN A 1.2.3.4
++ENTRY_END
++
++STEP 50 TIME_PASSES ELAPSE 300
++
++; now the upstream is offline, the prefetched answer should be in the cache.
++STEP 110 QUERY
++ENTRY_BEGIN
++REPLY RD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 120 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA NOERROR
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++www.example.com. 3300 IN A	10.20.30.40
++SECTION AUTHORITY
++example.com. 3300 IN NS ns.example.com.
++SECTION ADDITIONAL
++ns.example.com. 3300 IN A 1.2.3.4
++ENTRY_END
++
++SCENARIO_END

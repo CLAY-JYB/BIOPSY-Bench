@@ -1,0 +1,412 @@
+diff --git a/sapi/phpdbg/phpdbg.stub.php b/sapi/phpdbg/phpdbg.stub.php
+index ad0e42c8..40a51d89 100644
+--- a/sapi/phpdbg/phpdbg.stub.php
++++ b/sapi/phpdbg/phpdbg.stub.php
+@@ -2,28 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var string
+- * @cvalue PHPDBG_VERSION
+- */
+-const PHPDBG_VERSION = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHPDBG_COLOR_PROMPT
+- */
+-const PHPDBG_COLOR_PROMPT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHPDBG_COLOR_NOTICE
+- */
+-const PHPDBG_COLOR_NOTICE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHPDBG_COLOR_ERROR
+- */
+-const PHPDBG_COLOR_ERROR = UNKNOWN;
+-
+ function phpdbg_break_next(): void {}
+ 
+ function phpdbg_break_file(string $file, int $line): void {}
+diff --git a/sapi/phpdbg/phpdbg_arginfo.h b/sapi/phpdbg/phpdbg_arginfo.h
+index 4f4861a7..043f6674 100644
+--- a/sapi/phpdbg/phpdbg_arginfo.h
++++ b/sapi/phpdbg/phpdbg_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 08e29f02953f23bfce6ce04f435227b4e5e61545 */
++ * Stub hash: dc2e5420ea396c6235429c9606875ad2332811cb */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_phpdbg_break_next, 0, 0, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+@@ -71,11 +71,3 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(phpdbg_get_executable, arginfo_phpdbg_get_executable)
+ 	ZEND_FE_END
+ };
+-
+-static void register_phpdbg_symbols(int module_number)
+-{
+-	REGISTER_STRING_CONSTANT("PHPDBG_VERSION", PHPDBG_VERSION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHPDBG_COLOR_PROMPT", PHPDBG_COLOR_PROMPT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHPDBG_COLOR_NOTICE", PHPDBG_COLOR_NOTICE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHPDBG_COLOR_ERROR", PHPDBG_COLOR_ERROR, CONST_PERSISTENT);
+-}
+diff --git a/sapi/phpdbg/phpdbg_bp.c b/sapi/phpdbg/phpdbg_bp.c
+index 07a1fc7a..aa35402c 100644
+--- a/sapi/phpdbg/phpdbg_bp.c
++++ b/sapi/phpdbg/phpdbg_bp.c
+@@ -312,10 +312,10 @@ PHPDBG_API void phpdbg_set_breakpoint_file(const char *path, size_t path_len, ze
+ 
+ 		if (pending) {
+ 			zend_string *file;
+-			ZEND_HASH_MAP_FOREACH_STR_KEY(&PHPDBG_G(file_sources), file) {
++			ZEND_HASH_FOREACH_STR_KEY(&PHPDBG_G(file_sources), file) {
+ 				HashTable *fileht;
+ 
+-				phpdbg_debug("Compare against loaded %s\n", ZSTR_VAL(file));
++				phpdbg_debug("Compare against loaded %s\n", file);
+ 
+ 				if (!(pending = ((fileht = phpdbg_resolve_pending_file_break_ex(ZSTR_VAL(file), ZSTR_LEN(file), path_str, broken)) == NULL))) {
+ 					new_break = *(phpdbg_breakfile_t *) zend_hash_index_find_ptr(fileht, line_num);
+@@ -378,7 +378,7 @@ PHPDBG_API HashTable *phpdbg_resolve_pending_file_break_ex(const char *file, uin
+ 			PHPDBG_G(flags) &= ~PHPDBG_HAS_PENDING_FILE_BP;
+ 		}
+ 
+-		phpdbg_debug("compiled file: %s, cur bp file: %s\n", file, ZSTR_VAL(cur));
++		phpdbg_debug("compiled file: %s, cur bp file: %s\n", file, cur);
+ 
+ 		return master;
+ 	}
+@@ -394,8 +394,8 @@ PHPDBG_API void phpdbg_resolve_pending_file_break(const char *file) /* {{{ */
+ 
+ 	phpdbg_debug("was compiled: %s\n", file);
+ 
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_PENDING], cur, fileht) {
+-		phpdbg_debug("check bp: %s\n", ZSTR_VAL(cur));
++	ZEND_HASH_FOREACH_STR_KEY_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_PENDING], cur, fileht) {
++		phpdbg_debug("check bp: %s\n", cur);
+ 
+ 		phpdbg_resolve_pending_file_break_ex(file, filelen, cur, fileht);
+ 	} ZEND_HASH_FOREACH_END();
+@@ -551,7 +551,7 @@ PHPDBG_API void phpdbg_resolve_op_array_breaks(zend_op_array *op_array) /* {{{ *
+ 		return;
+ 	}
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(oplines_table, brake) {
++	ZEND_HASH_FOREACH_PTR(oplines_table, brake) {
+ 		if (phpdbg_resolve_op_array_break(brake, op_array) == SUCCESS) {
+ 			phpdbg_breakline_t *opline_break;
+ 
+@@ -880,7 +880,7 @@ static inline void phpdbg_create_conditional_break(phpdbg_breakcond_t *brake, co
+ 
+ 	bp_code = zend_string_concat3(
+ 		"return ", sizeof("return ")-1, expr, expr_len, ";", sizeof(";")-1);
+-	new_break.ops = zend_compile_string(bp_code, "Conditional Breakpoint Code", ZEND_COMPILE_POSITION_AFTER_OPEN_TAG);
++	new_break.ops = zend_compile_string(bp_code, "Conditional Breakpoint Code");
+ 	zend_string_release(bp_code);
+ 
+ 	if (new_break.ops) {
+@@ -1097,7 +1097,7 @@ static inline phpdbg_breakbase_t *phpdbg_find_conditional_breakpoint(zend_execut
+ 	phpdbg_breakcond_t *bp;
+ 	int breakpoint = FAILURE;
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_COND], bp) {
++	ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_COND], bp) {
+ 		zval retval;
+ 		const zend_op *orig_opline = EG(current_execute_data)->opline;
+ 		zend_function *orig_func = EG(current_execute_data)->func;
+@@ -1451,7 +1451,7 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Function Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_SYM], brake) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_SYM], brake) {
+ 				phpdbg_writeln("#%d\t\t%s%s",
+ 					brake->id, brake->symbol,
+ 					((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1463,10 +1463,10 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Method Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_table) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_table) {
+ 				phpdbg_breakmethod_t *brake;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(class_table, brake) {
++				ZEND_HASH_FOREACH_PTR(class_table, brake) {
+ 					phpdbg_writeln("#%d\t\t%s::%s%s",
+ 						brake->id, brake->class_name, brake->func_name,
+ 						((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1479,10 +1479,10 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("File Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE], points) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE], points) {
+ 				phpdbg_breakfile_t *brake;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(points, brake) {
++				ZEND_HASH_FOREACH_PTR(points, brake) {
+ 					phpdbg_writeln("#%d\t\t%s:"ZEND_ULONG_FMT"%s",
+ 						brake->id, brake->filename, brake->line,
+ 						((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1493,10 +1493,10 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Pending File Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_PENDING], points) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_PENDING], points) {
+ 				phpdbg_breakfile_t *brake;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(points, brake) {
++				ZEND_HASH_FOREACH_PTR(points, brake) {
+ 					phpdbg_writeln("#%d\t\t%s:"ZEND_ULONG_FMT"%s",
+ 						brake->id, brake->filename, brake->line,
+ 						((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1509,7 +1509,7 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Opline Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_OPLINE], brake) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_OPLINE], brake) {
+ 				const char *type;
+ 				switch (brake->type) {
+ 					case PHPDBG_BREAK_METHOD_OPLINE:
+@@ -1549,11 +1549,11 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Method opline Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD_OPLINE], class_table) {
+-				ZEND_HASH_MAP_FOREACH_PTR(class_table, method_table) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD_OPLINE], class_table) {
++				ZEND_HASH_FOREACH_PTR(class_table, method_table) {
+ 					phpdbg_breakopline_t *brake;
+ 
+-					ZEND_HASH_MAP_FOREACH_PTR(method_table, brake) {
++					ZEND_HASH_FOREACH_PTR(method_table, brake) {
+ 						phpdbg_writeln("#%d\t\t%s::%s opline "ZEND_ULONG_FMT"%s",
+ 							brake->id, brake->class_name, brake->func_name, brake->opline_num,
+ 							((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1567,10 +1567,10 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Function opline Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FUNCTION_OPLINE], function_table) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FUNCTION_OPLINE], function_table) {
+ 				phpdbg_breakopline_t *brake;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(function_table, brake) {
++				ZEND_HASH_FOREACH_PTR(function_table, brake) {
+ 					phpdbg_writeln("#%d\t\t%s opline "ZEND_ULONG_FMT"%s",
+ 						brake->id, brake->func_name, brake->opline_num,
+ 						((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1583,10 +1583,10 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("File opline Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_OPLINE], file_table) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_FILE_OPLINE], file_table) {
+ 				phpdbg_breakopline_t *brake;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(file_table, brake) {
++				ZEND_HASH_FOREACH_PTR(file_table, brake) {
+ 					phpdbg_writeln("#%d\t\t%s opline "ZEND_ULONG_FMT"%s",
+ 						brake->id, brake->class_name, brake->opline_num,
+ 						((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+@@ -1599,7 +1599,7 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Conditional Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_COND], brake) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_COND], brake) {
+ 				if (brake->paramed) {
+ 					switch (brake->param.type) {
+ 						case STR_PARAM:
+@@ -1655,7 +1655,7 @@ PHPDBG_API void phpdbg_print_breakpoints(zend_ulong type) /* {{{ */
+ 
+ 			phpdbg_out(SEPARATE "\n");
+ 			phpdbg_out("Opcode Breakpoints:\n");
+-			ZEND_HASH_MAP_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_OPCODE], brake) {
++			ZEND_HASH_FOREACH_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_OPCODE], brake) {
+ 				phpdbg_writeln("#%d\t\t%s%s",
+ 					brake->id, brake->name,
+ 					((phpdbg_breakbase_t *) brake)->disabled ? " [disabled]" : "");
+diff --git a/sapi/phpdbg/phpdbg_info.c b/sapi/phpdbg/phpdbg_info.c
+index 0a1e7570..e63ec89e 100644
+--- a/sapi/phpdbg/phpdbg_info.c
++++ b/sapi/phpdbg/phpdbg_info.c
+@@ -69,7 +69,7 @@ PHPDBG_INFO(files) /* {{{ */
+ 	} phpdbg_end_try_access();
+ 
+ 	phpdbg_try_access {
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), fname) {
++		ZEND_HASH_FOREACH_STR_KEY(&EG(included_files), fname) {
+ 			phpdbg_writeln("File: %s", ZSTR_VAL(fname));
+ 		} ZEND_HASH_FOREACH_END();
+ 	} phpdbg_catch_access {
+@@ -105,7 +105,7 @@ PHPDBG_INFO(constants) /* {{{ */
+ 
+ 	if (EG(zend_constants)) {
+ 		phpdbg_try_access {
+-			ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), data) {
++			ZEND_HASH_FOREACH_PTR(EG(zend_constants), data) {
+ 				if (ZEND_CONSTANT_MODULE_NUMBER(data) == PHP_USER_CONSTANT) {
+ 					zend_hash_update_ptr(&consts, data->name, data);
+ 				}
+@@ -119,7 +119,7 @@ PHPDBG_INFO(constants) /* {{{ */
+ 
+ 	if (zend_hash_num_elements(&consts)) {
+ 		phpdbg_out("Address            Refs    Type      Constant\n");
+-		ZEND_HASH_MAP_FOREACH_PTR(&consts, data) {
++		ZEND_HASH_FOREACH_PTR(&consts, data) {
+ 
+ #define VARIABLEINFO(msg, ...) \
+ 	phpdbg_writeln( \
+@@ -196,7 +196,7 @@ static int phpdbg_print_symbols(bool show_globals) {
+ 	zend_hash_init(&vars, 8, NULL, NULL, 0);
+ 
+ 	phpdbg_try_access {
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(symtable, var, data) {
++		ZEND_HASH_FOREACH_STR_KEY_VAL(symtable, var, data) {
+ 			if (zend_is_auto_global(var) ^ !show_globals) {
+ 				zend_hash_update(&vars, var, data);
+ 			}
+@@ -227,7 +227,7 @@ static int phpdbg_print_symbols(bool show_globals) {
+ 
+ 	if (zend_hash_num_elements(&vars)) {
+ 		phpdbg_out("Address            Refs    Type      Variable\n");
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(&vars, var, data) {
++		ZEND_HASH_FOREACH_STR_KEY_VAL(&vars, var, data) {
+ 			phpdbg_try_access {
+ 				const char *isref = "";
+ #define VARIABLEINFO(msg, ...) \
+@@ -387,7 +387,7 @@ PHPDBG_INFO(classes) /* {{{ */
+ 	zend_hash_init(&classes, 8, NULL, NULL, 0);
+ 
+ 	phpdbg_try_access {
+-		ZEND_HASH_MAP_FOREACH_PTR(EG(class_table), ce) {
++		ZEND_HASH_FOREACH_PTR(EG(class_table), ce) {
+ 			if (ce->type == ZEND_USER_CLASS) {
+ 				zend_hash_next_index_insert_ptr(&classes, ce);
+ 			}
+@@ -399,7 +399,7 @@ PHPDBG_INFO(classes) /* {{{ */
+ 	phpdbg_notice("User Classes (%d)", zend_hash_num_elements(&classes));
+ 
+ 	/* once added, assume that classes are stable... until shutdown. */
+-	ZEND_HASH_PACKED_FOREACH_PTR(&classes, ce) {
++	ZEND_HASH_FOREACH_PTR(&classes, ce) {
+ 		phpdbg_print_class_name(ce);
+ 
+ 		if (ce->parent) {
+@@ -431,7 +431,7 @@ PHPDBG_INFO(funcs) /* {{{ */
+ 	zend_hash_init(&functions, 8, NULL, NULL, 0);
+ 
+ 	phpdbg_try_access {
+-		ZEND_HASH_MAP_FOREACH_PTR(EG(function_table), zf) {
++		ZEND_HASH_FOREACH_PTR(EG(function_table), zf) {
+ 			if (zf->type == ZEND_USER_FUNCTION) {
+ 				zend_hash_next_index_insert_ptr(&functions, zf);
+ 			}
+@@ -442,7 +442,7 @@ PHPDBG_INFO(funcs) /* {{{ */
+ 
+ 	phpdbg_notice("User Functions (%d)", zend_hash_num_elements(&functions));
+ 
+-	ZEND_HASH_PACKED_FOREACH_PTR(&functions, zf) {
++	ZEND_HASH_FOREACH_PTR(&functions, zf) {
+ 		zend_op_array *op_array = &zf->op_array;
+ 
+ 		phpdbg_write("|-------- %s", op_array->function_name ? ZSTR_VAL(op_array->function_name) : "{main}");
+diff --git a/sapi/phpdbg/phpdbg_list.c b/sapi/phpdbg/phpdbg_list.c
+index 00ef995d..2c4d3bbe 100644
+--- a/sapi/phpdbg/phpdbg_list.c
++++ b/sapi/phpdbg/phpdbg_list.c
+@@ -309,7 +309,7 @@ zend_op_array *phpdbg_init_compile_file(zend_file_handle *file, int type) {
+ 	return op_array;
+ }
+ 
+-zend_op_array *phpdbg_compile_string(zend_string *source_string, const char *filename, zend_compile_position position) {
++zend_op_array *phpdbg_compile_string(zend_string *source_string, const char *filename) {
+ 	zend_string *fake_name;
+ 	zend_op_array *op_array;
+ 	phpdbg_file_source *dataptr;
+@@ -317,7 +317,7 @@ zend_op_array *phpdbg_compile_string(zend_string *source_string, const char *fil
+ 	char *bufptr, *endptr;
+ 
+ 	if (PHPDBG_G(flags) & PHPDBG_IN_EVAL) {
+-		return PHPDBG_G(compile_string)(source_string, filename, position);
++		return PHPDBG_G(compile_string)(source_string, filename);
+ 	}
+ 
+ 	dataptr = emalloc(sizeof(phpdbg_file_source) + sizeof(uint32_t) * ZSTR_LEN(source_string));
+@@ -332,7 +332,7 @@ zend_op_array *phpdbg_compile_string(zend_string *source_string, const char *fil
+ 	dataptr->lines = ++line;
+ 	dataptr->line[line] = endptr - dataptr->buf;
+ 
+-	op_array = PHPDBG_G(compile_string)(source_string, filename, position);
++	op_array = PHPDBG_G(compile_string)(source_string, filename);
+ 
+ 	if (op_array == NULL) {
+ 		efree(dataptr->buf);
+diff --git a/sapi/phpdbg/phpdbg_parser.y b/sapi/phpdbg/phpdbg_parser.y
+index 50cb93f0..3a6ad983 100644
+--- a/sapi/phpdbg/phpdbg_parser.y
++++ b/sapi/phpdbg/phpdbg_parser.y
+@@ -66,7 +66,7 @@ ZEND_EXTERN_MODULE_GLOBALS(phpdbg)
+ input
+ 	: command { $$ = $1; }
+ 	| input T_SEPARATOR command { phpdbg_stack_separate($1.top); $$ = $3; }
+-	| %empty { (void) phpdbg_nerrs; }
++	| %empty
+ 	;
+ 
+ command
+diff --git a/sapi/phpdbg/phpdbg_print.c b/sapi/phpdbg/phpdbg_print.c
+index c28576de..67d68b9d 100644
+--- a/sapi/phpdbg/phpdbg_print.c
++++ b/sapi/phpdbg/phpdbg_print.c
+@@ -140,7 +140,7 @@ PHPDBG_PRINT(class) /* {{{ */
+ 		if (zend_hash_num_elements(&ce->function_table)) {
+ 			zend_function *method;
+ 
+-			ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, method) {
++			ZEND_HASH_FOREACH_PTR(&ce->function_table, method) {
+ 				phpdbg_print_function_helper(method);
+ 			} ZEND_HASH_FOREACH_END();
+ 		}
+@@ -291,7 +291,7 @@ static void phpdbg_print_opcodes_ce(zend_class_entry *ce) {
+ 	}
+ 
+ 	phpdbg_out("%d methods: ", zend_hash_num_elements(&ce->function_table));
+-	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, method) {
++	ZEND_HASH_FOREACH_PTR(&ce->function_table, method) {
+ 		if (first) {
+ 			first = 0;
+ 		} else {
+@@ -304,7 +304,7 @@ static void phpdbg_print_opcodes_ce(zend_class_entry *ce) {
+ 	}
+ 	phpdbg_out("\n");
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, method) {
++	ZEND_HASH_FOREACH_PTR(&ce->function_table, method) {
+ 		phpdbg_print_function_helper(method);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -332,13 +332,13 @@ void phpdbg_print_opcodes(const char *function)
+ 
+ 		phpdbg_print_opcodes_main();
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(EG(function_table), name, func) {
++		ZEND_HASH_FOREACH_STR_KEY_PTR(EG(function_table), name, func) {
+ 			if (func->type == ZEND_USER_FUNCTION) {
+ 				phpdbg_print_opcodes_function(ZSTR_VAL(name), ZSTR_LEN(name));
+ 			}
+ 		} ZEND_HASH_FOREACH_END();
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(EG(class_table), ce) {
++		ZEND_HASH_FOREACH_PTR(EG(class_table), ce) {
+ 			if (ce->type == ZEND_USER_CLASS) {
+ 				phpdbg_out("\n");
+ 				phpdbg_print_opcodes_ce(ce);

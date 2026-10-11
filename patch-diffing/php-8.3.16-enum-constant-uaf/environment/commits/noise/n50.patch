@@ -1,0 +1,221 @@
+diff --git a/Zend/tests/throw/exit_in_finally.phpt b/Zend/tests/throw/exit_in_finally.phpt
+deleted file mode 100644
+index fc88d87c..00000000
+--- a/Zend/tests/throw/exit_in_finally.phpt
++++ /dev/null
+@@ -1,13 +0,0 @@
+---TEST--
+-Test exit with uncaught exception in finally block
+---FILE--
+-<?php
+-try {
+-    throw new Exception();
+-} finally {
+-    echo "Done\n";
+-    exit();
+-}
+-?>
+---EXPECT--
+-Done
+diff --git a/Zend/tests/throwing_overloaded_compound_assign_op.phpt b/Zend/tests/throwing_overloaded_compound_assign_op.phpt
+index 39c38627..e6e79baf 100644
+--- a/Zend/tests/throwing_overloaded_compound_assign_op.phpt
++++ b/Zend/tests/throwing_overloaded_compound_assign_op.phpt
+@@ -3,7 +3,6 @@ Exception in compound assign op should prevent call to overloaded object handler
+ --FILE--
+ <?php
+ 
+-#[AllowDynamicProperties]
+ class Test {
+     public function __get($k) {
+         $this->$k = 42;
+diff --git a/Zend/tests/traits/bug76773-deprecated.phpt b/Zend/tests/traits/bug76773-deprecated.phpt
+deleted file mode 100644
+index e6dac201..00000000
+--- a/Zend/tests/traits/bug76773-deprecated.phpt
++++ /dev/null
+@@ -1,35 +0,0 @@
+---TEST--
+-Bug #76773 (Traits used on the parent are ignored for child classes) [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-trait MyTrait
+-{
+-    public function hello()
+-    {
+-        echo __CLASS__, "\n";
+-
+-        if (\is_callable(array('parent', __FUNCTION__))) {
+-            parent::hello();
+-        }
+-    }
+-}
+-
+-class ParentClass
+-{
+-    use MyTrait;
+-}
+-
+-class ChildClass extends ParentClass
+-{
+-    use MyTrait;
+-}
+-
+-$c = new ChildClass();
+-$c->hello();
+-?>
+---EXPECTF--
+-ChildClass
+-
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-ParentClass
+diff --git a/Zend/tests/traits/bug76773.phpt b/Zend/tests/traits/bug76773.phpt
+index 50b31479..4ab53bf6 100644
+--- a/Zend/tests/traits/bug76773.phpt
++++ b/Zend/tests/traits/bug76773.phpt
+@@ -9,7 +9,7 @@ trait MyTrait
+     {
+         echo __CLASS__, "\n";
+ 
+-        if (get_parent_class(__CLASS__) !== false) {
++        if (\is_callable(array('parent', __FUNCTION__))) {
+             parent::hello();
+         }
+     }
+diff --git a/Zend/tests/traits/constant_001.phpt b/Zend/tests/traits/constant_001.phpt
+deleted file mode 100644
+index ad5d5a86..00000000
+--- a/Zend/tests/traits/constant_001.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Trying to access a constant on Trait via a Class
+---FILE--
+-<?php
+-
+-trait Foo {
+-    public const PUBLIC = 'public';
+-    protected const PROTECTED = 'protected';
+-    private const PRIVATE = 'private';
+-
+-    public function f1(): void {
+-        echo self::PUBLIC, ' via self', PHP_EOL;
+-        echo static::PUBLIC, ' via static', PHP_EOL;
+-        echo $this::PUBLIC, ' via $this', PHP_EOL;
+-    }
+-}
+-
+-class Base {
+-    use Foo;
+-
+-    public function f2(): void {
+-        echo self::PRIVATE, ' via self', PHP_EOL;
+-        echo static::PRIVATE, ' via static', PHP_EOL;
+-    }
+-}
+-
+-class Derived extends Base {
+-    public function f3(): void {
+-        echo self::PROTECTED, ' via self', PHP_EOL;
+-        echo static::PROTECTED, ' via static', PHP_EOL;
+-        echo parent::PROTECTED, ' via parent', PHP_EOL;
+-    }
+-}
+-
+-echo Base::PUBLIC, ' via class name', PHP_EOL;
+-echo (new Base)::PUBLIC, ' via object', PHP_EOL;
+-(new Base)->f1();
+-(new Base)->f2();
+-echo Derived::PUBLIC, ' via derived class name', PHP_EOL;
+-echo (new Derived)::PUBLIC, ' via derived class object', PHP_EOL;
+-(new Derived)->f3();
+-?>
+---EXPECTF--
+-public via class name
+-public via object
+-public via self
+-public via static
+-public via $this
+-private via self
+-private via static
+-public via derived class name
+-public via derived class object
+-protected via self
+-protected via static
+-protected via parent
+diff --git a/Zend/tests/traits/constant_002.phpt b/Zend/tests/traits/constant_002.phpt
+deleted file mode 100644
+index 560aa69c..00000000
+--- a/Zend/tests/traits/constant_002.phpt
++++ /dev/null
+@@ -1,42 +0,0 @@
+---TEST--
+-Defining a constant in both trait and its composing class with the same name, visibility, finality and value is allowed
+---FILE--
+-<?php
+-
+-trait TestTrait1 {
+-    public const A = 42;
+-}
+-
+-trait TestTrait2 {
+-    public const A = 42;
+-}
+-
+-trait TestTrait3 {
+-    use TestTrait2;
+-    public const A = 42;
+-}
+-
+-class ComposingClass1 {
+-    use TestTrait1;
+-    use TestTrait2;
+-}
+-
+-class ComposingClass2 {
+-    use TestTrait1;
+-    use TestTrait3;
+-}
+-
+-class ComposingClass3 {
+-    use TestTrait1;
+-    use TestTrait3;
+-    public const A = 42;
+-}
+-
+-echo ComposingClass1::A, PHP_EOL;
+-echo ComposingClass2::A, PHP_EOL;
+-echo ComposingClass3::A, PHP_EOL;
+-?>
+---EXPECTF--
+-42
+-42
+-42
+diff --git a/Zend/tests/traits/constant_003.phpt b/Zend/tests/traits/constant_003.phpt
+deleted file mode 100644
+index 7e946f53..00000000
+--- a/Zend/tests/traits/constant_003.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Non-final Constants in traits can be overridden in derived classes
+---FILE--
+-<?php
+-
+-trait Foo {
+-    public const A = 123;
+-}
+-
+-class Base {
+-    use Foo;
+-}
+-
+-class Derived extends Base {
+-    public const A = 456;
+-}
+-
+-echo Derived::A, PHP_EOL;
+-?>
+---EXPECTF--
+-456

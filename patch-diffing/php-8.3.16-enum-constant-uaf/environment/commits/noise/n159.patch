@@ -1,0 +1,382 @@
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfl_convert.h b/ext/mbstring/libmbfl/mbfl/mbfl_convert.h
+index e6353b16..563cdda1 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfl_convert.h
++++ b/ext/mbstring/libmbfl/mbfl/mbfl_convert.h
+@@ -81,7 +81,4 @@ MBFLAPI extern int mbfl_filt_conv_common_flush(mbfl_convert_filter *filter);
+ MBFLAPI extern void mbfl_convert_filter_devcat(mbfl_convert_filter *filter, mbfl_memory_device *src);
+ MBFLAPI extern int mbfl_convert_filter_strcat(mbfl_convert_filter *filter, const unsigned char *p);
+ 
+-MBFLAPI extern zend_string* mb_fast_convert(unsigned char *in, size_t in_len, const mbfl_encoding *from, const mbfl_encoding *to, uint32_t replacement_char, unsigned int error_mode, unsigned int *num_errors);
+-MBFLAPI extern void mb_illegal_output(uint32_t bad_cp, mb_from_wchar_fn fn, mb_convert_buf* buf);
+-
+ #endif /* MBFL_CONVERT_H */
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfl_encoding.h b/ext/mbstring/libmbfl/mbfl/mbfl_encoding.h
+index f66e85ac..f024e437 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfl_encoding.h
++++ b/ext/mbstring/libmbfl/mbfl/mbfl_encoding.h
+@@ -120,6 +120,8 @@ enum mbfl_no_encoding {
+ 	mbfl_no_encoding_charset_max
+ };
+ 
++typedef enum mbfl_no_encoding mbfl_encoding_id;
++
+ struct _mbfl_convert_filter;
+ struct mbfl_convert_vtbl {
+ 	enum mbfl_no_encoding from;
+@@ -131,98 +133,12 @@ struct mbfl_convert_vtbl {
+ 	void (*filter_copy)(struct _mbfl_convert_filter *src, struct _mbfl_convert_filter *dest);
+ };
+ 
+-typedef struct {
+-	unsigned char *out;
+-	unsigned char *limit;
+-	uint32_t state;
+-	uint32_t errors;
+-	uint32_t replacement_char;
+-	unsigned int error_mode;
+-	zend_string *str;
+-} mb_convert_buf;
+-
+-typedef size_t (*mb_to_wchar_fn)(unsigned char **in, size_t *in_len, uint32_t *out, size_t out_len, unsigned int *state);
+-typedef void (*mb_from_wchar_fn)(uint32_t *in, size_t in_len, mb_convert_buf *out, bool end);
+ typedef bool (*mb_check_fn)(unsigned char *in, size_t in_len);
+ 
+-/* When converting encoded text to a buffer of wchars (Unicode codepoints) using `mb_to_wchar_fn`,
+- * the buffer must be at least this size (to work with all supported text encodings) */
+-#define MBSTRING_MIN_WCHAR_BUFSIZE 5
+-
+-static inline void mb_convert_buf_init(mb_convert_buf *buf, size_t initsize, uint32_t repl_char, unsigned int err_mode)
+-{
+-	buf->state = buf->errors = 0;
+-	buf->str = emalloc(_ZSTR_STRUCT_SIZE(initsize));
+-	buf->out = (unsigned char*)ZSTR_VAL(buf->str);
+-	buf->limit = buf->out + initsize;
+-	buf->replacement_char = repl_char;
+-	buf->error_mode = err_mode;
+-}
+-
+-#define MB_CONVERT_BUF_ENSURE(buf, out, limit, needed) \
+-	ZEND_ASSERT(out <= limit); \
+-	if ((limit - out) < (needed)) { \
+-		size_t oldsize = limit - (unsigned char*)ZSTR_VAL(buf->str); \
+-		size_t newsize = oldsize + MAX(oldsize >> 1, needed); \
+-		zend_string *newstr = erealloc(buf->str, _ZSTR_STRUCT_SIZE(newsize)); \
+-		out = (unsigned char*)ZSTR_VAL(newstr) + (out - (unsigned char*)ZSTR_VAL(buf->str)); \
+-		limit = (unsigned char*)ZSTR_VAL(newstr) + newsize; \
+-		buf->str = newstr; \
+-	}
+-
+-#define MB_CONVERT_BUF_STORE(buf, _out, _limit) buf->out = _out; buf->limit = _limit
+-
+-#define MB_CONVERT_BUF_LOAD(buf, _out, _limit) _out = buf->out; _limit = buf->limit
+-
+-#define MB_CONVERT_ERROR(buf, out, limit, bad_cp, conv_fn) \
+-	MB_CONVERT_BUF_STORE(buf, out, limit); \
+-	mb_illegal_output(bad_cp, conv_fn, buf); \
+-	MB_CONVERT_BUF_LOAD(buf, out, limit)
+-
+-static inline unsigned char* mb_convert_buf_add(unsigned char *out, char c)
+-{
+-	*out++ = c;
+-	return out;
+-}
+-
+-static inline unsigned char* mb_convert_buf_add2(unsigned char *out, char c1, char c2)
+-{
+-	*out++ = c1;
+-	*out++ = c2;
+-	return out;
+-}
+-
+-static inline unsigned char* mb_convert_buf_add3(unsigned char *out, char c1, char c2, char c3)
+-{
+-	*out++ = c1;
+-	*out++ = c2;
+-	*out++ = c3;
+-	return out;
+-}
+-
+-static inline unsigned char* mb_convert_buf_add4(unsigned char *out, char c1, char c2, char c3, char c4)
+-{
+-	*out++ = c1;
+-	*out++ = c2;
+-	*out++ = c3;
+-	*out++ = c4;
+-	return out;
+-}
+-
+-static inline zend_string* mb_convert_buf_result(mb_convert_buf *buf)
+-{
+-	ZEND_ASSERT(buf->out <= buf->limit);
+-	zend_string *ret = buf->str;
+-	/* See `zend_string_alloc` in zend_string.h */
+-	GC_SET_REFCOUNT(ret, 1);
+-	GC_TYPE_INFO(ret) = GC_STRING;
+-	ZSTR_H(ret) = 0;
+-	ZSTR_LEN(ret) = buf->out - (unsigned char*)ZSTR_VAL(ret);
+-	*(buf->out) = '\0';
+-	return ret;
+-}
+-
+-typedef struct {
++/*
++ * encoding
++ */
++typedef struct _mbfl_encoding {
+ 	enum mbfl_no_encoding no_encoding;
+ 	const char *name;
+ 	const char *mime_name;
+@@ -231,8 +147,6 @@ typedef struct {
+ 	unsigned int flag;
+ 	const struct mbfl_convert_vtbl *input_filter;
+ 	const struct mbfl_convert_vtbl *output_filter;
+-	mb_to_wchar_fn to_wchar;
+-	mb_from_wchar_fn from_wchar;
+ 	mb_check_fn check;
+ } mbfl_encoding;
+ 
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfl_language.c b/ext/mbstring/libmbfl/mbfl/mbfl_language.c
+index ba1855ae..8e4d8f77 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfl_language.c
++++ b/ext/mbstring/libmbfl/mbfl/mbfl_language.c
+@@ -99,13 +99,13 @@ mbfl_name2language(const char *name)
+ 		}
+ 	}
+ 
+-	/* search aliases */
++	/* serch aliases */
+ 	i = 0;
+ 	while ((language = mbfl_language_ptr_table[i++]) != NULL) {
+ 		if (language->aliases != NULL) {
+ 			j = 0;
+-			while (language->aliases[j]) {
+-				if (strcasecmp(language->aliases[j], name) == 0) {
++			while ((*language->aliases)[j] != NULL) {
++				if (strcasecmp((*language->aliases)[j], name) == 0) {
+ 					return language;
+ 				}
+ 				j++;
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfl_language.h b/ext/mbstring/libmbfl/mbfl/mbfl_language.h
+index c5e68df7..a0a73899 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfl_language.h
++++ b/ext/mbstring/libmbfl/mbfl/mbfl_language.h
+@@ -72,7 +72,7 @@ typedef struct _mbfl_language {
+ 	enum mbfl_no_language no_language;
+ 	const char *name;
+ 	const char *short_name;
+-	const char **aliases;
++	const char *(*aliases)[];
+ 	enum mbfl_no_encoding mail_charset;
+ 	enum mbfl_no_encoding mail_header_encoding;
+ 	enum mbfl_no_encoding mail_body_encoding;
+diff --git a/ext/mbstring/libmbfl/nls/nls_de.c b/ext/mbstring/libmbfl/nls/nls_de.c
+index 54f4679b..9e9dae7c 100644
+--- a/ext/mbstring/libmbfl/nls/nls_de.c
++++ b/ext/mbstring/libmbfl/nls/nls_de.c
+@@ -6,7 +6,7 @@ const mbfl_language mbfl_language_german = {
+ 	mbfl_no_language_german,
+ 	"German",
+ 	"de",
+-	mbfl_language_german_aliases,
++	(const char *(*)[])&mbfl_language_german_aliases,
+ 	mbfl_no_encoding_8859_15,
+ 	mbfl_no_encoding_qprint,
+ 	mbfl_no_encoding_8bit
+diff --git a/ext/mbstring/libmbfl/nls/nls_uni.c b/ext/mbstring/libmbfl/nls/nls_uni.c
+index 994b1c45..e8ec5c79 100644
+--- a/ext/mbstring/libmbfl/nls/nls_uni.c
++++ b/ext/mbstring/libmbfl/nls/nls_uni.c
+@@ -6,7 +6,7 @@ const mbfl_language mbfl_language_uni = {
+ 	mbfl_no_language_uni,
+ 	"uni",
+ 	"uni",
+-	mbfl_language_uni_aliases,
++	(const char *(*)[])&mbfl_language_uni_aliases,
+ 	mbfl_no_encoding_utf8,
+ 	mbfl_no_encoding_base64,
+ 	mbfl_no_encoding_base64
+diff --git a/ext/mbstring/mb_gpc.c b/ext/mbstring/mb_gpc.c
+index 99a8ff90..cc875433 100644
+--- a/ext/mbstring/mb_gpc.c
++++ b/ext/mbstring/mb_gpc.c
+@@ -27,6 +27,7 @@
+ #include "main/php_output.h"
+ #include "ext/standard/info.h"
+ 
++#include "php_variables.h"
+ #include "php_globals.h"
+ #include "rfc1867.h"
+ #include "php_content_types.h"
+@@ -132,10 +133,12 @@ MBSTRING_API SAPI_TREAT_DATA_FUNC(mbstr_treat_data)
+ 
+ 	info.data_type              = arg;
+ 	info.separator              = separator;
+-	info.report_errors          = false;
++	info.report_errors          = 0;
+ 	info.to_encoding            = MBSTRG(internal_encoding);
++	info.to_language            = MBSTRG(language);
+ 	info.from_encodings         = MBSTRG(http_input_list);
+ 	info.num_from_encodings     = MBSTRG(http_input_list_size);
++	info.from_language          = MBSTRG(language);
+ 
+ 	MBSTRG(illegalchars) = 0;
+ 
+@@ -170,23 +173,33 @@ MBSTRING_API SAPI_TREAT_DATA_FUNC(mbstr_treat_data)
+ /* }}} */
+ 
+ /* {{{ mbfl_no_encoding _php_mb_encoding_handler_ex() */
+-const mbfl_encoding *_php_mb_encoding_handler_ex(const php_mb_encoding_handler_info_t *info, zval *array_ptr, char *res)
++const mbfl_encoding *_php_mb_encoding_handler_ex(const php_mb_encoding_handler_info_t *info, zval *arg, char *res)
+ {
+ 	char *var, *val;
++	const char *s1, *s2;
+ 	char *strtok_buf = NULL, **val_list = NULL;
+-	size_t n, num = 1, *len_list = NULL;
+-	size_t new_val_len;
++	zval *array_ptr = (zval *) arg;
++	size_t n, num, *len_list = NULL;
++	size_t val_len, new_val_len;
++	mbfl_string string, resvar, resval;
+ 	const mbfl_encoding *from_encoding = NULL;
+ 	mbfl_encoding_detector *identd = NULL;
++	mbfl_buffer_converter *convd = NULL;
++
++	mbfl_string_init_set(&string, info->to_encoding);
++	mbfl_string_init_set(&resvar, info->to_encoding);
++	mbfl_string_init_set(&resval, info->to_encoding);
+ 
+ 	if (!res || *res == '\0') {
+ 		goto out;
+ 	}
+ 
+-	/* count variables contained in `res`.
+-	 * separator may contain multiple separator chars; ANY of them demarcate variables */
+-	for (char *s1 = res; *s1; s1++) {
+-		for (const char *s2 = info->separator; *s2; s2++) {
++	/* count the variables(separators) contained in the "res".
++	 * separator may contain multiple separator chars.
++	 */
++	num = 1;
++	for (s1=res; *s1 != '\0'; s1++) {
++		for (s2=info->separator; *s2 != '\0'; s2++) {
+ 			if (*s1 == *s2) {
+ 				num++;
+ 			}
+@@ -199,6 +212,7 @@ const mbfl_encoding *_php_mb_encoding_handler_ex(const php_mb_encoding_handler_i
+ 
+ 	/* split and decode the query */
+ 	n = 0;
++	strtok_buf = NULL;
+ 	var = php_strtok_r(res, info->separator, &strtok_buf);
+ 	while (var)  {
+ 		val = strchr(var, '=');
+@@ -241,7 +255,6 @@ const mbfl_encoding *_php_mb_encoding_handler_ex(const php_mb_encoding_handler_i
+ 		if (identd != NULL) {
+ 			n = 0;
+ 			while (n < num) {
+-				mbfl_string string;
+ 				string.val = (unsigned char *)val_list[n];
+ 				string.len = len_list[n];
+ 				if (mbfl_encoding_detector_feed(identd, &string)) {
+@@ -260,40 +273,62 @@ const mbfl_encoding *_php_mb_encoding_handler_ex(const php_mb_encoding_handler_i
+ 		}
+ 	}
+ 
++	convd = NULL;
++	if (from_encoding != &mbfl_encoding_pass) {
++		convd = mbfl_buffer_converter_new(from_encoding, info->to_encoding, 0);
++		if (convd != NULL) {
++			mbfl_buffer_converter_illegal_mode(convd, MBSTRG(current_filter_illegal_mode));
++			mbfl_buffer_converter_illegal_substchar(convd, MBSTRG(current_filter_illegal_substchar));
++		} else {
++			if (info->report_errors) {
++				php_error_docref(NULL, E_WARNING, "Unable to create converter");
++			}
++			goto out;
++		}
++	}
++
+ 	/* convert encoding */
++	string.encoding = from_encoding;
++
+ 	n = 0;
+ 	while (n < num) {
+-		if (from_encoding != &mbfl_encoding_pass && info->to_encoding != &mbfl_encoding_pass) {
+-			unsigned int num_errors = 0;
+-			zend_string *converted_var = mb_fast_convert((unsigned char*)val_list[n], len_list[n], from_encoding, info->to_encoding, MBSTRG(current_filter_illegal_substchar), MBSTRG(current_filter_illegal_mode), &num_errors);
+-			MBSTRG(illegalchars) += num_errors;
+-			n++;
+-
+-			num_errors = 0;
+-			zend_string *converted_val = mb_fast_convert((unsigned char*)val_list[n], len_list[n], from_encoding, info->to_encoding, MBSTRG(current_filter_illegal_substchar), MBSTRG(current_filter_illegal_mode), &num_errors);
+-			MBSTRG(illegalchars) += num_errors;
+-			n++;
+-
+-			/* `val` must be a pointer returned by `emalloc` */
+-			val = estrndup(ZSTR_VAL(converted_val), ZSTR_LEN(converted_val));
+-			if (sapi_module.input_filter(info->data_type, ZSTR_VAL(converted_var), &val, ZSTR_LEN(converted_val), &new_val_len)) {
+-				/* add variable to symbol table */
+-				php_register_variable_safe(ZSTR_VAL(converted_var), val, new_val_len, array_ptr);
+-			}
+-			zend_string_free(converted_var);
+-			zend_string_free(converted_val);
++		string.val = (unsigned char *)val_list[n];
++		string.len = len_list[n];
++		if (convd != NULL && mbfl_buffer_converter_feed_result(convd, &string, &resvar) != NULL) {
++			var = (char *)resvar.val;
+ 		} else {
+-			var = val_list[n++];
+-			val = estrndup(val_list[n], len_list[n]);
+-			if (sapi_module.input_filter(info->data_type, var, &val, len_list[n], &new_val_len)) {
+-				php_register_variable_safe(var, val, new_val_len, array_ptr);
+-			}
+-			n++;
++			var = val_list[n];
++		}
++		n++;
++		string.val = (unsigned char *)val_list[n];
++		string.len = len_list[n];
++		if (convd != NULL && mbfl_buffer_converter_feed_result(convd, &string, &resval) != NULL) {
++			val = (char *)resval.val;
++			val_len = resval.len;
++		} else {
++			val = val_list[n];
++			val_len = len_list[n];
++		}
++		n++;
++		/* we need val to be emalloc()ed */
++		val = estrndup(val, val_len);
++		if (sapi_module.input_filter(info->data_type, var, &val, val_len, &new_val_len)) {
++			/* add variable to symbol table */
++			php_register_variable_safe(var, val, new_val_len, array_ptr);
+ 		}
+ 		efree(val);
++
++		if (convd != NULL){
++			mbfl_string_clear(&resvar);
++			mbfl_string_clear(&resval);
++		}
+ 	}
+ 
+ out:
++	if (convd != NULL) {
++		MBSTRG(illegalchars) += mbfl_buffer_illegalchars(convd);
++		mbfl_buffer_converter_delete(convd);
++	}
+ 	if (val_list != NULL) {
+ 		efree((void *)val_list);
+ 	}
+@@ -316,10 +351,12 @@ SAPI_POST_HANDLER_FUNC(php_mb_post_handler)
+ 
+ 	info.data_type              = PARSE_POST;
+ 	info.separator              = "&";
+-	info.report_errors          = false;
++	info.report_errors          = 0;
+ 	info.to_encoding            = MBSTRG(internal_encoding);
++	info.to_language            = MBSTRG(language);
+ 	info.from_encodings         = MBSTRG(http_input_list);
+ 	info.num_from_encodings     = MBSTRG(http_input_list_size);
++	info.from_language          = MBSTRG(language);
+ 
+ 	php_stream_rewind(SG(request_info).request_body);
+ 	post_data_str = php_stream_copy_to_mem(SG(request_info).request_body, PHP_STREAM_COPY_ALL, 0);

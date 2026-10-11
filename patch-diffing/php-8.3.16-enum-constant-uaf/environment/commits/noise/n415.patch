@@ -1,0 +1,210 @@
+diff --git a/main/snprintf.c b/main/snprintf.c
+index 9acd4efe..f082115c 100644
+--- a/main/snprintf.c
++++ b/main/snprintf.c
+@@ -14,9 +14,7 @@
+   +----------------------------------------------------------------------+
+ */
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #include "php.h"
+ 
+ #include <zend_strtod.h>
+@@ -580,8 +578,8 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{
+ 					} else if (*fmt == '*') {
+ 						precision = va_arg(ap, int);
+ 						fmt++;
+-						if (precision < -1)
+-							precision = -1;
++						if (precision < 0)
++							precision = 0;
+ 					} else
+ 						precision = 0;
+ 				} else
+diff --git a/main/spprintf.c b/main/spprintf.c
+index 37b81dc6..4c01347f 100644
+--- a/main/spprintf.c
++++ b/main/spprintf.c
+@@ -72,9 +72,7 @@
+  * SIO stdio-replacement strx_* functions by Panos Tsirigotis
+  * <panos@alumni.cs.colorado.edu> for xinetd.
+  */
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #include "php.h"
+ 
+ #include <stddef.h>
+diff --git a/main/streams/cast.c b/main/streams/cast.c
+index 3bad65fb..db0f039e 100644
+--- a/main/streams/cast.c
++++ b/main/streams/cast.c
+@@ -14,9 +14,7 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #include "php.h"
+ #include "php_globals.h"
+ #include "php_network.h"
+diff --git a/main/streams/glob_wrapper.c b/main/streams/glob_wrapper.c
+index 813e0bac..4574b787 100644
+--- a/main/streams/glob_wrapper.c
++++ b/main/streams/glob_wrapper.c
+@@ -41,9 +41,6 @@ typedef struct {
+ 	size_t   path_len;
+ 	char     *pattern;
+ 	size_t   pattern_len;
+-	size_t   *open_basedir_indexmap;
+-	size_t   open_basedir_indexmap_size;
+-	bool     open_basedir_used;
+ } glob_s_t;
+ 
+ PHPAPI char* _php_glob_stream_get_path(php_stream *stream, size_t *plen STREAMS_DC) /* {{{ */
+@@ -82,11 +79,6 @@ PHPAPI char* _php_glob_stream_get_pattern(php_stream *stream, size_t *plen STREA
+ }
+ /* }}} */
+ 
+-static inline int php_glob_stream_get_result_count(glob_s_t *pglob)
+-{
+-	return pglob->open_basedir_used ? (int) pglob->open_basedir_indexmap_size : pglob->glob.gl_pathc;
+-}
+-
+ PHPAPI int _php_glob_stream_get_count(php_stream *stream, int *pflags STREAMS_DC) /* {{{ */
+ {
+ 	glob_s_t *pglob = (glob_s_t *)stream->abstract;
+@@ -95,7 +87,7 @@ PHPAPI int _php_glob_stream_get_count(php_stream *stream, int *pflags STREAMS_DC
+ 		if (pflags) {
+ 			*pflags = pglob->flags;
+ 		}
+-		return php_glob_stream_get_result_count(pglob);
++		return pglob->glob.gl_pathc;
+ 	} else {
+ 		if (pflags) {
+ 			*pflags = 0;
+@@ -138,21 +130,15 @@ static ssize_t php_glob_stream_read(php_stream *stream, char *buf, size_t count)
+ 	glob_s_t *pglob = (glob_s_t *)stream->abstract;
+ 	php_stream_dirent *ent = (php_stream_dirent*)buf;
+ 	const char *path;
+-	int glob_result_count;
+-	size_t index;
+ 
+ 	/* avoid problems if someone mis-uses the stream */
+ 	if (count == sizeof(php_stream_dirent) && pglob) {
+-		glob_result_count = php_glob_stream_get_result_count(pglob);
+-		if (pglob->index < (size_t) glob_result_count) {
+-			index = pglob->open_basedir_used && pglob->open_basedir_indexmap ?
+-					pglob->open_basedir_indexmap[pglob->index] : pglob->index;
+-			php_glob_stream_path_split(pglob, pglob->glob.gl_pathv[index], pglob->flags & GLOB_APPEND, &path);
+-			++pglob->index;
++		if (pglob->index < (size_t)pglob->glob.gl_pathc) {
++			php_glob_stream_path_split(pglob, pglob->glob.gl_pathv[pglob->index++], pglob->flags & GLOB_APPEND, &path);
+ 			PHP_STRLCPY(ent->d_name, path, sizeof(ent->d_name), strlen(path));
+ 			return sizeof(php_stream_dirent);
+ 		}
+-		pglob->index = glob_result_count;
++		pglob->index = pglob->glob.gl_pathc;
+ 		if (pglob->path) {
+ 			efree(pglob->path);
+ 			pglob->path = NULL;
+@@ -176,9 +162,6 @@ static int php_glob_stream_close(php_stream *stream, int close_handle)  /* {{{ *
+ 		if (pglob->pattern) {
+ 			efree(pglob->pattern);
+ 		}
+-		if (pglob->open_basedir_indexmap) {
+-			efree(pglob->open_basedir_indexmap);
+-		}
+ 	}
+ 	efree(stream->abstract);
+ 	return 0;
+@@ -215,7 +198,7 @@ static php_stream *php_glob_stream_opener(php_stream_wrapper *wrapper, const cha
+ 		int options, zend_string **opened_path, php_stream_context *context STREAMS_DC)
+ {
+ 	glob_s_t *pglob;
+-	int ret, i;
++	int ret;
+ 	const char *tmp, *pos;
+ 
+ 	if (!strncmp(path, "glob://", sizeof("glob://")-1)) {
+@@ -225,6 +208,10 @@ static php_stream *php_glob_stream_opener(php_stream_wrapper *wrapper, const cha
+ 		}
+ 	}
+ 
++	if (((options & STREAM_DISABLE_OPEN_BASEDIR) == 0) && php_check_open_basedir(path)) {
++		return NULL;
++	}
++
+ 	pglob = ecalloc(sizeof(*pglob), 1);
+ 
+ 	if (0 != (ret = glob(path, pglob->flags & GLOB_FLAGMASK, NULL, &pglob->glob))) {
+@@ -237,20 +224,6 @@ static php_stream *php_glob_stream_opener(php_stream_wrapper *wrapper, const cha
+ 		}
+ 	}
+ 
+-	/* if open_basedir in use, check and filter restricted paths */
+-	if ((options & STREAM_DISABLE_OPEN_BASEDIR) == 0) {
+-		pglob->open_basedir_used = true;
+-		for (i = 0; i < pglob->glob.gl_pathc; i++) {
+-			if (!php_check_open_basedir_ex(pglob->glob.gl_pathv[i], 0)) {
+-				if (!pglob->open_basedir_indexmap) {
+-					pglob->open_basedir_indexmap = (size_t *) safe_emalloc(
+-							pglob->glob.gl_pathc, sizeof(size_t), 0);
+-				}
+-				pglob->open_basedir_indexmap[pglob->open_basedir_indexmap_size++] = i;
+-			}
+-		}
+-	}
+-
+ 	pos = path;
+ 	if ((tmp = strrchr(pos, '/')) != NULL) {
+ 		pos = tmp+1;
+diff --git a/main/streams/memory.c b/main/streams/memory.c
+index f53084a6..284ec4e1 100644
+--- a/main/streams/memory.c
++++ b/main/streams/memory.c
+@@ -14,9 +14,7 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #include "php.h"
+ #include "ext/standard/base64.h"
+ 
+diff --git a/main/streams/php_stream_context.h b/main/streams/php_stream_context.h
+index c98f5420..5905b690 100644
+--- a/main/streams/php_stream_context.h
++++ b/main/streams/php_stream_context.h
+@@ -57,7 +57,7 @@ PHPAPI void php_stream_context_free(php_stream_context *context);
+ PHPAPI php_stream_context *php_stream_context_alloc(void);
+ PHPAPI zval *php_stream_context_get_option(php_stream_context *context,
+ 		const char *wrappername, const char *optionname);
+-PHPAPI void php_stream_context_set_option(php_stream_context *context,
++PHPAPI int php_stream_context_set_option(php_stream_context *context,
+ 		const char *wrappername, const char *optionname, zval *optionvalue);
+ 
+ PHPAPI php_stream_notifier *php_stream_notification_alloc(void);
+diff --git a/main/streams/php_stream_plain_wrapper.h b/main/streams/php_stream_plain_wrapper.h
+index ce1a6e38..8ece0630 100644
+--- a/main/streams/php_stream_plain_wrapper.h
++++ b/main/streams/php_stream_plain_wrapper.h
+@@ -32,8 +32,8 @@ PHPAPI php_stream *_php_stream_fopen_with_path(const char *filename, const char
+ PHPAPI php_stream *_php_stream_fopen_from_file(FILE *file, const char *mode STREAMS_DC);
+ #define php_stream_fopen_from_file(file, mode)	_php_stream_fopen_from_file((file), (mode) STREAMS_CC)
+ 
+-PHPAPI php_stream *_php_stream_fopen_from_fd(int fd, const char *mode, const char *persistent_id, bool zero_position STREAMS_DC);
+-#define php_stream_fopen_from_fd(fd, mode, persistent_id)	_php_stream_fopen_from_fd((fd), (mode), (persistent_id), false STREAMS_CC)
++PHPAPI php_stream *_php_stream_fopen_from_fd(int fd, const char *mode, const char *persistent_id STREAMS_DC);
++#define php_stream_fopen_from_fd(fd, mode, persistent_id)	_php_stream_fopen_from_fd((fd), (mode), (persistent_id) STREAMS_CC)
+ 
+ PHPAPI php_stream *_php_stream_fopen_from_pipe(FILE *file, const char *mode STREAMS_DC);
+ #define php_stream_fopen_from_pipe(file, mode)	_php_stream_fopen_from_pipe((file), (mode) STREAMS_CC)
