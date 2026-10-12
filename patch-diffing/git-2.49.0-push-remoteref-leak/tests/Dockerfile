@@ -4,7 +4,7 @@ ENV ASAN_OPTIONS=detect_leaks=1:exitcode=0:symbolize=0
 ENV ASAN_OPTIONS=detect_leaks=1:exitcode=0
 ENV ASAN_OPTIONS=detect_leaks=1:exitcode=0
 
-# Thin verifier image: pure consumer. binaries/ / ground_truth / deps.tar.gz are construction-time exports from the environment build (see script/pipeline/export_verifier_artifacts.sh).
+# Thin verifier image: pure consumer. binaries/ / ground_truth / deps.tar.gz are construction-time exports from the environment build (see script/pipeline/export.sh).
 # Only the tools test.sh drives live here, all UNPINNED (no apt version pins anywhere. Reproducibility is carried by the prebuilt images and the custom-lib closure tar below, not by apt). python3 feeds the embedded scorer core and the domain scorers. util-linux provides setpriv for the privilege drop. gdb drives the tracer replay.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,12 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY deps.tar.gz /tmp/deps.tar.gz
 RUN tar xzf /tmp/deps.tar.gz -C / && rm /tmp/deps.tar.gz && \
     ldconfig  # no custom lib dirs (apt-only carrier)
-# the printf's substitution slot = the custom lib dirs discovered inside deps.tar.gz, resolved by export_verifier_artifacts.sh (quoted, space-separated).
+# the printf's substitution slot = the custom lib dirs discovered inside deps.tar.gz, resolved by export.sh (quoted, space-separated).
 
 # The challenge PAIR + ground truth: deterministic construction-time exports from the environment build (patch pipeline is seeded and deterministic).
 COPY binaries/ /app/binaries/
 RUN chmod 755 /app/binaries/vulnerable /app/binaries/patched
-# Carrier runtime data files (file(1)'s magic db &c.), exported at their compiled-in absolute paths. The tree merges onto / so the binaries resolve them with no env vars (the privilege drop scrubs env anyway). data-files/ is never empty. export_verifier_artifacts.sh drops a .keep when the carrier ships no data files.
+# Carrier runtime data files (file(1)'s magic db &c.), exported at their compiled-in absolute paths. The tree merges onto / so the binaries resolve them with no env vars (the privilege drop scrubs env anyway). data-files/ is never empty. export.sh drops a .keep when the carrier ships no data files.
 COPY data-files/ /
 # The git fixture repo ships as repo/dotgit/ plain tracked files. A real
 # .git member would commit as a gitlink (mode 160000) and clone as an

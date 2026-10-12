@@ -26,7 +26,7 @@ This challenge instantiates a REAL upstream defect/fix pair mined from the progr
 
 ## Difficulty axes
 
-Difficulty is the sole derived quantity. The band `hard` is computed from the draw (the law lives in reference/levels.md). What feeds it.
+Difficulty is the sole derived quantity. The band `medium` is computed from the draw (the law lives in reference/levels.md). What feeds it.
 
 | Input | Covers                                                                    |
 |-------|---------------------------------------------------------------------------|
