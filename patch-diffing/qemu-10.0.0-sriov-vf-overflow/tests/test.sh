@@ -119,6 +119,9 @@ mkdir -p "$(dirname "$REWARD")"
 # --- baseline #3: privilege drop (FAIL-CLOSED on a root verifier) ---------------
 # Wraps EXECUTION of the delivered binaries only. The tracer drivers run as the verifier.
 # VERIFIER_RUNAS is exported so the embedded python scorer reuses the same drop via runas_argv().
+# VER_DROP_OK is exported the same way: the bash preflight below already zeroes the bucket,
+# and any future python-side gate reads the same flag (a root verifier with no usable drop
+# must refuse every analyzed-code run, never run it as root).
 VER_RUNAS=()
 VER_DROP_OK=1
 if command_exists setpriv && id nobody >/dev/null 2>&1 \
@@ -128,7 +131,9 @@ if command_exists setpriv && id nobody >/dev/null 2>&1 \
     export VERIFIER_RUNAS="${VER_RUNAS[*]}"
 elif [ "$(id -u)" = "0" ]; then
     VER_DROP_OK=0
+    echo "✗ fail-closed: privilege drop unavailable on a root verifier; analyzed-code execution refused (affected buckets score 0)" >&2
 fi
+export VER_DROP_OK
 
 # --- baseline #9: reward writing is hardened, failures are loud -------------------
 TOTAL_SCORE=0

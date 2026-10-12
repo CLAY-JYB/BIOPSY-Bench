@@ -341,7 +341,7 @@ FROM target-deps AS vulnerable-binary
 WORKDIR /src
 
 # TEMPLATE:
-COPY src.tar.gz commits/ gh12366.inc /builder-inputs/
+COPY src.tar.gz commits/ enum_level.inc /builder-inputs/
 RUN set -eux; \
     mkdir -p /out /gt; \
     cd /src; \
@@ -349,7 +349,7 @@ RUN set -eux; \
     make -j16; \
     cp /src/sapi/cli/php /out/vuln_binary; \
     cp /out/vuln_binary /out/vuln_binary.unstripped; \
-    cp $(find /src -name opcache.so | head -1) /usr/local/lib/opcache.so && cp /builder-inputs/gh12366.inc /usr/local/lib/gh12366.inc; \
+    cp $(find /src -name opcache.so | head -1) /usr/local/lib/opcache.so && cp /builder-inputs/enum_level.inc /usr/local/lib/enum_level.inc; \
     strip /out/vuln_binary; \
     objcopy --remove-section .comment /out/vuln_binary; \
     chmod 0755 /out/vuln_binary
@@ -358,7 +358,7 @@ FROM target-deps AS patched-binary
 WORKDIR /src
 
 # TEMPLATE:
-COPY src.tar.gz commits/ gh12366.inc /builder-inputs/
+COPY src.tar.gz commits/ enum_level.inc /builder-inputs/
 RUN set -eux; \
     mkdir -p /out /gt; \
     patch -d /src -p1 --fuzz=0 --silent < /builder-inputs/commits/patch/p1.patch; \
@@ -904,7 +904,7 @@ RUN set -eux; \
     make -j16; \
     cp /src/sapi/cli/php /out/fixed_binary; \
     cp /out/fixed_binary /out/fixed_binary.unstripped; \
-    cp $(find /src -name opcache.so | head -1) /usr/local/lib/opcache.so && cp /builder-inputs/gh12366.inc /usr/local/lib/gh12366.inc; \
+    cp $(find /src -name opcache.so | head -1) /usr/local/lib/opcache.so && cp /builder-inputs/enum_level.inc /usr/local/lib/enum_level.inc; \
     strip /out/fixed_binary; \
     objcopy --remove-section .comment /out/fixed_binary; \
     chmod 0755 /out/fixed_binary
@@ -1070,7 +1070,7 @@ COPY --from=pip-re /usr/local /usr/local
 # The challenge PAIR: role-named paths fixed by the pipeline.
 COPY --from=vulnerable-binary /out/vuln_binary /app/binaries/vulnerable
 COPY --from=vulnerable-binary /usr/local/lib/opcache.so /usr/local/lib/opcache.so
-COPY --from=vulnerable-binary /usr/local/lib/gh12366.inc /usr/local/lib/gh12366.inc
+COPY --from=vulnerable-binary /usr/local/lib/enum_level.inc /usr/local/lib/enum_level.inc
 COPY --from=patched-binary /out/fixed_binary /app/binaries/patched
 
 

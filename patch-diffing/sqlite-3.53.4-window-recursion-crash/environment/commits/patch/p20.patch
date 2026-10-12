@@ -1,0 +1,17 @@
+diff --git a/src/select.c b/src/select.c
+index 4b0b5542..9fcf30ff 100644
+--- a/src/select.c
++++ b/src/select.c
+@@ -5582,7 +5603,11 @@ static int convertCompoundSelectToSubquery(Walker *pWalker, Select *p){
+   if( pNew==0 ) return WRC_Abort;
+   memset(&dummy, 0, sizeof(dummy));
+   pNewSrc = sqlite3SrcListAppendFromTerm(pParse,0,0,0,&dummy,pNew,0);
+-  if( pNewSrc==0 ) return WRC_Abort;
++  assert( pNewSrc!=0 || pParse->nErr );
++  if( pParse->nErr ){
++    sqlite3SrcListDelete(db, pNewSrc);
++    return WRC_Abort;
++  }
+   *pNew = *p;
+   p->pSrc = pNewSrc;
+   p->pEList = sqlite3ExprListAppend(pParse, 0, sqlite3Expr(db, TK_ASTERISK, 0));

@@ -1,0 +1,83 @@
+diff --git a/ext/fts5/test/fts5_common.tcl b/ext/fts5/test/fts5_common.tcl
+index 7076a52b..8ea87dbd 100644
+--- a/ext/fts5/test/fts5_common.tcl
++++ b/ext/fts5/test/fts5_common.tcl
+@@ -51,6 +51,10 @@ proc fts5_test_poslist2 {cmd} {
+   sort_poslist $res
+ }
+ 
++proc fts5_test_insttoken {cmd iInst iToken} {
++  $cmd xInstToken $iInst $iToken
++}
++
+ proc fts5_test_collist {cmd} {
+   set res [list]
+ 
+@@ -78,6 +82,9 @@ proc fts5_test_columnsize {cmd} {
+ proc fts5_columntext {cmd iCol} {
+   $cmd xColumnText $iCol
+ }
++proc fts5_columnlocale {cmd iCol} {
++  $cmd xColumnLocale $iCol
++}
+ 
+ proc fts5_test_columntext {cmd} {
+   set res [list]
+@@ -87,6 +94,14 @@ proc fts5_test_columntext {cmd} {
+   set res
+ }
+ 
++proc fts5_test_columnlocale {cmd} {
++  set res [list]
++  for {set i 0} {$i < [$cmd xColumnCount]} {incr i} {
++    lappend res [$cmd xColumnLocale $i]
++  }
++  set res
++}
++
+ proc fts5_test_columntotalsize {cmd} {
+   set res [list]
+   for {set i 0} {$i < [$cmd xColumnCount]} {incr i} {
+@@ -165,10 +180,12 @@ proc fts5_aux_test_functions {db} {
+   foreach f {
+     fts5_test_columnsize
+     fts5_test_columntext
++    fts5_test_columnlocale
+     fts5_test_columntotalsize
+     fts5_test_poslist
+     fts5_test_poslist2
+     fts5_test_collist
++    fts5_test_insttoken
+     fts5_test_tokenize
+     fts5_test_rowcount
+     fts5_test_rowid
+@@ -177,6 +194,7 @@ proc fts5_aux_test_functions {db} {
+     fts5_test_queryphrase
+     fts5_test_phrasecount
+     fts5_columntext
++    fts5_columnlocale
+     fts5_queryphrase
+     fts5_collist
+   } {
+diff --git a/ext/fts5/test/fts5ah.test b/ext/fts5/test/fts5ah.test
+index bc800578..bf9c9e9d 100644
+--- a/ext/fts5/test/fts5ah.test
++++ b/ext/fts5/test/fts5ah.test
+@@ -163,6 +163,17 @@ do_execsql_test 1.8.2 {
+   SELECT count(*) FROM t1 WHERE t1 MATCH 'x' AND rowid < 'text';
+ } {10000}
+ 
++do_execsql_test 1.8.3 {
++  SELECT count(*) FROM t1 WHERE t1 MATCH 'x' AND rowid<5000 AND rowid < 'text';
++} {4999}
++do_execsql_test 1.8.4 {
++  SELECT count(*) FROM t1 WHERE t1 MATCH 'x' AND rowid>5000 AND rowid > 'text';
++} {0}
++
++do_catchsql_test 1.9 {
++  SELECT * FROM t1('*xy');
++} {1 {unknown special query: xy}}
++
+ } ;# foreach_detail_mode
+ 
+ #db eval {SELECT rowid, fts5_decode(rowid, block) aS r FROM t1_data} {puts $r}

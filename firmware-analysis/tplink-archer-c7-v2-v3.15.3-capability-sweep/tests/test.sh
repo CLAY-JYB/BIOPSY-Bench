@@ -213,6 +213,9 @@ confined_agent_dir() {
 # --- baseline #3: privilege drop (FAIL-CLOSED on a root verifier) ---------------
 # Wraps EXECUTION of agent/analyzed code only; static analysis tools run as the verifier.
 # VERIFIER_RUNAS is exported so embedded python scorers can reuse the same drop via shlex.split(os.environ["VERIFIER_RUNAS"]).
+# VER_DROP_OK is exported for the python core's gate (verifier_core.drop_fail_closed): a root
+# verifier with no usable drop must REFUSE every agent-code run (denied observables, the
+# affected bucket scores 0) instead of executing analyzed code as root.
 VER_RUNAS=()
 VER_DROP_OK=1
 if command_exists setpriv && id nobody >/dev/null 2>&1 \
@@ -222,7 +225,9 @@ if command_exists setpriv && id nobody >/dev/null 2>&1 \
     export VERIFIER_RUNAS="${VER_RUNAS[*]}"
 elif [ "$(id -u)" = "0" ]; then
     VER_DROP_OK=0
+    echo "✗ fail-closed: privilege drop unavailable on a root verifier; agent-code execution refused (affected buckets score 0)" >&2
 fi
+export VER_DROP_OK
 
 # --- baseline #4: execve/execveat gate (plain-text strace logs) ------------------
 # rc 0 = violation (the traced run executed a verifier-side binary). $2 (optional) is the ONE exempted verifier-side target -- the binary under test when the activation command runs it directly (its first execve would otherwise void every legitimate run).
@@ -634,20 +639,43 @@ def runas_argv():
     return shlex.split(os.environ.get("VERIFIER_RUNAS", ""))
 
 
+_DROP_FAIL_NOTED = False
+
+
+def drop_fail_closed():
+    """True when the bash core flagged baseline #3's hard case: a ROOT
+    verifier with no usable privilege drop (VER_DROP_OK=0). Every
+    agent-code execution must then be REFUSED -- the denied-observable
+    failed-run shape every caller already scores as 0 -- never run as
+    root. Non-root dev verifiers never set the flag (their run-as-is is
+    the documented behavior)."""
+    global _DROP_FAIL_NOTED
+    if os.environ.get("VER_DROP_OK", "1") == "1":
+        return False
+    if not _DROP_FAIL_NOTED:
+        _DROP_FAIL_NOTED = True
+        print("✗ fail-closed: privilege drop unavailable on a root verifier; "
+              "agent-code runs are refused and score 0", file=sys.stderr)
+    return True
+
+
 def run_confined(argv, trace_path=None, timeout=60, strace_set=None, xx=False,
                  stdin_bytes=None):
     """Run agent/analyzed code under the unified privilege drop, optionally
     strace-wrapped so the caller can apply the exec gate and match syscall
     observables. argv MUST already be confined (confined_own_file / the
     verifier's own target binary). Returns (proc_or_None, stdout+stderr,
-    trace_text); proc is None on timeout OR spawn failure -- deliberately
-    indistinguishable, since both deny every observable symptom (the caller
-    labels them "timeout"/"failed" alike). With trace_path the tracer runs as
+    trace_text); proc is None on timeout OR spawn failure OR the baseline #3
+    fail-closed refusal -- deliberately indistinguishable, since all three
+    deny every observable symptom (the caller labels them "timeout"/"failed"
+    alike). With trace_path the tracer runs as
     the verifier and only the target is dropped (the trace file is
     verifier-written). xx=True hex-escapes every string (decode with _dehex
     before matching). stdin_bytes feeds the process (trigger-class inputs);
     capture is binary and decoded with errors='replace' so byte-exact
     stdin/stdout round-trips survive."""
+    if drop_fail_closed():
+        return None, "", ""
     prefix = []
     if trace_path is not None:
         prefix = ["strace", "-f", "-s", "4096"]
@@ -726,6 +754,9 @@ import socket
 import subprocess
 import sys
 import time
+
+sys.path.insert(0, "/tmp")
+import verifier_core as vc
 
 AGENT_DIR = os.path.realpath("/logs/artifacts/agent_output")
 
@@ -878,6 +909,24 @@ def _gdb_script(port, cp, rings, native=False, binary=None, argv=None,
     return "\n".join(lines) + "\n"
 
 
+class _RefusedRun(object):
+    """Stand-in proc for a refused run (baseline #3 fail-closed): every
+    poll/wait answers already-dead so port-wait and cleanup paths behave
+    exactly as they do for a spawn that died instantly. No agent code is
+    ever spawned."""
+
+    def poll(self):
+        return -9
+
+    def wait(self, timeout=None):
+        return -9
+
+    def kill(self):
+        pass
+
+    stdin = None
+
+
 class TracedRun(object):
     """One strace+gdbstub instrumented execution of an analyzed binary."""
 
@@ -891,6 +940,16 @@ class TracedRun(object):
         self.asmlog = "/tmp/fw-trace-%s.asm" % tag
         self.rc = None
         self.use_asmlog = False
+        # baseline #3 fail-closed: a root verifier with no usable drop
+        # refuses the run outright (denied observables) instead of
+        # executing analyzed code as root
+        self.fail_closed = vc.drop_fail_closed()
+        if self.fail_closed:
+            self._port = 0
+            self.qemu = _RefusedRun()
+            self.gdb = None
+            self.out_fh = None
+            return
         self._port = free_port()
         runas = shlex.split(os.environ.get("VERIFIER_RUNAS", ""))
         self.native = qemu is None
@@ -928,22 +987,9 @@ class TracedRun(object):
         qargv = [qemu] + (extra_qemu or [])
         if qemu and "mips" in qemu:
             qargv += ["-cpu", "24Kc"]
-        # qemu 6.2's mips BE gdbstub is unusable: at attach it reports a
-        # synthetic register state (pc far off the entry halt the LE
-        # stubs give, ra=0, t9=0), and neither raw Z0 packets nor gdb's
-        # software breakpoints ever fire. qemu 6.2's arm gdbstub has its
-        # own wall: on a DYNAMIC binary (musl loader) the stub drops the
-        # RSP connection right after the first continue — short runs
-        # (banner) finish before it matters, but a serving daemon dies
-        # with SIGTRAP the moment a breakpoint hits the dead socket
-        # (static arm binaries are unaffected; verified: synbmark rings
-        # pay through gdb, the dnsmasq daemon does not). The -d in_asm
-        # execution log is the observation tier for both: qemu prints
-        # every translated block with its exact guest address, and the
-        # rings are absolute ET_EXEC vaddrs, so they match literally and
-        # in execution order (verified against the aruba mips-BE
-        # synbmark: all five keychain rings appear exactly once, in
-        # order)
+        # qemu 6.2's mips BE gdbstub is unusable: at attach it reports a synthetic register state (pc far off the entry halt the LE stubs give, ra=0, t9=0), and neither raw Z0 packets nor gdb's software breakpoints ever fire.
+        # qemu 6.2's arm gdbstub has its own wall: on a DYNAMIC binary (musl loader) the stub drops the RSP connection right after the first continue. Short runs (banner) finish before it matters, but a serving daemon dies with SIGTRAP the moment a breakpoint hits the dead socket. Static arm binaries are unaffected (verified: synbmark rings pay through gdb, the dnsmasq daemon does not).
+        # The -d in_asm execution log is the observation tier for both: qemu prints every translated block with its exact guest address, and the rings are absolute ET_EXEC vaddrs, so they match literally and in execution order (verified on the mips-BE synbmark: all five keychain rings appear exactly once, in order).
         self.use_asmlog = (
             (str(cp.get("endian") or "") == "big"
              and int(cp.get("psize") or 4) == 4)
@@ -992,6 +1038,9 @@ class TracedRun(object):
         """Collect the run. Waits for the tracee (via gdb when attached:
         the gdbstub keeps the guest halted until `continue`, so gdb exit
         means the guest ended or crashed); returns a result dict."""
+        if self.fail_closed:
+            return {"hits": [], "rc": -9, "out": "", "trace": "",
+                    "gdblog": "", "fallback": "fail-closed"}
         deadline = time.time() + timeout
         if self.gdb is not None:
             try:
@@ -1049,12 +1098,7 @@ class TracedRun(object):
                 "gdblog": gdblog, "fallback": fallback}
 
     def _asm_tier(self):
-        """mips-BE observation tier: the -d in_asm block log. Every
-        translated block prints with its exact guest address and the
-        rings are absolute ET_EXEC vaddrs, so an in-order walk yields
-        the same ordered-prefix measurement the gdb ring trace makes
-        (UPX-packed binaries work too: the unpacked image lands at the
-        original vaddrs)."""
+        """qemu-stub observation tier (mips BE, arm dynamic): the -d in_asm block log. Every translated block prints with its exact guest address and the rings are absolute ET_EXEC vaddrs, so an in-order walk yields the same ordered-prefix measurement the gdb ring trace makes (UPX-packed binaries work too: the unpacked image lands at the original vaddrs)."""
         try:
             asm = open(self.asmlog, errors="replace").read()
         except OSError:
@@ -1100,6 +1144,9 @@ def ring_prefix(hits, nrings):
 def plain_run(qemu, tree, binary, argv, tag, timeout=90, stdin_bytes=None):
     """Untraced stability rerun: strace(exec gate) + drop + qemu, no gdb.
     Same result shape as TracedRun.finish()."""
+    if vc.drop_fail_closed():
+        return {"hits": [], "rc": -9, "out": "", "trace": "",
+                "gdblog": "", "fallback": "fail-closed"}
     runas = shlex.split(os.environ.get("VERIFIER_RUNAS", ""))
     trace = "/tmp/fw-trace-%s.strace" % tag
     out = "/tmp/fw-trace-%s.out" % tag
@@ -1382,7 +1429,7 @@ def _main():
                         details.append("⚠ CPT %s: gdb unavailable -- syscall "
                                        "anchor tier" % bn)
                     if res["fallback"] == "asmlog":
-                        details.append("ℹ CPT %s: mips-BE stub tier -- "
+                        details.append("ℹ CPT %s: qemu-stub tier -- "
                                        "in_asm block-log rings" % bn)
                     if res["rc"] is not None and res["rc"] != -9:
                         obs = str(c.get("banner_obs") or "")
@@ -1943,6 +1990,10 @@ def _boot_battery(gt, disk, sb, budget, ag_root):
     booted rootfs vs the agent's own tree."""
     import subprocess as _sp
     notes, pts = [], 0.0
+    if vc.drop_fail_closed():
+        notes.append("✗ BATT: fail-closed, privilege drop unavailable on a "
+                     "root verifier")
+        return 0.0, notes
     sub = sb.get("battery") or {}
     flag_each = sub.get("flag_each", 1.0)
     probes = sb.get("port_probes") or \
@@ -2694,7 +2745,7 @@ def _main():
             details.append("⚠ T_PROC: gdb unavailable -- syscall anchor "
                            "tier (announced degradation)")
         if run1.get("fallback") == "asmlog":
-            details.append("ℹ T_PROC: mips-BE stub tier -- in_asm "
+            details.append("ℹ T_PROC: qemu-stub tier -- in_asm "
                            "block-log rings")
     elif rings and not g_t3:
         details.append("✗ T_PROC: voided by the control differential")
@@ -2853,6 +2904,8 @@ def _plain_rerun(kind, t, QEMU, ag_root, ap, keys, poc_bytes,
                  service_argv, argv_case_argv, wait_port, exchange,
                  result_standard, tag, cp_native=None):
     """Untraced stability rerun (strace exec-gate still applies)."""
+    if vc.drop_fail_closed():
+        return None
     import shlex
     runas = shlex.split(os.environ.get("VERIFIER_RUNAS", ""))
 

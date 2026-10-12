@@ -1,0 +1,23 @@
+diff --git a/src/select.c b/src/select.c
+index 4b0b5542..9fcf30ff 100644
+--- a/src/select.c
++++ b/src/select.c
+@@ -6426,14 +6465,12 @@ static void selectAddSubqueryTypeInfo(Walker *pWalker, Select *p){
+   assert( (p->selFlags & SF_Resolved) );
+   pTabList = p->pSrc;
+   for(i=0, pFrom=pTabList->a; i<pTabList->nSrc; i++, pFrom++){
+-    Table *pTab = pFrom->pTab;
++    Table *pTab = pFrom->pSTab;
+     assert( pTab!=0 );
+-    if( (pTab->tabFlags & TF_Ephemeral)!=0 ){
++    if( (pTab->tabFlags & TF_Ephemeral)!=0 && pFrom->fg.isSubquery ){
+       /* A sub-query in the FROM clause of a SELECT */
+-      Select *pSel = pFrom->pSelect;
+-      if( pSel ){
+-        sqlite3SubqueryColumnTypes(pParse, pTab, pSel, SQLITE_AFF_NONE);
+-      }
++      Select *pSel = pFrom->u4.pSubq->pSelect;
++      sqlite3SubqueryColumnTypes(pParse, pTab, pSel, SQLITE_AFF_NONE);
+     }
+   }
+ }

@@ -1,0 +1,53 @@
+diff --git a/src/os_unix.c b/src/os_unix.c
+index c94c0c11..5d1dc9ac 100644
+--- a/src/os_unix.c
++++ b/src/os_unix.c
+@@ -322,7 +322,7 @@ static pid_t randomnessPid = 0;
+ #define UNIXFILE_EXCL        0x01     /* Connections from one process only */
+ #define UNIXFILE_RDONLY      0x02     /* Connection is read only */
+ #define UNIXFILE_PERSIST_WAL 0x04     /* Persistent WAL mode */
+-#ifndef SQLITE_DISABLE_DIRSYNC
++#if !defined(SQLITE_DISABLE_DIRSYNC) && !defined(_AIX)
+ # define UNIXFILE_DIRSYNC    0x08     /* Directory sync needed */
+ #else
+ # define UNIXFILE_DIRSYNC    0x00
+diff --git a/src/parse.y b/src/parse.y
+index 68c00f0a..926dd6e7 100644
+--- a/src/parse.y
++++ b/src/parse.y
+@@ -740,11 +740,21 @@ seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) LP exprlist(E) RP as(Z) on_using(N
+       if( A ){
+         SrcItem *pNew = &A->a[A->nSrc-1];
+         SrcItem *pOld = F->a;
++        assert( pOld->fg.fixedSchema==0 );
+         pNew->zName = pOld->zName;
+-        pNew->zDatabase = pOld->zDatabase;
+-        pNew->pSelect = pOld->pSelect;
+-        if( pNew->pSelect && (pNew->pSelect->selFlags & SF_NestedFrom)!=0 ){
+-          pNew->fg.isNestedFrom = 1;
++        assert( pOld->fg.fixedSchema==0 );
++        if( pOld->fg.isSubquery ){
++          pNew->fg.isSubquery = 1;
++          pNew->u4.pSubq = pOld->u4.pSubq;
++          pOld->u4.pSubq = 0;
++          pOld->fg.isSubquery = 0;
++          assert( pNew->u4.pSubq!=0 && pNew->u4.pSubq->pSelect!=0 );
++          if( (pNew->u4.pSubq->pSelect->selFlags & SF_NestedFrom)!=0 ){
++            pNew->fg.isNestedFrom = 1;
++          }
++        }else{
++          pNew->u4.zDatabase = pOld->u4.zDatabase;
++          pOld->u4.zDatabase = 0;
+         }
+         if( pOld->fg.isTabFunc ){
+           pNew->u1.pFuncArg = pOld->u1.pFuncArg;
+@@ -752,8 +762,7 @@ seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) LP exprlist(E) RP as(Z) on_using(N
+           pOld->fg.isTabFunc = 0;
+           pNew->fg.isTabFunc = 1;
+         }
+-        pOld->zName = pOld->zDatabase = 0;
+-        pOld->pSelect = 0;
++        pOld->zName = 0;
+       }
+       sqlite3SrcListDelete(pParse->db, F);
+     }else{

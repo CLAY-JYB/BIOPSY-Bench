@@ -1,0 +1,75 @@
+diff --git a/src/resolve.c b/src/resolve.c
+index dbb54198..202e87db 100644
+--- a/src/resolve.c
++++ b/src/resolve.c
+@@ -346,10 +346,10 @@ static int lookupName(
+     if( pSrcList ){
+       for(i=0, pItem=pSrcList->a; i<pSrcList->nSrc; i++, pItem++){
+         u8 hCol;
+-        pTab = pItem->pTab;
++        pTab = pItem->pSTab;
+         assert( pTab!=0 && pTab->zName!=0 );
+         assert( pTab->nCol>0 || pParse->nErr );
+-        assert( (int)pItem->fg.isNestedFrom == IsNestedFrom(pItem->pSelect) );
++        assert( (int)pItem->fg.isNestedFrom == IsNestedFrom(pItem));
+         if( pItem->fg.isNestedFrom ){
+           /* In this case, pItem is a subquery that has been formed from a
+           ** parenthesized subset of the FROM clause terms.  Example:
+@@ -358,8 +358,12 @@ static int lookupName(
+           **             This pItem -------------^
+           */
+           int hit = 0;
+-          assert( pItem->pSelect!=0 );
+-          pEList = pItem->pSelect->pEList;
++          Select *pSel;
++          assert( pItem->fg.isSubquery );
++          assert( pItem->u4.pSubq!=0 );
++          pSel = pItem->u4.pSubq->pSelect;
++          assert( pSel!=0 );
++          pEList = pSel->pEList;
+           assert( pEList!=0 );
+           assert( pEList->nExpr==pTab->nCol );
+           for(j=0; j<pEList->nExpr; j++){
+@@ -483,8 +487,8 @@ static int lookupName(
+           if( cntTab==0
+            || (cntTab==1
+                && ALWAYS(pMatch!=0)
+-               && ALWAYS(pMatch->pTab!=0)
+-               && (pMatch->pTab->tabFlags & TF_Ephemeral)!=0
++               && ALWAYS(pMatch->pSTab!=0)
++               && (pMatch->pSTab->tabFlags & TF_Ephemeral)!=0
+                && (pTab->tabFlags & TF_Ephemeral)==0)
+           ){
+             cntTab = 1;
+@@ -505,7 +509,7 @@ static int lookupName(
+       if( pMatch ){
+         pExpr->iTable = pMatch->iCursor;
+         assert( ExprUseYTab(pExpr) );
+-        pExpr->y.pTab = pMatch->pTab;
++        pExpr->y.pTab = pMatch->pSTab;
+         if( (pMatch->fg.jointype & (JT_LEFT|JT_LTORJ))!=0 ){
+           ExprSetProperty(pExpr, EP_CanBeNull);
+         }
+@@ -547,7 +551,7 @@ static int lookupName(
+       if( (pNC->ncFlags & NC_UUpsert)!=0 && zTab!=0 ){
+         Upsert *pUpsert = pNC->uNC.pUpsert;
+         if( pUpsert && sqlite3StrICmp("excluded",zTab)==0 ){
+-          pTab = pUpsert->pUpsertSrc->a[0].pTab;
++          pTab = pUpsert->pUpsertSrc->a[0].pSTab;
+           pExpr->iTable = EXCLUDED_TABLE_NUMBER;
+         }
+       }
+@@ -630,11 +634,11 @@ static int lookupName(
+      && pMatch
+      && (pNC->ncFlags & (NC_IdxExpr|NC_GenCol))==0
+      && sqlite3IsRowid(zCol)
+-     && ALWAYS(VisibleRowid(pMatch->pTab) || pMatch->fg.isNestedFrom)
++     && ALWAYS(VisibleRowid(pMatch->pSTab) || pMatch->fg.isNestedFrom)
+     ){
+       cnt = cntTab;
+ #if SQLITE_ALLOW_ROWID_IN_VIEW+0==2
+-      if( pMatch->pTab!=0 && IsView(pMatch->pTab) ){
++      if( pMatch->pSTab!=0 && IsView(pMatch->pSTab) ){
+         eNewExprOp = TK_NULL;
+       }
+ #endif

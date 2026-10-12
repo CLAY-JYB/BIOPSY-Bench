@@ -220,6 +220,9 @@ confined_agent_dir() {
 # --- baseline #3: privilege drop (FAIL-CLOSED on a root verifier) ---------------
 # Wraps EXECUTION of agent/analyzed code only; static analysis tools run as the verifier.
 # VERIFIER_RUNAS is exported so embedded python scorers can reuse the same drop via shlex.split(os.environ["VERIFIER_RUNAS"]).
+# VER_DROP_OK is exported for the python core's gate (verifier_core.drop_fail_closed): a root
+# verifier with no usable drop must REFUSE every agent-code run (denied observables, the
+# affected bucket scores 0) instead of executing analyzed code as root.
 VER_RUNAS=()
 VER_DROP_OK=1
 if command_exists setpriv && id nobody >/dev/null 2>&1 \
@@ -229,7 +232,9 @@ if command_exists setpriv && id nobody >/dev/null 2>&1 \
     export VERIFIER_RUNAS="${VER_RUNAS[*]}"
 elif [ "$(id -u)" = "0" ]; then
     VER_DROP_OK=0
+    echo "✗ fail-closed: privilege drop unavailable on a root verifier; agent-code execution refused (affected buckets score 0)" >&2
 fi
+export VER_DROP_OK
 
 # --- baseline #4: execve/execveat gate (plain-text strace logs) ------------------
 # rc 0 = violation (the traced run executed a verifier-side binary). $2 (optional) is the ONE exempted verifier-side target -- the binary under test when the activation command runs it directly (its first execve would otherwise void every legitimate run).
