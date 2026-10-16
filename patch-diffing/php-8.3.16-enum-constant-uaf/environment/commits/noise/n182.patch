@@ -1,0 +1,321 @@
+diff --git a/ext/mysqli/tests/mysqli_class_mysqli_stmt_interface.phpt b/ext/mysqli/tests/mysqli_class_mysqli_stmt_interface.phpt
+index c0101a8d..626843c4 100644
+--- a/ext/mysqli/tests/mysqli_class_mysqli_stmt_interface.phpt
++++ b/ext/mysqli/tests/mysqli_class_mysqli_stmt_interface.phpt
+@@ -40,9 +40,11 @@ mysqli
+         'store_result'      => true,
+     );
+ 
+-    $expected_methods['get_result'] = true;
+-    $expected_methods['more_results'] = true;
+-    $expected_methods['next_result'] = true;
++    if ($IS_MYSQLND) {
++        $expected_methods['get_result'] = true;
++        $expected_methods['more_results'] = true;
++        $expected_methods['next_result'] = true;
++    }
+ 
+     foreach ($methods as $k => $method) {
+     if (isset($expected_methods[$method])) {
+diff --git a/ext/mysqli/tests/mysqli_commit.phpt b/ext/mysqli/tests/mysqli_commit.phpt
+index ec90ab6d..642b5d9b 100644
+--- a/ext/mysqli/tests/mysqli_commit.phpt
++++ b/ext/mysqli/tests/mysqli_commit.phpt
+@@ -4,16 +4,18 @@ mysqli_commit()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+ 
+ if (!have_innodb($link))
+     die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[004] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -60,7 +62,7 @@ if (!have_innodb($link))
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli object is already closed
+diff --git a/ext/mysqli/tests/mysqli_commit_oo.phpt b/ext/mysqli/tests/mysqli_commit_oo.phpt
+index fd4c1bbf..56c90b86 100644
+--- a/ext/mysqli/tests/mysqli_commit_oo.phpt
++++ b/ext/mysqli/tests/mysqli_commit_oo.phpt
+@@ -4,16 +4,18 @@ mysqli_commit()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+ 
+ if (!have_innodb($link))
+     die(sprintf("skip Needs InnoDB support, [%d] %s", $link->errno, $link->error));
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require_once("connect.inc");
+ 
+     $tmp    = NULL;
+     $link   = NULL;
+@@ -95,10 +97,9 @@ if (!have_innodb($link))
+     }
+ 
+     print "done!";
+-?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ mysqli object is not fully initialized
+diff --git a/ext/mysqli/tests/mysqli_connect.phpt b/ext/mysqli/tests/mysqli_connect.phpt
+index f229515f..08a6fd11 100644
+--- a/ext/mysqli/tests/mysqli_connect.phpt
++++ b/ext/mysqli/tests/mysqli_connect.phpt
+@@ -118,26 +118,28 @@ require_once('skipifconnectfailure.inc');
+         mysqli_close($link);
+     }
+ 
+-    ini_set('mysqli.default_host', 'p:' . $host);
+-    if (!is_object($link = mysqli_connect())) {
+-        printf("[021] Usage of mysqli.default_host (persistent) failed\n") ;
+-    } else {
+-        if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
+-            printf("[022] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+-        $tmp = mysqli_fetch_assoc($res);
+-        if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
+-            printf("[023] Result looks strange - check manually, [%d] %s\n",
+-                mysqli_errno($link), mysqli_error($link));
+-            var_dump($tmp);
++    if ($IS_MYSQLND) {
++        ini_set('mysqli.default_host', 'p:' . $host);
++            if (!is_object($link = mysqli_connect())) {
++                printf("[021] Usage of mysqli.default_host (persistent) failed\n") ;
++        } else {
++            if (!$res = mysqli_query($link, "SELECT 'mysqli.default_host (persistent)' AS 'testing'"))
++                printf("[022] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++            $tmp = mysqli_fetch_assoc($res);
++            if ($tmp['testing'] !== 'mysqli.default_host (persistent)') {
++                printf("[023] Result looks strange - check manually, [%d] %s\n",
++                    mysqli_errno($link), mysqli_error($link));
++                var_dump($tmp);
++            }
++            mysqli_free_result($res);
++            mysqli_close($link);
+         }
+-        mysqli_free_result($res);
+-        mysqli_close($link);
+-    }
+ 
+-    ini_set('mysqli.default_host', 'p:');
+-    if (is_object($link = @mysqli_connect())) {
+-        printf("[024] Usage of mysqli.default_host=p: did not fail\n") ;
+-        mysqli_close($link);
++        ini_set('mysqli.default_host', 'p:');
++        if (is_object($link = @mysqli_connect())) {
++            printf("[024] Usage of mysqli.default_host=p: did not fail\n") ;
++            mysqli_close($link);
++        }
+     }
+ 
+     print "done!";
+diff --git a/ext/mysqli/tests/mysqli_connect_attr.phpt b/ext/mysqli/tests/mysqli_connect_attr.phpt
+index 323a87b7..eadf7b0f 100644
+--- a/ext/mysqli/tests/mysqli_connect_attr.phpt
++++ b/ext/mysqli/tests/mysqli_connect_attr.phpt
+@@ -4,10 +4,13 @@ mysqli check the session_connect_attrs table for connection attributes
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++if (!$IS_MYSQLND)
++    die("skip: test applies only to mysqlnd");
++
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die("skip Cannot connect to the server");
+ 
+ /* skip test if the server version does not have session_connect_attrs table yet*/
+ if (!$res = mysqli_query($link, "select count(*) as count from information_schema.tables where table_schema='performance_schema' and table_name='session_connect_attrs';"))
+@@ -35,7 +38,7 @@ mysqli_close($link);
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require_once("connect.inc");
+ 
+     $tmp    = NULL;
+     $link   = NULL;
+diff --git a/ext/mysqli/tests/mysqli_connect_oo.phpt b/ext/mysqli/tests/mysqli_connect_oo.phpt
+index 78293eb8..ec47e29c 100644
+--- a/ext/mysqli/tests/mysqli_connect_oo.phpt
++++ b/ext/mysqli/tests/mysqli_connect_oo.phpt
+@@ -24,40 +24,35 @@ require_once('skipifconnectfailure.inc');
+ 
+     // Run the following tests without an anoynmous MySQL user and use a password for the test user!
+     ini_set('mysqli.default_socket', $socket);
+-    $mysqli = new mysqli($host, $user, $passwd, $db, $port);
+-    if (0 !== mysqli_connect_errno()) {
++    if (!is_object($mysqli = new mysqli($host, $user, $passwd, $db, $port)) || (0 !== mysqli_connect_errno())) {
+         printf("[005] Usage of mysqli.default_socket failed\n") ;
+     } else {
+         $mysqli->close();
+     }
+ 
+     ini_set('mysqli.default_port', $port);
+-    $mysqli = new mysqli($host, $user, $passwd, $db);
+-    if (0 !== mysqli_connect_errno()) {
++    if (!is_object($mysqli = new mysqli($host, $user, $passwd, $db)) || (0 !== mysqli_connect_errno())) {
+         printf("[006] Usage of mysqli.default_port failed\n") ;
+     } else {
+         $mysqli->close();
+     }
+ 
+     ini_set('mysqli.default_pw', $passwd);
+-    $mysqli = new mysqli($host, $user);
+-    if (0 !== mysqli_connect_errno()) {
++    if (!is_object($mysqli = new mysqli($host, $user)) || (0 !== mysqli_connect_errno())) {
+         printf("[007] Usage of mysqli.default_pw failed\n") ;
+     } else {
+         $mysqli->close();
+     }
+ 
+     ini_set('mysqli.default_user', $user);
+-    $mysqli = new mysqli($host);
+-    if (0 !== mysqli_connect_errno()) {
++    if (!is_object($mysqli = new mysqli($host)) || (0 !== mysqli_connect_errno())) {
+         printf("[008] Usage of mysqli.default_user failed\n") ;
+     } else {
+         $mysqli->close();
+     }
+ 
+     ini_set('mysqli.default_host', $host);
+-    $mysqli = new mysqli();
+-    if (0 !== mysqli_connect_errno()) {
++    if (!is_object($mysqli = new mysqli()) || (0 !== mysqli_connect_errno())) {
+         printf("[012] Failed to create mysqli object\n");
+     } else {
+         // There shall be NO connection! Using new mysqli(void) shall not use defaults for a connection!
+@@ -71,16 +66,22 @@ require_once('skipifconnectfailure.inc');
+         }
+     }
+ 
+-    ini_set('mysqli.default_host', 'p:' . $host);
+-    $mysqli = new mysqli();
+-    // There shall be NO connection! Using new mysqli(void) shall not use defaults for a connection!
+-    // We had long discussions on this and found that the ext/mysqli API as
+-    // such is broken. As we can't fix it, we document how it has behaved from
+-    // the first day on. And that's: no connection.
+-    try {
+-        $mysqli->query('SELECT 1');
+-    } catch (Error $exception) {
+-        echo $exception->getMessage() . "\n";
++    if ($IS_MYSQLND) {
++        ini_set('mysqli.default_host', 'p:' . $host);
++        if (!is_object($mysqli = new mysqli())) {
++            // Due to an API flaw this shall not connect
++            printf("[010] Failed to create mysqli object\n");
++        } else {
++            // There shall be NO connection! Using new mysqli(void) shall not use defaults for a connection!
++            // We had long discussions on this and found that the ext/mysqli API as
++            // such is broken. As we can't fix it, we document how it has behaved from
++            // the first day on. And that's: no connection.
++            try {
++                $mysqli->query('SELECT 1');
++            } catch (Error $exception) {
++                echo $exception->getMessage() . "\n";
++            }
++        }
+     }
+ 
+     print "... and now Exceptions\n";
+diff --git a/ext/mysqli/tests/mysqli_connect_oo_warnings.phpt b/ext/mysqli/tests/mysqli_connect_oo_warnings.phpt
+new file mode 100644
+index 00000000..b16547d8
+--- /dev/null
++++ b/ext/mysqli/tests/mysqli_connect_oo_warnings.phpt
+@@ -0,0 +1,57 @@
++--TEST--
++new mysqli()
++--EXTENSIONS--
++mysqli
++--SKIPIF--
++<?php
++    require_once('skipifconnectfailure.inc');
++    if (!get_current_user())
++        die('skip: get_current_user() not supported');
++    if (stristr(mysqli_get_client_info(), 'mysqlnd'))
++        die("skip: test for libmysql (different error output when using php streams");
++?>
++--FILE--
++<?php
++    require_once("connect.inc");
++
++    $myhost = 'invalidhost';
++    $link   = NULL;
++
++    print "1) bail\n";
++    if (!is_object($mysqli = new mysqli($myhost)) || ('mysqli' !== get_class($mysqli)))
++        printf("[001] Expecting NULL, got %s/%s\n", gettype($mysqli), (is_object($mysqli)) ? var_export($mysqli, true) : $mysqli);
++
++    print "2) be quiet\n";
++    if (!is_object($mysqli = @new mysqli($myhost)) || ('mysqli' !== get_class($mysqli)))
++        printf("[002] Expecting NULL, got %s/%s\n", gettype($mysqli), (is_object($mysqli)) ? var_export($mysqli, true) : $mysqli);
++    var_dump(mysqli_connect_error());
++    var_dump(mysqli_connect_errno());
++
++    print "3) bail\n";
++    if (false !== ($link = mysqli_connect($myhost))) {
++        printf("[003] Expecting boolean/false, got %s/%s\n", gettype($link), $link);
++    }
++
++    print "4) be quiet\n";
++    if (false !== ($link = @mysqli_connect($myhost))) {
++        printf("[004] Expecting boolean/false, got %s/%s\n", gettype($link), $link);
++    }
++    var_dump(mysqli_connect_error());
++    var_dump(mysqli_connect_errno());
++
++    print "done!";
++?>
++--EXPECTF--
++1) bail
++
++Warning: mysqli::__construct(): (HY000/200%d): %s
++2) be quiet
++%s(%d) "%s"
++int(200%d)
++3) bail
++
++Warning: mysqli_connect(): (HY000/200%d): %s
++4) be quiet
++%s(%d) "%s"
++int(200%d)
++done!

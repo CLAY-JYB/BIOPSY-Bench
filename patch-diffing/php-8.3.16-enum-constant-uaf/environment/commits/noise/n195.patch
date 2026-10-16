@@ -1,0 +1,170 @@
+diff --git a/ext/mysqli/tests/mysqli_warning_unclonable.phpt b/ext/mysqli/tests/mysqli_warning_unclonable.phpt
+index 46033402..f1aaad60 100644
+--- a/ext/mysqli/tests/mysqli_warning_unclonable.phpt
++++ b/ext/mysqli/tests/mysqli_warning_unclonable.phpt
+@@ -4,13 +4,14 @@ Trying to clone mysqli_warning object
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
+ if (!$TEST_EXPERIMENTAL)
+     die("skip - experimental (= unsupported) feature");
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -34,7 +35,7 @@ if (!$TEST_EXPERIMENTAL)
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Fatal error: Trying to clone an uncloneable object of class mysqli_warning in %s on line %d
+diff --git a/ext/mysqli/tests/skipifconnectfailure.inc b/ext/mysqli/tests/skipifconnectfailure.inc
+index 2e770426..ccde567b 100644
+--- a/ext/mysqli/tests/skipifconnectfailure.inc
++++ b/ext/mysqli/tests/skipifconnectfailure.inc
+@@ -1,6 +1,7 @@
+ <?php
+-require_once 'connect.inc';
++require_once('connect.inc');
+ if ($skip_on_connect_failure) {
++    include_once('connect.inc');
+     $link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket);
+     if (!is_object($link))
+         die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+diff --git a/ext/mysqli/tests/table.inc b/ext/mysqli/tests/table.inc
+index 3b011a12..16b688f7 100644
+--- a/ext/mysqli/tests/table.inc
++++ b/ext/mysqli/tests/table.inc
+@@ -1,5 +1,5 @@
+ <?PHP
+-require_once 'connect.inc';
++require_once('connect.inc');
+ 
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+     printf("Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+diff --git a/ext/mysqli/tests/write_property.phpt b/ext/mysqli/tests/write_property.phpt
+index 25b538f9..e54f7387 100644
+--- a/ext/mysqli/tests/write_property.phpt
++++ b/ext/mysqli/tests/write_property.phpt
+@@ -13,6 +13,18 @@ try {
+     echo $e->getMessage(), "\n";
+ }
+ 
++$driver->reconnect = 0;
++var_dump($driver->reconnect);
++$str = '4';
++$str .= '2';
++$driver->reconnect = $str;
++var_dump($driver->reconnect);
++try {
++    $driver->reconnect = [];
++} catch (Error $e) {
++    echo $e->getMessage(), "\n";
++}
++
+ $driver->report_mode = "1";
+ var_dump($driver->report_mode);
+ try {
+@@ -24,5 +36,8 @@ try {
+ ?>
+ --EXPECT--
+ Cannot write read-only property mysqli_driver::$client_info
++bool(false)
++bool(true)
++Cannot assign array to property mysqli_driver::$reconnect of type bool
+ int(1)
+ Cannot assign array to property mysqli_driver::$report_mode of type int
+diff --git a/ext/mysqli/tests/write_property_strict.phpt b/ext/mysqli/tests/write_property_strict.phpt
+index 841cc36b..3084ab86 100644
+--- a/ext/mysqli/tests/write_property_strict.phpt
++++ b/ext/mysqli/tests/write_property_strict.phpt
+@@ -15,6 +15,12 @@ try {
+     echo $e->getMessage(), "\n";
+ }
+ 
++try {
++    $driver->reconnect = 0;
++} catch (Error $e) {
++    echo $e->getMessage(), "\n";
++}
++
+ try {
+     $driver->report_mode = "1";
+ } catch (Error $e) {
+@@ -24,4 +30,5 @@ try {
+ ?>
+ --EXPECT--
+ Cannot write read-only property mysqli_driver::$client_info
++Cannot assign int to property mysqli_driver::$reconnect of type bool
+ Cannot assign string to property mysqli_driver::$report_mode of type int
+diff --git a/ext/mysqlnd/mysqlnd.h b/ext/mysqlnd/mysqlnd.h
+index 840d2192..734001ed 100644
+--- a/ext/mysqlnd/mysqlnd.h
++++ b/ext/mysqlnd/mysqlnd.h
+@@ -109,6 +109,7 @@ PHPAPI void mysqlnd_debug(const char *mode);
+ #define mysqlnd_query(conn, query_str, query_len)		((conn)->data)->m->query((conn)->data, (query_str), (query_len))
+ #define mysqlnd_async_query(conn, query_str, query_len)	((conn)->data)->m->send_query((conn)->data, (query_str), (query_len), NULL, NULL)
+ #define mysqlnd_reap_async_query(conn)					((conn)->data)->m->reap_query((conn)->data)
++#define mysqlnd_unbuffered_skip_result(result)			(result)->m.skip_result((result))
+ 
+ PHPAPI enum_func_status mysqlnd_poll(MYSQLND **r_array, MYSQLND **e_array, MYSQLND ***dont_poll, long sec, long usec, int * desc_num);
+ 
+diff --git a/ext/mysqlnd/mysqlnd_connection.c b/ext/mysqlnd/mysqlnd_connection.c
+index fa50c23c..c905e38c 100644
+--- a/ext/mysqlnd/mysqlnd_connection.c
++++ b/ext/mysqlnd/mysqlnd_connection.c
+@@ -361,20 +361,20 @@ MYSQLND_METHOD(mysqlnd_conn_data, set_server_option)(MYSQLND_CONN_DATA * const c
+ 
+ 
+ /* {{{ mysqlnd_conn_data::restart_psession */
+-static void
++static enum_func_status
+ MYSQLND_METHOD(mysqlnd_conn_data, restart_psession)(MYSQLND_CONN_DATA * conn)
+ {
+ 	DBG_ENTER("mysqlnd_conn_data::restart_psession");
+ 	MYSQLND_INC_CONN_STATISTIC(conn->stats, STAT_CONNECT_REUSED);
+ 	conn->current_result = NULL;
+ 	conn->last_message.s = NULL;
+-	DBG_VOID_RETURN;
++	DBG_RETURN(PASS);
+ }
+ /* }}} */
+ 
+ 
+ /* {{{ mysqlnd_conn_data::end_psession */
+-static void
++static enum_func_status
+ MYSQLND_METHOD(mysqlnd_conn_data, end_psession)(MYSQLND_CONN_DATA * conn)
+ {
+ 	DBG_ENTER("mysqlnd_conn_data::end_psession");
+@@ -385,7 +385,7 @@ MYSQLND_METHOD(mysqlnd_conn_data, end_psession)(MYSQLND_CONN_DATA * conn)
+ 	}
+ 	mysqlnd_set_string(&conn->last_message, NULL, 0);
+ 	conn->error_info = &conn->error_info_impl;
+-	DBG_VOID_RETURN;
++	DBG_RETURN(PASS);
+ }
+ /* }}} */
+ 
+@@ -503,8 +503,9 @@ MYSQLND_METHOD(mysqlnd_conn_data, connect_handshake)(MYSQLND_CONN_DATA * conn,
+ 	enum_func_status ret = FAIL;
+ 	DBG_ENTER("mysqlnd_conn_data::connect_handshake");
+ 
+-	if (PASS == conn->vio->data->m.connect(conn->vio, *scheme, conn->persistent, conn->stats, conn->error_info)) {
+-		conn->protocol_frame_codec->data->m.reset(conn->protocol_frame_codec, conn->stats, conn->error_info);
++	if (PASS == conn->vio->data->m.connect(conn->vio, *scheme, conn->persistent, conn->stats, conn->error_info) &&
++		PASS == conn->protocol_frame_codec->data->m.reset(conn->protocol_frame_codec, conn->stats, conn->error_info))
++	{
+ 		size_t client_flags = mysql_flags;
+ 
+ 		ret = conn->command->handshake(conn, *username, *password, *database, client_flags);

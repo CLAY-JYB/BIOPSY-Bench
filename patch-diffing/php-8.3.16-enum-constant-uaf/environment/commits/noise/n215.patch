@@ -1,0 +1,263 @@
+diff --git a/ext/pcntl/tests/pcntl_fork_variation.phpt b/ext/pcntl/tests/pcntl_fork_variation.phpt
+index 744c8aaf..81cc8343 100644
+--- a/ext/pcntl/tests/pcntl_fork_variation.phpt
++++ b/ext/pcntl/tests/pcntl_fork_variation.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Test function pcntl_fork() by testing the process isolation in the forking hierarchy father -> son -> grandson where father cannot know his grandson
++Test function pcntl_fork() by testing the process isolation in the forking hierarchy father -> son -> grandson where father can not knows his grandson
+ --CREDITS--
+ Marco Fabbri mrfabbri@gmail.com
+ Francesco Fullone ff@ideato.it
+diff --git a/ext/pcntl/tests/pcntl_getpriority_error.phpt b/ext/pcntl/tests/pcntl_getpriority_error.phpt
+index 2fa88a76..4339e0eb 100644
+--- a/ext/pcntl/tests/pcntl_getpriority_error.phpt
++++ b/ext/pcntl/tests/pcntl_getpriority_error.phpt
+@@ -1,36 +1,23 @@
+ --TEST--
+-pcntl_getpriority() - Wrong mode passed and also for non existing process id provided
++pcntl_getpriority() - Wrong process identifier
+ --EXTENSIONS--
+ pcntl
+-posix
+ --SKIPIF--
+ <?php
+ 
+-require_once("pcntl_skipif_user_env_rules.inc");
+-
+ if (!function_exists('pcntl_getpriority')) {
+     die('skip pcntl_getpriority doesn\'t exist');
+ }
+-
+-if (PHP_OS == "Darwin") {
+-    die("skip This test is not for Darwin");
+-}
+-
+ ?>
+ --FILE--
+ <?php
+ 
+ try {
+-    pcntl_getpriority(null, PRIO_PGRP + PRIO_USER + PRIO_PROCESS + 10);
++    pcntl_getpriority(null, 42);
+ } catch (ValueError $exception) {
+     echo $exception->getMessage() . "\n";
+ }
+ 
+-// Different behavior in MacOS than rest of operating systems
+-pcntl_getpriority(-1, PRIO_PROCESS);
+-
+ ?>
+---EXPECTF--
++--EXPECT--
+ pcntl_getpriority(): Argument #2 ($mode) must be one of PRIO_PGRP, PRIO_USER, or PRIO_PROCESS
+-
+-Warning: pcntl_getpriority(): Error %d: No process was located using the given parameters in %s
+diff --git a/ext/pcntl/tests/pcntl_getpriority_error_darwin.phpt b/ext/pcntl/tests/pcntl_getpriority_error_darwin.phpt
+deleted file mode 100644
+index 5ea8813f..00000000
+--- a/ext/pcntl/tests/pcntl_getpriority_error_darwin.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-pcntl_getpriority() - Wrong mode passed and also for non existing process id provided
+---EXTENSIONS--
+-pcntl
+-posix
+---SKIPIF--
+-<?php
+-
+-require_once("pcntl_skipif_user_env_rules.inc");
+-
+-if (!function_exists('pcntl_getpriority')) {
+-    die('skip pcntl_getpriority doesn\'t exist');
+-}
+-
+-if (PHP_OS !== "Darwin") {
+-    die("skip This test only runs on Darwin");
+-}
+-
+-?>
+---FILE--
+-<?php
+-
+-try {
+-    pcntl_getpriority(null, (PRIO_PGRP + PRIO_USER + PRIO_PROCESS + 10));
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-try {
+-    pcntl_getpriority(-1, PRIO_DARWIN_THREAD);
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-try {
+-    // Different behavior in MacOS than rest of operating systems
+-    pcntl_getpriority(-1, PRIO_PROCESS);
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-pcntl_getpriority(): Argument #2 ($mode) must be one of PRIO_PGRP, PRIO_USER, PRIO_PROCESS or PRIO_DARWIN_THREAD
+-pcntl_getpriority(): Argument #1 ($process_id) must be 0 (zero) if PRIO_DARWIN_THREAD is provided as second parameter
+-pcntl_getpriority(): Argument #1 ($process_id) is not a valid process, process group, or user ID
+diff --git a/ext/pcntl/tests/pcntl_setpriority_error.phpt b/ext/pcntl/tests/pcntl_setpriority_error.phpt
+index 6f0a6797..cdb8d404 100644
+--- a/ext/pcntl/tests/pcntl_setpriority_error.phpt
++++ b/ext/pcntl/tests/pcntl_setpriority_error.phpt
+@@ -1,35 +1,23 @@
+ --TEST--
+-pcntl_setpriority() - Check for errors
++pcntl_setpriority() - Wrong process identifier
+ --EXTENSIONS--
+ pcntl
+-posix
+ --SKIPIF--
+ <?php
+ 
+-require_once("pcntl_skipif_user_env_rules.inc");
+-
+ if (!function_exists('pcntl_setpriority')) {
+     die('skip pcntl_setpriority doesn\'t exist');
+ }
+-
+-if (PHP_OS == "Darwin") {
+-    die("skip This test is not for Darwin");
+-}
+-
+ ?>
+ --FILE--
+ <?php
+ 
+ try {
+-    $result = pcntl_setpriority(0, null, (PRIO_PGRP + PRIO_USER + PRIO_PROCESS + 10));
++    pcntl_setpriority(0, null, 42);
+ } catch (ValueError $exception) {
+     echo $exception->getMessage() . "\n";
+ }
+ 
+-pcntl_setpriority(0, -123);
+-
+ ?>
+---EXPECTF--
++--EXPECT--
+ pcntl_setpriority(): Argument #3 ($mode) must be one of PRIO_PGRP, PRIO_USER, or PRIO_PROCESS
+-
+-Warning: pcntl_setpriority(): Error 3: No process was located using the given parameters in %s
+diff --git a/ext/pcntl/tests/pcntl_setpriority_error_darwin.phpt b/ext/pcntl/tests/pcntl_setpriority_error_darwin.phpt
+deleted file mode 100644
+index 6a8a7332..00000000
+--- a/ext/pcntl/tests/pcntl_setpriority_error_darwin.phpt
++++ /dev/null
+@@ -1,49 +0,0 @@
+---TEST--
+-pcntl_setpriority() - Check for errors
+---EXTENSIONS--
+-pcntl
+-posix
+---SKIPIF--
+-<?php
+-
+-require_once("pcntl_skipif_user_env_rules.inc");
+-
+-if (!function_exists('pcntl_setpriority')) {
+-    die('skip pcntl_setpriority doesn\'t exist');
+-}
+-
+-if (PHP_OS !== "Darwin") {
+-    die("skip This test only runs on Darwin");
+-}
+-
+-?>
+---FILE--
+-<?php
+-
+-try {
+-    pcntl_setpriority(0, null, (PRIO_PGRP + PRIO_USER + PRIO_PROCESS + 10));
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-try {
+-    pcntl_setpriority(0, -1, PRIO_DARWIN_THREAD);
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-try {
+-    pcntl_setpriority(0, -123);
+-} catch (ValueError $exception) {
+-    echo $exception->getMessage() . "\n";
+-}
+-
+-pcntl_setpriority(-1000, 1);
+-
+-?>
+---EXPECTF--
+-pcntl_setpriority(): Argument #3 ($mode) must be one of PRIO_PGRP, PRIO_USER, PRIO_PROCESS or PRIO_DARWIN_THREAD
+-pcntl_setpriority(): Argument #2 ($process_id) must be 0 (zero) if PRIO_DARWIN_THREAD is provided as second parameter
+-pcntl_setpriority(): Argument #2 ($process_id) is not a valid process, process group, or user ID
+-
+-Warning: pcntl_setpriority(): Error 1: A process was located, but neither its effective nor real user ID matched the effective user ID of the caller in %s
+diff --git a/ext/pcntl/tests/pcntl_setpriority_error_linux.phpt b/ext/pcntl/tests/pcntl_setpriority_error_linux.phpt
+deleted file mode 100644
+index 49184f00..00000000
+--- a/ext/pcntl/tests/pcntl_setpriority_error_linux.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-pcntl_setpriority() - Check for errors
+---EXTENSIONS--
+-pcntl
+-posix
+---SKIPIF--
+-<?php
+-
+-require_once("pcntl_skipif_user_env_rules.inc");
+-
+-if (!function_exists('pcntl_setpriority')) {
+-    die('skip pcntl_setpriority doesn\'t exist');
+-}
+-
+-if (PHP_OS !== "Linux") {
+-    die("skip This test only runs on Linux");
+-}
+-
+-?>
+---FILE--
+-<?php
+-
+-pcntl_setpriority(-1000, 1);
+-pcntl_setpriority(-1000, 0);
+-
+-?>
+---EXPECTF--
+-Warning: pcntl_setpriority(): Error 1: A process was located, but neither its effective nor real user ID matched the effective user ID of the caller in %s
+-
+-Warning: pcntl_setpriority(): Error 13: Only a super user may attempt to increase the process priority in %s on line %d
+diff --git a/ext/pcntl/tests/pcntl_signal_001.phpt b/ext/pcntl/tests/pcntl_signal_001.phpt
+deleted file mode 100644
+index 2f4f3855..00000000
+--- a/ext/pcntl/tests/pcntl_signal_001.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-pcntl_signal() signal greater than max available.
+---EXTENSIONS--
+-pcntl
+---FILE--
+-<?php
+-try {
+-    pcntl_signal(1000000, function($signo){
+-        echo "signaled\n";
+-    });    
+-} catch (Error $e) {
+-    echo $e->getMessage();
+-}
+-?>
+---EXPECTF--
+-pcntl_signal(): Argument #1 ($signal) must be less than %d

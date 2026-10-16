@@ -1,0 +1,408 @@
+diff --git a/ext/phar/phar/pharcommand.inc b/ext/phar/phar/pharcommand.inc
+index fdc43654..1b1eeca5 100644
+--- a/ext/phar/phar/pharcommand.inc
++++ b/ext/phar/phar/pharcommand.inc
+@@ -1598,7 +1598,7 @@ class PharCommand extends CLICommand
+             if (is_bool($v)) {
+                 $v = $v ? 'enabled' : 'disabled';
+             }
+-            printf("%-{$klen}s  %s\n", $k.':', $v);
++            printf("%-${klen}s  %s\n", $k.':', $v);
+         }
+     }
+     // }}}
+diff --git a/ext/phar/phar_object.c b/ext/phar/phar_object.c
+index 8cd13e72..f329c3b0 100644
+--- a/ext/phar/phar_object.c
++++ b/ext/phar/phar_object.c
+@@ -1448,10 +1448,9 @@ static int phar_build(zend_object_iterator *iter, void *puser) /* {{{ */
+ 				}
+ 
+ 				switch (intern->type) {
+-					case SPL_FS_DIR: {
+-						zend_string *test_str = spl_filesystem_object_get_path(intern);
+-						fname_len = spprintf(&fname, 0, "%s%c%s", ZSTR_VAL(test_str), DEFAULT_SLASH, intern->u.dir.entry.d_name);
+-						zend_string_release_ex(test_str, /* persistent */ false);
++					case SPL_FS_DIR:
++						test = spl_filesystem_object_get_path(intern, NULL);
++						fname_len = spprintf(&fname, 0, "%s%c%s", test, DEFAULT_SLASH, intern->u.dir.entry.d_name);
+ 						if (php_stream_stat_path(fname, &ssb) == 0 && S_ISDIR(ssb.sb.st_mode)) {
+ 							/* ignore directories */
+ 							efree(fname);
+@@ -1471,7 +1470,6 @@ static int phar_build(zend_object_iterator *iter, void *puser) /* {{{ */
+ 
+ 						save = fname;
+ 						goto phar_spl_fileinfo;
+-					}
+ 					case SPL_FS_INFO:
+ 					case SPL_FS_FILE:
+ 						fname = expand_filepath(ZSTR_VAL(intern->file_name), NULL);
+@@ -2252,7 +2250,7 @@ static zend_object *phar_convert_to_other(phar_archive_data *source, int convert
+ 	phar_metadata_tracker_copy(&phar->metadata_tracker, &source->metadata_tracker, phar->is_persistent);
+ 
+ 	/* first copy each file's uncompressed contents to a temporary file and set per-file flags */
+-	ZEND_HASH_MAP_FOREACH_PTR(&source->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&source->manifest, entry) {
+ 
+ 		newentry = *entry;
+ 
+@@ -4271,13 +4269,13 @@ static int extract_helper(phar_archive_data *archive, zend_string *search, char
+ 
+ 	if (!search) {
+ 		/* nothing to match -- extract all files */
+-		ZEND_HASH_MAP_FOREACH_PTR(&archive->manifest, entry) {
++		ZEND_HASH_FOREACH_PTR(&archive->manifest, entry) {
+ 			if (FAILURE == phar_extract_file(overwrite, entry, pathto, pathto_len, error)) return -1;
+ 			extracted++;
+ 		} ZEND_HASH_FOREACH_END();
+ 	} else if ('/' == ZSTR_VAL(search)[ZSTR_LEN(search) - 1]) {
+ 		/* ends in "/" -- extract all entries having that prefix */
+-		ZEND_HASH_MAP_FOREACH_PTR(&archive->manifest, entry) {
++		ZEND_HASH_FOREACH_PTR(&archive->manifest, entry) {
+ 			if (0 != strncmp(ZSTR_VAL(search), entry->filename, ZSTR_LEN(search))) continue;
+ 			if (FAILURE == phar_extract_file(overwrite, entry, pathto, pathto_len, error)) return -1;
+ 			extracted++;
+@@ -5055,6 +5053,9 @@ PHP_METHOD(PharFileInfo, decompress)
+ 
+ /* {{{ phar methods */
+ 
++#define REGISTER_PHAR_CLASS_CONST_LONG(class_name, const_name, value) \
++	zend_declare_class_constant_long(class_name, const_name, sizeof(const_name)-1, (zend_long)value);
++
+ void phar_object_init(void) /* {{{ */
+ {
+ 	phar_ce_PharException = register_class_PharException(zend_ce_exception);
+@@ -5064,5 +5065,22 @@ void phar_object_init(void) /* {{{ */
+ 	phar_ce_data = register_class_PharData(spl_ce_RecursiveDirectoryIterator, zend_ce_countable, zend_ce_arrayaccess);
+ 
+ 	phar_ce_entry = register_class_PharFileInfo(spl_ce_SplFileInfo);
++
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "BZ2", PHAR_ENT_COMPRESSED_BZ2)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "GZ", PHAR_ENT_COMPRESSED_GZ)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "NONE", PHAR_ENT_COMPRESSED_NONE)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHAR", PHAR_FORMAT_PHAR)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "TAR", PHAR_FORMAT_TAR)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "ZIP", PHAR_FORMAT_ZIP)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "COMPRESSED", PHAR_ENT_COMPRESSION_MASK)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHP", PHAR_MIME_PHP)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "PHPS", PHAR_MIME_PHPS)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "MD5", PHAR_SIG_MD5)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL", PHAR_SIG_OPENSSL)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL_SHA256", PHAR_SIG_OPENSSL_SHA256)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "OPENSSL_SHA512", PHAR_SIG_OPENSSL_SHA512)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA1", PHAR_SIG_SHA1)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA256", PHAR_SIG_SHA256)
++	REGISTER_PHAR_CLASS_CONST_LONG(phar_ce_archive, "SHA512", PHAR_SIG_SHA512)
+ }
+ /* }}} */
+diff --git a/ext/phar/phar_object.stub.php b/ext/phar/phar_object.stub.php
+index 3004a1ee..bfff7f66 100644
+--- a/ext/phar/phar_object.stub.php
++++ b/ext/phar/phar_object.stub.php
+@@ -8,87 +8,6 @@ class PharException extends Exception
+ 
+ class Phar extends RecursiveDirectoryIterator implements Countable, ArrayAccess
+ {
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_BZ2
+-     */
+-    const BZ2 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_GZ
+-     */
+-    const GZ = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSED_NONE
+-     */
+-    const NONE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_PHAR
+-     */
+-    const PHAR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_TAR
+-     */
+-    const TAR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_FORMAT_ZIP
+-     */
+-    const ZIP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_ENT_COMPRESSION_MASK
+-     */
+-    const COMPRESSED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_MIME_PHP
+-     */
+-    const PHP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_MIME_PHPS
+-     */
+-    const PHPS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_MD5
+-     */
+-    const MD5 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL
+-     */
+-    const OPENSSL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL_SHA256
+-     */
+-    const OPENSSL_SHA256 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_OPENSSL_SHA512
+-     */
+-    const OPENSSL_SHA512 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA1
+-     */
+-    const SHA1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA256
+-     */
+-    const SHA256 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHAR_SIG_SHA512
+-     */
+-    const SHA512 = UNKNOWN;
+-
+     public function __construct(string $filename, int $flags = FilesystemIterator::SKIP_DOTS|FilesystemIterator::UNIX_PATHS, ?string $alias = null) {}
+ 
+     public function __destruct() {}
+diff --git a/ext/phar/phar_object_arginfo.h b/ext/phar/phar_object_arginfo.h
+index 17d96a94..0ae18a16 100644
+--- a/ext/phar/phar_object_arginfo.h
++++ b/ext/phar/phar_object_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 799b653b10dbdfa58747e41715700cfd5300fa4f */
++ * Stub hash: cce88c2e27bd0b0fc7f68defdb0556b053e7dc81 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Phar___construct, 0, 0, 1)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+@@ -622,102 +622,6 @@ static zend_class_entry *register_class_Phar(zend_class_entry *class_entry_Recur
+ 	class_entry = zend_register_internal_class_ex(&ce, class_entry_RecursiveDirectoryIterator);
+ 	zend_class_implements(class_entry, 2, class_entry_Countable, class_entry_ArrayAccess);
+ 
+-	zval const_BZ2_value;
+-	ZVAL_LONG(&const_BZ2_value, PHAR_ENT_COMPRESSED_BZ2);
+-	zend_string *const_BZ2_name = zend_string_init_interned("BZ2", sizeof("BZ2") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_BZ2_name, &const_BZ2_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_BZ2_name);
+-
+-	zval const_GZ_value;
+-	ZVAL_LONG(&const_GZ_value, PHAR_ENT_COMPRESSED_GZ);
+-	zend_string *const_GZ_name = zend_string_init_interned("GZ", sizeof("GZ") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_GZ_name, &const_GZ_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_GZ_name);
+-
+-	zval const_NONE_value;
+-	ZVAL_LONG(&const_NONE_value, PHAR_ENT_COMPRESSED_NONE);
+-	zend_string *const_NONE_name = zend_string_init_interned("NONE", sizeof("NONE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NONE_name, &const_NONE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NONE_name);
+-
+-	zval const_PHAR_value;
+-	ZVAL_LONG(&const_PHAR_value, PHAR_FORMAT_PHAR);
+-	zend_string *const_PHAR_name = zend_string_init_interned("PHAR", sizeof("PHAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHAR_name, &const_PHAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHAR_name);
+-
+-	zval const_TAR_value;
+-	ZVAL_LONG(&const_TAR_value, PHAR_FORMAT_TAR);
+-	zend_string *const_TAR_name = zend_string_init_interned("TAR", sizeof("TAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_TAR_name, &const_TAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_TAR_name);
+-
+-	zval const_ZIP_value;
+-	ZVAL_LONG(&const_ZIP_value, PHAR_FORMAT_ZIP);
+-	zend_string *const_ZIP_name = zend_string_init_interned("ZIP", sizeof("ZIP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ZIP_name, &const_ZIP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ZIP_name);
+-
+-	zval const_COMPRESSED_value;
+-	ZVAL_LONG(&const_COMPRESSED_value, PHAR_ENT_COMPRESSION_MASK);
+-	zend_string *const_COMPRESSED_name = zend_string_init_interned("COMPRESSED", sizeof("COMPRESSED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_COMPRESSED_name, &const_COMPRESSED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_COMPRESSED_name);
+-
+-	zval const_PHP_value;
+-	ZVAL_LONG(&const_PHP_value, PHAR_MIME_PHP);
+-	zend_string *const_PHP_name = zend_string_init_interned("PHP", sizeof("PHP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHP_name, &const_PHP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHP_name);
+-
+-	zval const_PHPS_value;
+-	ZVAL_LONG(&const_PHPS_value, PHAR_MIME_PHPS);
+-	zend_string *const_PHPS_name = zend_string_init_interned("PHPS", sizeof("PHPS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PHPS_name, &const_PHPS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PHPS_name);
+-
+-	zval const_MD5_value;
+-	ZVAL_LONG(&const_MD5_value, PHAR_SIG_MD5);
+-	zend_string *const_MD5_name = zend_string_init_interned("MD5", sizeof("MD5") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_MD5_name, &const_MD5_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_MD5_name);
+-
+-	zval const_OPENSSL_value;
+-	ZVAL_LONG(&const_OPENSSL_value, PHAR_SIG_OPENSSL);
+-	zend_string *const_OPENSSL_name = zend_string_init_interned("OPENSSL", sizeof("OPENSSL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_name, &const_OPENSSL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_name);
+-
+-	zval const_OPENSSL_SHA256_value;
+-	ZVAL_LONG(&const_OPENSSL_SHA256_value, PHAR_SIG_OPENSSL_SHA256);
+-	zend_string *const_OPENSSL_SHA256_name = zend_string_init_interned("OPENSSL_SHA256", sizeof("OPENSSL_SHA256") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_SHA256_name, &const_OPENSSL_SHA256_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_SHA256_name);
+-
+-	zval const_OPENSSL_SHA512_value;
+-	ZVAL_LONG(&const_OPENSSL_SHA512_value, PHAR_SIG_OPENSSL_SHA512);
+-	zend_string *const_OPENSSL_SHA512_name = zend_string_init_interned("OPENSSL_SHA512", sizeof("OPENSSL_SHA512") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_OPENSSL_SHA512_name, &const_OPENSSL_SHA512_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_OPENSSL_SHA512_name);
+-
+-	zval const_SHA1_value;
+-	ZVAL_LONG(&const_SHA1_value, PHAR_SIG_SHA1);
+-	zend_string *const_SHA1_name = zend_string_init_interned("SHA1", sizeof("SHA1") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA1_name, &const_SHA1_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA1_name);
+-
+-	zval const_SHA256_value;
+-	ZVAL_LONG(&const_SHA256_value, PHAR_SIG_SHA256);
+-	zend_string *const_SHA256_name = zend_string_init_interned("SHA256", sizeof("SHA256") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA256_name, &const_SHA256_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA256_name);
+-
+-	zval const_SHA512_value;
+-	ZVAL_LONG(&const_SHA512_value, PHAR_SIG_SHA512);
+-	zend_string *const_SHA512_name = zend_string_init_interned("SHA512", sizeof("SHA512") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_SHA512_name, &const_SHA512_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_SHA512_name);
+-
+ 	return class_entry;
+ }
+ 
+diff --git a/ext/phar/stream.c b/ext/phar/stream.c
+index b45b6623..745c3b42 100644
+--- a/ext/phar/stream.c
++++ b/ext/phar/stream.c
+@@ -613,7 +613,7 @@ static int phar_wrapper_stat(php_stream_wrapper *wrapper, const char *url, int f
+ 	if (HT_IS_INITIALIZED(&phar->mounted_dirs) && zend_hash_num_elements(&phar->mounted_dirs)) {
+ 		zend_string *str_key;
+ 
+-		ZEND_HASH_MAP_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
++		ZEND_HASH_FOREACH_STR_KEY(&phar->mounted_dirs, str_key) {
+ 			if (ZSTR_LEN(str_key) >= internal_file_len || strncmp(ZSTR_VAL(str_key), internal_file, ZSTR_LEN(str_key))) {
+ 				continue;
+ 			} else {
+@@ -883,7 +883,7 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		uint32_t from_len = ZSTR_LEN(resource_from->path) - 1;
+ 		uint32_t to_len = ZSTR_LEN(resource_to->path) - 1;
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->manifest, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->manifest, b) {
+ 			str_key = b->key;
+ 			entry = Z_PTR(b->val);
+ 			if (!entry->is_deleted &&
+@@ -910,9 +910,10 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		} ZEND_HASH_FOREACH_END();
+ 		zend_hash_rehash(&phar->manifest);
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->virtual_dirs, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->virtual_dirs, b) {
+ 			str_key = b->key;
+-			if (zend_string_starts_with_cstr(str_key, ZSTR_VAL(resource_from->path)+1, from_len) &&
++			if (ZSTR_LEN(str_key) >= from_len &&
++				memcmp(ZSTR_VAL(str_key), ZSTR_VAL(resource_from->path)+1, from_len) == 0 &&
+ 				(ZSTR_LEN(str_key) == from_len || IS_SLASH(ZSTR_VAL(str_key)[from_len]))) {
+ 
+ 				new_str_key = zend_string_alloc(ZSTR_LEN(str_key) + to_len - from_len, 0);
+@@ -927,9 +928,10 @@ static int phar_wrapper_rename(php_stream_wrapper *wrapper, const char *url_from
+ 		} ZEND_HASH_FOREACH_END();
+ 		zend_hash_rehash(&phar->virtual_dirs);
+ 
+-		ZEND_HASH_MAP_FOREACH_BUCKET(&phar->mounted_dirs, b) {
++		ZEND_HASH_FOREACH_BUCKET(&phar->mounted_dirs, b) {
+ 			str_key = b->key;
+-			if (zend_string_starts_with_cstr(str_key, ZSTR_VAL(resource_from->path)+1, from_len) &&
++			if (ZSTR_LEN(str_key) >= from_len &&
++				memcmp(ZSTR_VAL(str_key), ZSTR_VAL(resource_from->path)+1, from_len) == 0 &&
+ 				(ZSTR_LEN(str_key) == from_len || IS_SLASH(ZSTR_VAL(str_key)[from_len]))) {
+ 
+ 				new_str_key = zend_string_alloc(ZSTR_LEN(str_key) + to_len - from_len, 0);
+diff --git a/ext/phar/tar.c b/ext/phar/tar.c
+index 60e248c7..80a17d69 100644
+--- a/ext/phar/tar.c
++++ b/ext/phar/tar.c
+@@ -498,7 +498,7 @@ bail:
+ 
+ 		entry.link = NULL;
+ 		/* link field is null-terminated unless it has 100 non-null chars.
+-		 * Thus we cannot use strlen. */
++		 * Thus we can not use strlen. */
+ 		linkname_len = strnlen(hdr->linkname, 100);
+ 		if (entry.tar_type == TAR_LINK) {
+ 			if (!zend_hash_str_exists(&myphar->manifest, hdr->linkname, linkname_len)) {
+@@ -968,7 +968,7 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 	int closeoldfile, free_user_stub;
+ 	size_t signature_length;
+ 	struct _phar_pass_tar_info pass;
+-	char *buf, *signature, sigbuf[8];
++	char *buf, *signature, *tmp, sigbuf[8];
+ 	char halt_stub[] = "__HALT_COMPILER();";
+ 
+ 	entry.flags = PHAR_ENT_PERM_DEF_FILE;
+@@ -1064,7 +1064,9 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 			free_user_stub = 0;
+ 		}
+ 
+-		if ((pos = php_stristr(user_stub, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++		tmp = estrndup(user_stub, len);
++		if ((pos = php_stristr(tmp, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++			efree(tmp);
+ 			if (error) {
+ 				spprintf(error, 0, "illegal stub for tar-based phar \"%s\"", phar->fname);
+ 			}
+@@ -1073,6 +1075,8 @@ int phar_tar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int
+ 			}
+ 			return EOF;
+ 		}
++		pos = user_stub + (pos - tmp);
++		efree(tmp);
+ 
+ 		len = pos - user_stub + 18;
+ 		entry.fp = php_stream_fopen_tmpfile();
+diff --git a/ext/phar/tests/bug65414.phpt b/ext/phar/tests/bug65414.phpt
+index d3ff7794..abbdf49b 100644
+--- a/ext/phar/tests/bug65414.phpt
++++ b/ext/phar/tests/bug65414.phpt
+@@ -24,6 +24,10 @@ foreach ($bads as $bad) {
+ }
+ echo 'done' . PHP_EOL;
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/bug65414.phar');
++?>
+ --EXPECT--
+ .phar/injected-1.txt:Cannot create any files in magic ".phar" directory
+ /.phar/injected-2.txt:Cannot create any files in magic ".phar" directory

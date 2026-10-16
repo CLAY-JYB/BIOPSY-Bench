@@ -34,6 +34,9 @@ RUN tar xzf /tmp/deps.tar.gz -C / && rm /tmp/deps.tar.gz && \
 COPY binary /app/binary
 RUN chmod 755 /app/binary
 COPY ground_truth/ /app/ground_truth/
+# binding stamp (script/pipeline/stamp_ground_truth.sh)
+RUN printf '%s\n' 'bfe228f219e9cb0eb53f16947ccf25ec' > /etc/machine-id
+
 
 # Verifier entrypoint (harbor separate mode: the image owns /tests/test.sh).
 # test.sh stays root-only (700): it discloses the scoring thresholds and gate

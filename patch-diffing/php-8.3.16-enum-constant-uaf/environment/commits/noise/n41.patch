@@ -1,0 +1,131 @@
+diff --git a/Zend/tests/include_stat_is_quiet.phpt b/Zend/tests/include_stat_is_quiet.phpt
+index 75ba8f3d..ef8240f9 100644
+--- a/Zend/tests/include_stat_is_quiet.phpt
++++ b/Zend/tests/include_stat_is_quiet.phpt
+@@ -4,7 +4,6 @@ Stats executed during include path resolution should be silent
+ <?php
+ 
+ class StreamWrapper {
+-    public $context;
+     public function url_stat($path, $flags) {
+         $path = str_replace('test://', 'file://', $path);
+         if ($flags & STREAM_URL_STAT_QUIET) {
+diff --git a/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt b/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt
+deleted file mode 100644
+index fc853e47..00000000
+--- a/Zend/tests/is_callable_trampoline_uaf-deprecated.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-is_callable() with trampoline should not caused UAF [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-class B {}
+-class A extends B {
+-    public function bar($func) {
+-        var_dump(is_callable(array('parent', 'foo')));
+-    }
+-
+-    public function __call($func, $args) {
+-    }
+-}
+-
+-class X {
+-    public static function __callStatic($func, $args) {
+-    }
+-}
+-
+-$a = new A();
+-// Extra X::foo() wrapper to force use of allocated trampoline.
+-X::foo($a->bar('foo'));
+-
+-?>
+---EXPECTF--
+-Deprecated: Use of "parent" in callables is deprecated in %s on line %d
+-bool(false)
+diff --git a/Zend/tests/is_callable_trampoline_uaf.phpt b/Zend/tests/is_callable_trampoline_uaf.phpt
+index a36a995b..24108644 100644
+--- a/Zend/tests/is_callable_trampoline_uaf.phpt
++++ b/Zend/tests/is_callable_trampoline_uaf.phpt
+@@ -6,7 +6,7 @@ is_callable() with trampoline should not caused UAF
+ class B {}
+ class A extends B {
+     public function bar($func) {
+-        var_dump(is_callable(array('B', 'foo')));
++        var_dump(is_callable(array('parent', 'foo')));
+     }
+ 
+     public function __call($func, $args) {
+diff --git a/Zend/tests/iterable_or_null.phpt b/Zend/tests/iterable_or_null.phpt
+index a44e858b..3585e449 100644
+--- a/Zend/tests/iterable_or_null.phpt
++++ b/Zend/tests/iterable_or_null.phpt
+@@ -40,8 +40,8 @@ try {
+ 
+ ?>
+ --EXPECT--
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, string given
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, int given
+-zend_iterable(): Argument #1 ($arg1) must be of type Traversable|array, null given
+-zend_iterable(): Argument #2 ($arg2) must be of type Traversable|array|null, string given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, string given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, int given
++zend_iterable(): Argument #1 ($arg1) must be of type iterable, null given
++zend_iterable(): Argument #2 ($arg2) must be of type ?iterable, string given
+ 
+diff --git a/Zend/tests/lc_ctype_inheritance.phpt b/Zend/tests/lc_ctype_inheritance.phpt
+new file mode 100644
+index 00000000..8c968f06
+--- /dev/null
++++ b/Zend/tests/lc_ctype_inheritance.phpt
+@@ -0,0 +1,25 @@
++--TEST--
++Do not inherit LC_CTYPE from environment
++--SKIPIF--
++<?php
++if (!setlocale(LC_CTYPE, "de_DE", "de-DE")) die("skip requires de_DE locale");
++?>
++--ENV--
++LC_CTYPE=de_DE
++--FILE--
++<?php
++
++var_dump(setlocale(LC_CTYPE, "0"));
++var_dump(bin2hex(strtoupper("\xe4")));
++var_dump(preg_match('/\w/', "\xe4"));
++var_dump(setlocale(LC_CTYPE, "de_DE", "de-DE") !== false);
++var_dump(bin2hex(strtoupper("\xe4")));
++var_dump(preg_match('/\w/', "\xe4"));
++?>
++--EXPECTF--
++string(%d) "C%r(\.UTF-8)?%r"
++string(2) "e4"
++int(0)
++bool(true)
++string(2) "c4"
++int(1)
+diff --git a/Zend/tests/lsb_011.phpt b/Zend/tests/lsb_011.phpt
+index 0d0faeda..206f0cb9 100644
+--- a/Zend/tests/lsb_011.phpt
++++ b/Zend/tests/lsb_011.phpt
+@@ -19,6 +19,5 @@ class Test2 extends Test1 {
+ }
+ Test2::test();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ ok
+diff --git a/Zend/tests/lsb_012.phpt b/Zend/tests/lsb_012.phpt
+index bf959a30..21ddff35 100644
+--- a/Zend/tests/lsb_012.phpt
++++ b/Zend/tests/lsb_012.phpt
+@@ -19,6 +19,5 @@ class Test2 extends Test1 {
+ }
+ Test2::test();
+ ?>
+---EXPECTF--
+-Deprecated: Use of "static" in callables is deprecated in %s on line %d
++--EXPECT--
+ ok

@@ -1,0 +1,163 @@
+diff --git a/ext/phar/tests/phar_convert_repeated_b.phpt b/ext/phar/tests/phar_convert_repeated_b.phpt
+index 8adb5812..26589d84 100644
+--- a/ext/phar/tests/phar_convert_repeated_b.phpt
++++ b/ext/phar/tests/phar_convert_repeated_b.phpt
+@@ -77,10 +77,15 @@ try {
+ ?>
+ --CLEAN--
+ <?php
++echo __DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz' . "\n";
++
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.gz');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar.gz');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.1.2.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.zip');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.1.zip');
++
+ ?>
+ --EXPECT--
+ =================== new PharData() ==================
+diff --git a/ext/phar/tests/phar_convert_tar2.phpt b/ext/phar/tests/phar_convert_tar2.phpt
+index 8028d774..10e1bd22 100644
+--- a/ext/phar/tests/phar_convert_tar2.phpt
++++ b/ext/phar/tests/phar_convert_tar2.phpt
+@@ -44,6 +44,7 @@ var_dump($phar->getStub());
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.gz');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+diff --git a/ext/phar/tests/phar_convert_tar3.phpt b/ext/phar/tests/phar_convert_tar3.phpt
+index 090782f3..8a693cf6 100644
+--- a/ext/phar/tests/phar_convert_tar3.phpt
++++ b/ext/phar/tests/phar_convert_tar3.phpt
+@@ -11,7 +11,7 @@ phar.readonly=0
+ 
+ $fname = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.php';
+ $pname = 'phar://' . $fname;
+-$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar.bz2';
++$fname2 = __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.tar';
+ $fname3 = __DIR__ . '/' . basename(__FILE__, '.php') . '.2.phar.tar';
+ $stub = '<?php echo "first stub\n"; __HALT_COMPILER(); ?>';
+ $file = $stub;
+@@ -33,7 +33,7 @@ var_dump($phar->isFileFormat(Phar::TAR));
+ var_dump($phar->isCompressed());
+ var_dump($phar->getStub());
+ 
+-copy($fname2, $fname3);
++copy($fname2 . '.bz2', $fname3);
+ 
+ $phar = new Phar($fname3);
+ var_dump($phar->isFileFormat(Phar::TAR));
+@@ -45,7 +45,9 @@ var_dump($phar->getStub());
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar.bz2');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
++__HALT_COMPILER();
+ ?>
+ --EXPECT--
+ bool(false)
+diff --git a/ext/phar/tests/phar_extract.phpt b/ext/phar/tests/phar_extract.phpt
+index 7d50a3be..9f5faa8d 100644
+--- a/ext/phar/tests/phar_extract.phpt
++++ b/ext/phar/tests/phar_extract.phpt
+@@ -105,27 +105,30 @@ try {
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/oops');
+-rmdir(__DIR__ . '/oops1');
+-unlink(__DIR__ . '/tempmanifest1.phar.php');
++@rmdir(__DIR__ . '/whatever');
++@unlink(__DIR__ . '/oops');
++@rmdir(__DIR__ . '/oops1');
++@unlink(__DIR__ . '/tempmanifest1.phar.php');
+ $e = __DIR__ . '/extract/';
+-unlink($e . 'file1.txt');
+-unlink($e . 'file2.txt');
+-unlink($e . 'subdir/ectory/file.txt');
+-rmdir($e . 'subdir/ectory');
+-rmdir($e . 'subdir');
+-rmdir($e . 'one');
+-rmdir($e);
++@unlink($e . 'file1.txt');
++@unlink($e . 'file2.txt');
++@unlink($e . 'subdir/ectory/file.txt');
++@rmdir($e . 'subdir/ectory');
++@rmdir($e . 'subdir');
++@rmdir($e . 'one/level');
++@rmdir($e . 'one');
++@rmdir($e);
+ $e = __DIR__ . '/extract1/';
+-unlink($e . 'file1.txt');
+-unlink($e . 'subdir/ectory/file.txt');
+-rmdir($e . 'subdir/ectory');
+-rmdir($e . 'subdir');
+-rmdir($e);
++@unlink($e . 'file1.txt');
++@unlink($e . 'subdir/ectory/file.txt');
++@rmdir($e . 'subdir/ectory');
++@rmdir($e . 'subdir');
++@rmdir($e);
+ $e = __DIR__ . '/extract1-2/';
+-unlink($e . 'file2.txt');
+-rmdir($e . 'one');
+-rmdir($e);
++@unlink($e . 'file2.txt');
++@rmdir($e . 'one/level');
++@rmdir($e . 'one');
++@rmdir($e);
+ ?>
+ --EXPECTF--
+ %sextract%cfile1.txt
+diff --git a/ext/phar/tests/phar_gobyebye-win32.phpt b/ext/phar/tests/phar_gobyebye-win32.phpt
+index 7baa0c61..39dcdbe9 100644
+--- a/ext/phar/tests/phar_gobyebye-win32.phpt
++++ b/ext/phar/tests/phar_gobyebye-win32.phpt
+@@ -26,10 +26,8 @@ opendir("foo/hi");
+ include $pname . '/foo/hi';
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php'); ?>
+ --EXPECTF--
+ Warning: readfile(foo/hi): Failed to open stream: No such file or directory in phar://%sphar_gobyebye-win32.phar.php/foo/hi on line %d
+ 
+diff --git a/ext/phar/tests/phar_gobyebye.phpt b/ext/phar/tests/phar_gobyebye.phpt
+index 4db6e0d9..7ad8e18c 100644
+--- a/ext/phar/tests/phar_gobyebye.phpt
++++ b/ext/phar/tests/phar_gobyebye.phpt
+@@ -27,10 +27,8 @@ opendir("foo/hi");
+ include $pname . '/foo/hi';
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.php'); ?>
+ --EXPECTF--
+ Warning: readfile(foo/hi): Failed to open stream: No such file or directory in phar://%sphar_gobyebye.phar.php/foo/hi on line %d
+ 
+diff --git a/ext/phar/tests/phar_oo_compressallbz2.phpt b/ext/phar/tests/phar_oo_compressallbz2.phpt
+index 16f8f22a..7a0fbfc7 100644
+--- a/ext/phar/tests/phar_oo_compressallbz2.phpt
++++ b/ext/phar/tests/phar_oo_compressallbz2.phpt
+@@ -43,6 +43,7 @@ var_dump($phar['b']->isCompressed(Phar::BZ2));
+ ?>
+ --CLEAN--
+ <?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php');
+ ?>
+ --EXPECT--

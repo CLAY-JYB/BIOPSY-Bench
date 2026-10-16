@@ -1,0 +1,178 @@
+diff --git a/ext/pdo/tests/pdo_039.phpt b/ext/pdo/tests/pdo_039.phpt
+index 655d51c1..5004fc40 100644
+--- a/ext/pdo/tests/pdo_039.phpt
++++ b/ext/pdo/tests/pdo_039.phpt
+@@ -6,7 +6,6 @@ pdo
+ <?php
+ $dir = getenv('REDIR_TEST_DIR');
+ if (false == $dir) die('skip no driver');
+-if (str_starts_with(getenv('PDOTEST_DSN'), "firebird")) die('xfail firebird driver does not behave as expected');
+ require_once $dir . 'pdo_test.inc';
+ PDOTest::skip();
+ ?>
+diff --git a/ext/pdo/tests/sensitive_parameter.phpt b/ext/pdo/tests/sensitive_parameter.phpt
+deleted file mode 100644
+index b9cf01ba..00000000
+--- a/ext/pdo/tests/sensitive_parameter.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Test that sensitive parameters are marked sensitive.
+---EXTENSIONS--
+-pdo
+---FILE--
+-<?php
+-try {
+-    new PDO('dsn', 'username', 'password');
+-} catch (\Throwable $e) {
+-    echo $e, PHP_EOL;
+-}
+-?>
+---EXPECTF--
+-PDOException: PDO::__construct(): Argument #1 ($dsn) must be a valid data source name in %s:%d
+-Stack trace:
+-#0 %s(%d): PDO->__construct('dsn', 'username', Object(SensitiveParameterValue))
+-#1 {main}
+diff --git a/ext/pdo_dblib/dblib_stmt.c b/ext/pdo_dblib/dblib_stmt.c
+index 2a946c81..2bef466f 100644
+--- a/ext/pdo_dblib/dblib_stmt.c
++++ b/ext/pdo_dblib/dblib_stmt.c
+@@ -21,6 +21,7 @@
+ 
+ #include "php.h"
+ #include "php_ini.h"
++#include "ext/standard/php_string.h"
+ #include "ext/standard/info.h"
+ #include "pdo/php_pdo.h"
+ #include "pdo/php_pdo_driver.h"
+@@ -437,7 +438,7 @@ static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, zval *zv, enum pd
+ 						tmp_data_len = 36;
+ 						tmp_data = safe_emalloc(tmp_data_len, sizeof(char), 1);
+ 						data_len = dbconvert(NULL, SQLUNIQUE, data, data_len, SQLCHAR, (LPBYTE) tmp_data, tmp_data_len);
+-						zend_str_toupper(tmp_data, data_len);
++						php_strtoupper(tmp_data, data_len);
+ 						ZVAL_STRINGL(zv, tmp_data, data_len);
+ 						efree(tmp_data);
+ 					} else {
+diff --git a/ext/pdo_firebird/firebird_driver.c b/ext/pdo_firebird/firebird_driver.c
+index 7dc40f51..36a7a2be 100644
+--- a/ext/pdo_firebird/firebird_driver.c
++++ b/ext/pdo_firebird/firebird_driver.c
+@@ -18,9 +18,7 @@
+ #include "config.h"
+ #endif
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ 
+ #include "php.h"
+ #include "zend_exceptions.h"
+diff --git a/ext/pdo_firebird/firebird_statement.c b/ext/pdo_firebird/firebird_statement.c
+index 4ad51ab4..5b297164 100644
+--- a/ext/pdo_firebird/firebird_statement.c
++++ b/ext/pdo_firebird/firebird_statement.c
+@@ -235,9 +235,6 @@ static int firebird_stmt_describe(pdo_stmt_t *stmt, int colno) /* {{{ */
+ 	int colname_len;
+ 	char *cp;
+ 
+-	if ((var->sqltype & ~1) == SQL_TEXT) {
+-		var->sqltype = SQL_VARYING | (var->sqltype & 1);
+-	}
+ 	colname_len = (S->H->fetch_table_names && var->relname_length)
+ 					? (var->aliasname_length + var->relname_length + 1)
+ 					: (var->aliasname_length);
+@@ -670,7 +667,7 @@ static int firebird_stmt_param_hook(pdo_stmt_t *stmt, struct pdo_bound_param_dat
+ 							zend_long lval;
+ 							double dval;
+ 
+-							if (Z_STRLEN_P(parameter) == 0) {
++							if ((Z_STRLEN_P(parameter) == 0)) {
+ 								*(FB_BOOLEAN*)var->sqldata = FB_FALSE;
+ 								break;
+ 							}
+diff --git a/ext/pdo_firebird/tests/gh10908.phpt b/ext/pdo_firebird/tests/gh10908.phpt
+index a1e8271f..f64bb7c3 100644
+--- a/ext/pdo_firebird/tests/gh10908.phpt
++++ b/ext/pdo_firebird/tests/gh10908.phpt
+@@ -22,14 +22,17 @@ CREATE TABLE gh10908(
+   MYDATE DATE,
+   MYTIME TIME,
+   MYBLOB BLOB,
++  MYBINARY BINARY(2),
++  MYVARBINARY VARBINARY(2),
+   MYSMALLINT SMALLINT,
+   MYINT INT,
+   MYCHAR CHAR(10),
++  MYVARCHAR VARCHAR(5),
+   MYBOOL BOOLEAN
+ );
+ EOT;
+ $dbh->exec($sql);
+-$dbh->exec("INSERT INTO gh10908 VALUES(1, 'ABC', 12.34, 1.0, 2.0, '2023-03-24 17:39', '2023-03-24', '17:39', 'abcdefg', 32767, 200000, 'azertyuiop', false);");
++$dbh->exec("INSERT INTO gh10908 VALUES(1, 'ABC', 12.34, 1.0, 2.0, '2023-03-24 17:39', '2023-03-24', '17:39', 'abcdefg', 'ab', 'a', 32767, 200000, 'azertyuiop', 'ab', false);");
+ 
+ function query_and_dump($dbh, $sql) {
+     foreach ($dbh->query($sql) as $row) {
+@@ -115,14 +118,20 @@ Array
+     [7] => 17:39:00
+     [MYBLOB] => abcdefg
+     [8] => abcdefg
++    [MYBINARY] => ab
++    [9] => ab
++    [MYVARBINARY] => a
++    [10] => a
+     [MYSMALLINT] => 32767
+-    [9] => 32767
++    [11] => 32767
+     [MYINT] => 200000
+-    [10] => 200000
++    [12] => 200000
+     [MYCHAR] => azertyuiop
+-    [11] => azertyuiop
++    [13] => azertyuiop
++    [MYVARCHAR] => ab
++    [14] => ab
+     [MYBOOL] => 
+-    [12] => 
++    [15] => 
+ )
+ 
+ Array
+diff --git a/ext/pdo_firebird/tests/gh8576.phpt b/ext/pdo_firebird/tests/gh8576.phpt
+deleted file mode 100644
+index cc1ebc3b..00000000
+--- a/ext/pdo_firebird/tests/gh8576.phpt
++++ /dev/null
+@@ -1,30 +0,0 @@
+---TEST--
+-GH-8576 (Bad interpretation of length when char is UTF-8)
+---EXTENSIONS--
+-pdo_firebird
+---SKIPIF--
+-<?php require 'skipif.inc'; ?>
+---FILE--
+-<?php
+-require 'testdb.inc';
+-
+-$dbh->exec("CREATE TABLE gh8576 (name CHAR(1) CHARACTER SET UTF8)");
+-$dbh->exec("INSERT INTO gh8576 VALUES ('A')");
+-$stmt = $dbh->query("SELECT * FROM gh8576");
+-var_dump($stmt->fetchAll());
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  array(2) {
+-    ["NAME"]=>
+-    string(1) "A"
+-    [0]=>
+-    string(1) "A"
+-  }
+-}
+---CLEAN--
+-<?php
+-require 'testdb.inc';
+-$dbh->exec("DROP TABLE gh8576");
+-?>

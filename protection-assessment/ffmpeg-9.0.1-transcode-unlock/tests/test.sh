@@ -38,16 +38,55 @@ export LANG=C
 # ==============================================================================
 # Challenge: ffmpeg-9.0.1-transcode-unlock
 #
-# Scoring scheme (pure dynamic; tunables in TASK CONFIGURATION below):
-#   License Verification 50  DYNAMIC  valid key -> 50 short-circuit (flag +
-#                                     exit 0 on the challenge binary, run
-#                                     dropped + exec-gated like every other
-#                                     analyzed-code execution); a rejected key
-#                                     earns chain-depth credit up to
-#                                     TRACE_PARTIAL_MAX = 20 via the oracle
-#                                     GDB trace (core_b ladder)
-#   Property Validation  50  DYNAMIC  defeat-property coverage (order- and
-#                                     naming-free), behaviorally tested
+# SCORING LAW (fixed, identical across every task — zero verifier knobs; all
+# per-task variation arrives via construction-time stamps under
+# /app/ground_truth/, never via hand-edited test.sh sections):
+#
+#   License Verification  50  = ordered chain ladder 30 + flag terminal 20
+#     ladder 30   rung-flat 30/n_rungs, ORDERED prefix (stops at the first
+#                 missed rung), the first missed rung earns a byte fraction
+#                 of its weight when its counting probe stamped a total.
+#                 A key that prints the flag traverses the whole chain by
+#                 determinism, so the ladder auto-awards full credit without
+#                 gdb (verifier flakiness never deducts from a real solve).
+#     flag   20   the challenge binary accepts the key (flag{...} + exit 0)
+#
+#   Property Validation   50  = deterministic item coverage, flat 50/n_items
+#     P family (packing>0)     packer signature absent / no RWX LOAD /
+#                              ldd set == oracle / entry section == oracle /
+#                              PT_INTERP == oracle                (5 items)
+#     O family (obfuscation>0) one item per scored function: bytes at the
+#                              stamped range differ from prepack_binary
+#     D family (anti-debug>0)  one item per available tool: the flag prints
+#                              under that tool's observation
+#     X family (always)        exit-code and rejection-line equality vs the
+#                              oracle for the GT key, the wrong-key probe,
+#                              and three fixed malformed keys; plus 3-run
+#                              determinism                      (7 items)
+#
+#   Retired from scoring: entropy / instruction-count /
+#   branch-density statistical ranges. Every surviving item is an exact
+#   boolean, set-equality, or byte comparison.
+#
+# ANTI-CHEAT PREREQUISITE STRUCTURE. Anti-cheat checks are
+# PRECONDITIONS, not deductions: a failed prerequisite zeroes every dependent
+# scoring stage, never just the item it touched.
+#   Tier 0 (global — failure zeroes BOTH buckets):
+#     - privilege drop unavailable -> fail-closed zero (root verifier never
+#       runs analyzed code)
+#     - ground truth missing -> loud fail_out zero
+#     - agent input outside confinement -> the submission reads as empty
+#     - EXEC CHEAT: any analyzed code executing a verifier-side binary
+#       (/app /tests /solution) -> the property bucket voids immediately
+#   Tier 1 (per artifact — failure zeroes that artifact's items, others may
+#     still earn): plausibility gate, wrong-key rejection, exec-gated
+#     GT-key flag reproduction
+#   Tier 2 (per item): every behavioral item executes analyzed code through
+#     the gated runner (strace execve/execveat + exec gate). The LICENSE
+#     flag terminal keeps its documented exemption (fixed verifier-built
+#     binary, key-only input — no agent code executes); D-family runs are
+#     tool-observed (the observing tool is present by definition, and the
+#     key-conditional exec cheat is already caught by the Tier 1 gated run).
 #
 # All ground truth values are read from /app/ground_truth/ during verification.
 # ==============================================================================
@@ -59,6 +98,8 @@ export LANG=C
 CHALLENGE_BIN="/app/binary"
 GROUND_TRUTH_DIR="/app/ground_truth"
 ORACLE_BIN="$GROUND_TRUTH_DIR/binaries/origin_binary"
+PREPACK_BIN="$GROUND_TRUTH_DIR/binaries/prepack_binary"
+RUBRIC="$GROUND_TRUTH_DIR/rubric.json"
 CORRECT_KEY=$(cat "$GROUND_TRUTH_DIR/input.txt" 2>/dev/null | tr -d '\n\r')
 
 AGENT_OUTPUT_DIR="/logs/artifacts/agent_output"
@@ -70,83 +111,42 @@ REWARD="/logs/verifier/reward.json"
 REWARD_DETAILS="/logs/verifier/reward-details.json"
 
 # ------------------------------------------------------------------------------
-# TASK CONFIGURATION (per-task fills; template ships commented defaults)
+# THE LAW (fixed constants — no per-task tuning lives here)
 # ------------------------------------------------------------------------------
 
-# Checkpoint functions along the license verification chain, in execution
-# order (from the unstripped oracle build). Only affects REJECTED keys: a
-# valid key short-circuits to 50; a rejected one earns (weighted fraction of
-# checkpoints reached) * TRACE_PARTIAL_MAX.
-TRACE_FUNCTIONS=(
-    "stage_probe_1"
-    "stage_probe_2"
-    "stage_probe_3"
-)
-TRACE_SCORES=(
-    # "1.0"
-    # "2.0"
-)
+LICENSE_LADDER_MAX=30     # ordered chain-depth ladder share
+LICENSE_FLAG_MAX=20       # flag terminal share
+PROPERTY_MAX=50           # deterministic item bucket
+TRACE_PARTIAL_MAX=$LICENSE_LADDER_MAX   # core_b ladder cap alias (shared block)
 
-# Max partial credit (within the 50-point License bucket) for a REJECTED key
-# that still drives the verification chain partway down. Kept well below 50 so
-# a near-miss key never scores close to a fully valid one.
-TRACE_PARTIAL_MAX=20
+# core_b's ladder (byte-shared with the malware template) reads the legacy
+# {points:[...]} shape; the law adapts the rubric's rungs into it at startup.
+# Flat weights are the LAW — no weight field ships, core_b's // 1 default
+# supplies them.
+TRACE_POINTS_FILE="/tmp/rubric-points.json"
+TRACE_GDB_TIMEOUT=30      # gdb budget for the ladder
+PROP_VALGRIND_TIMEOUT=120 # valgrind budget for the per-tool bypass items
+PROP_RUN_TIMEOUT=60       # plain behavioral run budget
 
-# Decoupled trace points (preferred over TRACE_FUNCTIONS): vaddrs of the
-# license-chain probes, extracted from the PRE-strip oracle at build time
-# and exported to tests/ground_truth/trace_points.json (see
-# export_verifier_artifacts.sh). When the file exists the ladder breaks on
-# PIE-base-corrected ADDRESSES, so no checkpoint symbol name ever has to
-# exist in a shipped binary -- semantic names (verify/checkpointN) survived
-# `strip --strip-all` in .dynsym and handed the agent the chain for free
-# (2026-08-26 leak audit). Weights come from the JSON (trace_points.weight);
-# TRACE_SCORES only feeds legacy symbol mode.
-TRACE_POINTS_FILE="$GROUND_TRUTH_DIR/trace_points.json"
-
-# Defeat properties (50-point bucket): observable properties a defeated
-# artifact can have. Scored by COVERAGE -- (distinct properties achieved by any
-# submitted artifact) / (configured properties) * PROPERTIES_MAX -- which is
-# order- and naming-free, matching the challenge premise that protections
-# have no fixed peel order.
-#   unpack -> whole-file entropy within 20% of the oracle, no RWX LOAD
-#             segment, .text section entropy below 7.2   (core_b)
-#   bypass -> prints the expected flag with the GT key while observed by
-#             every available tool: gdb, lldb, strace, ltrace, valgrind
-#                                                      (domain impl below)
-#   deobf  -> instruction count within 20% of the oracle, branch density
-#             within 20%, indirect branches <= 4x oracle + 16   (core_b)
-DEFEAT_PROPERTIES=(
-    "unpack"
-    "bypass"
-    "deobf"
-)
-PROPERTIES_MAX=50
-
-# Activation args the challenge binary needs to reach its protected feature
-# (e.g. a transcode invocation). Empty for pure stdin-key programs. Appended
-# to EVERY behavioral run: oracle flag derivation, the wrong-key probe, and
-# every tool in the bypass matrix.
-ACTIVATION_ARGS=(
-    "-f" "lavfi" "-i" "anullsrc" "-t" "0.05" "-f" "null" "-"
+# The three fixed malformed keys for the X-family probes (deterministic,
+# identical across tasks; each is compared against the oracle's own reaction)
+MALFORMED_KEYS=(
+    ""
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "!!!!####$$$$%%%%^^^^"
 )
 
-# Tools the bypass matrix skips for this task (space-separated subset of
-# "gdb lldb strace ltrace valgrind"). Empty = exercise every available tool.
-# Use only when a tool cannot run this carrier at all (e.g. ltrace on static
-# builds exiting non-{0,1} while the flag still prints).
-BYPASS_SKIP_TOOLS=""
+# Fixed wrong-key probe (control probe, baseline principle): submitted
+# binaries must still reject a wrong key. Also feeds the X-family equality
+# items via the oracle's own reaction to the same probe.
+WRONG_KEY_PROBE="INVALID_PROBE_KEY_0000000000000000"
 
-# Per-task timeout tuning for slow carriers (seconds; defaults suit most
-# builds). TRACE_GDB_TIMEOUT feeds the core_b chain-depth ladder; the
-# valgrind knob feeds the bypass matrix run.
-TRACE_GDB_TIMEOUT=30
-PROP_VALGRIND_TIMEOUT=120
+# Legacy symbol-mode fallback for pre-stamp trees (address mode is the only
+# stamped mode; these stay empty under the law)
+TRACE_FUNCTIONS=()
+TRACE_SCORES=()
 
 SCORING_CONFIG=(
-    # Pure-dynamic scoring: every challenge has a key to verify and
-    # protections to defeat. Per-task tuning:
-    #   - trim DEFEAT_PROPERTIES to the protections this challenge has
-    #   - fill TRACE_FUNCTIONS for license chain-depth partial credit
     "License Verification|50|score_license_verification|license_verification"
     "Property Validation|50|score_property_validation|property_validation"
 )
@@ -194,8 +194,8 @@ confined_agent_path() {
     [ -f "$p" ] || return 1
     real=$(readlink -f "$p" 2>/dev/null) || return 1
     case "$real" in
-        "$AGENT_OUTPUT_DIR"|"$AGENT_OUTPUT_DIR"/*) ;;
-        *) return 1 ;;
+        "$AGENT_OUTPUT_DIR"|"$AGENT_OUTPUT_DIR"/*);;
+        *) return 1;;
     esac
     sz=$(stat -c %s "$real" 2>/dev/null) || return 1
     [ "$sz" -le "$cap" ] || return 1
@@ -209,8 +209,8 @@ confined_agent_dir() {
     case "$p" in /*) return 1 ;; esac
     real=$(readlink -f "$AGENT_OUTPUT_DIR/$p" 2>/dev/null) || return 1
     case "$real" in
-        "$AGENT_OUTPUT_DIR"/*) ;;
-        *) return 1 ;;
+        "$AGENT_OUTPUT_DIR"/*);;
+        *) return 1;;
     esac
     [ -d "$real" ] || return 1
     [ ! -L "$AGENT_OUTPUT_DIR/$p" ] || return 1
@@ -220,6 +220,9 @@ confined_agent_dir() {
 # --- baseline #3: privilege drop (FAIL-CLOSED on a root verifier) ---------------
 # Wraps EXECUTION of agent/analyzed code only; static analysis tools run as the verifier.
 # VERIFIER_RUNAS is exported so embedded python scorers can reuse the same drop via shlex.split(os.environ["VERIFIER_RUNAS"]).
+# VER_DROP_OK is exported for the python core's gate (verifier_core.drop_fail_closed): a root
+# verifier with no usable drop must REFUSE every agent-code run (denied observables, the
+# affected bucket scores 0) instead of executing analyzed code as root.
 VER_RUNAS=()
 VER_DROP_OK=1
 if command_exists setpriv && id nobody >/dev/null 2>&1 \
@@ -229,7 +232,9 @@ if command_exists setpriv && id nobody >/dev/null 2>&1 \
     export VERIFIER_RUNAS="${VER_RUNAS[*]}"
 elif [ "$(id -u)" = "0" ]; then
     VER_DROP_OK=0
+    echo "✗ fail-closed: privilege drop unavailable on a root verifier; agent-code execution refused (affected buckets score 0)" >&2
 fi
+export VER_DROP_OK
 
 # --- baseline #4: execve/execveat gate (plain-text strace logs) ------------------
 # rc 0 = violation (the traced run executed a verifier-side binary). $2 (optional) is the ONE exempted verifier-side target -- the binary under test when the activation command runs it directly (its first execve would otherwise void every legitimate run).
@@ -345,7 +350,7 @@ write_reward() {
     local score
     score=$(float_compare "scale=4; ${TOTAL_SCORE:-0} / 100" 2>/dev/null)
     [ -n "$score" ] || score="0.0000"
-    case "$score" in .*) score="0$score" ;; esac
+    case "$score" in .*) score="0$score";; esac
     rm -f "$REWARD" "$REWARD_DETAILS" 2>/dev/null || true
     if ! printf '{"score": %s}\n' "$score" >"$REWARD" 2>/dev/null; then
         echo "verifier: could not write $REWARD (pre-existing immutable file?)" >&2
@@ -393,10 +398,10 @@ scorer error"
         VER_CAT_FIELDS+=("$json_field")
 
         points=$(float_compare "scale=4; $score / 100")
-        case "$points" in .*) points="0$points" ;; esac
+        case "$points" in .*) points="0$points";; esac
         VER_CAT_POINTS+=("$points")
         maxpoints=$(float_compare "scale=4; $max_points / 100")
-        case "$maxpoints" in .*) maxpoints="0$maxpoints" ;; esac
+        case "$maxpoints" in .*) maxpoints="0$maxpoints";; esac
         VER_CAT_MAXPOINTS+=("$maxpoints")
 
         TOTAL_SCORE=$(float_compare "$TOTAL_SCORE + $score")
@@ -414,10 +419,10 @@ ver_print_report() {
         [ "$(float_compare "${VER_CAT_SCORES[$i]} > 0")" = "1" ] && sym="⊘"
         [ "$(float_compare "${VER_CAT_SCORES[$i]} >= ${VER_CAT_MAXES[$i]}")" = "1" ] && sym="✓"
         disp=$(float_compare "scale=4; ${VER_CAT_SCORES[$i]} / 100")
-        case "$disp" in .*) disp="0$disp" ;; esac
+        case "$disp" in .*) disp="0$disp";; esac
         local maxdisp
         maxdisp=$(float_compare "scale=4; ${VER_CAT_MAXES[$i]} / 100")
-        case "$maxdisp" in .*) maxdisp="0$maxdisp" ;; esac
+        case "$maxdisp" in .*) maxdisp="0$maxdisp";; esac
         printf "  %s %-38s %6s / %s\n" "$sym" "${VER_CAT_NAMES[$i]}:" "$disp" "$maxdisp"
         if [ -n "${VER_CAT_DETAILS[$i]}" ]; then
             echo "${VER_CAT_DETAILS[$i]}" | while IFS= read -r line; do
@@ -429,7 +434,7 @@ ver_print_report() {
     echo "  ----------------------------------------"
     local total_disp
     total_disp=$(float_compare "scale=4; $TOTAL_SCORE / 100")
-    case "$total_disp" in .*) total_disp="0$total_disp" ;; esac
+    case "$total_disp" in .*) total_disp="0$total_disp";; esac
     printf "  %-40s %6s / %s\n" "TOTAL SCORE:" "$total_disp" "1.00"
     echo "==============================================================================="
 }
@@ -467,6 +472,42 @@ fi
 
 [ -f "$GROUND_TRUTH_DIR/input.txt" ] \
     || fail_out "missing ground truth: $GROUND_TRUTH_DIR/input.txt"
+
+# ------------------------------------------------------------------------------
+# THE RUBRIC (the only per-task input; written by stamp_ground_truth 8.06)
+#   rubric.json
+#.rungs              ordered stations {name, vaddr, iter{name,vaddr,total}}
+#.levels             {packing, anti_debug, obfuscation, interlock}
+#.packer_signature   hex bytes present iff the construction knows them
+#.scored_functions   [{vaddr, size}]  (obfuscation anchors ∩ hosts)
+#.tool_blacklist     tools that cannot run this carrier
+#.activation         canonical invocation argv
+# ------------------------------------------------------------------------------
+
+[ -s "$RUBRIC" ] || fail_out "missing rubric: $RUBRIC (run stamp_ground_truth 8.06)"
+
+ACTIVATION_ARGS=()
+if command_exists jq; then
+    while IFS= read -r _a; do
+        [ -n "$_a" ] && ACTIVATION_ARGS+=("$_a")
+    done < <(jq -r '.activation[]?' "$RUBRIC" 2>/dev/null || true)
+fi
+export ACTIVATION_ARGS
+
+LEVEL_PACKING=0; LEVEL_ANTI_DEBUG=0; LEVEL_OBFUSCATION=0; LEVEL_INTERLOCK=0
+PACKER_SIGNATURE_HEX=""
+TOOL_BLACKLIST=""
+if command_exists jq; then
+    LEVEL_PACKING=$(jq -r '.levels.packing // 0' "$RUBRIC")
+    LEVEL_ANTI_DEBUG=$(jq -r '.levels.anti_debug // 0' "$RUBRIC")
+    LEVEL_OBFUSCATION=$(jq -r '.levels.obfuscation // 0' "$RUBRIC")
+    LEVEL_INTERLOCK=$(jq -r '.levels.interlock // 0' "$RUBRIC")
+    PACKER_SIGNATURE_HEX=$(jq -r '.packer_signature // ""' "$RUBRIC")
+    TOOL_BLACKLIST=$(jq -r '(.tool_blacklist // []) | join(" ")' "$RUBRIC")
+    # adapt the rubric rungs into core_b's legacy {points:[...]} shape
+    jq '{points: .rungs}' "$RUBRIC" > "$TRACE_POINTS_FILE" 2>/dev/null \
+        || fail_out "rubric.json unreadable: $RUBRIC"
+fi
 
 # ===== @VERIFIER-CORE-B-BEGIN (byte-identical across the malware/protection templates; canonical source: script/verifier_blocks/core_b.sh -- edit there, not here) =====
 
@@ -558,8 +599,8 @@ validate_submission() {
     local real
     real=$(readlink -f "$bin" 2>/dev/null) || return 1
     case "$real" in
-        "$AGENT_OUTPUT_DIR"|"$AGENT_OUTPUT_DIR"/*) ;;
-        *) return 1 ;;
+        "$AGENT_OUTPUT_DIR"|"$AGENT_OUTPUT_DIR"/*);;
+        *) return 1;;
     esac
     local sz
     sz=$(stat -c %s "$real" 2>/dev/null) || return 1
@@ -639,20 +680,26 @@ prop_deobf() {
 
 # --- GDB chain-depth ladder (shared partial-credit mechanism) ------------------------
 # How deep does a REJECTED key/command drive the verification chain in the
-# EVASION-FREE ORACLE? Breakpoints on the chain probes with per-checkpoint
-# weights (default 1 each), partial credit capped at TRACE_PARTIAL_MAX.
-# Only called on rejection: a valid key/command deterministically traverses
-# the whole chain, so misses under it indicate verifier flakiness and are
-# never used to deduct.
+# EVASION-FREE ORACLE? ORDERED-PREFIX semantics: rungs score in
+# execution order, the ladder STOPS at the first missed rung, and the first
+# missed rung may still earn a BYTE-FRACTION of its weight when it carries an
+# iter (counting) probe -- the probe fires once per still-matching comparison
+# byte, so count/total is the matched-prefix fraction. Random touching of
+# deep code earns nothing; only the ordered prefix scores.
 #
-# Two breakpoint modes (2026-08-26 address decoupling):
+# Only called on rejection: a valid key/command deterministically traverses
+# the whole chain (the caller short-circuits to full credit), so misses under
+# it indicate verifier flakiness and are never used to deduct.
+#
+# Two breakpoint modes:
 #   ADDRESS (preferred): TRACE_POINTS_FILE (trace_points.json in the ground
-#     truth) carries build-time-extracted probe vaddrs. The ladder `starti`s
+#     truth) carries build-time-extracted probe vaddrs, optionally with an
+#     "iter" sub-object {name, vaddr, total} per rung. The ladder `starti`s
 #     the oracle, derives the PIE load base from `info proc mappings` via
 #     embedded python, and breaks on base+vaddr. No symbol name is involved,
 #     so challenge binaries can hide/localize their license-chain symbols.
 #   SYMBOL (legacy): breakpoints on TRACE_FUNCTIONS[] names -- for tasks
-#     whose ground truth predates trace_points.json.
+#     whose ground truth predates trace_points.json (no counting probes).
 #
 # Usage: run_trace_ladder <stdin_file> <gdb target argv...>
 # Echoes the score (first line) + per-checkpoint details; rc 1 when it cannot
@@ -661,20 +708,31 @@ run_trace_ladder() {
     local stdin_file="$1"; shift
     [ -f "$ORACLE_BIN" ] && [ -x "$ORACLE_BIN" ] || return 1
 
-    # ---- resolve both modes into TP_NAMES / TP_WEIGHTS / TP_VADDRS -------
+    # ---- resolve both modes into parallel arrays --------------------------
+    # TP_*  : entry probes (stage rungs); TPI_*: counting probes ("" if none)
     local TP_NAMES=() TP_WEIGHTS=() TP_VADDRS=() fn _i _rec _npts
+    local TPI_NAMES=() TPI_VADDRS=() TPI_TOTALS=()
     if [ -s "${TRACE_POINTS_FILE:-}" ] && command_exists jq; then
         _npts=$(jq -r '.points | length' "$TRACE_POINTS_FILE" 2>/dev/null || echo 0)
         if [ "${_npts:-0}" -gt 0 ] 2>/dev/null; then
             local _flds=()
             for _i in $(seq 0 $((_npts - 1))); do
-                _rec=$(jq -r ".points[$_i] | .name, .vaddr, (.weight // 1)" \
+                _rec=$(jq -r ".points[$_i] | .name, .vaddr, (.weight // 1),
+                               (.iter.name // \"\"), (.iter.vaddr // 0),
+                               (.iter.total // 0)" \
                         "$TRACE_POINTS_FILE" 2>/dev/null) || continue
                 mapfile -t _flds <<<"$_rec"
                 [ "${#_flds[@]}" -ge 2 ] || continue
                 TP_NAMES+=("${_flds[0]}")
                 TP_VADDRS+=("$(( ${_flds[1]} ))")
                 TP_WEIGHTS+=("${_flds[2]:-1}")
+                if [ -n "${_flds[3]:-}" ] && [ "${_flds[5]:-0}" != "0" ]; then
+                    TPI_NAMES+=("${_flds[3]}")
+                    TPI_VADDRS+=("$(( ${_flds[4]} ))")
+                    TPI_TOTALS+=("${_flds[5]}")
+                else
+                    TPI_NAMES+=(""); TPI_VADDRS+=("0"); TPI_TOTALS+=("0")
+                fi
             done
         fi
     fi
@@ -683,6 +741,7 @@ run_trace_ladder() {
         TP_NAMES=("${TRACE_FUNCTIONS[@]}")
         for _i in "${!TRACE_FUNCTIONS[@]}"; do
             TP_WEIGHTS+=("${TRACE_SCORES[$_i]:-1}")
+            TPI_NAMES+=(""); TPI_VADDRS+=("0"); TPI_TOTALS+=("0")
         done
     fi
 
@@ -701,7 +760,9 @@ EOF
         if [ "${#TP_VADDRS[@]}" -gt 0 ]; then
             # ADDRESS mode: stop at the loader entry (inferior loaded, base
             # fixed -- gdb disables ASLR by default), read the image base
-            # off the mappings, then place absolute breakpoints.
+            # off the mappings, then place absolute breakpoints. Entry
+            # probes print TRACE:<name> once; counting probes print
+            # TRACEDIT:<name> on EVERY hit (the hit count IS the signal).
             cat <<EOF
 starti
 python
@@ -709,7 +770,7 @@ import gdb
 _pts = [
 EOF
             for _i in "${!TP_NAMES[@]}"; do
-                echo "    ("${TP_NAMES[$_i]}", ${TP_VADDRS[$_i]}),"
+                echo "    (\"${TP_NAMES[$_i]}\", ${TP_VADDRS[$_i]}, ${TPI_VADDRS[$_i]:-0}, \"${TPI_NAMES[$_i]:-}\"),"
             done
             cat <<EOF
 ]
@@ -721,15 +782,18 @@ for _ln in gdb.execute("info proc mappings", to_string=True).splitlines():
 if _base is None:
     gdb.write("TRACE:NOBASE\n")
 else:
-    for _name, _off in _pts:
+    for _name, _off, _ioff, _iname in _pts:
         gdb.execute("break *%d" % (_base + _off))
-        gdb.execute('commands\nsilent\nprintf "TRACE:%s\n", "' + _name + '"\ncontinue\nend')
+        gdb.execute('commands\nsilent\nprintf "TRACE:%s\\\\n", "' + _name + '"\ncontinue\nend')
+        if _ioff and _iname:
+            gdb.execute("break *%d" % (_base + _ioff))
+            gdb.execute('commands\nsilent\nprintf "TRACEDIT:%s\\\\n", "' + _iname + '"\ncontinue\nend')
 end
 continue
 quit
 EOF
         else
-            # SYMBOL mode (legacy)
+            # SYMBOL mode (legacy; no counting probes)
             for fn in "${TP_NAMES[@]}"; do
                 cat <<EOF
 break $fn
@@ -761,16 +825,37 @@ EOF
         return 0
     fi
 
-    local details=() weighted_total=0 weighted_hit=0 idx=0 n=1 fn
+    # ---- ordered-prefix scoring with a byte-fraction failing rung ---------
+    local details=() weighted_total=0 weighted_hit=0 idx=0 n=1 fn stopped=0
     for fn in "${TP_NAMES[@]}"; do
-        # :-1 default also guards set -u on an empty/unset TP_WEIGHTS
         local w="${TP_WEIGHTS[$idx]:-1}"
         weighted_total=$(float_compare "$weighted_total + $w")
+        if [ "$stopped" -eq 1 ]; then
+            details+=("✗ checkpoint $n ($fn) not reached (ladder stopped)")
+            idx=$((idx + 1)); n=$((n + 1)); continue
+        fi
         if grep -qF "TRACE:$fn" /tmp/verifier-trace.log; then
             weighted_hit=$(float_compare "$weighted_hit + $w")
-            details+=("✓ checkpoint $n ($fn) reached")
+            details+=("✓ checkpoint $n ($fn) passed")
+        elif [ -n "${TPI_NAMES[$idx]:-}" ]; then
+            # first missed rung with a counting probe: byte-fraction credit.
+            # The probe fired once per still-matching comparison byte, so
+            # the hit count over the stamped total is the matched-prefix
+            # fraction.
+            local _hits=0 _frac=0
+            _hits=$(grep -cF "TRACEDIT:${TPI_NAMES[$idx]}" /tmp/verifier-trace.log || true)
+            if [ "$_hits" -gt "${TPI_TOTALS[$idx]}" ]; then _hits="${TPI_TOTALS[$idx]}"; fi
+            _frac=$(float_compare "scale=4; $_hits / ${TPI_TOTALS[$idx]}")
+            if [ "$(float_compare "$_frac > 0")" = "1" ]; then
+                weighted_hit=$(float_compare "scale=4; $weighted_hit + $w * $_frac")
+                details+=("⊘ checkpoint $n ($fn) partial: matched prefix $_hits/${TPI_TOTALS[$idx]} bytes")
+            else
+                details+=("✗ checkpoint $n ($fn) failed at byte 0 (0/${TPI_TOTALS[$idx]})")
+            fi
+            stopped=1
         else
-            details+=("✗ checkpoint $n ($fn) NOT reached")
+            details+=("✗ checkpoint $n ($fn) failed (no counting probe)")
+            stopped=1
         fi
         idx=$((idx + 1)); n=$((n + 1))
     done
@@ -782,178 +867,76 @@ EOF
     echo "$score"
     printf '%s\n' "${details[@]}"
 }
+
 # ===== @VERIFIER-CORE-B-END =====
 
 # ==============================================================================
-# DOMAIN FUNCTIONS (protection-specific; each keeps a "why not portable" note)
+# DOMAIN FUNCTIONS
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# Expected flag: derived at verification time from the ORACLE binary + the
-# ground-truth key. The flag depends on the key blob, so an agent that never
-# recovered the GT key cannot predict it. Behavioral checks require submitted
-# artifacts to reproduce this flag -- a stub that merely exits 0 scores
-# nothing.
-# ------------------------------------------------------------------------------
+# --- expected flag: derived at verification time from the ORACLE binary and
+# the ground-truth key. The flag depends on the key blob, so a stub that never
+# recovered the GT key cannot predict it.
 EXPECTED_FLAG=""
 
 compute_expected_flag() {
     if [ -x "$ORACLE_BIN" ] && [ -n "$CORRECT_KEY" ]; then
         # || true INSIDE the substitution: under set -e + pipefail an oracle
-        # that prints no flag must degrade to the empty-flag warning below,
-        # not silently kill the whole verifier mid-run
+        # that prints no flag must degrade to the empty-flag warning below
         EXPECTED_FLAG=$(echo "$CORRECT_KEY" | timeout 60 "$ORACLE_BIN" "${ACTIVATION_ARGS[@]}" 2>/dev/null \
             | grep -oE 'flag\{[^}]*\}' | head -1 || true)
     fi
 }
 
-# ------------------------------------------------------------------------------
-# Negative behavioral gate (this skill's CONTROL PROBE instance, baseline
-# principle): submitted binaries must still reject wrong keys. Runs the binary
-# with a guaranteed-invalid key; it must exit non-zero (and not via a
-# timeout), and must not print a flag. Kills flag-printing stubs and binaries
-# whose verification was patched out rather than genuinely defeated.
-# ------------------------------------------------------------------------------
-WRONG_KEY_PROBE="INVALID_PROBE_KEY_0000000000000000"
+# --- behavioral run helpers ----------------------------------------------------
+# ANTI-CHEAT PREREQUISITE, TIER 2: every execution of ANALYZED code goes
+# through the gated runner. run_bin wraps the run in strace -f
+# (execve/execveat only) and applies the exec gate — executing anything under
+# /app, /tests, or /solution (mirroring the oracle, replaying the challenge
+# binary, reading verifier internals) sets EXEC_CHEAT, and the property
+# scorer immediately voids the WHOLE bucket: an exec cheat falsifies every
+# behavioral item at once, so the dependent scope is everything.
+# The LICENSE flag terminal keeps its documented exemption (a fixed
+# verifier-built binary fed a key string — no agent code executes there).
+EXEC_CHEAT=0
 
-check_wrong_key_rejected() {
-    local bin="$1"
-    local out rc
+run_bin() {
+    local bin="$1" keyf="$2" out rc gate_trace=""
+    if command_exists strace; then
+        gate_trace=$(mktemp)
+    fi
     set +e
-    out=$(echo "$WRONG_KEY_PROBE" | timeout 30 "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
+    if [ -n "$gate_trace" ]; then
+        out=$(timeout "$PROP_RUN_TIMEOUT" strace -f -e trace=execve,execveat \
+              -o "$gate_trace" "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" \
+              < "$keyf" 2>/dev/null)
+    else
+        out=$(timeout "$PROP_RUN_TIMEOUT" "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" < "$keyf" 2>/dev/null)
+    fi
     rc=$?
     set -e
-    [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ] && ! grep -qE 'flag\{[^}]+\}' <<<"$out"
+    if [ -n "$gate_trace" ]; then
+        if exec_gate_violation "$gate_trace"; then
+            EXEC_CHEAT=1
+            echo "✗ exec cheat: $bin executed a verifier-side binary — property bucket voided" >&2
+        fi
+        rm -f "$gate_trace"
+    fi
+    echo "rc$rc"
+    printf '%s\n' "$out"
 }
 
-# ------------------------------------------------------------------------------
-# bypass property (domain): the artifact must complete verification while
-# observed by every available tool from the matrix: debuggers (gdb, lldb),
-# tracers (strace, ltrace) and the instrumentation framework (valgrind).
-# WHY NOT PORTABLE: checks flag-on-stdout with the GT key; malware's bypass
-# observes trigger side effects instead.
-# ------------------------------------------------------------------------------
-prop_bypass() {
-    # rc 0 = property holds, 1 = tested and fails, 2 = untestable
-    [ -n "$EXPECTED_FLAG" ] || return 2
-    # activation args as one string for the -ex/run-args style interfaces
-    local ACTIVATION_ARGS_STR="${ACTIVATION_ARGS[*]:-}"
-    # lldb resolution: bare `lldb` on PATH resolves to the LLVM-22 bundle's
-    # lldb (the verifier image's /usr/bin/lldb symlink; no /opt/llvm-22 here), which
-    # fails to even start (missing libpython3.11). Prefer the distro
-    # /usr/bin/lldb-15 -- but only when it actually starts -- and fall back
-    # to PATH lldb only if it runs.
-    local LLDB_BIN=""
-    if command_exists lldb-15 && lldb-15 --version >/dev/null 2>&1; then
-        LLDB_BIN="$(command -v lldb-15)"
-    elif command_exists lldb && lldb --version >/dev/null 2>&1; then
-        LLDB_BIN="$(command -v lldb)"
-    fi
-    command_exists gdb || [ -n "$LLDB_BIN" ] \
-        || command_exists strace || command_exists ltrace \
-        || command_exists valgrind || return 2
-
-    skip_tool() {
-        case " $BYPASS_SKIP_TOOLS " in *" $1 "*) return 0 ;; esac
-        return 1
-    }
-
-    local tmp_key out rc
-    tmp_key=$(mktemp)
-    printf '%s\n' "$CORRECT_KEY" > "$tmp_key"
-
-    if command_exists gdb && ! skip_tool gdb; then
-        # -nx: do NOT load ~/.gdbinit. This image installs pwndbg there, and
-        # pwndbg both slows startup on large binaries and can swallow the
-        # inferior's stdout -- making the flag invisible without -nx.
-        set +e
-        out=$(timeout 90 "${VER_RUNAS[@]}" gdb -nx -q -batch -ex "run $ACTIVATION_ARGS_STR" -ex "quit" "$1" < "$tmp_key" 2>/dev/null)
-        rc=$?
-        set -e
-        if [ "$rc" -ne 0 ] || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            rm -f "$tmp_key"; return 1
-        fi
-    fi
-
-    if [ -n "$LLDB_BIN" ] && ! skip_tool lldb; then
-        local lldb_cmds
-        lldb_cmds=$(mktemp)
-        # bare run-args with an empty value makes lldb misfire on default
-        # (empty-args) tasks: emit the setting only when args exist
-        {
-            if [ -n "$ACTIVATION_ARGS_STR" ]; then
-                printf 'settings set -- target.run-args %s\n' "$ACTIVATION_ARGS_STR"
-            fi
-            printf 'process launch --stdin %s\nquit\n' "$tmp_key"
-        } > "$lldb_cmds"
-        # lldb opens --stdin AS nobody: both the key file and the command
-        # file must be world-readable (gdb is unaffected -- its stdin fd is
-        # opened by the root shell before the drop)
-        chmod 644 "$tmp_key" "$lldb_cmds"
-        set +e
-        out=$(timeout 90 "${VER_RUNAS[@]}" env HOME=/tmp "$LLDB_BIN" -batch -s "$lldb_cmds" "$1" 2>/dev/null)
-        rc=$?
-        set -e
-        rm -f "$lldb_cmds"
-        if [ "$rc" -ne 0 ] || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            rm -f "$tmp_key"; return 1
-        fi
-    fi
-
-    if command_exists strace && ! skip_tool strace; then
-        set +e
-        out=$(timeout 60 strace "${VER_RUNAS[@]}" "$1" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
-        rc=$?
-        set -e
-        if [ "$rc" -ne 0 ] || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            rm -f "$tmp_key"; return 1
-        fi
-    fi
-
-    if command_exists ltrace && ! skip_tool ltrace; then
-        set +e
-        out=$(timeout 60 "${VER_RUNAS[@]}" ltrace "$1" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
-        rc=$?
-        set -e
-        # ltrace exits 1 on static ELFs ("Couldn't find .dynsym") while the
-        # trace itself completed and the inferior ran -- the flag check is
-        # the discriminator here, not ltrace's own exit status
-        if { [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; } || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            rm -f "$tmp_key"; return 1
-        fi
-    fi
-
-    if command_exists valgrind && ! skip_tool valgrind; then
-        set +e
-        out=$(timeout "${PROP_VALGRIND_TIMEOUT:-120}" "${VER_RUNAS[@]}" valgrind -q "$1" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
-        rc=$?
-        set -e
-        if [ "$rc" -ne 0 ] || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            rm -f "$tmp_key"; return 1
-        fi
-    fi
-
-    rm -f "$tmp_key"
-    return 0
+oracle_rejection_line() {
+    # the oracle's own rejection message line for a given key file
+    local keyf="$1"
+    run_bin "$ORACLE_BIN" "$keyf" | grep -vE '^rc[0-9]+$' | grep -E 'Invalid|invalid|denied|Denied|reject|Reject|expired|Expired' | head -1 || true
 }
 
 # ==============================================================================
-# SCORING FUNCTIONS
+# LICENSE VERIFICATION — 50 = ordered ladder 30 + flag terminal 20
 # ==============================================================================
-
-# ------------------------------------------------------------------------------
-# License Verification -- 50-point bucket:
-#   - valid key (flag + exit 0 on the challenge binary) -> 50, short-circuit.
-#     The run is dropped to nobody and strace-wrapped (baseline #3/#4: the
-#     challenge binary itself is the one exempted verifier-side target).
-#     Trace misses never deduct here: a valid key deterministically traverses
-#     the whole chain, so a miss means verifier flakiness.
-#   - rejected key -> partial chain-depth credit via the core_b ladder,
-#     up to TRACE_PARTIAL_MAX (20).
-#   - no key -> 0.
-# ------------------------------------------------------------------------------
 score_license_verification() {
-    local score=0
+    local score=0 ladder=0 flag=0
     local test_key=""
     local details=()
 
@@ -968,78 +951,356 @@ score_license_verification() {
             return
         fi
 
-        # A valid key must exit 0 AND print a flag{...} (the binary is fixed, so any
-    # well-formed flag satisfies the oracle; no EXPECTED_FLAG comparison) --
-        # matching the documented contract (correct key -> flag{...}, exit 0).
-        # Dropped, but deliberately NOT traced: the challenge binary carries
-        # real anti-debug by design (D>=1 fires under any tracer and kills the
-        # run before verification), and the exec-gate guards AGENT-authored
-        # code executions -- the license run feeds a fixed verifier-built
-        # binary a key string, so there is nothing for that gate to catch here.
+        # ---- flag terminal (20): challenge binary accepts the key ----------
+        # Plain dropped run, deliberately NOT traced (D>=1 anti-debug fires
+        # under any tracer) and deliberately not exec-gated (the license run
+        # feeds a fixed verifier-built binary a key string).
         local lic_out lic_rc
         set +e
-        lic_out=$(echo "$test_key" | timeout 60 "${VER_RUNAS[@]}" "$CHALLENGE_BIN" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
+        lic_out=$(echo "$test_key" | timeout "$PROP_RUN_TIMEOUT" "${VER_RUNAS[@]}" "$CHALLENGE_BIN" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
         lic_rc=$?
         set -e
-
         if [ "$lic_rc" -eq 0 ] && grep -qE 'flag\{[^}]+\}' <<<"$lic_out"; then
-            score=50
-            details+=("✓ Key accepted, flag printed (0.5000/0.5000)")
-            details+=("   Key: ${test_key:0:25}...")
-            echo "$score"
-            printf '%s\n' "${details[@]}"
-            return
+            flag=$LICENSE_FLAG_MAX
+            details+=("✓ flag terminal: key accepted, flag printed ($LICENSE_FLAG_MAX/$LICENSE_FLAG_MAX)")
+        else
+            details+=("✗ flag terminal: key rejected (exit=$lic_rc) (0/$LICENSE_FLAG_MAX)")
         fi
-        details+=("✗ Key rejected (exit=$lic_rc) (0/0.5000)")
-        details+=("   Key: ${test_key:0:25}...")
 
-        # Partial credit: how deep the rejected key drives the verification
-        # chain in the oracle (core_b ladder; rc 1 when it cannot run).
-        local trace_out temp_input
-        temp_input=$(mktemp)
-        printf '%s\n' "$test_key" > "$temp_input"
-        # the ladder honors the activation args: arg-gated features must be
-        # reachable on the chain-depth path exactly as on every other run
-        trace_out=$(run_trace_ladder "$temp_input" "$ORACLE_BIN" \
-            ${ACTIVATION_ARGS[@]+"${ACTIVATION_ARGS[@]}"} || true)
-        rm -f "$temp_input"
-        if [ -n "$trace_out" ]; then
-            local trace_score=$(echo "$trace_out" | head -1)
-            if [ "$(float_compare "$trace_score > 0")" = "1" ]; then
-                score="$trace_score"
-                local pts_display=$(float_compare "scale=4; $trace_score / 100")
+        # ---- ordered chain ladder (30) --------------------------------------
+        if [ "$flag" -eq "$LICENSE_FLAG_MAX" ]; then
+            # Deterministic-traversal ruling: a key the challenge binary
+            # accepts necessarily drove the whole chain in the evasion-free
+            # oracle; running gdb under it would only let verifier flakiness
+            # deduct from a real solve.
+            ladder=$LICENSE_LADDER_MAX
+            details+=("✓ chain ladder: auto-full (flag proved the full traversal) ($LICENSE_LADDER_MAX/$LICENSE_LADDER_MAX)")
+        else
+            local trace_out temp_input
+            temp_input=$(mktemp)
+            printf '%s\n' "$test_key" > "$temp_input"
+            trace_out=$(run_trace_ladder "$temp_input" "$ORACLE_BIN" \
+                ${ACTIVATION_ARGS[@]+"${ACTIVATION_ARGS[@]}"} || true)
+            rm -f "$temp_input"
+            if [ -n "$trace_out" ]; then
+                local trace_score=$(echo "$trace_out" | head -1)
+                if [ "$(float_compare "$trace_score > $LICENSE_LADDER_MAX")" = "1" ]; then
+                    trace_score=$LICENSE_LADDER_MAX
+                fi
+                ladder="$trace_score"
+                local pts_display=$(float_compare "scale=4; $ladder / 100")
                 case "$pts_display" in .*) pts_display="0$pts_display";; esac
-                details+=("⊘ Partial chain-depth credit ($pts_display/0.5000)")
+                details+=("⊘ chain ladder: $ladder/$LICENSE_LADDER_MAX ($pts_display/0.3000)")
+                while IFS= read -r line; do
+                    [ -n "$line" ] && details+=("   $line")
+                done <<< "$(echo "$trace_out" | tail -n +2)"
+            else
+                details+=("⊘ chain ladder: cannot run (no oracle or no stamped rungs) (0/$LICENSE_LADDER_MAX)")
             fi
-            while IFS= read -r line; do
-                [ -n "$line" ] && details+=("$line")
-            done <<< "$(echo "$trace_out" | tail -n +2)"
         fi
     else
         details+=("⊘ No key provided (0/0.5000)")
     fi
 
+    score=$(float_compare "$flag + $ladder")
     echo "$score"
     printf '%s\n' "${details[@]}"
 }
 
-# ------------------------------------------------------------------------------
-# Property Validation -- 50-point bucket, scored by COVERAGE:
-#   (distinct properties achieved by any submitted artifact)
-#   / (configured DEFEAT_PROPERTIES) * PROPERTIES_MAX
-# Order- and naming-free: any artifact in binaries/ can earn any property,
-# matching the challenge premise that protections have no fixed peel order.
-# Every artifact first passes the full gate chain (plausibility, .text volume,
-# non-original, wrong-key rejection, oracle-flag reproduction); only then are
-# properties tested.
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# PROPERTY VALIDATION — 50 = deterministic item coverage, flat 50/n_items
+# ==============================================================================
+
+# ---- P family items (packing > 0) ---------------------------------------------
+item_packer_sig_absent() {
+    # exact byte search: the construction-stamped packer signature must not
+    # appear anywhere in the submitted file. rc 0 = item earned. The hex->byte
+    # decode uses python3 (the verifier image need not ship xxd).
+    [ -n "$PACKER_SIGNATURE_HEX" ] || return 2
+    local prc
+    python3 - "$1" "$PACKER_SIGNATURE_HEX" <<'SIG_PY' || prc=$?
+import sys
+data = open(sys.argv[1], 'rb').read()
+needle = bytes.fromhex(sys.argv[2])
+sys.exit(0 if needle not in data else 1)
+SIG_PY
+    [ "${prc:-0}" -eq 0 ] && return 0
+    return 1
+}
+
+item_no_rwx() {
+    # no writable+executable LOAD segment (packer self-decryption hallmark)
+    if command_exists readelf && has_rwx_load "$1"; then return 1; fi
+    return 0
+}
+
+_ldd_libs() {
+    ldd "$1" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i ~ /\.so/) {sub("^.*/","",$i); print $i}}' | sort -u
+}
+
+item_ldd_set_eq() {
+    command_exists ldd || return 2
+    [ -x "$ORACLE_BIN" ] || return 2
+    local a b
+    a=$(_ldd_libs "$1"); b=$(_ldd_libs "$ORACLE_BIN")
+    [ -n "$b" ] || return 2
+    [ "$a" = "$b" ] && return 0 || return 1
+}
+
+_entry_section() {
+    # section name containing the ELF entry point
+    readelf -h "$1" 2>/dev/null | awk '/Entry point/ {print $4}' | tr -d '\r'
+}
+
+_section_of_vaddr() {
+    local bin="$1" va="$2"
+    python3 - "$bin" "$va" <<'PYEOF'
+import sys
+# minimal ELF section lookup by vaddr (deterministic, no pyelftools needed)
+import struct
+path, vas = sys.argv[1], sys.argv[2]
+va = int(vas, 0)
+data = open(path, 'rb').read()
+if data[:4] != b'\x7fELF': sys.exit(0)
+end = '<' if data[5] == 1 else '>'
+e_shoff, = struct.unpack_from(end + 'Q', data, 0x28)
+e_shentsize, e_shnum, e_shstrndx = struct.unpack_from(end + 'HHH', data, 0x3a)
+raw = []
+for i in range(e_shnum):
+    f = struct.unpack_from(end + 'IIQQQQIIQQ', data, e_shoff + i * e_shentsize)
+    raw.append(f)
+st = raw[e_shstrndx]
+strtab = data[st[4]:st[4] + st[5]]
+for f in raw:
+    nm_end = strtab.find(b'\0', f[0])
+    name = strtab[f[0]:nm_end].decode('latin-1')
+    if name and f[3] <= va < f[3] + f[5]:  # sh_addr <= va < sh_addr + sh_size
+        print(name)
+        break
+PYEOF
+}
+
+item_entry_section_eq() {
+    command_exists readelf || return 2
+    [ -x "$ORACLE_BIN" ] || return 2
+    local ea eo
+    ea=$(_entry_section "$1"); eo=$(_entry_section "$ORACLE_BIN")
+    [ -n "$eo" ] || return 2
+    [ -n "$ea" ] || return 1
+    local sa sb
+    sa=$(_section_of_vaddr "$1" "$ea"); sb=$(_section_of_vaddr "$ORACLE_BIN" "$eo")
+    [ -n "$sb" ] || return 2
+    [ "$sa" = "$sb" ] && return 0 || return 1
+}
+
+_interp() {
+    readelf -lW "$1" 2>/dev/null | grep -oE 'Requesting program interpreter: [^]]+' | sed 's/Requesting program interpreter: //'
+}
+
+item_interp_eq() {
+    command_exists readelf || return 2
+    [ -x "$ORACLE_BIN" ] || return 2
+    local a b
+    a=$(_interp "$1"); b=$(_interp "$ORACLE_BIN")
+    [ -n "$b" ] || return 2
+    [ "$a" = "$b" ] && return 0 || return 1
+}
+
+# ---- O family items (obfuscation > 0): one per stamped scored function -------
+# The submitted artifact must DIFFER from prepack_binary (the packer-free,
+# still-protected intermediate) at the stamped byte range: an untouched range
+# means the obfuscation is still in place. vaddr layout is stable across
+# packing (unpackers restore the original image), so the comparison is
+# well-defined.
+item_region_differs() {
+    local bin="$1" vaddr="$2" size="$3"
+    [ -f "$PREPACK_BIN" ] || return 2
+    python3 - "$PREPACK_BIN" "$bin" "$vaddr" "$size" <<'PYEOF'
+import struct, sys
+def vread(path, vaddr, size):
+    data = open(path, 'rb').read()
+    if data[:4] != b'\x7fELF': return None
+    end = '<' if data[5] == 1 else '>'
+    e_phoff, = struct.unpack_from(end + 'Q', data, 0x20)
+    e_phentsize, e_phnum = struct.unpack_from(end + 'HH', data, 0x36)
+    for i in range(e_phnum):
+        f = struct.unpack_from(end + 'IIQQQQQQ', data, e_phoff + i * e_phentsize)
+        p_type, p_flags, p_offset, p_vaddr, p_paddr, p_filesz = f[0], f[1], f[2], f[3], f[4], f[5]
+        if p_type == 1 and p_vaddr <= vaddr and vaddr + size <= p_vaddr + p_filesz:
+            off = p_offset + (vaddr - p_vaddr)
+            return data[off:off + size]
+    return None
+ref = vread(sys.argv[1], int(sys.argv[3], 0), int(sys.argv[4], 0))
+got = vread(sys.argv[2], int(sys.argv[3], 0), int(sys.argv[4], 0))
+if ref is None or got is None:
+    sys.exit(2)   # untestable
+sys.exit(0 if ref != got else 1)
+PYEOF
+}
+
+# ---- D family items (anti-debug > 0): one per available tool ------------------
+# The artifact completes verification with the GT key while observed by the
+# tool. gdb -nx skips the image's pwndbg gdbinit (slows startup, can swallow
+# the inferior's stdout).
+bypass_tool_ok() {
+    local bin="$1" tool="$2"
+    local ACTIVATION_ARGS_STR="${ACTIVATION_ARGS[*]:-}"
+    local tmp_key out rc
+    tmp_key=$(mktemp)
+    printf '%s\n' "$CORRECT_KEY" > "$tmp_key"
+    chmod 644 "$tmp_key"
+    case "$tool" in
+        gdb)
+            set +e
+            out=$(timeout 90 "${VER_RUNAS[@]}" gdb -nx -q -batch -ex "run $ACTIVATION_ARGS_STR" -ex "quit" "$bin" < "$tmp_key" 2>/dev/null)
+            rc=$?
+            set -e ;;
+        lldb)
+            local LLDB_BIN=""
+            if command_exists lldb-15 && lldb-15 --version >/dev/null 2>&1; then
+                LLDB_BIN="$(command -v lldb-15)"
+            elif command_exists lldb && lldb --version >/dev/null 2>&1; then
+                LLDB_BIN="$(command -v lldb)"
+            fi
+            [ -n "$LLDB_BIN" ] || { rm -f "$tmp_key"; return 2; }
+            local lldb_cmds
+            lldb_cmds=$(mktemp)
+            {
+                if [ -n "$ACTIVATION_ARGS_STR" ]; then
+                    printf 'settings set -- target.run-args %s\n' "$ACTIVATION_ARGS_STR"
+                fi
+                printf 'process launch --stdin %s\nquit\n' "$tmp_key"
+            } > "$lldb_cmds"
+            chmod 644 "$lldb_cmds"
+            set +e
+            out=$(timeout 90 "${VER_RUNAS[@]}" env HOME=/tmp "$LLDB_BIN" -batch -s "$lldb_cmds" "$bin" 2>/dev/null)
+            rc=$?
+            set -e
+            rm -f "$lldb_cmds" ;;
+        strace)
+            set +e
+            out=$(timeout 60 strace "${VER_RUNAS[@]}" "$bin" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
+            rc=$?
+            set -e ;;
+        ltrace)
+            set +e
+            out=$(timeout 60 "${VER_RUNAS[@]}" ltrace "$bin" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
+            rc=$?
+            set -e
+            # ltrace exits 1 on static ELFs while the inferior still ran
+            if [ "$rc" -eq 1 ] && grep -qF "$EXPECTED_FLAG" <<<"$out"; then rc=0; fi ;;
+        valgrind)
+            set +e
+            out=$(timeout "${PROP_VALGRIND_TIMEOUT:-120}" "${VER_RUNAS[@]}" valgrind -q "$bin" ${ACTIVATION_ARGS_STR} < "$tmp_key" 2>/dev/null)
+            rc=$?
+            set -e;;
+        *) rm -f "$tmp_key"; return 2;;
+    esac
+    rm -f "$tmp_key"
+    if [ "$rc" -eq 0 ] && grep -qF "$EXPECTED_FLAG" <<<"$out"; then return 0; fi
+    return 1
+}
+
+# ---- X family items (always on): exact behavioral equality with the oracle ----
+x_gtkey_rc_eq() {
+    local bin="$1" kf="$2" orc_rc art_rc
+    orc_rc=$(run_bin "$ORACLE_BIN" "$kf" | head -1)
+    art_rc=$(run_bin "$bin" "$kf" | head -1)
+    [ -n "$orc_rc" ] || return 2
+    [ "$orc_rc" = "$art_rc" ] && return 0 || return 1
+}
+
+x_reject_line_eq() {
+    # rejection-line equality for a REJECTED key: the artifact must print the
+    # oracle's own rejection line (byte-for-byte), not an invented one
+    local bin="$1" kf="$2" want got
+    want=$(oracle_rejection_line "$kf")
+    [ -n "$want" ] || return 2
+    got=$(run_bin "$bin" "$kf" | grep -F -- "$want" | head -1)
+    [ "$got" = "$want" ] && return 0 || return 1
+}
+
+x_reject_rc_eq() {
+    local bin="$1" kf="$2" orc art
+    orc=$(run_bin "$ORACLE_BIN" "$kf" | head -1)
+    art=$(run_bin "$bin" "$kf" | head -1)
+    [ -n "$orc" ] || return 2
+    [ "$orc" = "$art" ] && return 0 || return 1
+}
+
+x_determinism() {
+    local bin="$1" sig a i
+    sig=""
+    for i in 1 2 3; do
+        a=$(run_bin "$bin" "$2" | grep -E '^rc[0-9]+$|flag\{' | tr '\n' ' ')
+        if [ -z "$sig" ]; then sig="$a"; fi
+        [ "$sig" = "$a" ] || return 1
+    done
+    return 0
+}
+
+# ---- assemble the item menu from the construction stamps ----------------------
+build_item_menu() {
+    # echoes one "id|family" per line
+    if [ "$LEVEL_PACKING" -gt 0 ]; then
+        echo "packing.sig|P"; echo "packing.rwx|P"; echo "packing.ldd|P"
+        echo "packing.entry|P"; echo "packing.interp|P"
+    fi
+    if [ "$LEVEL_OBFUSCATION" -gt 0 ] && command_exists jq; then
+        local _i _n _v _s
+        _n=$(jq -r '.scored_functions | length' "$RUBRIC" 2>/dev/null || echo 0)
+        for _i in $(seq 0 $((_n - 1))); do
+            _v=$(jq -r ".scored_functions[$_i].vaddr" "$RUBRIC" 2>/dev/null)
+            _s=$(jq -r ".scored_functions[$_i].size" "$RUBRIC" 2>/dev/null)
+            [ -n "$_v" ] && [ "$_v" != "null" ] && echo "obfuscation.f$_i|O|$_v|$_s"
+        done
+    fi
+    if [ "$LEVEL_ANTI_DEBUG" -gt 0 ]; then
+        local t
+        for t in gdb lldb strace ltrace valgrind; do
+            case " $TOOL_BLACKLIST " in *" $t "*) continue ;; esac
+            if command_exists "$t" || { [ "$t" = "lldb" ] && command_exists lldb-15; }; then
+                echo "bypass.$t|D"
+            fi
+        done
+    fi
+    echo "behavior.gtkey_rc|X"
+    echo "behavior.wrongkey_rc|X"
+    echo "behavior.wrongkey_msg|X"
+    echo "behavior.determinism|X"
+    echo "behavior.malformed_1|X"
+    echo "behavior.malformed_2|X"
+    echo "behavior.malformed_3|X"
+}
+
+# run one item against one binary. rc 0 earned, 1 failed, 2 untestable.
+score_item() {
+    local bin="$1" id="$2" vaddr="$3" size="$4" kf_gt="$5" kf_wk="$6" kf_m1="$7" kf_m2="$8" kf_m3="$9"
+    case "$id" in
+        packing.sig)     item_packer_sig_absent "$bin";;
+        packing.rwx)     item_no_rwx "$bin";;
+        packing.ldd)     item_ldd_set_eq "$bin";;
+        packing.entry)   item_entry_section_eq "$bin";;
+        packing.interp)  item_interp_eq "$bin";;
+        obfuscation.f*)  item_region_differs "$bin" "$vaddr" "$size";;
+        bypass.*)        bypass_tool_ok "$bin" "${id#bypass.}";;
+        behavior.gtkey_rc)    x_gtkey_rc_eq "$bin" "$kf_gt";;
+        behavior.wrongkey_rc) x_reject_rc_eq "$bin" "$kf_wk";;
+        behavior.wrongkey_msg) x_reject_line_eq "$bin" "$kf_wk";;
+        behavior.determinism) x_determinism "$bin" "$kf_gt";;
+        behavior.malformed_1) x_reject_rc_eq "$bin" "$kf_m1" && x_reject_line_eq "$bin" "$kf_m1";;
+        behavior.malformed_2) x_reject_rc_eq "$bin" "$kf_m2" && x_reject_line_eq "$bin" "$kf_m2";;
+        behavior.malformed_3) x_reject_rc_eq "$bin" "$kf_m3" && x_reject_line_eq "$bin" "$kf_m3";;
+        *) return 2;;
+    esac
+}
+
 score_property_validation() {
     local details=()
-    local total=${#DEFEAT_PROPERTIES[@]}
 
-    if [ "$total" -eq 0 ]; then
+    if [ "$VER_DROP_OK" -ne 1 ]; then
         echo "0"
-        echo "⊘ No defeat properties configured (0/0.5000)"
+        echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root (0/0.5000)"
         return
     fi
     if [ ! -d "$BINARIES_DIR" ]; then
@@ -1047,45 +1308,62 @@ score_property_validation() {
         echo "⊘ No binaries submitted (0/0.5000)"
         return
     fi
-    if [ "$VER_DROP_OK" -ne 1 ]; then
-        echo "0"
-        echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root (0/0.5000)"
-        return
+
+    # fixed probe key files
+    local kf_gt kf_wk kf_m1 kf_m2 kf_m3
+    kf_gt=$(mktemp); printf '%s\n' "$CORRECT_KEY" > "$kf_gt"
+    kf_wk=$(mktemp); printf '%s\n' "$WRONG_KEY_PROBE" > "$kf_wk"
+    kf_m1=$(mktemp); printf '\n' > "$kf_m1"
+    kf_m2=$(mktemp); printf '%s\n' "${MALFORMED_KEYS[1]}" > "$kf_m2"
+    kf_m3=$(mktemp); printf '%s\n' "${MALFORMED_KEYS[2]}" > "$kf_m3"
+    chmod 644 "$kf_gt" "$kf_wk" "$kf_m1" "$kf_m2" "$kf_m3"
+
+    local menu total
+    menu=$(build_item_menu)
+    total=$(echo "$menu" | wc -l)
+    if [ "$total" -eq 0 ]; then
+        echo "0"; echo "⊘ no items configured (0/0.5000)"; return
     fi
 
-    local achieved=""
-    local untestable=""
-    local scanned=0
-    local bin prop
+    local achieved="" untestable="" scanned=0 bin id fam vaddr size
     for bin in "$BINARIES_DIR"/*; do
         [ -f "$bin" ] || continue
         scanned=$((scanned + 1))
 
+        # ANTI-CHEAT PREREQUISITES, TIER 1 (per artifact): every gate below
+        # must pass before this artifact can earn ANY item. A failure does
+        # not void other artifacts — the dependent scope is this artifact's
+        # items. The Tier 0 exec cheat (checked inside the gated runner)
+        # voids the WHOLE bucket instead.
         if ! validate_submission "$bin"; then
-            details+=("⊘ $(basename "$bin"): failed plausibility gate")
+            details+=("⊘ $(basename "$bin"): failed plausibility gate (artifact prerequisite)")
             continue
         fi
-        if ! check_wrong_key_rejected "$bin"; then
-            details+=("⊘ $(basename "$bin"): wrong key accepted -- stub or patched-out verification")
+        local wk_all wk_out wk_rc
+        wk_all=$(run_bin "$bin" "$kf_wk")
+        wk_rc=$(head -1 <<<"$wk_all")
+        wk_out=$(tail -n +2 <<<"$wk_all")
+        if [ "$EXEC_CHEAT" -eq 1 ]; then
+            details+=("✗ $(basename "$bin"): executed a verifier-side binary (/app|/tests|/solution) -- property bucket voided")
+            echo "0"
+            printf '%s\n' "${details[@]}"
+            return
+        fi
+        if { [ "$wk_rc" = "rc0" ] || [ "$wk_rc" = "rc124" ]; } || grep -qE 'flag\{[^}]+\}' <<<"$wk_out"; then
+            details+=("⊘ $(basename "$bin"): wrong key accepted or hang -- stub or patched-out verification (artifact prerequisite)")
             continue
         fi
 
-        # Behavioral anchor: with the GT key the artifact must reproduce the
-        # flag (activation args included -- the flag-derivation context is
-        # the oracle's, which may need them to reach the protected feature).
-        # The run is strace-wrapped (baseline #4) and privilege-dropped to
-        # nobody (baseline #3); artifacts never touch verifier-side trees,
-        # so the gate has NO exempted target here.
+        # behavioral anchor: GT key must reproduce the oracle's flag.
+        # strace-wrapped + exec-gated (baseline #4); no exempted target here.
         local out rc gate_trace=""
-        if command_exists strace; then
-            gate_trace=$(mktemp)
-        fi
+        if command_exists strace; then gate_trace=$(mktemp); fi
         set +e
         if [ -n "$gate_trace" ]; then
-            out=$(echo "$CORRECT_KEY" | timeout 90 strace -f -e trace=execve,execveat \
+            out=$(cat "$kf_gt" | timeout 90 strace -f -e trace=execve,execveat \
                   -o "$gate_trace" "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
         else
-            out=$(echo "$CORRECT_KEY" | timeout 60 "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
+            out=$(cat "$kf_gt" | timeout "$PROP_RUN_TIMEOUT" "${VER_RUNAS[@]}" "$bin" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
         fi
         rc=$?
         set -e
@@ -1098,73 +1376,70 @@ score_property_validation() {
         fi
         rm -f "$gate_trace"
         if [ "$rc" -ne 0 ] || [ -z "$EXPECTED_FLAG" ] || ! grep -qF "$EXPECTED_FLAG" <<<"$out"; then
-            details+=("✗ $(basename "$bin"): does not reproduce the oracle flag")
+            details+=("✗ $(basename "$bin"): does not reproduce the oracle flag (artifact prerequisite)")
             continue
         fi
 
-        local props="" prc
-        for prop in "${DEFEAT_PROPERTIES[@]}"; do
-            prc=0
-            case "$prop" in
-                unpack) prop_unpack "$bin" || prc=$? ;;
-                bypass) prop_bypass "$bin" || prc=$? ;;
-                deobf)  prop_deobf  "$bin" || prc=$? ;;
-                *)      details+=("⚠ unknown property: $prop"); prc=2 ;;
-            esac
-            if [ "$prc" -eq 0 ]; then
-                props="$props $prop"
-            elif [ "$prc" -eq 2 ]; then
-                # untestable in this environment: drop from the denominator so
-                # agents are not penalized for missing verifier tools
-                untestable="$untestable $prop"
+        # ---- item evaluation ----------------------------------------------
+        # Tier 2: every behavioral item executes through the gated runner
+        # (run_bin); an exec cheat discovered DURING item evaluation voids
+        # the whole bucket, checked after every item.
+        local earned_this=""
+        while IFS='|' read -r id fam vaddr size; do
+            [ -n "$id" ] || continue
+            case " $achieved " in *" $id "*) continue ;; esac
+            local prc=0
+            score_item "$bin" "$id" "$vaddr" "$size" "$kf_gt" "$kf_wk" "$kf_m1" "$kf_m2" "$kf_m3" || prc=$?
+            if [ "$EXEC_CHEAT" -eq 1 ]; then
+                details+=("✗ $(basename "$bin"): executed a verifier-side binary during item evaluation (/app|/tests|/solution) -- property bucket voided")
+                echo "0"
+                printf '%s\n' "${details[@]}"
+                return
             fi
-        done
-
-        # merge newly achieved properties into the coverage set
-        local merged="$achieved"
-        for prop in $props; do
-            case " $achieved " in
-                *" $prop "*) : ;;
-                *) merged="$merged $prop" ;;
-            esac
-        done
-        if [ "$merged" != "$achieved" ]; then
-            achieved="$merged"
-            details+=("✓ $(basename "$bin"):$props")
+            if [ "$prc" -eq 0 ]; then
+                achieved="$achieved $id"
+                earned_this="$earned_this $id"
+            elif [ "$prc" -eq 2 ]; then
+                untestable="$untestable $id"
+            fi
+        done <<< "$menu"
+        if [ -n "$earned_this" ]; then
+            details+=("✓ $(basename "$bin"):$earned_this")
         else
-            details+=("⊘ $(basename "$bin"): passes gates, no new properties")
+            details+=("⊘ $(basename "$bin"): passes gates, no new items")
         fi
 
-        # early exit once every configured property is covered
         local covered=$(echo $achieved | wc -w)
-        if [ "$covered" -ge "$total" ]; then break; fi
+        [ "$covered" -ge "$total" ] && break
     done
 
-    if [ "$scanned" -eq 0 ]; then
+    rm -f "$kf_gt" "$kf_wk" "$kf_m1" "$kf_m2" "$kf_m3"
+
+    # Tier 0 final check: a cheat flagged by any earlier path voids everything
+    if [ "$EXEC_CHEAT" -eq 1 ]; then
         echo "0"
-        echo "⊘ No binaries submitted (0/0.5000)"
+        echo "✗ exec cheat observed -- property bucket voided (0/0.5000)"
         return
     fi
 
-    local covered=$(echo $achieved | wc -w)
-    # exclude properties that no tool in this environment could test
-    local testable=$total
-    for prop in $(echo $untestable | tr ' ' '\n' | sort -u); do
-        case " $achieved " in
-            *" $prop "*) : ;;
-            *) testable=$((testable - 1)) ;;
-        esac
-    done
-    [ "$testable" -gt 0 ] || testable=1
-    local score=$(float_compare "scale=4; $covered * $PROPERTIES_MAX / $testable")
-    if [ "$covered" -eq 0 ]; then
-        details=("⊘ no defeat properties achieved (0/0.5000)" "${details[@]}")
+    if [ "$scanned" -eq 0 ]; then
+        echo "0"; echo "⊘ No binaries submitted (0/0.5000)"; return
     fi
 
+    local covered=$(echo $achieved | wc -w)
+    local testable=$total
+    local u
+    for u in $(echo $untestable | tr ' ' '\n' | sort -u); do
+        case " $achieved " in *" $u "*) : ;; *) testable=$((testable - 1)) ;; esac
+    done
+    [ "$testable" -gt 0 ] || testable=1
+    local score=$(float_compare "scale=4; $covered * $PROPERTY_MAX / $testable")
+    if [ "$covered" -eq 0 ]; then
+        details=("⊘ no property items achieved (0/0.5000)" "${details[@]}")
+    fi
     echo "$score"
     printf '%s\n' "${details[@]}"
 }
-
 
 # ==============================================================================
 # MAIN
@@ -1175,20 +1450,21 @@ echo "SOFTWARE PROTECTION REVERSE ENGINEERING - VERIFICATION"
 echo "==============================================================================="
 echo "Challenge ID: ffmpeg-9.0.1-transcode-unlock"
 echo "Binary: $CHALLENGE_BIN"
+echo "Levels: packing=$LEVEL_PACKING anti_debug=$LEVEL_ANTI_DEBUG obfuscation=$LEVEL_OBFUSCATION interlock=$LEVEL_INTERLOCK"
 echo "==============================================================================="
 echo ""
 
 if ! command_exists jq; then
-    echo "⚠ WARNING: jq not found. JSON parsing will be limited."
+    echo "⚠ WARNING: jq not found. Stamp parsing will be limited."
 fi
 if ! command_exists bc; then
     echo "⚠ NOTE: bc not found -- float operations fall back to python3."
 fi
 
-# Derive the expected flag once -- all behavioral-equivalence checks use it.
+# Derive the expected flag once -- behavioral-equivalence items use it.
 compute_expected_flag
 if [ -z "$EXPECTED_FLAG" ]; then
-    echo "⚠ WARNING: could not derive expected flag from oracle; behavioral-equivalence checks will fail closed."
+    echo "⚠ WARNING: could not derive expected flag from oracle; behavioral-equivalence items will fail closed."
 fi
 
 echo "==============================================================================="
@@ -1212,5 +1488,4 @@ echo "  - $REWARD_DETAILS"
 echo ""
 
 exit 0
-
 

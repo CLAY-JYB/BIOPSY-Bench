@@ -1,0 +1,481 @@
+diff --git a/sapi/fpm/tests/logtool.inc b/sapi/fpm/tests/logtool.inc
+index fc2043b8..64a58ec7 100644
+--- a/sapi/fpm/tests/logtool.inc
++++ b/sapi/fpm/tests/logtool.inc
+@@ -513,11 +513,7 @@ class LogTool
+         }
+         $this->trace("Matching EXPECTED: $expectedMessage");
+ 
+-        // Allow expected message to contain %s and %s for any string or number as in run-tests.php
+-        $expectRe = str_replace('%s', '[^\r\n]+', $expectedMessage);
+-        $expectRe = str_replace('%d', '\d+', $expectRe);
+-
+-        $pattern = sprintf('/^(?:%s )?%s: %s(%s)$/', self::P_TIME, $type, self::P_DEBUG, $expectRe);
++        $pattern = sprintf('/^(?:%s )?%s: %s(%s)$/', self::P_TIME, $type, self::P_DEBUG, $expectedMessage);
+         $this->trace("PATTERN: $pattern");
+ 
+         return function ($line) use ($expectedMessage, $pattern, $type, $ignoreErrorFor) {
+diff --git a/sapi/fpm/tests/pm-max-spawn-rate-config.phpt b/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
+index 999c1d74..8b5f6b4e 100644
+--- a/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
++++ b/sapi/fpm/tests/pm-max-spawn-rate-config.phpt
+@@ -24,8 +24,8 @@ pm.max_spawn_rate = 64
+ EOT;
+ 
+ $tester = new FPM\Tester($cfg);
+-$tester->start(['-tt']);
+-$tester->expectLogConfigOptions(['pm.max_spawn_rate = 64']);
++$tester->start(['-t', '-t']);
++$tester->expectLogConfigOptions(['pm.max_spawn_rate' => 64]);
+ $tester->close();
+ 
+ ?>
+diff --git a/sapi/fpm/tests/response.inc b/sapi/fpm/tests/response.inc
+index cd5e19d7..5fff8d35 100644
+--- a/sapi/fpm/tests/response.inc
++++ b/sapi/fpm/tests/response.inc
+@@ -41,11 +41,6 @@ class Response
+      */
+     private $expectInvalid;
+ 
+-    /**
+-     * @var bool
+-     */
+-    private bool $debugOutputted = false;
+-
+     /**
+      * @param string|array|null $data
+      * @param bool              $expectInvalid
+@@ -76,11 +71,11 @@ class Response
+             $body = implode("\n", $body);
+         }
+ 
+-        if ( ! $this->checkIfValid()) {
+-            $this->error('Response is invalid');
+-        } elseif ( ! $this->checkDefaultHeaders($contentType)) {
+-            $this->error('Response default headers not found');
+-        } elseif ($body !== $this->rawBody) {
++        if (
++            $this->checkIfValid() &&
++            $this->checkDefaultHeaders($contentType) &&
++            $body !== $this->rawBody
++        ) {
+             if ($multiLine) {
+                 $this->error(
+                     "==> The expected body:\n$body\n" .
+@@ -170,26 +165,6 @@ class Response
+         return $this;
+     }
+ 
+-    /**
+-     * Expect error pattern in the response.
+-     *
+-     * @param string $errorMessagePattern Expected error message RegExp patter.
+-     *
+-     * @return Response
+-     */
+-    public function expectErrorPattern(string $errorMessagePattern): Response
+-    {
+-        $errorData = $this->getErrorData();
+-        if (preg_match($errorMessagePattern, $errorData) === 0) {
+-            $this->error(
+-                "The expected error pattern $errorMessagePattern does not match the returned error '$errorData'"
+-            );
+-            $this->debugOutput();
+-        }
+-
+-        return $this;
+-    }
+-
+     /**
+      * Expect response status.
+      *
+@@ -208,7 +183,6 @@ class Response
+             $statusMessage = $status === null ? "expected not to be set": "expected to be $status";
+             $this->error("Status is $statusMessage but the actual value is {$headers['status']}");
+         }
+-
+         return $this;
+     }
+ 
+@@ -278,8 +252,6 @@ class Response
+         echo "----------------- ERR -----------------\n";
+         echo $this->data['err_response'] . "\n";
+         echo "---------------------------------------\n\n";
+-
+-        $this->debugOutputted = true;
+     }
+ 
+     /**
+@@ -424,11 +396,8 @@ class Response
+      *
+      * @return bool
+      */
+-    private function error(string $message): bool
++    private function error($message): bool
+     {
+-        if ( ! $this->debugOutputted) {
+-            $this->debugOutput();
+-        }
+         echo "ERROR: $message\n";
+ 
+         return false;
+diff --git a/sapi/fpm/tests/setsofib.phpt b/sapi/fpm/tests/setsofib.phpt
+deleted file mode 100644
+index ba6502e1..00000000
+--- a/sapi/fpm/tests/setsofib.phpt
++++ /dev/null
+@@ -1,44 +0,0 @@
+---TEST--
+-FPM: listen.setfib`
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-
+-if (!str_contains(PHP_OS, 'FreeBSD')) {
+-    die('skipped supported only on FreeBSD');
+-}
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-pid = {{FILE:PID}}
+-[setfib]
+-listen = {{ADDR}}
+-listen.setfib = 68000
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->start();
+-$tester->expectLogError('Invalid routing table id 68000, max is 1');
+-$tester->terminate();
+-$tester->close();
+-
+-?>
+-Done
+---EXPECT--
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/tester.inc b/sapi/fpm/tests/tester.inc
+index a3f40ed9..fd341dd0 100644
+--- a/sapi/fpm/tests/tester.inc
++++ b/sapi/fpm/tests/tester.inc
+@@ -131,16 +131,6 @@ class Tester
+      */
+     private ?Response $response;
+ 
+-    /**
+-     * @var string[]
+-     */
+-    private $expectedAccessLogs;
+-
+-    /**
+-     * @var bool
+-     */
+-    private $expectSuppressableAccessLogEntries;
+-
+     /**
+      * Clean all the created files up
+      *
+@@ -269,11 +259,10 @@ class Tester
+     static public function skipIfConfigFails(string $configTemplate)
+     {
+         $tester     = new self($configTemplate, '', [], self::getCallerFileName());
+-        $testResult = $tester->testConfig(true);
++        $testResult = $tester->testConfig();
+         if ($testResult !== null) {
+             self::clean(2);
+-            $message = $testResult[0] ?? 'Config failed';
+-            die("skip $message");
++            die("skip $testResult");
+         }
+     }
+ 
+@@ -305,7 +294,7 @@ class Tester
+      */
+     static public function skipIfNotRoot()
+     {
+-        if (exec('whoami') !== 'root') {
++        if (getmyuid() != 0) {
+             die('skip not running as root');
+         }
+     }
+@@ -315,7 +304,7 @@ class Tester
+      */
+     static public function skipIfRoot()
+     {
+-        if (exec('whoami') === 'root') {
++        if (getmyuid() == 0) {
+             die('skip running as root');
+         }
+     }
+@@ -331,13 +320,13 @@ class Tester
+     }
+ 
+     /**
+-     * Skip if posix extension not loaded.
++     * Skip if shared extension is not available in extension directory.
+      */
+-    static public function skipIfUserDoesNotExist($userName)
++    static public function skipIfSharedExtensionNotFound($extensionName)
+     {
+-        self::skipIfPosixNotLoaded();
+-        if (posix_getpwnam($userName) === false) {
+-            die("skip user $userName does not exist");
++        $soPath = ini_get('extension_dir') . '/' . $extensionName . '.so';
++        if ( ! file_exists($soPath)) {
++            die("skip $extensionName extension not present in extension_dir");
+         }
+     }
+ 
+@@ -379,26 +368,17 @@ class Tester
+     /**
+      * Test configuration file.
+      *
+-     * @return null|array
++     * @return null|string
+      * @throws \Exception
+      */
+-    public function testConfig($silent = false)
++    public function testConfig()
+     {
+         $configFile = $this->createConfig();
+-        $cmd        = self::findExecutable() . ' -tt -y ' . $configFile . ' 2>&1';
++        $cmd        = self::findExecutable() . ' -t -y ' . $configFile . ' 2>&1';
+         $this->trace('Testing config using command', $cmd, true);
+         exec($cmd, $output, $code);
+         if ($code) {
+-            $messages = [];
+-            foreach ($output as $outputLine) {
+-                $message    = preg_replace("/\[.+?\]/", "", $outputLine, 1);
+-                $messages[] = $message;
+-                if ( ! $silent) {
+-                    $this->error($message, null, false);
+-                }
+-            }
+-
+-            return $messages;
++            return preg_replace("/\[.+?\]/", "", $output[0]);
+         }
+ 
+         return null;
+@@ -1319,7 +1299,6 @@ class Tester
+             return $filePath;
+         }
+         file_put_contents($filePath, $content);
+-
+         $this->trace('Created file: ' . $filePath, $content, isFile: true);
+ 
+         return $filePath;
+@@ -1360,15 +1339,14 @@ class Tester
+     /**
+      * Display error.
+      *
+-     * @param string          $msg       Error message.
+-     * @param \Exception|null $exception If there is an exception, log its message
+-     * @param bool            $prefix    Whether to prefix the error message
++     * @param string          $msg
++     * @param \Exception|null $exception
+      *
+      * @return false
+      */
+-    private function error(string $msg, \Exception $exception = null, bool $prefix = true): bool
++    private function error($msg, \Exception $exception = null): bool
+     {
+-        $this->error = $prefix ? 'ERROR: ' . $msg : ltrim($msg);
++        $this->error = 'ERROR: ' . $msg;
+         if ($exception) {
+             $this->error .= '; EXCEPTION: ' . $exception->getMessage();
+         }
+@@ -1868,23 +1846,13 @@ class Tester
+      */
+     public function expectLogConfigOptions(array $options)
+     {
+-        foreach ($options as $value) {
+-            $confValue = str_replace(
+-                ']',
+-                '\]',
+-                str_replace(
+-                    '[',
+-                    '\[',
+-                    str_replace('/', '\/', $value)
+-                )
+-            );
+-            $this->expectLogNotice("\s+$confValue", checkAllLogs: true);
++        foreach ($options as $name => $value) {
++            $this->expectLogNotice("\s+$name\s=\s$value", checkAllLogs: true);
+         }
+ 
+         return true;
+     }
+ 
+-
+     /**
+      * Print content of access log.
+      */
+@@ -1897,70 +1865,6 @@ class Tester
+     }
+ 
+     /**
+-     * Return content of access log.
+-     *
+-     * @return string|false
+-     */
+-    public function getAccessLog()
+-    {
+-        $accessLog = $this->getFile('acc.log');
+-        if (is_file($accessLog)) {
+-            return file_get_contents($accessLog);
+-        }
+-        return false;
+-    }
+-
+-    /**
+-     * Expect a single access log line.
+-     *
+-     * @param string $LogLine
+-     * @param bool $suppressable see expectSuppressableAccessLogEntries
+-     */
+-    public function expectAccessLog(
+-        string $logLine,
+-        bool $suppressable = false
+-    ) {
+-        if (!$suppressable || $this->expectSuppressableAccessLogEntries) {
+-            $this->expectedAccessLogs[] = $logLine;
+-        }
+-    }
+-
+-    /**
+-     * Checks that all access log entries previously listed as expected by
+-     * calling "expectAccessLog" are in the access log.
+-     */
+-    public function checkAccessLog()
+-    {
+-        if (isset($this->expectedAccessLogs)) {
+-            $expectedAccessLog = implode("\n", $this->expectedAccessLogs) . "\n";
+-        } else {
+-            $this->error("Called checkAccessLog but did not previous call expectAccessLog");
+-        }
+-        if ($accessLog = $this->getAccessLog()) {
+-            if ($expectedAccessLog !== $accessLog) {
+-                $this->error(sprintf(
+-                    "Access log was not as expected.\nEXPECTED:\n%s\n\nACTUAL:\n%s",
+-                    $expectedAccessLog,
+-                    $accessLog
+-                ));
+-            }
+-        } else {
+-            $this->error("Called checkAccessLog but access log does not exist");
+-        }
+-    }
+-
+-    /**
+-     * Flags whether the access log check should expect to see suppressable
+-     * log entries, i.e. the URL is not in access.suppress_path[] config
+-     *
+-     * @param bool
+-     */
+-    public function expectSuppressableAccessLogEntries(bool $expectSuppressableAccessLogEntries)
+-    {
+-        $this->expectSuppressableAccessLogEntries = $expectSuppressableAccessLogEntries;
+-    }
+-
+-    /*
+      * Read all log entries.
+      *
+      * @param string      $type    The log type
+diff --git a/sapi/fpm/www.conf.in b/sapi/fpm/www.conf.in
+index 37ac8a19..4b8eb7ca 100644
+--- a/sapi/fpm/www.conf.in
++++ b/sapi/fpm/www.conf.in
+@@ -41,7 +41,7 @@ group = @php_fpm_group@
+ listen = 127.0.0.1:9000
+ 
+ ; Set listen(2) backlog.
+-; Default Value: 511 (-1 on Linux, FreeBSD and OpenBSD)
++; Default Value: 511 (-1 on FreeBSD and OpenBSD)
+ ;listen.backlog = 511
+ 
+ ; Set permissions for unix socket, if one is used. In Linux, read/write
+@@ -68,10 +68,6 @@ listen = 127.0.0.1:9000
+ ; Default Value: any
+ ;listen.allowed_clients = 127.0.0.1
+ 
+-; Set the associated the route table (FIB). FreeBSD only
+-; Default Value: -1
+-;listen.setfib = 1
+-
+ ; Specify the nice(2) priority to apply to the pool processes (only if set)
+ ; The value can vary from -19 (highest priority) to 20 (lower priority)
+ ; Note: - It will only work if the FPM master process is launched as root
+@@ -80,8 +76,7 @@ listen = 127.0.0.1:9000
+ ; Default Value: no set
+ ; process.priority = -19
+ 
+-; Set the process dumpable flag (PR_SET_DUMPABLE prctl for Linux or
+-; PROC_TRACE_CTL procctl for FreeBSD) even if the process user
++; Set the process dumpable flag (PR_SET_DUMPABLE prctl) even if the process user
+ ; or group is different than the master process user. It allows to create process
+ ; core dump and ptrace the process for the pool user.
+ ; Default Value: no
+@@ -353,22 +348,6 @@ pm.max_spare_servers = 3
+ ; Default: "%R - %u %t \"%m %r\" %s"
+ ;access.format = "%R - %u %t \"%m %r%Q%q\" %s %f %{milli}d %{kilo}M %C%%"
+ 
+-; A list of request_uri values which should be filtered from the access log.
+-;
+-; As a security precuation, this setting will be ignored if:
+-;     - the request method is not GET or HEAD; or
+-;     - there is a request body; or
+-;     - there are query parameters; or
+-;     - the response code is outwith the successful range of 200 to 299
+-;
+-; Note: The paths are matched against the output of the access.format tag "%r".
+-;       On common configurations, this may look more like SCRIPT_NAME than the
+-;       expected pre-rewrite URI.
+-;
+-; Default Value: not set
+-;access.suppress_path[] = /ping
+-;access.suppress_path[] = /health_check.php
+-
+ ; The log file for slow requests
+ ; Default Value: not set
+ ; Note: slowlog is mandatory if request_slowlog_timeout is set
+diff --git a/sapi/fuzzer/Makefile.frag b/sapi/fuzzer/Makefile.frag
+index 8a456ca6..50feac3a 100644
+--- a/sapi/fuzzer/Makefile.frag
++++ b/sapi/fuzzer/Makefile.frag
+@@ -8,12 +8,6 @@ $(SAPI_FUZZER_PATH)/php-fuzz-parser: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_F
+ $(SAPI_FUZZER_PATH)/php-fuzz-execute: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_EXECUTE_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_EXECUTE_OBJS) -o $@
+ 
+-$(SAPI_FUZZER_PATH)/php-fuzz-function-jit: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_FUNCTION_JIT_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_FUNCTION_JIT_OBJS) -o $@
+-
+-$(SAPI_FUZZER_PATH)/php-fuzz-tracing-jit: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_TRACING_JIT_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_TRACING_JIT_OBJS) -o $@
+-
+ $(SAPI_FUZZER_PATH)/php-fuzz-unserialize: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_UNSERIALIZE_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_UNSERIALIZE_OBJS) -o $@
+ 
+@@ -28,6 +22,3 @@ $(SAPI_FUZZER_PATH)/php-fuzz-exif: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZ
+ 
+ $(SAPI_FUZZER_PATH)/php-fuzz-mbstring: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_MBSTRING_OBJS)
+ 	$(FUZZER_BUILD) $(PHP_FUZZER_MBSTRING_OBJS) -o $@
+-
+-$(SAPI_FUZZER_PATH)/php-fuzz-mbregex: $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS) $(PHP_FUZZER_MBREGEX_OBJS)
+-	$(FUZZER_BUILD) $(PHP_FUZZER_MBREGEX_OBJS) -o $@

@@ -1,0 +1,547 @@
+diff --git a/Zend/zend_ini.h b/Zend/zend_ini.h
+index 56939fa9..08a4a9cc 100644
+--- a/Zend/zend_ini.h
++++ b/Zend/zend_ini.h
+@@ -90,52 +90,6 @@ ZEND_API char *zend_ini_string_ex(const char *name, size_t name_length, int orig
+ ZEND_API zend_string *zend_ini_get_value(zend_string *name);
+ ZEND_API bool zend_ini_parse_bool(zend_string *str);
+ 
+-/**
+- * Parses an ini quantity
+- *
+- * The value parameter must be a string in the form
+- *
+- *     sign? digits ws* multiplier?
+- *
+- * with
+- *
+- *     sign: [+-]
+- *     digit: [0-9]
+- *     digits: digit+
+- *     ws: [ \t\n\r\v\f]
+- *     multiplier: [KMG]
+- *
+- * Leading and trailing whitespaces are ignored.
+- *
+- * If the string is empty or consists only of only whitespaces, 0 is returned.
+- *
+- * Digits is parsed as decimal unless the first digit is '0', in which case
+- * digits is parsed as octal.
+- *
+- * The multiplier is case-insensitive. K, M, and G multiply the quantity by
+- * 2**10, 2**20, and 2**30, respectively.
+- *
+- * For backwards compatibility, ill-formatted values are handled as follows:
+- * - No leading digits: value is treated as '0'
+- * - Invalid multiplier: multiplier is ignored
+- * - Invalid characters between digits and multiplier: invalid characters are
+- *   ignored
+- * - Integer overflow: The result of the overflow is returned
+- *
+- * In any of these cases an error string is stored in *errstr (caller must
+- * release it), otherwise *errstr is set to NULL.
+- */
+-ZEND_API zend_long zend_ini_parse_quantity(zend_string *value, zend_string **errstr);
+-
+-/**
+- * Unsigned variant of zend_ini_parse_quantity
+- */
+-ZEND_API zend_ulong zend_ini_parse_uquantity(zend_string *value, zend_string **errstr);
+-
+-ZEND_API zend_long zend_ini_parse_quantity_warn(zend_string *value, zend_string *setting);
+-
+-ZEND_API zend_ulong zend_ini_parse_uquantity_warn(zend_string *value, zend_string *setting);
+-
+ ZEND_API zend_result zend_ini_register_displayer(const char *name, uint32_t name_length, void (*displayer)(zend_ini_entry *ini_entry, int type));
+ 
+ ZEND_API ZEND_INI_DISP(zend_ini_boolean_displayer_cb);
+@@ -196,8 +150,8 @@ END_EXTERN_C()
+ #define INI_ORIG_STR(name)	zend_ini_string((name), strlen(name), 1)
+ #define INI_ORIG_BOOL(name) ((bool) INI_ORIG_INT(name))
+ 
+-#define REGISTER_INI_ENTRIES() zend_register_ini_entries_ex(ini_entries, module_number, type)
+-#define UNREGISTER_INI_ENTRIES() zend_unregister_ini_entries_ex(module_number, type)
++#define REGISTER_INI_ENTRIES() zend_register_ini_entries(ini_entries, module_number)
++#define UNREGISTER_INI_ENTRIES() zend_unregister_ini_entries(module_number)
+ #define DISPLAY_INI_ENTRIES() display_ini_entries(zend_module)
+ 
+ #define REGISTER_INI_DISPLAYER(name, displayer) zend_ini_register_displayer((name), strlen(name), displayer)
+@@ -209,12 +163,8 @@ ZEND_API ZEND_INI_MH(OnUpdateBool);
+ ZEND_API ZEND_INI_MH(OnUpdateLong);
+ ZEND_API ZEND_INI_MH(OnUpdateLongGEZero);
+ ZEND_API ZEND_INI_MH(OnUpdateReal);
+-/* char* versions */
+ ZEND_API ZEND_INI_MH(OnUpdateString);
+ ZEND_API ZEND_INI_MH(OnUpdateStringUnempty);
+-/* zend_string* versions */
+-ZEND_API ZEND_INI_MH(OnUpdateStr);
+-ZEND_API ZEND_INI_MH(OnUpdateStrNotEmpty);
+ END_EXTERN_C()
+ 
+ #define ZEND_INI_DISPLAY_ORIG	1
+diff --git a/Zend/zend_ini_parser.y b/Zend/zend_ini_parser.y
+index 2d4e949d..58ad4b36 100644
+--- a/Zend/zend_ini_parser.y
++++ b/Zend/zend_ini_parser.y
+@@ -311,7 +311,7 @@ static void zval_ini_dtor(zval *zv)
+ 
+ statement_list:
+ 		statement_list statement
+-	|	%empty { (void) ini_nerrs; }
++	|	%empty
+ ;
+ 
+ statement:
+diff --git a/Zend/zend_interfaces.c b/Zend/zend_interfaces.c
+index 42fbccd4..8250359d 100644
+--- a/Zend/zend_interfaces.c
++++ b/Zend/zend_interfaces.c
+@@ -124,9 +124,10 @@ ZEND_API int zend_user_it_valid(zend_object_iterator *_iter)
+ 		zend_user_iterator *iter = (zend_user_iterator*)_iter;
+ 		zval *object = &iter->it.data;
+ 		zval more;
++		bool result;
+ 
+-		zend_call_known_instance_method_with_0_params(iter->ce->iterator_funcs_ptr->zf_valid, Z_OBJ_P(object), &more);
+-		bool result = i_zend_is_true(&more);
++		zend_call_method_with_0_params(Z_OBJ_P(object), iter->ce, &iter->ce->iterator_funcs_ptr->zf_valid, "valid", &more);
++		result = i_zend_is_true(&more);
+ 		zval_ptr_dtor(&more);
+ 		return result ? SUCCESS : FAILURE;
+ 	}
+@@ -141,7 +142,7 @@ ZEND_API zval *zend_user_it_get_current_data(zend_object_iterator *_iter)
+ 	zval *object = &iter->it.data;
+ 
+ 	if (Z_ISUNDEF(iter->value)) {
+-		zend_call_known_instance_method_with_0_params(iter->ce->iterator_funcs_ptr->zf_current, Z_OBJ_P(object), &iter->value);
++		zend_call_method_with_0_params(Z_OBJ_P(object), iter->ce, &iter->ce->iterator_funcs_ptr->zf_current, "current", &iter->value);
+ 	}
+ 	return &iter->value;
+ }
+@@ -152,7 +153,7 @@ ZEND_API void zend_user_it_get_current_key(zend_object_iterator *_iter, zval *ke
+ {
+ 	zend_user_iterator *iter = (zend_user_iterator*)_iter;
+ 	zval *object = &iter->it.data;
+-	zend_call_known_instance_method_with_0_params(iter->ce->iterator_funcs_ptr->zf_key, Z_OBJ_P(object), key);
++	zend_call_method_with_0_params(Z_OBJ_P(object), iter->ce, &iter->ce->iterator_funcs_ptr->zf_key, "key", key);
+ 	if (UNEXPECTED(Z_ISREF_P(key))) {
+ 		zend_unwrap_reference(key);
+ 	}
+@@ -166,7 +167,7 @@ ZEND_API void zend_user_it_move_forward(zend_object_iterator *_iter)
+ 	zval *object = &iter->it.data;
+ 
+ 	zend_user_it_invalidate_current(_iter);
+-	zend_call_known_instance_method_with_0_params(iter->ce->iterator_funcs_ptr->zf_next, Z_OBJ_P(object), NULL);
++	zend_call_method_with_0_params(Z_OBJ_P(object), iter->ce, &iter->ce->iterator_funcs_ptr->zf_next, "next", NULL);
+ }
+ /* }}} */
+ 
+@@ -177,7 +178,7 @@ ZEND_API void zend_user_it_rewind(zend_object_iterator *_iter)
+ 	zval *object = &iter->it.data;
+ 
+ 	zend_user_it_invalidate_current(_iter);
+-	zend_call_known_instance_method_with_0_params(iter->ce->iterator_funcs_ptr->zf_rewind, Z_OBJ_P(object), NULL);
++	zend_call_method_with_0_params(Z_OBJ_P(object), iter->ce, &iter->ce->iterator_funcs_ptr->zf_rewind, "rewind", NULL);
+ }
+ /* }}} */
+ 
+@@ -273,8 +274,7 @@ static int zend_implement_traversable(zend_class_entry *interface, zend_class_en
+ 			}
+ 		}
+ 	}
+-	zend_error_noreturn(E_CORE_ERROR, "%s %s must implement interface %s as part of either %s or %s",
+-		zend_get_object_type_uc(class_type),
++	zend_error_noreturn(E_CORE_ERROR, "Class %s must implement interface %s as part of either %s or %s",
+ 		ZSTR_VAL(class_type->name),
+ 		ZSTR_VAL(zend_ce_traversable->name),
+ 		ZSTR_VAL(zend_ce_iterator->name),
+@@ -292,17 +292,8 @@ static int zend_implement_aggregate(zend_class_entry *interface, zend_class_entr
+ 			ZSTR_VAL(class_type->name));
+ 	}
+ 
+-	/* Always initialize iterator_funcs_ptr. */
+-	ZEND_ASSERT(!class_type->iterator_funcs_ptr && "Iterator funcs already set?");
+-	zend_class_iterator_funcs *funcs_ptr = class_type->type == ZEND_INTERNAL_CLASS
+-		? pemalloc(sizeof(zend_class_iterator_funcs), 1)
+-		: zend_arena_alloc(&CG(arena), sizeof(zend_class_iterator_funcs));
+-	class_type->iterator_funcs_ptr = funcs_ptr;
+-
+-	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
+-	funcs_ptr->zf_new_iterator = zend_hash_str_find_ptr(
++	zend_function *zf = zend_hash_str_find_ptr(
+ 		&class_type->function_table, "getiterator", sizeof("getiterator") - 1);
+-
+ 	if (class_type->get_iterator && class_type->get_iterator != zend_user_it_get_new_iterator) {
+ 		/* get_iterator was explicitly assigned for an internal class. */
+ 		if (!class_type->parent || class_type->parent->get_iterator != class_type->get_iterator) {
+@@ -311,14 +302,23 @@ static int zend_implement_aggregate(zend_class_entry *interface, zend_class_entr
+ 		}
+ 
+ 		/* The getIterator() method has not been overwritten, use inherited get_iterator(). */
+-		if (funcs_ptr->zf_new_iterator->common.scope != class_type) {
++		if (zf->common.scope != class_type) {
+ 			return SUCCESS;
+ 		}
+ 
+ 		/* getIterator() has been overwritten, switch to zend_user_it_get_new_iterator. */
+ 	}
+ 
++	ZEND_ASSERT(!class_type->iterator_funcs_ptr && "Iterator funcs already set?");
++	zend_class_iterator_funcs *funcs_ptr = class_type->type == ZEND_INTERNAL_CLASS
++		? pemalloc(sizeof(zend_class_iterator_funcs), 1)
++		: zend_arena_alloc(&CG(arena), sizeof(zend_class_iterator_funcs));
+ 	class_type->get_iterator = zend_user_it_get_new_iterator;
++	class_type->iterator_funcs_ptr = funcs_ptr;
++
++	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
++	funcs_ptr->zf_new_iterator = zf;
++
+ 	return SUCCESS;
+ }
+ /* }}} */
+@@ -332,66 +332,28 @@ static int zend_implement_iterator(zend_class_entry *interface, zend_class_entry
+ 			ZSTR_VAL(class_type->name));
+ 	}
+ 
+-	ZEND_ASSERT(!class_type->iterator_funcs_ptr && "Iterator funcs already set?");
+-	zend_class_iterator_funcs *funcs_ptr = class_type->type == ZEND_INTERNAL_CLASS
+-		? pemalloc(sizeof(zend_class_iterator_funcs), 1)
+-		: zend_arena_alloc(&CG(arena), sizeof(zend_class_iterator_funcs));
+-	class_type->iterator_funcs_ptr = funcs_ptr;
+-
+-	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
+-	funcs_ptr->zf_rewind = zend_hash_str_find_ptr(
+-		&class_type->function_table, "rewind", sizeof("rewind") - 1);
+-	funcs_ptr->zf_valid = zend_hash_str_find_ptr(
+-		&class_type->function_table, "valid", sizeof("valid") - 1);
+-	funcs_ptr->zf_key = zend_hash_str_find_ptr(
+-		&class_type->function_table, "key", sizeof("key") - 1);
+-	funcs_ptr->zf_current = zend_hash_str_find_ptr(
+-		&class_type->function_table, "current", sizeof("current") - 1);
+-	funcs_ptr->zf_next = zend_hash_str_find_ptr(
+-		&class_type->function_table, "next", sizeof("next") - 1);
+-
+ 	if (class_type->get_iterator && class_type->get_iterator != zend_user_it_get_iterator) {
+ 		if (!class_type->parent || class_type->parent->get_iterator != class_type->get_iterator) {
+ 			/* get_iterator was explicitly assigned for an internal class. */
+ 			ZEND_ASSERT(class_type->type == ZEND_INTERNAL_CLASS);
+ 			return SUCCESS;
+ 		}
+-
+-		/* None of the Iterator methods have been overwritten, use inherited get_iterator(). */
+-		if (funcs_ptr->zf_rewind->common.scope != class_type &&
+-				funcs_ptr->zf_valid->common.scope != class_type &&
+-				funcs_ptr->zf_key->common.scope != class_type &&
+-				funcs_ptr->zf_current->common.scope != class_type &&
+-				funcs_ptr->zf_next->common.scope != class_type) {
+-			return SUCCESS;
+-		}
+-
+-		/* One of the Iterator methods has been overwritten,
+-		 * switch to zend_user_it_get_iterator. */
++		/* Otherwise get_iterator was inherited from the parent by default. */
+ 	}
+ 
+-	class_type->get_iterator = zend_user_it_get_iterator;
+-	return SUCCESS;
+-}
+-/* }}} */
++	if (class_type->parent && (class_type->parent->ce_flags & ZEND_ACC_REUSE_GET_ITERATOR)) {
++		/* Keep the inherited get_iterator handler. */
++		class_type->ce_flags |= ZEND_ACC_REUSE_GET_ITERATOR;
++	} else {
++		class_type->get_iterator = zend_user_it_get_iterator;
++	}
+ 
+-/* {{{ zend_implement_arrayaccess */
+-static int zend_implement_arrayaccess(zend_class_entry *interface, zend_class_entry *class_type)
+-{
+-	ZEND_ASSERT(!class_type->arrayaccess_funcs_ptr && "ArrayAccess funcs already set?");
+-	zend_class_arrayaccess_funcs *funcs_ptr = class_type->type == ZEND_INTERNAL_CLASS
+-		? pemalloc(sizeof(zend_class_arrayaccess_funcs), 1)
+-		: zend_arena_alloc(&CG(arena), sizeof(zend_class_arrayaccess_funcs));
+-	class_type->arrayaccess_funcs_ptr = funcs_ptr;
+-
+-	funcs_ptr->zf_offsetget = zend_hash_str_find_ptr(
+-		&class_type->function_table, "offsetget", sizeof("offsetget") - 1);
+-	funcs_ptr->zf_offsetexists = zend_hash_str_find_ptr(
+-		&class_type->function_table, "offsetexists", sizeof("offsetexists") - 1);
+-	funcs_ptr->zf_offsetset = zend_hash_str_find_ptr(
+-		&class_type->function_table, "offsetset", sizeof("offsetset") - 1);
+-	funcs_ptr->zf_offsetunset = zend_hash_str_find_ptr(
+-		&class_type->function_table, "offsetunset", sizeof("offsetunset") - 1);
++	ZEND_ASSERT(!class_type->iterator_funcs_ptr && "Iterator funcs already set?");
++	zend_class_iterator_funcs *funcs_ptr = class_type->type == ZEND_INTERNAL_CLASS
++		? pemalloc(sizeof(zend_class_iterator_funcs), 1)
++		: zend_arena_alloc(&CG(arena), sizeof(zend_class_iterator_funcs));
++	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
++	class_type->iterator_funcs_ptr = funcs_ptr;
+ 
+ 	return SUCCESS;
+ }
+@@ -655,7 +617,6 @@ ZEND_API void zend_register_interfaces(void)
+ 	zend_ce_serializable->interface_gets_implemented = zend_implement_serializable;
+ 
+ 	zend_ce_arrayaccess = register_class_ArrayAccess();
+-	zend_ce_arrayaccess->interface_gets_implemented = zend_implement_arrayaccess;
+ 
+ 	zend_ce_countable = register_class_Countable();
+ 
+diff --git a/Zend/zend_interfaces.h b/Zend/zend_interfaces.h
+index 883e482f..a8351ee9 100644
+--- a/Zend/zend_interfaces.h
++++ b/Zend/zend_interfaces.h
+@@ -40,23 +40,14 @@ typedef struct _zend_user_iterator {
+ 
+ ZEND_API zval* zend_call_method(zend_object *object, zend_class_entry *obj_ce, zend_function **fn_proxy, const char *function_name, size_t function_name_len, zval *retval, uint32_t param_count, zval* arg1, zval* arg2);
+ 
+-static zend_always_inline zval* zend_call_method_with_0_params(zend_object *object, zend_class_entry *obj_ce,
+-		zend_function **fn_proxy, const char *function_name, zval *retval)
+-{
+-	return zend_call_method(object, obj_ce, fn_proxy, function_name, strlen(function_name), retval, 0, NULL, NULL);
+-}
+-
+-static zend_always_inline zval* zend_call_method_with_1_params(zend_object *object, zend_class_entry *obj_ce,
+-		zend_function **fn_proxy, const char *function_name, zval *retval, zval* arg1)
+-{
+-	return zend_call_method(object, obj_ce, fn_proxy, function_name, strlen(function_name), retval, 1, arg1, NULL);
+-}
+-
+-static zend_always_inline zval* zend_call_method_with_2_params(zend_object *object, zend_class_entry *obj_ce,
+-		zend_function **fn_proxy, const char *function_name, zval *retval, zval* arg1, zval* arg2)
+-{
+-	return zend_call_method(object, obj_ce, fn_proxy, function_name, strlen(function_name), retval, 2, arg1, arg2);
+-}
++#define zend_call_method_with_0_params(obj, obj_ce, fn_proxy, function_name, retval) \
++	zend_call_method(obj, obj_ce, fn_proxy, function_name, sizeof(function_name)-1, retval, 0, NULL, NULL)
++
++#define zend_call_method_with_1_params(obj, obj_ce, fn_proxy, function_name, retval, arg1) \
++	zend_call_method(obj, obj_ce, fn_proxy, function_name, sizeof(function_name)-1, retval, 1, arg1, NULL)
++
++#define zend_call_method_with_2_params(obj, obj_ce, fn_proxy, function_name, retval, arg1, arg2) \
++	zend_call_method(obj, obj_ce, fn_proxy, function_name, sizeof(function_name)-1, retval, 2, arg1, arg2)
+ 
+ ZEND_API void zend_user_it_rewind(zend_object_iterator *_iter);
+ ZEND_API zend_result zend_user_it_valid(zend_object_iterator *_iter);
+diff --git a/Zend/zend_iterators.h b/Zend/zend_iterators.h
+index 5e7451f7..bce98a24 100644
+--- a/Zend/zend_iterators.h
++++ b/Zend/zend_iterators.h
+@@ -72,13 +72,6 @@ typedef struct _zend_class_iterator_funcs {
+ 	zend_function *zf_rewind;
+ } zend_class_iterator_funcs;
+ 
+-typedef struct _zend_class_arrayaccess_funcs {
+-	zend_function *zf_offsetget;
+-	zend_function *zf_offsetexists;
+-	zend_function *zf_offsetset;
+-	zend_function *zf_offsetunset;
+-} zend_class_arrayaccess_funcs;
+-
+ BEGIN_EXTERN_C()
+ /* given a zval, returns stuff that can be used to iterate it. */
+ ZEND_API zend_object_iterator* zend_iterator_unwrap(zval *array_ptr);
+diff --git a/Zend/zend_language_parser.y b/Zend/zend_language_parser.y
+index f0c66221..a8bddfae 100644
+--- a/Zend/zend_language_parser.y
++++ b/Zend/zend_language_parser.y
+@@ -272,13 +272,12 @@ static YYSIZE_T zend_yytnamerr(char*, const char*);
+ %type <ast> lexical_var_list encaps_list
+ %type <ast> array_pair non_empty_array_pair_list array_pair_list possible_array_pair
+ %type <ast> isset_variable type return_type type_expr type_without_static
+-%type <ast> identifier type_expr_without_static union_type_without_static_element union_type_without_static intersection_type_without_static
+-%type <ast> inline_function union_type_element union_type intersection_type
++%type <ast> identifier type_expr_without_static union_type_without_static intersection_type_without_static
++%type <ast> inline_function union_type intersection_type
+ %type <ast> attributed_statement attributed_class_statement attributed_parameter
+ %type <ast> attribute_decl attribute attributes attribute_group namespace_declaration_name
+ %type <ast> match match_arm_list non_empty_match_arm_list match_arm match_arm_cond_list
+ %type <ast> enum_declaration_statement enum_backing_type enum_case enum_case_expr
+-%type <ast> function_name
+ 
+ %type <num> returns_ref function fn is_reference is_variadic variable_modifiers
+ %type <num> method_modifiers non_empty_member_modifiers member_modifier
+@@ -293,7 +292,7 @@ static YYSIZE_T zend_yytnamerr(char*, const char*);
+ %% /* Rules */
+ 
+ start:
+-	top_statement_list	{ CG(ast) = $1; (void) zendnerrs; }
++	top_statement_list	{ CG(ast) = $1; }
+ ;
+ 
+ reserved_non_modifiers:
+@@ -561,17 +560,8 @@ unset_variable:
+ 		variable { $$ = zend_ast_create(ZEND_AST_UNSET, $1); }
+ ;
+ 
+-function_name:
+-		T_STRING { $$ = $1; }
+-	|	T_READONLY {
+-			zval zv;
+-			if (zend_lex_tstring(&zv, $1) == FAILURE) { YYABORT; }
+-			$$ = zend_ast_create_zval(&zv);
+-		}
+-;
+-
+ function_declaration_statement:
+-	function returns_ref function_name backup_doc_comment '(' parameter_list ')' return_type
++	function returns_ref T_STRING backup_doc_comment '(' parameter_list ')' return_type
+ 	backup_fn_flags '{' inner_statement_list '}' backup_fn_flags
+ 		{ $$ = zend_ast_create_decl(ZEND_AST_FUNC_DECL, $2 | $13, $1, $4,
+ 		      zend_ast_get_str($3), $6, NULL, $11, $8, NULL); CG(extra_fn_flags) = $9; }
+@@ -605,7 +595,6 @@ class_modifiers:
+ class_modifier:
+ 		T_ABSTRACT 		{ $$ = ZEND_ACC_EXPLICIT_ABSTRACT_CLASS; }
+ 	|	T_FINAL 		{ $$ = ZEND_ACC_FINAL; }
+-	|	T_READONLY 		{ $$ = ZEND_ACC_READONLY_CLASS|ZEND_ACC_NO_DYNAMIC_PROPERTIES; }
+ ;
+ 
+ trait_declaration_statement:
+@@ -823,16 +812,9 @@ type:
+ 	|	T_STATIC			{ $$ = zend_ast_create_ex(ZEND_AST_TYPE, IS_STATIC); }
+ ;
+ 
+-union_type_element:
+-                type { $$ = $1; }
+-        |        '(' intersection_type ')' { $$ = $2; }
+-;
+-
+ union_type:
+-		union_type_element '|' union_type_element
+-			{ $$ = zend_ast_create_list(2, ZEND_AST_TYPE_UNION, $1, $3); }
+-	|	union_type '|' union_type_element
+-			{ $$ = zend_ast_list_add($1, $3); }
++		type '|' type       { $$ = zend_ast_create_list(2, ZEND_AST_TYPE_UNION, $1, $3); }
++	|	union_type '|' type { $$ = zend_ast_list_add($1, $3); }
+ ;
+ 
+ intersection_type:
+@@ -856,15 +838,10 @@ type_without_static:
+ 	|	name		{ $$ = $1; }
+ ;
+ 
+-union_type_without_static_element:
+-                type_without_static { $$ = $1; }
+-        |        '(' intersection_type_without_static ')' { $$ = $2; }
+-;
+-
+ union_type_without_static:
+-		union_type_without_static_element '|' union_type_without_static_element
++		type_without_static '|' type_without_static
+ 			{ $$ = zend_ast_create_list(2, ZEND_AST_TYPE_UNION, $1, $3); }
+-	|	union_type_without_static '|' union_type_without_static_element
++	|	union_type_without_static '|' type_without_static
+ 			{ $$ = zend_ast_list_add($1, $3); }
+ ;
+ 
+@@ -1152,7 +1129,7 @@ expr:
+ 	|	expr T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG expr	{ $$ = zend_ast_create_binary_op(ZEND_BW_AND, $1, $3); }
+ 	|	expr T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG expr	{ $$ = zend_ast_create_binary_op(ZEND_BW_AND, $1, $3); }
+ 	|	expr '^' expr	{ $$ = zend_ast_create_binary_op(ZEND_BW_XOR, $1, $3); }
+-	|	expr '.' expr 	{ $$ = zend_ast_create_concat_op($1, $3); }
++	|	expr '.' expr 	{ $$ = zend_ast_create_binary_op(ZEND_CONCAT, $1, $3); }
+ 	|	expr '+' expr 	{ $$ = zend_ast_create_binary_op(ZEND_ADD, $1, $3); }
+ 	|	expr '-' expr 	{ $$ = zend_ast_create_binary_op(ZEND_SUB, $1, $3); }
+ 	|	expr '*' expr	{ $$ = zend_ast_create_binary_op(ZEND_MUL, $1, $3); }
+@@ -1232,7 +1209,8 @@ inline_function:
+ 	|	fn returns_ref backup_doc_comment '(' parameter_list ')' return_type
+ 		T_DOUBLE_ARROW backup_fn_flags backup_lex_pos expr backup_fn_flags
+ 			{ $$ = zend_ast_create_decl(ZEND_AST_ARROW_FUNC, $2 | $12, $1, $3,
+-				  zend_string_init("{closure}", sizeof("{closure}") - 1, 0), $5, NULL, $11, $7, NULL);
++				  zend_string_init("{closure}", sizeof("{closure}") - 1, 0), $5, NULL,
++				  zend_ast_create(ZEND_AST_RETURN, $11), $7, NULL);
+ 				  ((zend_ast_decl *) $$)->lex_pos = $10;
+ 				  CG(extra_fn_flags) = $9; }
+ ;
+@@ -1280,19 +1258,12 @@ lexical_var:
+ function_call:
+ 		name argument_list
+ 			{ $$ = zend_ast_create(ZEND_AST_CALL, $1, $2); }
+-	|	T_READONLY argument_list {
+-			zval zv;
+-			if (zend_lex_tstring(&zv, $1) == FAILURE) { YYABORT; }
+-			$$ = zend_ast_create(ZEND_AST_CALL, zend_ast_create_zval(&zv), $2);
+-		}
+ 	|	class_name T_PAAMAYIM_NEKUDOTAYIM member_name argument_list
+ 			{ $$ = zend_ast_create(ZEND_AST_STATIC_CALL, $1, $3, $4); }
+ 	|	variable_class_name T_PAAMAYIM_NEKUDOTAYIM member_name argument_list
+ 			{ $$ = zend_ast_create(ZEND_AST_STATIC_CALL, $1, $3, $4); }
+-	|	callable_expr { $<num>$ = CG(zend_lineno); } argument_list { 
+-			$$ = zend_ast_create(ZEND_AST_CALL, $1, $3); 
+-			$$->lineno = $<num>2;
+-		}
++	|	callable_expr argument_list
++			{ $$ = zend_ast_create(ZEND_AST_CALL, $1, $2); }
+ ;
+ 
+ class_name:
+@@ -1519,11 +1490,11 @@ encaps_var:
+ 			{ $$ = zend_ast_create(ZEND_AST_NULLSAFE_PROP,
+ 			      zend_ast_create(ZEND_AST_VAR, $1), $3); }
+ 	|	T_DOLLAR_OPEN_CURLY_BRACES expr '}'
+-			{ $$ = zend_ast_create_ex(ZEND_AST_VAR, ZEND_ENCAPS_VAR_DOLLAR_CURLY_VAR_VAR, $2); }
++			{ $$ = zend_ast_create(ZEND_AST_VAR, $2); }
+ 	|	T_DOLLAR_OPEN_CURLY_BRACES T_STRING_VARNAME '}'
+-			{ $$ = zend_ast_create_ex(ZEND_AST_VAR, ZEND_ENCAPS_VAR_DOLLAR_CURLY, $2); }
++			{ $$ = zend_ast_create(ZEND_AST_VAR, $2); }
+ 	|	T_DOLLAR_OPEN_CURLY_BRACES T_STRING_VARNAME '[' expr ']' '}'
+-			{ $$ = zend_ast_create_ex(ZEND_AST_DIM, ZEND_ENCAPS_VAR_DOLLAR_CURLY,
++			{ $$ = zend_ast_create(ZEND_AST_DIM,
+ 			      zend_ast_create(ZEND_AST_VAR, $2), $4); }
+ 	|	T_CURLY_OPEN variable '}' { $$ = $2; }
+ ;
+diff --git a/Zend/zend_language_scanner.l b/Zend/zend_language_scanner.l
+index c73a5094..56c57a5a 100644
+--- a/Zend/zend_language_scanner.l
++++ b/Zend/zend_language_scanner.l
+@@ -620,6 +620,7 @@ static zend_op_array *zend_compile(int type)
+ 		zend_emit_final_return(type == ZEND_USER_FUNCTION);
+ 		op_array->line_start = 1;
+ 		op_array->line_end = last_lineno;
++		zend_init_static_variables_map_ptr(op_array);
+ 		pass_two(op_array);
+ 		zend_oparray_context_end(&original_oparray_context);
+ 		zend_file_context_end(&original_file_context);
+@@ -781,7 +782,7 @@ ZEND_API size_t zend_get_scanned_file_offset(void)
+ 	return offset;
+ }
+ 
+-zend_op_array *compile_string(zend_string *source_string, const char *filename, zend_compile_position position)
++zend_op_array *compile_string(zend_string *source_string, const char *filename)
+ {
+ 	zend_lex_state original_lex_state;
+ 	zend_op_array *op_array = NULL;
+@@ -798,19 +799,7 @@ zend_op_array *compile_string(zend_string *source_string, const char *filename,
+ 	filename_str = zend_string_init(filename, strlen(filename), 0);
+ 	zend_prepare_string_for_scanning(&tmp, filename_str);
+ 	zend_string_release(filename_str);
+-
+-	switch (position) {
+-		case ZEND_COMPILE_POSITION_AT_SHEBANG:
+-			BEGIN(SHEBANG);
+-			break;
+-		case ZEND_COMPILE_POSITION_AT_OPEN_TAG:
+-			BEGIN(INITIAL);
+-			break;
+-		case ZEND_COMPILE_POSITION_AFTER_OPEN_TAG:
+-			BEGIN(ST_IN_SCRIPTING);
+-			break;
+-	}
+-
++	BEGIN(ST_IN_SCRIPTING);
+ 	op_array = zend_compile(ZEND_EVAL_CODE);
+ 
+ 	zend_restore_lexical_state(&original_lex_state);
+@@ -1729,6 +1718,12 @@ NEWLINE ("\r"|"\n"|"\r\n")
+ 	RETURN_TOKEN_WITH_IDENT(T_READONLY);
+ }
+ 
++/* Don't treat "readonly(" as a keyword, to allow using it as a function name. */
++<ST_IN_SCRIPTING>"readonly"[ \n\r\t]*"(" {
++	yyless(strlen("readonly"));
++	RETURN_TOKEN_WITH_STR(T_STRING, 0);
++}
++
+ <ST_IN_SCRIPTING>"unset" {
+ 	RETURN_TOKEN_WITH_IDENT(T_UNSET);
+ }

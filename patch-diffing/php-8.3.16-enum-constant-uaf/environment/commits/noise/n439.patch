@@ -1,0 +1,106 @@
+diff --git a/sapi/phpdbg/tests/watch_004.phpt b/sapi/phpdbg/tests/watch_004.phpt
+index 10ec8ffa..42e3fd3b 100644
+--- a/sapi/phpdbg/tests/watch_004.phpt
++++ b/sapi/phpdbg/tests/watch_004.phpt
+@@ -2,6 +2,9 @@
+ Test detection of inline string manipulations on zval watch
+ --SKIPIF--
+ <?php
++if (PHP_INT_SIZE == 4) {
++    die("xfail There may be flaws in the implementation of watchpoints that cause failures");
++}
+ if (getenv('SKIP_ASAN')) {
+     die("skip intentionally causes segfaults");
+ }
+diff --git a/scripts/dev/check_parameters.php b/scripts/dev/check_parameters.php
+index a68f5ebe..f8e905cc 100755
+--- a/scripts/dev/check_parameters.php
++++ b/scripts/dev/check_parameters.php
+@@ -51,7 +51,7 @@ $API_params = array(
+ /** reports an error, according to its level */
+ function error($str, $level = 0)
+ {
+-    global $current_file, $current_function, $line, $error_reported;
++    global $current_file, $current_function, $line;
+ 
+     if ($level <= REPORT_LEVEL) {
+         if (strpos($current_file,PHPDIR) === 0) {
+@@ -60,7 +60,6 @@ function error($str, $level = 0)
+             $filename = $current_file;
+         }
+         echo $filename , " [$line] $current_function : $str\n";
+-        $error_reported = true;
+     }
+ }
+ 
+@@ -373,9 +372,6 @@ foreach($dirs as $dir) {
+     }
+ }
+ 
+-$error_reported = false;
+ foreach ($dirs as $dir) {
+     recurse(realpath($dir));
+ }
+-
+-exit($error_reported === false ? 0 : 2);
+diff --git a/scripts/dev/makedist b/scripts/dev/makedist
+index 8e53f1d7..38553d63 100755
+--- a/scripts/dev/makedist
++++ b/scripts/dev/makedist
+@@ -175,7 +175,7 @@ cd ..
+ 
+ echo ""
+ echo "makedist: Creating $prefix.tar archive."
+-"$tar" cf "$prefix".tar --owner=0 --group=0 --numeric-owner --sort=name "$prefix"
++"$tar" cf "$prefix".tar "$prefix"
+ rm -rf "$prefix" "$prefix".tar.*
+ 
+ echo "makedist: Creating $prefix.tar.gz archive."
+diff --git a/scripts/man1/php-config.1.in b/scripts/man1/php-config.1.in
+index 5ed77c57..20f09d61 100644
+--- a/scripts/man1/php-config.1.in
++++ b/scripts/man1/php-config.1.in
+@@ -1,4 +1,4 @@
+-.TH @program_prefix@php\-config 1 "2022" "The PHP Group" "Scripting Language"
++.TH @program_prefix@php\-config 1 "2021" "The PHP Group" "Scripting Language"
+ .SH NAME
+ @program_prefix@php\-config \- get information about PHP configuration and compile options
+ .SH SYNOPSIS
+diff --git a/scripts/man1/phpize.1.in b/scripts/man1/phpize.1.in
+index bf50aa0c..308b51e0 100644
+--- a/scripts/man1/phpize.1.in
++++ b/scripts/man1/phpize.1.in
+@@ -1,4 +1,4 @@
+-.TH @program_prefix@phpize 1 "2022" "The PHP Group" "Scripting Language"
++.TH @program_prefix@phpize 1 "2021" "The PHP Group" "Scripting Language"
+ .SH NAME
+ @program_prefix@phpize \- prepare a PHP extension for compiling
+ .SH SYNOPSIS
+diff --git a/scripts/phpize.m4 b/scripts/phpize.m4
+index 616d1642..1f0cbd70 100644
+--- a/scripts/phpize.m4
++++ b/scripts/phpize.m4
+@@ -164,7 +164,7 @@ all_targets='$(PHP_MODULES) $(PHP_ZEND_EX)'
+ install_targets="install-modules install-headers"
+ phplibdir="`pwd`/modules"
+ CPPFLAGS="$CPPFLAGS -DHAVE_CONFIG_H"
+-CFLAGS_CLEAN='$(CFLAGS) -D_GNU_SOURCE'
++CFLAGS_CLEAN='$(CFLAGS)'
+ CXXFLAGS_CLEAN='$(CXXFLAGS)'
+ 
+ test "$prefix" = "NONE" && prefix="/usr/local"
+diff --git a/tests/basic/025.phpt b/tests/basic/025.phpt
+index 6b7340a8..5bc7bbdb 100644
+--- a/tests/basic/025.phpt
++++ b/tests/basic/025.phpt
+@@ -11,7 +11,9 @@ a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ var_dump($_POST, $HTTP_RAW_POST_DATA);
+ ?>
+ --EXPECTF--
+-Warning: PHP Request Startup: POST Content-Length of 2050 bytes exceeds the limit of 1024 bytes in Unknown on line 0
++Warning: Unknown: POST Content-Length of 2050 bytes exceeds the limit of 1024 bytes in Unknown on line 0
++
++Warning: Cannot modify header information - headers already sent in Unknown on line 0
+ 
+ Warning: Undefined variable $HTTP_RAW_POST_DATA in %s on line %d
+ array(0) {

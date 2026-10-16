@@ -97,10 +97,10 @@ EXTRA_ANN: Dict[str, str] = {
         "strenc(minlen=4,aes=1,keysplit=1), "
         "adec(prob=50,strength=1,maxSites=20)"
     ),
-    "vm_v7":                 "vm(minBlocks=1,obfRegIdx=1,encBytecode=1)",
-    "vm_v7_bare":            "vm(minBlocks=1,obfRegIdx=0,encBytecode=0)",
+    "vm_v7": "vm(minBlocks=1,obfRegIdx=1,encBytecode=1)",
+    "vm_v7_bare": "vm(minBlocks=1,obfRegIdx=0,encBytecode=0)",
     "vm_v7_obfidx":          "vm(minBlocks=1,obfRegIdx=1,encBytecode=0)",
-    "vm_v7_enc":             "vm(minBlocks=1,obfRegIdx=0,encBytecode=1)",
+    "vm_v7_enc": "vm(minBlocks=1,obfRegIdx=0,encBytecode=1)",
     "vm_v7_hardened":        "vm(minBlocks=1,obfRegIdx=1,encBytecode=1,hardened=1)",
     "vm_v7_regenc":          "vm(minBlocks=1,obfRegIdx=1,encBytecode=1,regEncrypt=1)",
     "vm_v7_regenc_hardened": "vm(minBlocks=1,obfRegIdx=1,encBytecode=1,hardened=1)",
@@ -157,20 +157,20 @@ class TestCase:
     ann_override: str | None  = None
     extra_opts:   list[str]   = field(default_factory=list)
     gates:        list[str]   = field(default_factory=list)
-    expect_enabled: list[str]                 = field(default_factory=list)
-    expect_order:   list[str]                 = field(default_factory=list)
+    expect_enabled: list[str] = field(default_factory=list)
+    expect_order:   list[str] = field(default_factory=list)
     expect_config:  Dict[str, Dict[str, str]] = field(default_factory=dict)
     # Skip-channel assertions (Phase-1 of the skip-reporting feature).
     # - expect_no_skips:
     #     None  → inherit from runner CLI (--strict-skips); when strict mode
-    #             is on, any TestCase with >= 2 passes auto-strict.
+    # is on, any TestCase with >= 2 passes auto-strict.
     #     True  → forced strict: -obf-no-skips appended, any skip aborts.
     #     False → forced lenient: skips are tolerated regardless of CLI mode.
     # - allowed_skip_reasons: when non-empty, the strict CLI gate is replaced
     #   with a JSON post-check that allows only those reason tokens
     #   (e.g. {"budget_exhausted"} for budget tests).
     expect_no_skips: Optional[bool]           = None
-    allowed_skip_reasons: set[str]            = field(default_factory=set)
+    allowed_skip_reasons: set[str] = field(default_factory=set)
     correctness:  bool        = True
     ir_only:      bool        = False
     category:     str         = "pass"

@@ -1,0 +1,140 @@
+diff --git a/ext/spl/tests/bug36258.phpt b/ext/spl/tests/bug36258.phpt
+new file mode 100644
+index 00000000..5e61b299
+--- /dev/null
++++ b/ext/spl/tests/bug36258.phpt
+@@ -0,0 +1,17 @@
++--TEST--
++Bug #36258 (SplFileObject::getPath() may lead to segfault)
++--FILE--
++<?php
++
++$diriter = new RecursiveIteratorIterator( new RecursiveDirectoryIterator('.') );
++
++foreach ($diriter as $key => $file) {
++    var_dump($file->getFilename());
++    var_dump($file->getPath());
++    break;
++}
++
++?>
++--EXPECTF--
++string(%d) "%s"
++string(%d) "%s"
+diff --git a/ext/spl/tests/bug46053.phpt b/ext/spl/tests/bug46053.phpt
+new file mode 100644
+index 00000000..a18705bb
+--- /dev/null
++++ b/ext/spl/tests/bug46053.phpt
+@@ -0,0 +1,13 @@
++--TEST--
++Bug #46053 (SplFileObject::seek - Endless loop)
++--FILE--
++<?php
++
++$x = new splfileobject(__FILE__);
++$x->getPathName();
++$x->seek(10);
++$x->seek(0);
++var_dump(trim($x->fgets()));
++?>
++--EXPECTF--
++string(%d) "<?php"
+diff --git a/ext/spl/tests/bug46569.csv b/ext/spl/tests/bug46569.csv
+new file mode 100644
+index 00000000..f456a03b
+--- /dev/null
++++ b/ext/spl/tests/bug46569.csv
+@@ -0,0 +1,5 @@
++first,line
++second,line
++third,line
++fourth,line
++fifth,line
+diff --git a/ext/spl/tests/bug46569.phpt b/ext/spl/tests/bug46569.phpt
+new file mode 100644
+index 00000000..0c1ab6ce
+--- /dev/null
++++ b/ext/spl/tests/bug46569.phpt
+@@ -0,0 +1,14 @@
++--TEST--
++Bug #46569 (SplFileObject: fgetcsv after seek returns wrong line)
++--FILE--
++<?php
++$file = new SplFileObject(__DIR__ . '/bug46569.csv');
++$file->seek(1);
++print_r($file->fgetcsv());
++?>
++--EXPECT--
++Array
++(
++    [0] => second
++    [1] => line
++)
+diff --git a/ext/spl/tests/bug51374.phpt b/ext/spl/tests/bug51374.phpt
+new file mode 100644
+index 00000000..0ce95e9c
+--- /dev/null
++++ b/ext/spl/tests/bug51374.phpt
+@@ -0,0 +1,17 @@
++--TEST--
++SPL: SplFileObject wrongly initializes objects
++--FILE--
++<?php
++class Foo extends SplFileObject
++{
++    public $bam = array();
++}
++$fileInfo = new SplFileInfo('php://temp');
++$fileInfo->setFileClass('Foo');
++$file = $fileInfo->openFile('r');
++
++print var_dump($file->bam); // is null or UNKNOWN:0
++?>
++--EXPECT--
++array(0) {
++}
+diff --git a/ext/spl/tests/bug51532.phpt b/ext/spl/tests/bug51532.phpt
+new file mode 100644
+index 00000000..c412fc0a
+--- /dev/null
++++ b/ext/spl/tests/bug51532.phpt
+@@ -0,0 +1,14 @@
++--TEST--
++SPL: Allow valid extension of SplFileObject::fscanf
++--FILE--
++<?php
++
++class A extends SplFileObject {
++    public function fscanf($format, &...$vars): array|int|null {
++
++    }
++}
++?>
++===DONE===
++--EXPECT--
++===DONE===
+diff --git a/ext/spl/tests/bug52573.phpt b/ext/spl/tests/bug52573.phpt
+new file mode 100644
+index 00000000..8817da0f
+--- /dev/null
++++ b/ext/spl/tests/bug52573.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++Bug #52573 (SplFileObject::fscanf Segmentation fault)
++--FILE--
++<?php // test
++
++$result = null;
++$f = new SplFileObject(__FILE__, 'r');
++var_dump($f->fscanf('<?php // %s', $result));
++var_dump($result);
++var_dump($f->fscanf('<?php // %s'));
++?>
++--EXPECT--
++int(1)
++string(4) "test"
++array(1) {
++  [0]=>
++  NULL
++}

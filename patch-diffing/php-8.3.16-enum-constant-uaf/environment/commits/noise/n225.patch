@@ -1,0 +1,1116 @@
+diff --git a/ext/pcre/tests/preg_split_error1.phpt b/ext/pcre/tests/preg_split_error1.phpt
+index 5ffb9f08..4d0fb9e2 100644
+--- a/ext/pcre/tests/preg_split_error1.phpt
++++ b/ext/pcre/tests/preg_split_error1.phpt
+@@ -36,7 +36,7 @@ try {
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_split(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_split_error1.php on line %d
++Warning: preg_split(): Delimiter must not be alphanumeric or backslash in %spreg_split_error1.php on line %d
+ bool(false)
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pdo/pdo.c b/ext/pdo/pdo.c
+index e8738db9..b18efe46 100644
+--- a/ext/pdo/pdo.c
++++ b/ext/pdo/pdo.c
+@@ -71,7 +71,7 @@ PHP_FUNCTION(pdo_drivers)
+ 
+ 	array_init(return_value);
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		add_next_index_stringl(return_value, pdriver->driver_name, pdriver->driver_name_len);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -252,7 +252,7 @@ PHP_MINIT_FUNCTION(pdo)
+ 
+ 	pdo_exception_ce = register_class_PDOException(spl_ce_RuntimeException);
+ 
+-	pdo_dbh_init(module_number);
++	pdo_dbh_init();
+ 	pdo_stmt_init();
+ 
+ 	return SUCCESS;
+@@ -277,7 +277,7 @@ PHP_MINFO_FUNCTION(pdo)
+ 	php_info_print_table_start();
+ 	php_info_print_table_header(2, "PDO support", "enabled");
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		spprintf(&drivers, 0, "%s, %s", ldrivers, pdriver->driver_name);
+ 		efree(ldrivers);
+ 		ldrivers = drivers;
+diff --git a/ext/pdo/pdo.stub.php b/ext/pdo/pdo.stub.php
+index a2652060..ebe81b7a 100644
+--- a/ext/pdo/pdo.stub.php
++++ b/ext/pdo/pdo.stub.php
+@@ -5,7 +5,7 @@
+ class PDOException extends RuntimeException
+ {
+     /** @var int|string */
+-    protected $code = 0; // TODO add proper type
++    protected $code = 0;
+     public ?array $errorInfo = null;
+ }
+ 
+diff --git a/ext/pdo/pdo_arginfo.h b/ext/pdo/pdo_arginfo.h
+index 9f8a0c6c..72eda0c3 100644
+--- a/ext/pdo/pdo_arginfo.h
++++ b/ext/pdo/pdo_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: dc41dddeea1ae117c6f2f3447afb29bf6623b757 */
++ * Stub hash: 8d975a20d009e827f8d72ac19b94b55870b6bf9c */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_pdo_drivers, 0, 0, IS_ARRAY, 0)
+ ZEND_END_ARG_INFO()
+diff --git a/ext/pdo/pdo_dbh.c b/ext/pdo/pdo_dbh.c
+index 96fa3500..9544a721 100644
+--- a/ext/pdo/pdo_dbh.c
++++ b/ext/pdo/pdo_dbh.c
+@@ -28,13 +28,10 @@
+ #include "php_pdo.h"
+ #include "php_pdo_driver.h"
+ #include "php_pdo_int.h"
+-#include "zend_attributes.h"
+ #include "zend_exceptions.h"
+ #include "zend_object_handlers.h"
+ #include "zend_hash.h"
+ #include "pdo_dbh_arginfo.h"
+-#include "zend_observer.h"
+-#include "zend_extensions.h"
+ 
+ static bool pdo_dbh_attribute_set(pdo_dbh_t *dbh, zend_long attr, zval *value);
+ 
+@@ -65,7 +62,7 @@ void pdo_throw_exception(unsigned int driver_errcode, char *driver_errmsg, pdo_e
+ 		zend_throw_exception_object(&pdo_exception);
+ }
+ 
+-void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, pdo_error_type sqlstate, const char *supp) /* {{{ */
++void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, const char *sqlstate, const char *supp) /* {{{ */
+ {
+ 	pdo_error_type *pdo_err = &dbh->error_code;
+ 	char *message = NULL;
+@@ -84,7 +81,7 @@ void pdo_raise_impl_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, pdo_error_type sqlst
+ 		pdo_err = &stmt->error_code;
+ 	}
+ 
+-	memcpy(*pdo_err, sqlstate, sizeof(pdo_error_type));
++	strncpy(*pdo_err, sqlstate, 6);
+ 
+ 	/* hash sqlstate to error messages */
+ 	msg = pdo_sqlstate_state_to_description(*pdo_err);
+@@ -1203,7 +1200,7 @@ PHP_METHOD(PDO, getAvailableDrivers)
+ 
+ 	array_init(return_value);
+ 
+-	ZEND_HASH_MAP_FOREACH_PTR(&pdo_driver_hash, pdriver) {
++	ZEND_HASH_FOREACH_PTR(&pdo_driver_hash, pdriver) {
+ 		add_next_index_stringl(return_value, (char*)pdriver->driver_name, pdriver->driver_name_len);
+ 	} ZEND_HASH_FOREACH_END();
+ }
+@@ -1214,9 +1211,6 @@ static void cls_method_dtor(zval *el) /* {{{ */ {
+ 	if (func->common.function_name) {
+ 		zend_string_release_ex(func->common.function_name, 0);
+ 	}
+-	if (ZEND_MAP_PTR(func->common.run_time_cache)) {
+-		efree(ZEND_MAP_PTR(func->common.run_time_cache));
+-	}
+ 	efree(func);
+ }
+ /* }}} */
+@@ -1226,9 +1220,6 @@ static void cls_method_pdtor(zval *el) /* {{{ */ {
+ 	if (func->common.function_name) {
+ 		zend_string_release_ex(func->common.function_name, 1);
+ 	}
+-	if (ZEND_MAP_PTR(func->common.run_time_cache)) {
+-		pefree(ZEND_MAP_PTR(func->common.run_time_cache), 1);
+-	}
+ 	pefree(func, 1);
+ }
+ /* }}} */
+@@ -1256,15 +1247,12 @@ bool pdo_hash_methods(pdo_dbh_object_t *dbh_obj, int kind)
+ 
+ 	memset(&func, 0, sizeof(func));
+ 
+-	size_t rt_cache_size = zend_internal_run_time_cache_reserved_size();
+ 	while (funcs->fname) {
+ 		func.type = ZEND_INTERNAL_FUNCTION;
+ 		func.handler = funcs->handler;
+ 		func.function_name = zend_string_init(funcs->fname, strlen(funcs->fname), dbh->is_persistent);
+ 		func.scope = dbh_obj->std.ce;
+ 		func.prototype = NULL;
+-		ZEND_MAP_PTR(func.run_time_cache) = rt_cache_size ? pecalloc(rt_cache_size, 1, dbh->is_persistent) : NULL;
+-		func.T = ZEND_OBSERVER_ENABLED;
+ 		if (funcs->flags) {
+ 			func.fn_flags = funcs->flags | ZEND_ACC_NEVER_CACHE;
+ 		} else {
+@@ -1346,7 +1334,7 @@ static HashTable *dbh_get_gc(zend_object *object, zval **gc_data, int *gc_count)
+ static zend_object_handlers pdo_dbh_object_handlers;
+ static void pdo_dbh_free_storage(zend_object *std);
+ 
+-void pdo_dbh_init(int module_number)
++void pdo_dbh_init(void)
+ {
+ 	pdo_dbh_ce = register_class_PDO();
+ 	pdo_dbh_ce->create_object = pdo_dbh_new;
+@@ -1358,6 +1346,92 @@ void pdo_dbh_init(int module_number)
+ 	pdo_dbh_object_handlers.get_method = dbh_method_get;
+ 	pdo_dbh_object_handlers.compare = zend_objects_not_comparable;
+ 	pdo_dbh_object_handlers.get_gc = dbh_get_gc;
++
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_BOOL", (zend_long)PDO_PARAM_BOOL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_NULL", (zend_long)PDO_PARAM_NULL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_INT",  (zend_long)PDO_PARAM_INT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR",  (zend_long)PDO_PARAM_STR);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_LOB",  (zend_long)PDO_PARAM_LOB);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STMT", (zend_long)PDO_PARAM_STMT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_INPUT_OUTPUT", (zend_long)PDO_PARAM_INPUT_OUTPUT);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR_NATL", (zend_long)PDO_PARAM_STR_NATL);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_STR_CHAR", (zend_long)PDO_PARAM_STR_CHAR);
++
++
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_ALLOC",		(zend_long)PDO_PARAM_EVT_ALLOC);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FREE",			(zend_long)PDO_PARAM_EVT_FREE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_EXEC_PRE",		(zend_long)PDO_PARAM_EVT_EXEC_PRE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_EXEC_POST",	(zend_long)PDO_PARAM_EVT_EXEC_POST);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FETCH_PRE",	(zend_long)PDO_PARAM_EVT_FETCH_PRE);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_FETCH_POST",	(zend_long)PDO_PARAM_EVT_FETCH_POST);
++	REGISTER_PDO_CLASS_CONST_LONG("PARAM_EVT_NORMALIZE",	(zend_long)PDO_PARAM_EVT_NORMALIZE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_DEFAULT", (zend_long)PDO_FETCH_USE_DEFAULT);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_LAZY", (zend_long)PDO_FETCH_LAZY);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ASSOC", (zend_long)PDO_FETCH_ASSOC);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_NUM",  (zend_long)PDO_FETCH_NUM);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_BOTH", (zend_long)PDO_FETCH_BOTH);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_OBJ",  (zend_long)PDO_FETCH_OBJ);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_BOUND", (zend_long)PDO_FETCH_BOUND);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_COLUMN", (zend_long)PDO_FETCH_COLUMN);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_CLASS", (zend_long)PDO_FETCH_CLASS);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_INTO", (zend_long)PDO_FETCH_INTO);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_FUNC", (zend_long)PDO_FETCH_FUNC);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_GROUP", (zend_long)PDO_FETCH_GROUP);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_UNIQUE", (zend_long)PDO_FETCH_UNIQUE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_KEY_PAIR", (zend_long)PDO_FETCH_KEY_PAIR);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_CLASSTYPE", (zend_long)PDO_FETCH_CLASSTYPE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_SERIALIZE",(zend_long)PDO_FETCH_SERIALIZE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_PROPS_LATE", (zend_long)PDO_FETCH_PROPS_LATE);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_NAMED", (zend_long)PDO_FETCH_NAMED);
++
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_AUTOCOMMIT",	(zend_long)PDO_ATTR_AUTOCOMMIT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_PREFETCH",		(zend_long)PDO_ATTR_PREFETCH);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_TIMEOUT", 		(zend_long)PDO_ATTR_TIMEOUT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_ERRMODE", 		(zend_long)PDO_ATTR_ERRMODE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_SERVER_VERSION",	(zend_long)PDO_ATTR_SERVER_VERSION);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CLIENT_VERSION", 	(zend_long)PDO_ATTR_CLIENT_VERSION);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_SERVER_INFO",		(zend_long)PDO_ATTR_SERVER_INFO);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CONNECTION_STATUS", 	(zend_long)PDO_ATTR_CONNECTION_STATUS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CASE",		 	(zend_long)PDO_ATTR_CASE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CURSOR_NAME", 	(zend_long)PDO_ATTR_CURSOR_NAME);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_CURSOR",	 	(zend_long)PDO_ATTR_CURSOR);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_ORACLE_NULLS",	(zend_long)PDO_ATTR_ORACLE_NULLS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_PERSISTENT",	(zend_long)PDO_ATTR_PERSISTENT);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_STATEMENT_CLASS",		(zend_long)PDO_ATTR_STATEMENT_CLASS);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_FETCH_TABLE_NAMES",		(zend_long)PDO_ATTR_FETCH_TABLE_NAMES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_FETCH_CATALOG_NAMES",		(zend_long)PDO_ATTR_FETCH_CATALOG_NAMES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DRIVER_NAME",		(zend_long)PDO_ATTR_DRIVER_NAME);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_STRINGIFY_FETCHES", (zend_long)PDO_ATTR_STRINGIFY_FETCHES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_MAX_COLUMN_LEN", (zend_long)PDO_ATTR_MAX_COLUMN_LEN);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_EMULATE_PREPARES", (zend_long)PDO_ATTR_EMULATE_PREPARES);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DEFAULT_FETCH_MODE", (zend_long)PDO_ATTR_DEFAULT_FETCH_MODE);
++	REGISTER_PDO_CLASS_CONST_LONG("ATTR_DEFAULT_STR_PARAM", (zend_long)PDO_ATTR_DEFAULT_STR_PARAM);
++
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_SILENT",	(zend_long)PDO_ERRMODE_SILENT);
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_WARNING",	(zend_long)PDO_ERRMODE_WARNING);
++	REGISTER_PDO_CLASS_CONST_LONG("ERRMODE_EXCEPTION",	(zend_long)PDO_ERRMODE_EXCEPTION);
++
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_NATURAL",	(zend_long)PDO_CASE_NATURAL);
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_LOWER",	(zend_long)PDO_CASE_LOWER);
++	REGISTER_PDO_CLASS_CONST_LONG("CASE_UPPER",	(zend_long)PDO_CASE_UPPER);
++
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_NATURAL",	(zend_long)PDO_NULL_NATURAL);
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_EMPTY_STRING",	(zend_long)PDO_NULL_EMPTY_STRING);
++	REGISTER_PDO_CLASS_CONST_LONG("NULL_TO_STRING",	(zend_long)PDO_NULL_TO_STRING);
++
++	REGISTER_PDO_CLASS_CONST_STRING("ERR_NONE",	PDO_ERR_NONE);
++
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_NEXT", (zend_long)PDO_FETCH_ORI_NEXT);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_PRIOR", (zend_long)PDO_FETCH_ORI_PRIOR);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_FIRST", (zend_long)PDO_FETCH_ORI_FIRST);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_LAST", (zend_long)PDO_FETCH_ORI_LAST);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_ABS", (zend_long)PDO_FETCH_ORI_ABS);
++	REGISTER_PDO_CLASS_CONST_LONG("FETCH_ORI_REL", (zend_long)PDO_FETCH_ORI_REL);
++
++	REGISTER_PDO_CLASS_CONST_LONG("CURSOR_FWDONLY", (zend_long)PDO_CURSOR_FWDONLY);
++	REGISTER_PDO_CLASS_CONST_LONG("CURSOR_SCROLL", (zend_long)PDO_CURSOR_SCROLL);
+ }
+ 
+ static void dbh_free(pdo_dbh_t *dbh, bool free_persistent)
+diff --git a/ext/pdo/pdo_dbh.stub.php b/ext/pdo/pdo_dbh.stub.php
+index 45364147..7ff52c96 100644
+--- a/ext/pdo/pdo_dbh.stub.php
++++ b/ext/pdo/pdo_dbh.stub.php
+@@ -5,388 +5,7 @@
+ /** @not-serializable */
+ class PDO
+ {
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_NULL)
+-     */
+-    public const PARAM_NULL = 0;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_BOOL)
+-     */
+-    public const PARAM_BOOL = 5;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_INT)
+-     */
+-    public const PARAM_INT = 1;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR)
+-     */
+-    public const PARAM_STR = 2;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_LOB)
+-     */
+-    public const PARAM_LOB = 3;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STMT)
+-     */
+-    public const PARAM_STMT = 4;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_INPUT_OUTPUT)
+-     */
+-    public const PARAM_INPUT_OUTPUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR_NATL)
+-     */
+-    public const PARAM_STR_NATL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_STR_CHAR)
+-     */
+-    public const PARAM_STR_CHAR = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_ALLOC)
+-     */
+-    public const PARAM_EVT_ALLOC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FREE)
+-     */
+-    public const PARAM_EVT_FREE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_EXEC_PRE)
+-     */
+-    public const PARAM_EVT_EXEC_PRE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_EXEC_POST)
+-     */
+-    public const PARAM_EVT_EXEC_POST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FETCH_PRE)
+-     */
+-    public const PARAM_EVT_FETCH_PRE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_FETCH_POST)
+-     */
+-    public const PARAM_EVT_FETCH_POST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_PARAM_EVT_NORMALIZE)
+-     */
+-    public const PARAM_EVT_NORMALIZE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_USE_DEFAULT)
+-     */
+-    public const FETCH_DEFAULT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_LAZY)
+-     */
+-    public const FETCH_LAZY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ASSOC)
+-     */
+-    public const FETCH_ASSOC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_NUM)
+-     */
+-    public const FETCH_NUM = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_BOTH)
+-     */
+-    public const FETCH_BOTH = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_OBJ)
+-     */
+-    public const FETCH_OBJ = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_BOUND)
+-     */
+-    public const FETCH_BOUND = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_COLUMN)
+-     */
+-    public const FETCH_COLUMN = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_CLASS)
+-     */
+-    public const FETCH_CLASS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_INTO)
+-     */
+-    public const FETCH_INTO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_FUNC)
+-     */
+-    public const FETCH_FUNC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_GROUP)
+-     */
+-    public const FETCH_GROUP = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_UNIQUE)
+-     */
+-    public const FETCH_UNIQUE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_KEY_PAIR)
+-     */
+-    public const FETCH_KEY_PAIR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_CLASSTYPE)
+-     */
+-    public const FETCH_CLASSTYPE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_SERIALIZE)
+-     */
+-    public const FETCH_SERIALIZE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_PROPS_LATE)
+-     */
+-    public const FETCH_PROPS_LATE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_NAMED)
+-     */
+-    public const FETCH_NAMED = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_AUTOCOMMIT)
+-     */
+-    public const ATTR_AUTOCOMMIT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_PREFETCH)
+-     */
+-    public const ATTR_PREFETCH = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_TIMEOUT)
+-     */
+-    public const ATTR_TIMEOUT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_ERRMODE)
+-     */
+-    public const ATTR_ERRMODE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_SERVER_VERSION)
+-     */
+-    public const ATTR_SERVER_VERSION = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CLIENT_VERSION)
+-     */
+-    public const ATTR_CLIENT_VERSION = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_SERVER_INFO)
+-     */
+-    public const ATTR_SERVER_INFO = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CONNECTION_STATUS)
+-     */
+-    public const ATTR_CONNECTION_STATUS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CASE)
+-     */
+-    public const ATTR_CASE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CURSOR_NAME)
+-     */
+-    public const ATTR_CURSOR_NAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_CURSOR)
+-     */
+-    public const ATTR_CURSOR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_ORACLE_NULLS)
+-     */
+-    public const ATTR_ORACLE_NULLS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_PERSISTENT)
+-     */
+-    public const ATTR_PERSISTENT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_STATEMENT_CLASS)
+-     */
+-    public const ATTR_STATEMENT_CLASS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_FETCH_TABLE_NAMES)
+-     */
+-    public const ATTR_FETCH_TABLE_NAMES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_FETCH_CATALOG_NAMES)
+-     */
+-    public const ATTR_FETCH_CATALOG_NAMES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DRIVER_NAME)
+-     */
+-    public const ATTR_DRIVER_NAME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_STRINGIFY_FETCHES)
+-     */
+-    public const ATTR_STRINGIFY_FETCHES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_MAX_COLUMN_LEN)
+-     */
+-    public const ATTR_MAX_COLUMN_LEN = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_EMULATE_PREPARES)
+-     */
+-    public const ATTR_EMULATE_PREPARES = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DEFAULT_FETCH_MODE)
+-     */
+-    public const ATTR_DEFAULT_FETCH_MODE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ATTR_DEFAULT_STR_PARAM)
+-     */
+-    public const ATTR_DEFAULT_STR_PARAM = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_SILENT)
+-     */
+-    public const ERRMODE_SILENT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_WARNING)
+-     */
+-    public const ERRMODE_WARNING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_ERRMODE_EXCEPTION)
+-     */
+-    public const ERRMODE_EXCEPTION = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_NATURAL)
+-     */
+-    public const CASE_NATURAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_LOWER)
+-     */
+-    public const CASE_LOWER = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CASE_UPPER)
+-     */
+-    public const CASE_UPPER = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_NATURAL)
+-     */
+-    public const NULL_NATURAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_EMPTY_STRING)
+-     */
+-    public const NULL_EMPTY_STRING = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_NULL_TO_STRING)
+-     */
+-    public const NULL_TO_STRING = UNKNOWN;
+-
+-    /**
+-     * @var string
+-     * @cvalue PDO_ERR_NONE
+-     */
+-    public const ERR_NONE = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_NEXT)
+-     */
+-    public const FETCH_ORI_NEXT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_PRIOR)
+-     */
+-    public const FETCH_ORI_PRIOR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_FIRST)
+-     */
+-    public const FETCH_ORI_FIRST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_LAST)
+-     */
+-    public const FETCH_ORI_LAST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_ABS)
+-     */
+-    public const FETCH_ORI_ABS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_FETCH_ORI_REL)
+-     */
+-    public const FETCH_ORI_REL = UNKNOWN;
+-
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CURSOR_FWDONLY)
+-     */
+-    public const CURSOR_FWDONLY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue LONG_CONST(PDO_CURSOR_SCROLL)
+-     */
+-    public const CURSOR_SCROLL = UNKNOWN;
+-
+-    public function __construct(string $dsn, ?string $username = null, #[\SensitiveParameter] ?string $password = null, ?array $options = null) {}
++    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null) {}
+ 
+     /** @tentative-return-type */
+     public function beginTransaction(): bool {}
+diff --git a/ext/pdo/pdo_dbh_arginfo.h b/ext/pdo/pdo_dbh_arginfo.h
+index afbbc935..11d6fac0 100644
+--- a/ext/pdo/pdo_dbh_arginfo.h
++++ b/ext/pdo/pdo_dbh_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 7dcba884671fd90b891fab7e3f0d4cc9a4ac76a1 */
++ * Stub hash: 7d10dbdfd55eb4a4dc779cbf4fa000cdf4fb3539 */
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_PDO___construct, 0, 0, 1)
+ 	ZEND_ARG_TYPE_INFO(0, dsn, IS_STRING, 0)
+@@ -103,459 +103,5 @@ static zend_class_entry *register_class_PDO(void)
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+ 	class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+ 
+-	zval const_PARAM_NULL_value;
+-	ZVAL_LONG(&const_PARAM_NULL_value, LONG_CONST(PDO_PARAM_NULL));
+-	zend_string *const_PARAM_NULL_name = zend_string_init_interned("PARAM_NULL", sizeof("PARAM_NULL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_NULL_name, &const_PARAM_NULL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_NULL_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_NULL) == 0);
+-
+-	zval const_PARAM_BOOL_value;
+-	ZVAL_LONG(&const_PARAM_BOOL_value, LONG_CONST(PDO_PARAM_BOOL));
+-	zend_string *const_PARAM_BOOL_name = zend_string_init_interned("PARAM_BOOL", sizeof("PARAM_BOOL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_BOOL_name, &const_PARAM_BOOL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_BOOL_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_BOOL) == 5);
+-
+-	zval const_PARAM_INT_value;
+-	ZVAL_LONG(&const_PARAM_INT_value, LONG_CONST(PDO_PARAM_INT));
+-	zend_string *const_PARAM_INT_name = zend_string_init_interned("PARAM_INT", sizeof("PARAM_INT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_INT_name, &const_PARAM_INT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_INT_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_INT) == 1);
+-
+-	zval const_PARAM_STR_value;
+-	ZVAL_LONG(&const_PARAM_STR_value, LONG_CONST(PDO_PARAM_STR));
+-	zend_string *const_PARAM_STR_name = zend_string_init_interned("PARAM_STR", sizeof("PARAM_STR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_name, &const_PARAM_STR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_STR) == 2);
+-
+-	zval const_PARAM_LOB_value;
+-	ZVAL_LONG(&const_PARAM_LOB_value, LONG_CONST(PDO_PARAM_LOB));
+-	zend_string *const_PARAM_LOB_name = zend_string_init_interned("PARAM_LOB", sizeof("PARAM_LOB") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_LOB_name, &const_PARAM_LOB_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_LOB_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_LOB) == 3);
+-
+-	zval const_PARAM_STMT_value;
+-	ZVAL_LONG(&const_PARAM_STMT_value, LONG_CONST(PDO_PARAM_STMT));
+-	zend_string *const_PARAM_STMT_name = zend_string_init_interned("PARAM_STMT", sizeof("PARAM_STMT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STMT_name, &const_PARAM_STMT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STMT_name);
+-	ZEND_ASSERT(LONG_CONST(PDO_PARAM_STMT) == 4);
+-
+-	zval const_PARAM_INPUT_OUTPUT_value;
+-	ZVAL_LONG(&const_PARAM_INPUT_OUTPUT_value, LONG_CONST(PDO_PARAM_INPUT_OUTPUT));
+-	zend_string *const_PARAM_INPUT_OUTPUT_name = zend_string_init_interned("PARAM_INPUT_OUTPUT", sizeof("PARAM_INPUT_OUTPUT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_INPUT_OUTPUT_name, &const_PARAM_INPUT_OUTPUT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_INPUT_OUTPUT_name);
+-
+-	zval const_PARAM_STR_NATL_value;
+-	ZVAL_LONG(&const_PARAM_STR_NATL_value, LONG_CONST(PDO_PARAM_STR_NATL));
+-	zend_string *const_PARAM_STR_NATL_name = zend_string_init_interned("PARAM_STR_NATL", sizeof("PARAM_STR_NATL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_NATL_name, &const_PARAM_STR_NATL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_NATL_name);
+-
+-	zval const_PARAM_STR_CHAR_value;
+-	ZVAL_LONG(&const_PARAM_STR_CHAR_value, LONG_CONST(PDO_PARAM_STR_CHAR));
+-	zend_string *const_PARAM_STR_CHAR_name = zend_string_init_interned("PARAM_STR_CHAR", sizeof("PARAM_STR_CHAR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_STR_CHAR_name, &const_PARAM_STR_CHAR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_STR_CHAR_name);
+-
+-	zval const_PARAM_EVT_ALLOC_value;
+-	ZVAL_LONG(&const_PARAM_EVT_ALLOC_value, LONG_CONST(PDO_PARAM_EVT_ALLOC));
+-	zend_string *const_PARAM_EVT_ALLOC_name = zend_string_init_interned("PARAM_EVT_ALLOC", sizeof("PARAM_EVT_ALLOC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_ALLOC_name, &const_PARAM_EVT_ALLOC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_ALLOC_name);
+-
+-	zval const_PARAM_EVT_FREE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FREE_value, LONG_CONST(PDO_PARAM_EVT_FREE));
+-	zend_string *const_PARAM_EVT_FREE_name = zend_string_init_interned("PARAM_EVT_FREE", sizeof("PARAM_EVT_FREE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FREE_name, &const_PARAM_EVT_FREE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FREE_name);
+-
+-	zval const_PARAM_EVT_EXEC_PRE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_EXEC_PRE_value, LONG_CONST(PDO_PARAM_EVT_EXEC_PRE));
+-	zend_string *const_PARAM_EVT_EXEC_PRE_name = zend_string_init_interned("PARAM_EVT_EXEC_PRE", sizeof("PARAM_EVT_EXEC_PRE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_EXEC_PRE_name, &const_PARAM_EVT_EXEC_PRE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_EXEC_PRE_name);
+-
+-	zval const_PARAM_EVT_EXEC_POST_value;
+-	ZVAL_LONG(&const_PARAM_EVT_EXEC_POST_value, LONG_CONST(PDO_PARAM_EVT_EXEC_POST));
+-	zend_string *const_PARAM_EVT_EXEC_POST_name = zend_string_init_interned("PARAM_EVT_EXEC_POST", sizeof("PARAM_EVT_EXEC_POST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_EXEC_POST_name, &const_PARAM_EVT_EXEC_POST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_EXEC_POST_name);
+-
+-	zval const_PARAM_EVT_FETCH_PRE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FETCH_PRE_value, LONG_CONST(PDO_PARAM_EVT_FETCH_PRE));
+-	zend_string *const_PARAM_EVT_FETCH_PRE_name = zend_string_init_interned("PARAM_EVT_FETCH_PRE", sizeof("PARAM_EVT_FETCH_PRE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FETCH_PRE_name, &const_PARAM_EVT_FETCH_PRE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FETCH_PRE_name);
+-
+-	zval const_PARAM_EVT_FETCH_POST_value;
+-	ZVAL_LONG(&const_PARAM_EVT_FETCH_POST_value, LONG_CONST(PDO_PARAM_EVT_FETCH_POST));
+-	zend_string *const_PARAM_EVT_FETCH_POST_name = zend_string_init_interned("PARAM_EVT_FETCH_POST", sizeof("PARAM_EVT_FETCH_POST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_FETCH_POST_name, &const_PARAM_EVT_FETCH_POST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_FETCH_POST_name);
+-
+-	zval const_PARAM_EVT_NORMALIZE_value;
+-	ZVAL_LONG(&const_PARAM_EVT_NORMALIZE_value, LONG_CONST(PDO_PARAM_EVT_NORMALIZE));
+-	zend_string *const_PARAM_EVT_NORMALIZE_name = zend_string_init_interned("PARAM_EVT_NORMALIZE", sizeof("PARAM_EVT_NORMALIZE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_PARAM_EVT_NORMALIZE_name, &const_PARAM_EVT_NORMALIZE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_PARAM_EVT_NORMALIZE_name);
+-
+-	zval const_FETCH_DEFAULT_value;
+-	ZVAL_LONG(&const_FETCH_DEFAULT_value, LONG_CONST(PDO_FETCH_USE_DEFAULT));
+-	zend_string *const_FETCH_DEFAULT_name = zend_string_init_interned("FETCH_DEFAULT", sizeof("FETCH_DEFAULT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_DEFAULT_name, &const_FETCH_DEFAULT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_DEFAULT_name);
+-
+-	zval const_FETCH_LAZY_value;
+-	ZVAL_LONG(&const_FETCH_LAZY_value, LONG_CONST(PDO_FETCH_LAZY));
+-	zend_string *const_FETCH_LAZY_name = zend_string_init_interned("FETCH_LAZY", sizeof("FETCH_LAZY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_LAZY_name, &const_FETCH_LAZY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_LAZY_name);
+-
+-	zval const_FETCH_ASSOC_value;
+-	ZVAL_LONG(&const_FETCH_ASSOC_value, LONG_CONST(PDO_FETCH_ASSOC));
+-	zend_string *const_FETCH_ASSOC_name = zend_string_init_interned("FETCH_ASSOC", sizeof("FETCH_ASSOC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ASSOC_name, &const_FETCH_ASSOC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ASSOC_name);
+-
+-	zval const_FETCH_NUM_value;
+-	ZVAL_LONG(&const_FETCH_NUM_value, LONG_CONST(PDO_FETCH_NUM));
+-	zend_string *const_FETCH_NUM_name = zend_string_init_interned("FETCH_NUM", sizeof("FETCH_NUM") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_NUM_name, &const_FETCH_NUM_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_NUM_name);
+-
+-	zval const_FETCH_BOTH_value;
+-	ZVAL_LONG(&const_FETCH_BOTH_value, LONG_CONST(PDO_FETCH_BOTH));
+-	zend_string *const_FETCH_BOTH_name = zend_string_init_interned("FETCH_BOTH", sizeof("FETCH_BOTH") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_BOTH_name, &const_FETCH_BOTH_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_BOTH_name);
+-
+-	zval const_FETCH_OBJ_value;
+-	ZVAL_LONG(&const_FETCH_OBJ_value, LONG_CONST(PDO_FETCH_OBJ));
+-	zend_string *const_FETCH_OBJ_name = zend_string_init_interned("FETCH_OBJ", sizeof("FETCH_OBJ") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_OBJ_name, &const_FETCH_OBJ_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_OBJ_name);
+-
+-	zval const_FETCH_BOUND_value;
+-	ZVAL_LONG(&const_FETCH_BOUND_value, LONG_CONST(PDO_FETCH_BOUND));
+-	zend_string *const_FETCH_BOUND_name = zend_string_init_interned("FETCH_BOUND", sizeof("FETCH_BOUND") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_BOUND_name, &const_FETCH_BOUND_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_BOUND_name);
+-
+-	zval const_FETCH_COLUMN_value;
+-	ZVAL_LONG(&const_FETCH_COLUMN_value, LONG_CONST(PDO_FETCH_COLUMN));
+-	zend_string *const_FETCH_COLUMN_name = zend_string_init_interned("FETCH_COLUMN", sizeof("FETCH_COLUMN") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_COLUMN_name, &const_FETCH_COLUMN_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_COLUMN_name);
+-
+-	zval const_FETCH_CLASS_value;
+-	ZVAL_LONG(&const_FETCH_CLASS_value, LONG_CONST(PDO_FETCH_CLASS));
+-	zend_string *const_FETCH_CLASS_name = zend_string_init_interned("FETCH_CLASS", sizeof("FETCH_CLASS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_CLASS_name, &const_FETCH_CLASS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_CLASS_name);
+-
+-	zval const_FETCH_INTO_value;
+-	ZVAL_LONG(&const_FETCH_INTO_value, LONG_CONST(PDO_FETCH_INTO));
+-	zend_string *const_FETCH_INTO_name = zend_string_init_interned("FETCH_INTO", sizeof("FETCH_INTO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_INTO_name, &const_FETCH_INTO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_INTO_name);
+-
+-	zval const_FETCH_FUNC_value;
+-	ZVAL_LONG(&const_FETCH_FUNC_value, LONG_CONST(PDO_FETCH_FUNC));
+-	zend_string *const_FETCH_FUNC_name = zend_string_init_interned("FETCH_FUNC", sizeof("FETCH_FUNC") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_FUNC_name, &const_FETCH_FUNC_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_FUNC_name);
+-
+-	zval const_FETCH_GROUP_value;
+-	ZVAL_LONG(&const_FETCH_GROUP_value, LONG_CONST(PDO_FETCH_GROUP));
+-	zend_string *const_FETCH_GROUP_name = zend_string_init_interned("FETCH_GROUP", sizeof("FETCH_GROUP") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_GROUP_name, &const_FETCH_GROUP_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_GROUP_name);
+-
+-	zval const_FETCH_UNIQUE_value;
+-	ZVAL_LONG(&const_FETCH_UNIQUE_value, LONG_CONST(PDO_FETCH_UNIQUE));
+-	zend_string *const_FETCH_UNIQUE_name = zend_string_init_interned("FETCH_UNIQUE", sizeof("FETCH_UNIQUE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_UNIQUE_name, &const_FETCH_UNIQUE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_UNIQUE_name);
+-
+-	zval const_FETCH_KEY_PAIR_value;
+-	ZVAL_LONG(&const_FETCH_KEY_PAIR_value, LONG_CONST(PDO_FETCH_KEY_PAIR));
+-	zend_string *const_FETCH_KEY_PAIR_name = zend_string_init_interned("FETCH_KEY_PAIR", sizeof("FETCH_KEY_PAIR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_KEY_PAIR_name, &const_FETCH_KEY_PAIR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_KEY_PAIR_name);
+-
+-	zval const_FETCH_CLASSTYPE_value;
+-	ZVAL_LONG(&const_FETCH_CLASSTYPE_value, LONG_CONST(PDO_FETCH_CLASSTYPE));
+-	zend_string *const_FETCH_CLASSTYPE_name = zend_string_init_interned("FETCH_CLASSTYPE", sizeof("FETCH_CLASSTYPE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_CLASSTYPE_name, &const_FETCH_CLASSTYPE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_CLASSTYPE_name);
+-
+-	zval const_FETCH_SERIALIZE_value;
+-	ZVAL_LONG(&const_FETCH_SERIALIZE_value, LONG_CONST(PDO_FETCH_SERIALIZE));
+-	zend_string *const_FETCH_SERIALIZE_name = zend_string_init_interned("FETCH_SERIALIZE", sizeof("FETCH_SERIALIZE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_SERIALIZE_name, &const_FETCH_SERIALIZE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_SERIALIZE_name);
+-
+-	zval const_FETCH_PROPS_LATE_value;
+-	ZVAL_LONG(&const_FETCH_PROPS_LATE_value, LONG_CONST(PDO_FETCH_PROPS_LATE));
+-	zend_string *const_FETCH_PROPS_LATE_name = zend_string_init_interned("FETCH_PROPS_LATE", sizeof("FETCH_PROPS_LATE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_PROPS_LATE_name, &const_FETCH_PROPS_LATE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_PROPS_LATE_name);
+-
+-	zval const_FETCH_NAMED_value;
+-	ZVAL_LONG(&const_FETCH_NAMED_value, LONG_CONST(PDO_FETCH_NAMED));
+-	zend_string *const_FETCH_NAMED_name = zend_string_init_interned("FETCH_NAMED", sizeof("FETCH_NAMED") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_NAMED_name, &const_FETCH_NAMED_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_NAMED_name);
+-
+-	zval const_ATTR_AUTOCOMMIT_value;
+-	ZVAL_LONG(&const_ATTR_AUTOCOMMIT_value, LONG_CONST(PDO_ATTR_AUTOCOMMIT));
+-	zend_string *const_ATTR_AUTOCOMMIT_name = zend_string_init_interned("ATTR_AUTOCOMMIT", sizeof("ATTR_AUTOCOMMIT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_AUTOCOMMIT_name, &const_ATTR_AUTOCOMMIT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_AUTOCOMMIT_name);
+-
+-	zval const_ATTR_PREFETCH_value;
+-	ZVAL_LONG(&const_ATTR_PREFETCH_value, LONG_CONST(PDO_ATTR_PREFETCH));
+-	zend_string *const_ATTR_PREFETCH_name = zend_string_init_interned("ATTR_PREFETCH", sizeof("ATTR_PREFETCH") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_PREFETCH_name, &const_ATTR_PREFETCH_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_PREFETCH_name);
+-
+-	zval const_ATTR_TIMEOUT_value;
+-	ZVAL_LONG(&const_ATTR_TIMEOUT_value, LONG_CONST(PDO_ATTR_TIMEOUT));
+-	zend_string *const_ATTR_TIMEOUT_name = zend_string_init_interned("ATTR_TIMEOUT", sizeof("ATTR_TIMEOUT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_TIMEOUT_name, &const_ATTR_TIMEOUT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_TIMEOUT_name);
+-
+-	zval const_ATTR_ERRMODE_value;
+-	ZVAL_LONG(&const_ATTR_ERRMODE_value, LONG_CONST(PDO_ATTR_ERRMODE));
+-	zend_string *const_ATTR_ERRMODE_name = zend_string_init_interned("ATTR_ERRMODE", sizeof("ATTR_ERRMODE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_ERRMODE_name, &const_ATTR_ERRMODE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_ERRMODE_name);
+-
+-	zval const_ATTR_SERVER_VERSION_value;
+-	ZVAL_LONG(&const_ATTR_SERVER_VERSION_value, LONG_CONST(PDO_ATTR_SERVER_VERSION));
+-	zend_string *const_ATTR_SERVER_VERSION_name = zend_string_init_interned("ATTR_SERVER_VERSION", sizeof("ATTR_SERVER_VERSION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_SERVER_VERSION_name, &const_ATTR_SERVER_VERSION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_SERVER_VERSION_name);
+-
+-	zval const_ATTR_CLIENT_VERSION_value;
+-	ZVAL_LONG(&const_ATTR_CLIENT_VERSION_value, LONG_CONST(PDO_ATTR_CLIENT_VERSION));
+-	zend_string *const_ATTR_CLIENT_VERSION_name = zend_string_init_interned("ATTR_CLIENT_VERSION", sizeof("ATTR_CLIENT_VERSION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CLIENT_VERSION_name, &const_ATTR_CLIENT_VERSION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CLIENT_VERSION_name);
+-
+-	zval const_ATTR_SERVER_INFO_value;
+-	ZVAL_LONG(&const_ATTR_SERVER_INFO_value, LONG_CONST(PDO_ATTR_SERVER_INFO));
+-	zend_string *const_ATTR_SERVER_INFO_name = zend_string_init_interned("ATTR_SERVER_INFO", sizeof("ATTR_SERVER_INFO") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_SERVER_INFO_name, &const_ATTR_SERVER_INFO_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_SERVER_INFO_name);
+-
+-	zval const_ATTR_CONNECTION_STATUS_value;
+-	ZVAL_LONG(&const_ATTR_CONNECTION_STATUS_value, LONG_CONST(PDO_ATTR_CONNECTION_STATUS));
+-	zend_string *const_ATTR_CONNECTION_STATUS_name = zend_string_init_interned("ATTR_CONNECTION_STATUS", sizeof("ATTR_CONNECTION_STATUS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CONNECTION_STATUS_name, &const_ATTR_CONNECTION_STATUS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CONNECTION_STATUS_name);
+-
+-	zval const_ATTR_CASE_value;
+-	ZVAL_LONG(&const_ATTR_CASE_value, LONG_CONST(PDO_ATTR_CASE));
+-	zend_string *const_ATTR_CASE_name = zend_string_init_interned("ATTR_CASE", sizeof("ATTR_CASE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CASE_name, &const_ATTR_CASE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CASE_name);
+-
+-	zval const_ATTR_CURSOR_NAME_value;
+-	ZVAL_LONG(&const_ATTR_CURSOR_NAME_value, LONG_CONST(PDO_ATTR_CURSOR_NAME));
+-	zend_string *const_ATTR_CURSOR_NAME_name = zend_string_init_interned("ATTR_CURSOR_NAME", sizeof("ATTR_CURSOR_NAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CURSOR_NAME_name, &const_ATTR_CURSOR_NAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CURSOR_NAME_name);
+-
+-	zval const_ATTR_CURSOR_value;
+-	ZVAL_LONG(&const_ATTR_CURSOR_value, LONG_CONST(PDO_ATTR_CURSOR));
+-	zend_string *const_ATTR_CURSOR_name = zend_string_init_interned("ATTR_CURSOR", sizeof("ATTR_CURSOR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_CURSOR_name, &const_ATTR_CURSOR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_CURSOR_name);
+-
+-	zval const_ATTR_ORACLE_NULLS_value;
+-	ZVAL_LONG(&const_ATTR_ORACLE_NULLS_value, LONG_CONST(PDO_ATTR_ORACLE_NULLS));
+-	zend_string *const_ATTR_ORACLE_NULLS_name = zend_string_init_interned("ATTR_ORACLE_NULLS", sizeof("ATTR_ORACLE_NULLS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_ORACLE_NULLS_name, &const_ATTR_ORACLE_NULLS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_ORACLE_NULLS_name);
+-
+-	zval const_ATTR_PERSISTENT_value;
+-	ZVAL_LONG(&const_ATTR_PERSISTENT_value, LONG_CONST(PDO_ATTR_PERSISTENT));
+-	zend_string *const_ATTR_PERSISTENT_name = zend_string_init_interned("ATTR_PERSISTENT", sizeof("ATTR_PERSISTENT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_PERSISTENT_name, &const_ATTR_PERSISTENT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_PERSISTENT_name);
+-
+-	zval const_ATTR_STATEMENT_CLASS_value;
+-	ZVAL_LONG(&const_ATTR_STATEMENT_CLASS_value, LONG_CONST(PDO_ATTR_STATEMENT_CLASS));
+-	zend_string *const_ATTR_STATEMENT_CLASS_name = zend_string_init_interned("ATTR_STATEMENT_CLASS", sizeof("ATTR_STATEMENT_CLASS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_STATEMENT_CLASS_name, &const_ATTR_STATEMENT_CLASS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_STATEMENT_CLASS_name);
+-
+-	zval const_ATTR_FETCH_TABLE_NAMES_value;
+-	ZVAL_LONG(&const_ATTR_FETCH_TABLE_NAMES_value, LONG_CONST(PDO_ATTR_FETCH_TABLE_NAMES));
+-	zend_string *const_ATTR_FETCH_TABLE_NAMES_name = zend_string_init_interned("ATTR_FETCH_TABLE_NAMES", sizeof("ATTR_FETCH_TABLE_NAMES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_FETCH_TABLE_NAMES_name, &const_ATTR_FETCH_TABLE_NAMES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_FETCH_TABLE_NAMES_name);
+-
+-	zval const_ATTR_FETCH_CATALOG_NAMES_value;
+-	ZVAL_LONG(&const_ATTR_FETCH_CATALOG_NAMES_value, LONG_CONST(PDO_ATTR_FETCH_CATALOG_NAMES));
+-	zend_string *const_ATTR_FETCH_CATALOG_NAMES_name = zend_string_init_interned("ATTR_FETCH_CATALOG_NAMES", sizeof("ATTR_FETCH_CATALOG_NAMES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_FETCH_CATALOG_NAMES_name, &const_ATTR_FETCH_CATALOG_NAMES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_FETCH_CATALOG_NAMES_name);
+-
+-	zval const_ATTR_DRIVER_NAME_value;
+-	ZVAL_LONG(&const_ATTR_DRIVER_NAME_value, LONG_CONST(PDO_ATTR_DRIVER_NAME));
+-	zend_string *const_ATTR_DRIVER_NAME_name = zend_string_init_interned("ATTR_DRIVER_NAME", sizeof("ATTR_DRIVER_NAME") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DRIVER_NAME_name, &const_ATTR_DRIVER_NAME_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DRIVER_NAME_name);
+-
+-	zval const_ATTR_STRINGIFY_FETCHES_value;
+-	ZVAL_LONG(&const_ATTR_STRINGIFY_FETCHES_value, LONG_CONST(PDO_ATTR_STRINGIFY_FETCHES));
+-	zend_string *const_ATTR_STRINGIFY_FETCHES_name = zend_string_init_interned("ATTR_STRINGIFY_FETCHES", sizeof("ATTR_STRINGIFY_FETCHES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_STRINGIFY_FETCHES_name, &const_ATTR_STRINGIFY_FETCHES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_STRINGIFY_FETCHES_name);
+-
+-	zval const_ATTR_MAX_COLUMN_LEN_value;
+-	ZVAL_LONG(&const_ATTR_MAX_COLUMN_LEN_value, LONG_CONST(PDO_ATTR_MAX_COLUMN_LEN));
+-	zend_string *const_ATTR_MAX_COLUMN_LEN_name = zend_string_init_interned("ATTR_MAX_COLUMN_LEN", sizeof("ATTR_MAX_COLUMN_LEN") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_MAX_COLUMN_LEN_name, &const_ATTR_MAX_COLUMN_LEN_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_MAX_COLUMN_LEN_name);
+-
+-	zval const_ATTR_EMULATE_PREPARES_value;
+-	ZVAL_LONG(&const_ATTR_EMULATE_PREPARES_value, LONG_CONST(PDO_ATTR_EMULATE_PREPARES));
+-	zend_string *const_ATTR_EMULATE_PREPARES_name = zend_string_init_interned("ATTR_EMULATE_PREPARES", sizeof("ATTR_EMULATE_PREPARES") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_EMULATE_PREPARES_name, &const_ATTR_EMULATE_PREPARES_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_EMULATE_PREPARES_name);
+-
+-	zval const_ATTR_DEFAULT_FETCH_MODE_value;
+-	ZVAL_LONG(&const_ATTR_DEFAULT_FETCH_MODE_value, LONG_CONST(PDO_ATTR_DEFAULT_FETCH_MODE));
+-	zend_string *const_ATTR_DEFAULT_FETCH_MODE_name = zend_string_init_interned("ATTR_DEFAULT_FETCH_MODE", sizeof("ATTR_DEFAULT_FETCH_MODE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DEFAULT_FETCH_MODE_name, &const_ATTR_DEFAULT_FETCH_MODE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DEFAULT_FETCH_MODE_name);
+-
+-	zval const_ATTR_DEFAULT_STR_PARAM_value;
+-	ZVAL_LONG(&const_ATTR_DEFAULT_STR_PARAM_value, LONG_CONST(PDO_ATTR_DEFAULT_STR_PARAM));
+-	zend_string *const_ATTR_DEFAULT_STR_PARAM_name = zend_string_init_interned("ATTR_DEFAULT_STR_PARAM", sizeof("ATTR_DEFAULT_STR_PARAM") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ATTR_DEFAULT_STR_PARAM_name, &const_ATTR_DEFAULT_STR_PARAM_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ATTR_DEFAULT_STR_PARAM_name);
+-
+-	zval const_ERRMODE_SILENT_value;
+-	ZVAL_LONG(&const_ERRMODE_SILENT_value, LONG_CONST(PDO_ERRMODE_SILENT));
+-	zend_string *const_ERRMODE_SILENT_name = zend_string_init_interned("ERRMODE_SILENT", sizeof("ERRMODE_SILENT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_SILENT_name, &const_ERRMODE_SILENT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_SILENT_name);
+-
+-	zval const_ERRMODE_WARNING_value;
+-	ZVAL_LONG(&const_ERRMODE_WARNING_value, LONG_CONST(PDO_ERRMODE_WARNING));
+-	zend_string *const_ERRMODE_WARNING_name = zend_string_init_interned("ERRMODE_WARNING", sizeof("ERRMODE_WARNING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_WARNING_name, &const_ERRMODE_WARNING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_WARNING_name);
+-
+-	zval const_ERRMODE_EXCEPTION_value;
+-	ZVAL_LONG(&const_ERRMODE_EXCEPTION_value, LONG_CONST(PDO_ERRMODE_EXCEPTION));
+-	zend_string *const_ERRMODE_EXCEPTION_name = zend_string_init_interned("ERRMODE_EXCEPTION", sizeof("ERRMODE_EXCEPTION") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERRMODE_EXCEPTION_name, &const_ERRMODE_EXCEPTION_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERRMODE_EXCEPTION_name);
+-
+-	zval const_CASE_NATURAL_value;
+-	ZVAL_LONG(&const_CASE_NATURAL_value, LONG_CONST(PDO_CASE_NATURAL));
+-	zend_string *const_CASE_NATURAL_name = zend_string_init_interned("CASE_NATURAL", sizeof("CASE_NATURAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_NATURAL_name, &const_CASE_NATURAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_NATURAL_name);
+-
+-	zval const_CASE_LOWER_value;
+-	ZVAL_LONG(&const_CASE_LOWER_value, LONG_CONST(PDO_CASE_LOWER));
+-	zend_string *const_CASE_LOWER_name = zend_string_init_interned("CASE_LOWER", sizeof("CASE_LOWER") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_LOWER_name, &const_CASE_LOWER_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_LOWER_name);
+-
+-	zval const_CASE_UPPER_value;
+-	ZVAL_LONG(&const_CASE_UPPER_value, LONG_CONST(PDO_CASE_UPPER));
+-	zend_string *const_CASE_UPPER_name = zend_string_init_interned("CASE_UPPER", sizeof("CASE_UPPER") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CASE_UPPER_name, &const_CASE_UPPER_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CASE_UPPER_name);
+-
+-	zval const_NULL_NATURAL_value;
+-	ZVAL_LONG(&const_NULL_NATURAL_value, LONG_CONST(PDO_NULL_NATURAL));
+-	zend_string *const_NULL_NATURAL_name = zend_string_init_interned("NULL_NATURAL", sizeof("NULL_NATURAL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_NATURAL_name, &const_NULL_NATURAL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_NATURAL_name);
+-
+-	zval const_NULL_EMPTY_STRING_value;
+-	ZVAL_LONG(&const_NULL_EMPTY_STRING_value, LONG_CONST(PDO_NULL_EMPTY_STRING));
+-	zend_string *const_NULL_EMPTY_STRING_name = zend_string_init_interned("NULL_EMPTY_STRING", sizeof("NULL_EMPTY_STRING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_EMPTY_STRING_name, &const_NULL_EMPTY_STRING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_EMPTY_STRING_name);
+-
+-	zval const_NULL_TO_STRING_value;
+-	ZVAL_LONG(&const_NULL_TO_STRING_value, LONG_CONST(PDO_NULL_TO_STRING));
+-	zend_string *const_NULL_TO_STRING_name = zend_string_init_interned("NULL_TO_STRING", sizeof("NULL_TO_STRING") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_NULL_TO_STRING_name, &const_NULL_TO_STRING_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_NULL_TO_STRING_name);
+-
+-	zval const_ERR_NONE_value;
+-	zend_string *const_ERR_NONE_value_str = zend_string_init(PDO_ERR_NONE, strlen(PDO_ERR_NONE), 1);
+-	ZVAL_STR(&const_ERR_NONE_value, const_ERR_NONE_value_str);
+-	zend_string *const_ERR_NONE_name = zend_string_init_interned("ERR_NONE", sizeof("ERR_NONE") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_ERR_NONE_name, &const_ERR_NONE_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_ERR_NONE_name);
+-
+-	zval const_FETCH_ORI_NEXT_value;
+-	ZVAL_LONG(&const_FETCH_ORI_NEXT_value, LONG_CONST(PDO_FETCH_ORI_NEXT));
+-	zend_string *const_FETCH_ORI_NEXT_name = zend_string_init_interned("FETCH_ORI_NEXT", sizeof("FETCH_ORI_NEXT") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_NEXT_name, &const_FETCH_ORI_NEXT_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_NEXT_name);
+-
+-	zval const_FETCH_ORI_PRIOR_value;
+-	ZVAL_LONG(&const_FETCH_ORI_PRIOR_value, LONG_CONST(PDO_FETCH_ORI_PRIOR));
+-	zend_string *const_FETCH_ORI_PRIOR_name = zend_string_init_interned("FETCH_ORI_PRIOR", sizeof("FETCH_ORI_PRIOR") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_PRIOR_name, &const_FETCH_ORI_PRIOR_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_PRIOR_name);
+-
+-	zval const_FETCH_ORI_FIRST_value;
+-	ZVAL_LONG(&const_FETCH_ORI_FIRST_value, LONG_CONST(PDO_FETCH_ORI_FIRST));
+-	zend_string *const_FETCH_ORI_FIRST_name = zend_string_init_interned("FETCH_ORI_FIRST", sizeof("FETCH_ORI_FIRST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_FIRST_name, &const_FETCH_ORI_FIRST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_FIRST_name);
+-
+-	zval const_FETCH_ORI_LAST_value;
+-	ZVAL_LONG(&const_FETCH_ORI_LAST_value, LONG_CONST(PDO_FETCH_ORI_LAST));
+-	zend_string *const_FETCH_ORI_LAST_name = zend_string_init_interned("FETCH_ORI_LAST", sizeof("FETCH_ORI_LAST") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_LAST_name, &const_FETCH_ORI_LAST_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_LAST_name);
+-
+-	zval const_FETCH_ORI_ABS_value;
+-	ZVAL_LONG(&const_FETCH_ORI_ABS_value, LONG_CONST(PDO_FETCH_ORI_ABS));
+-	zend_string *const_FETCH_ORI_ABS_name = zend_string_init_interned("FETCH_ORI_ABS", sizeof("FETCH_ORI_ABS") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_ABS_name, &const_FETCH_ORI_ABS_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_ABS_name);
+-
+-	zval const_FETCH_ORI_REL_value;
+-	ZVAL_LONG(&const_FETCH_ORI_REL_value, LONG_CONST(PDO_FETCH_ORI_REL));
+-	zend_string *const_FETCH_ORI_REL_name = zend_string_init_interned("FETCH_ORI_REL", sizeof("FETCH_ORI_REL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_FETCH_ORI_REL_name, &const_FETCH_ORI_REL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_FETCH_ORI_REL_name);
+-
+-	zval const_CURSOR_FWDONLY_value;
+-	ZVAL_LONG(&const_CURSOR_FWDONLY_value, LONG_CONST(PDO_CURSOR_FWDONLY));
+-	zend_string *const_CURSOR_FWDONLY_name = zend_string_init_interned("CURSOR_FWDONLY", sizeof("CURSOR_FWDONLY") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURSOR_FWDONLY_name, &const_CURSOR_FWDONLY_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURSOR_FWDONLY_name);
+-
+-	zval const_CURSOR_SCROLL_value;
+-	ZVAL_LONG(&const_CURSOR_SCROLL_value, LONG_CONST(PDO_CURSOR_SCROLL));
+-	zend_string *const_CURSOR_SCROLL_name = zend_string_init_interned("CURSOR_SCROLL", sizeof("CURSOR_SCROLL") - 1, 1);
+-	zend_declare_class_constant_ex(class_entry, const_CURSOR_SCROLL_name, &const_CURSOR_SCROLL_value, ZEND_ACC_PUBLIC, NULL);
+-	zend_string_release(const_CURSOR_SCROLL_name);
+-
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(&class_entry->function_table, "__construct", sizeof("__construct") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+ 	return class_entry;
+ }

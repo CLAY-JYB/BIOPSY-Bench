@@ -11,7 +11,7 @@ from ._common import (
 # enforceConflicts fatal). Strip vm from combos that include flattening so
 # rt_combo_all and rt_kitchen_sink can actually run end-to-end. Dedicated
 # vm tests live in cases/vm.py.
-_COMBO_PASSES         = [p for p in PASSES              if p != "vm"]
+_COMBO_PASSES         = [p for p in PASSES if p != "vm"]
 _COMBO_PASSES_W_ADEC  = [p for p in ALL_PASSES_WITH_ADEC if p != "vm"]
 
 

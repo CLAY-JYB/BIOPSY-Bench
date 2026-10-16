@@ -1,0 +1,503 @@
+diff --git a/sapi/fuzzer/README.md b/sapi/fuzzer/README.md
+index ee2d0ee4..f79baa6c 100644
+--- a/sapi/fuzzer/README.md
++++ b/sapi/fuzzer/README.md
+@@ -1,7 +1,7 @@
+ Fuzzing SAPI for PHP
+ --------------------
+ 
+-The following `./configure` options can be used to enable the fuzzing SAPI, as well as all available fuzzers. If you don't build the exif/json/mbstring extensions, fuzzers for these extensions will not be built.
++The following `./configure` options can be used to enable the fuzzing SAPI, as well as all availablefuzzers. If you don't build the exif/json/mbstring extensions, fuzzers for these extensions will not be built.
+ 
+ ```sh
+ CC=clang CXX=clang++ \
+@@ -10,15 +10,12 @@ CC=clang CXX=clang++ \
+     --enable-fuzzer \
+     --with-pic \
+     --enable-debug-assertions \
+-    --enable-address-sanitizer \
+     --enable-exif \
+     --enable-mbstring
+ ```
+ 
+ The `--with-pic` option is required to avoid a linking failure. The `--enable-debug-assertions` option can be used to enable debug assertions despite the use of a release build.
+ 
+-You can combine fuzzing with `--enable-address-sanitizer`, `--enable-undefined-sanitizer` or `--enable-memory-sanitizer`. The first two options can also be used together.
+-
+ You will need a recent version of clang that supports the `-fsanitize=fuzzer-no-link` option.
+ 
+ When running `make` it creates these binaries in `sapi/fuzzer/`:
+@@ -28,11 +25,8 @@ When running `make` it creates these binaries in `sapi/fuzzer/`:
+ * `php-fuzz-unserializehash`: Fuzzing unserialize() for HashContext objects
+ * `php-fuzz-json`: Fuzzing JSON parser (requires --enable-json)
+ * `php-fuzz-exif`: Fuzzing `exif_read_data()` function (requires --enable-exif)
+-* `php-fuzz-mbstring`: Fuzzing `mb_convert_encoding()` (requires `--enable-mbstring`)
+-* `php-fuzz-mbregex`: Fuzzing `mb_ereg[i]()` (requires --enable-mbstring)
++* `php-fuzz-mbstring`: Fuzzing `mb_ereg[i]()` (requires --enable-mbstring)
+ * `php-fuzz-execute`: Fuzzing the executor
+-* `php-fuzz-function-jit`: Fuzzing the function JIT (requires --enable-opcache)
+-* `php-fuzz-tracing-jit`: Fuzzing the tracing JIT (requires --enable-opcache)
+ 
+ Some fuzzers have a seed corpus in `sapi/fuzzer/corpus`. You can use it as follows:
+ 
+@@ -66,21 +60,7 @@ sapi/fuzzer/php-fuzz-parser -merge=1 ./my-parser-corpus sapi/fuzzer/corpus/parse
+ sapi/fuzzer/php-fuzz-parser -only_ascii=1 ./my-parser-corpus
+ ```
+ 
+-For the execute, function-jit and tracing-jit fuzzers, a corpus may be generated from any set of test files:
+-
+-```sh
+-sapi/cli/php sapi/fuzzer/generate_execute_corpus.php ./execute-corpus Zend/tests ext/opcache/tests/jit
+-sapi/fuzzer/php-fuzzer-function-jit ./execute-corpus
+-```
+-
+-For the mbstring fuzzer, a dictionary of encodings should be generated first:
+-
+-```sh
+-sapi/cli/php sapi/fuzzer/generate_mbstring_dict.php
+-sapi/fuzzer/php-fuzz-mbstring -dict=$PWD/sapi/fuzzer/dict/mbstring ./my-mbstring-corpus
+-```
+-
+-For the mbregex fuzzer, you may want to build the libonig dependency with instrumentation. At this time, libonig is not clean under ubsan, so only the fuzzer and address sanitizers may be used.
++For the mbstring fuzzer, you may want to build the libonig dependency with instrumentation. At this time, libonig is not clean under ubsan, so only the fuzzer and address sanitizers may be used.
+ 
+ ```sh
+ git clone https://github.com/kkos/oniguruma.git
+diff --git a/sapi/fuzzer/config.m4 b/sapi/fuzzer/config.m4
+index aac06d18..92327fc1 100644
+--- a/sapi/fuzzer/config.m4
++++ b/sapi/fuzzer/config.m4
+@@ -6,6 +6,12 @@ PHP_ARG_ENABLE([fuzzer],,
+   [no],
+   [no])
+ 
++PHP_ARG_ENABLE([fuzzer-msan],,
++  [AS_HELP_STRING([--enable-fuzzer-msan],
++    [Enable msan instead of asan/ubsan when fuzzing])],
++  [no],
++  [no])
++
+ dnl For newer clang versions see https://llvm.org/docs/LibFuzzer.html#fuzzer-usage
+ dnl for relevant flags.
+ 
+@@ -33,6 +39,22 @@ if test "$PHP_FUZZER" != "no"; then
+     AX_CHECK_COMPILE_FLAG([-fsanitize=fuzzer-no-link], [
+       CFLAGS="$CFLAGS -fsanitize=fuzzer-no-link"
+       CXXFLAGS="$CXXFLAGS -fsanitize=fuzzer-no-link"
++
++      if test "$PHP_FUZZER_MSAN" = "yes"; then
++        CFLAGS="$CFLAGS -fsanitize=memory -fsanitize-memory-track-origins"
++        CXXFLAGS="$CXXFLAGS -fsanitize=memory -fsanitize-memory-track-origins"
++      else
++        CFLAGS="$CFLAGS -fsanitize=address"
++        CXXFLAGS="$CXXFLAGS -fsanitize=address"
++
++        dnl Don't include -fundefined in CXXFLAGS, because that would also require linking
++        dnl with a C++ compiler.
++        dnl Disable object-size sanitizer, because it is incompatible with our zend_function
++        dnl union, and this can't be easily fixed.
++        dnl We need to specify -fno-sanitize-recover=undefined here, otherwise ubsan warnings
++        dnl will not be considered failures by the fuzzer.
++        CFLAGS="$CFLAGS -fsanitize=undefined -fno-sanitize=object-size -fno-sanitize-recover=undefined"
++      fi
+     ],[
+       AC_MSG_ERROR(Compiler doesn't support -fsanitize=fuzzer-no-link)
+     ])
+@@ -54,8 +76,6 @@ if test "$PHP_FUZZER" != "no"; then
+ 
+   PHP_FUZZER_TARGET([parser], PHP_FUZZER_PARSER_OBJS)
+   PHP_FUZZER_TARGET([execute], PHP_FUZZER_EXECUTE_OBJS)
+-  PHP_FUZZER_TARGET([function-jit], PHP_FUZZER_FUNCTION_JIT_OBJS)
+-  PHP_FUZZER_TARGET([tracing-jit], PHP_FUZZER_TRACING_JIT_OBJS)
+   PHP_FUZZER_TARGET([unserialize], PHP_FUZZER_UNSERIALIZE_OBJS)
+   PHP_FUZZER_TARGET([unserializehash], PHP_FUZZER_UNSERIALIZEHASH_OBJS)
+   PHP_FUZZER_TARGET([json], PHP_FUZZER_JSON_OBJS)
+@@ -65,9 +85,6 @@ if test "$PHP_FUZZER" != "no"; then
+   fi
+   if test -n "$enable_mbstring" && test "$enable_mbstring" != "no"; then
+     PHP_FUZZER_TARGET([mbstring], PHP_FUZZER_MBSTRING_OBJS)
+-    if test -n "$enable_mbregex" && test "$enable_mbregex" != "no"; then
+-      PHP_FUZZER_TARGET([mbregex], PHP_FUZZER_MBREGEX_OBJS)
+-    fi
+   fi
+ 
+   PHP_SUBST(PHP_FUZZER_BINARIES)
+diff --git a/sapi/fuzzer/fuzzer-execute-common.h b/sapi/fuzzer/fuzzer-execute-common.h
+deleted file mode 100644
+index 3ecd27d3..00000000
+--- a/sapi/fuzzer/fuzzer-execute-common.h
++++ /dev/null
+@@ -1,166 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include <main/php.h>
+-
+-#if defined(__FreeBSD__)
+-# include <sys/sysctl.h>
+-#endif
+-
+-#include "fuzzer.h"
+-#include "fuzzer-sapi.h"
+-#include "zend_exceptions.h"
+-
+-#define FILE_NAME "/tmp/fuzzer.php"
+-#define MAX_STEPS 1000
+-#define MAX_SIZE (8 * 1024)
+-static uint32_t steps_left;
+-static bool bailed_out = false;
+-
+-/* Because the fuzzer is always compiled with clang,
+- * we can assume that we don't use global registers / hybrid VM. */
+-typedef int (ZEND_FASTCALL *opcode_handler_t)(zend_execute_data *);
+-
+-static zend_always_inline void fuzzer_bailout(void) {
+-	bailed_out = true;
+-	zend_bailout();
+-}
+-
+-static zend_always_inline void fuzzer_step(void) {
+-	if (--steps_left == 0) {
+-		/* Reset steps before bailing out, so code running after bailout (e.g. in
+-		 * destructors) will get another MAX_STEPS, rather than UINT32_MAX steps. */
+-		steps_left = MAX_STEPS;
+-		fuzzer_bailout();
+-	}
+-}
+-
+-static void (*orig_execute_ex)(zend_execute_data *execute_data);
+-
+-static void fuzzer_execute_ex(zend_execute_data *execute_data) {
+-	while (1) {
+-		int ret;
+-		fuzzer_step();
+-		if ((ret = ((opcode_handler_t) EX(opline)->handler)(execute_data)) != 0) {
+-			if (ret > 0) {
+-				execute_data = EG(current_execute_data);
+-			} else {
+-				return;
+-			}
+-		}
+-	}
+-}
+-
+-static zend_op_array *(*orig_compile_string)(
+-		zend_string *source_string, const char *filename, zend_compile_position position);
+-
+-static zend_op_array *fuzzer_compile_string(
+-		zend_string *str, const char *filename, zend_compile_position position) {
+-	if (ZSTR_LEN(str) > MAX_SIZE) {
+-		/* Avoid compiling huge inputs via eval(). */
+-		fuzzer_bailout();
+-	}
+-
+-	return orig_compile_string(str, filename, position);
+-}
+-
+-static void (*orig_execute_internal)(zend_execute_data *execute_data, zval *return_value);
+-
+-static void fuzzer_execute_internal(zend_execute_data *execute_data, zval *return_value) {
+-	fuzzer_step();
+-
+-	uint32_t num_args = ZEND_CALL_NUM_ARGS(execute_data);
+-	for (uint32_t i = 0; i < num_args; i++) {
+-		/* Some internal functions like preg_replace() may be slow on large inputs.
+-		 * Limit the maximum size of string inputs. */
+-		zval *arg = ZEND_CALL_VAR_NUM(execute_data, i);
+-		if (Z_TYPE_P(arg) == IS_STRING && Z_STRLEN_P(arg) > MAX_SIZE) {
+-			fuzzer_bailout();
+-		}
+-	}
+-
+-	orig_execute_internal(execute_data, return_value);
+-}
+-
+-static void fuzzer_init_php_for_execute(const char *extra_ini) {
+-	/* Compilation will often trigger fatal errors.
+-	 * Use tracked allocation mode to avoid leaks in that case. */
+-	putenv("USE_TRACKED_ALLOC=1");
+-
+-	/* Just like other SAPIs, ignore SIGPIPEs. */
+-	signal(SIGPIPE, SIG_IGN);
+-
+-	fuzzer_init_php(extra_ini);
+-
+-	orig_execute_ex = zend_execute_ex;
+-	zend_execute_ex = fuzzer_execute_ex;
+-	orig_execute_internal = zend_execute_internal ? zend_execute_internal : execute_internal;
+-	zend_execute_internal = fuzzer_execute_internal;
+-	orig_compile_string = zend_compile_string;
+-	zend_compile_string = fuzzer_compile_string;
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED static void create_file(void) {
+-	/* For opcache_invalidate() to work, the dummy file name used for fuzzing needs to
+-	 * actually exist. */
+-	FILE *f = fopen(FILE_NAME, "w");
+-	fclose(f);
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED static void opcache_invalidate(void) {
+-	steps_left = MAX_STEPS;
+-	zend_exception_save();
+-	zval retval, func, args[2];
+-	ZVAL_STRING(&func, "opcache_invalidate");
+-	ZVAL_STRING(&args[0], FILE_NAME);
+-	ZVAL_TRUE(&args[1]);
+-	call_user_function(CG(function_table), NULL, &func, &retval, 2, args);
+-	ZEND_ASSERT(Z_TYPE(retval) == IS_TRUE);
+-	zval_ptr_dtor(&args[0]);
+-	zval_ptr_dtor(&retval);
+-	zval_ptr_dtor(&func);
+-	zend_exception_restore();
+-}
+-
+-ZEND_ATTRIBUTE_UNUSED char *get_opcache_path(void) {
+-	/* Try relative to cwd. */
+-	char *p = realpath("modules/opcache.so", NULL);
+-	if (p) {
+-		return p;
+-	}
+-
+-	/* Try relative to binary location. */
+-	char path[MAXPATHLEN];
+-#if defined(__FreeBSD__)
+-	size_t pathlen = sizeof(path);
+-	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+-	if (sysctl(mib, 4, path, &pathlen, NULL, 0) < 0) {
+-#else
+-	if (readlink("/proc/self/exe", path, sizeof(path)) < 0) {
+-#endif
+-		ZEND_ASSERT(0 && "Failed to get binary path");
+-		return NULL;
+-	}
+-
+-	/* Get basename. */
+-	char *last_sep = strrchr(path, '/');
+-	if (last_sep) {
+-		*last_sep = '\0';
+-	}
+-
+-	strlcat(path, "/modules/opcache.so", sizeof(path));
+-	return realpath(path, NULL);
+-}
+diff --git a/sapi/fuzzer/fuzzer-execute.c b/sapi/fuzzer/fuzzer-execute.c
+index aa456a17..abc5ebff 100644
+--- a/sapi/fuzzer/fuzzer-execute.c
++++ b/sapi/fuzzer/fuzzer-execute.c
+@@ -14,7 +14,70 @@
+    +----------------------------------------------------------------------+
+  */
+ 
+-#include "fuzzer-execute-common.h"
++#include <main/php.h>
++
++#include "fuzzer.h"
++#include "fuzzer-sapi.h"
++
++#define MAX_STEPS 1000
++#define MAX_SIZE (8 * 1024)
++static uint32_t steps_left;
++
++/* Because the fuzzer is always compiled with clang,
++ * we can assume that we don't use global registers / hybrid VM. */
++typedef int (ZEND_FASTCALL *opcode_handler_t)(zend_execute_data *);
++
++static zend_always_inline void fuzzer_step(void) {
++	if (--steps_left == 0) {
++		/* Reset steps before bailing out, so code running after bailout (e.g. in
++		 * destructors) will get another MAX_STEPS, rather than UINT32_MAX steps. */
++		steps_left = MAX_STEPS;
++		zend_bailout();
++	}
++}
++
++static void fuzzer_execute_ex(zend_execute_data *execute_data) {
++	while (1) {
++		int ret;
++		fuzzer_step();
++		if ((ret = ((opcode_handler_t) EX(opline)->handler)(execute_data)) != 0) {
++			if (ret > 0) {
++				execute_data = EG(current_execute_data);
++			} else {
++				return;
++			}
++		}
++	}
++}
++
++static zend_op_array *(*orig_compile_string)(zend_string *source_string, const char *filename);
++
++static zend_op_array *fuzzer_compile_string(zend_string *str, const char *filename) {
++	if (ZSTR_LEN(str) > MAX_SIZE) {
++		/* Avoid compiling huge inputs via eval(). */
++		zend_bailout();
++	}
++
++	return orig_compile_string(str, filename);
++}
++
++static void (*orig_execute_internal)(zend_execute_data *execute_data, zval *return_value);
++
++static void fuzzer_execute_internal(zend_execute_data *execute_data, zval *return_value) {
++	fuzzer_step();
++
++	uint32_t num_args = ZEND_CALL_NUM_ARGS(execute_data);
++	for (uint32_t i = 0; i < num_args; i++) {
++		/* Some internal functions like preg_replace() may be slow on large inputs.
++		 * Limit the maximum size of string inputs. */
++		zval *arg = ZEND_CALL_VAR_NUM(execute_data, i);
++		if (Z_TYPE_P(arg) == IS_STRING && Z_STRLEN_P(arg) > MAX_SIZE) {
++			zend_bailout();
++		}
++	}
++
++	orig_execute_internal(execute_data, return_value);
++}
+ 
+ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ 	if (Size > MAX_SIZE) {
+@@ -24,13 +87,27 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ 	}
+ 
+ 	steps_left = MAX_STEPS;
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, /* before_shutdown */ NULL);
++	fuzzer_do_request_from_buffer("/fuzzer.php", (const char *) Data, Size, /* execute */ 1);
+ 
+ 	return 0;
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php_for_execute(NULL);
++	/* Compilation will often trigger fatal errors.
++	 * Use tracked allocation mode to avoid leaks in that case. */
++	putenv("USE_TRACKED_ALLOC=1");
++
++	/* Just like other SAPIs, ignore SIGPIPEs. */
++	signal(SIGPIPE, SIG_IGN);
++
++	fuzzer_init_php();
++
++	zend_execute_ex = fuzzer_execute_ex;
++	orig_execute_internal = zend_execute_internal ? zend_execute_internal : execute_internal;
++	zend_execute_internal = fuzzer_execute_internal;
++	orig_compile_string = zend_compile_string;
++	zend_compile_string = fuzzer_compile_string;
++
++	/* fuzzer_shutdown_php(); */
+ 	return 0;
+ }
+diff --git a/sapi/fuzzer/fuzzer-exif.c b/sapi/fuzzer/fuzzer-exif.c
+index cb16bb90..8cf1ce06 100644
+--- a/sapi/fuzzer/fuzzer-exif.c
++++ b/sapi/fuzzer/fuzzer-exif.c
+@@ -64,7 +64,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/fuzzer-function-jit.c b/sapi/fuzzer/fuzzer-function-jit.c
+deleted file mode 100644
+index c637bcfa..00000000
+--- a/sapi/fuzzer/fuzzer-function-jit.c
++++ /dev/null
+@@ -1,68 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Authors: Nikita Popov <nikic@php.net>                                |
+-   +----------------------------------------------------------------------+
+- */
+-
+-#include "fuzzer-execute-common.h"
+-
+-int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+-	if (Size > MAX_SIZE) {
+-		/* Large inputs have a large impact on fuzzer performance,
+-		 * but are unlikely to be necessary to reach new codepaths. */
+-		return 0;
+-	}
+-
+-	zend_string *jit_option = zend_string_init("opcache.jit", sizeof("opcache.jit") - 1, 1);
+-
+-	/* First run without JIT to determine whether we bail out. We should not run JITed code if
+-	 * we bail out here, as the JIT code may loop infinitely. */
+-	steps_left = MAX_STEPS;
+-	bailed_out = false;
+-	zend_alter_ini_entry_chars(
+-		jit_option, "off", sizeof("off")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-	fuzzer_do_request_from_buffer(
+-		FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-
+-	if (!bailed_out) {
+-		steps_left = MAX_STEPS;
+-		zend_alter_ini_entry_chars(jit_option,
+-			"function", sizeof("function")-1, PHP_INI_USER, PHP_INI_STAGE_RUNTIME);
+-		zend_execute_ex = orig_execute_ex;
+-		fuzzer_do_request_from_buffer(
+-			FILE_NAME, (const char *) Data, Size, /* execute */ 1, opcache_invalidate);
+-		zend_execute_ex = fuzzer_execute_ex;
+-	}
+-
+-	zend_string_release(jit_option);
+-
+-	return 0;
+-}
+-
+-int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	char *opcache_path = get_opcache_path();
+-	assert(opcache_path && "Failed to determine opcache path");
+-
+-	char ini_buf[512];
+-	snprintf(ini_buf, sizeof(ini_buf),
+-		"zend_extension=%s\n"
+-		"opcache.validate_timestamps=0\n"
+-		"opcache.file_update_protection=0\n"
+-		"opcache.jit_buffer_size=256M",
+-		opcache_path);
+-	free(opcache_path);
+-
+-	create_file();
+-	fuzzer_init_php_for_execute(ini_buf);
+-	return 0;
+-}
+diff --git a/sapi/fuzzer/fuzzer-json.c b/sapi/fuzzer/fuzzer-json.c
+index 4335598b..a154bc3b 100644
+--- a/sapi/fuzzer/fuzzer-json.c
++++ b/sapi/fuzzer/fuzzer-json.c
+@@ -55,7 +55,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;

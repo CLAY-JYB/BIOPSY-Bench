@@ -1,0 +1,242 @@
+diff --git a/ext/mysqli/tests/bug45289.phpt b/ext/mysqli/tests/bug45289.phpt
+index eb590681..8a72e351 100644
+--- a/ext/mysqli/tests/bug45289.phpt
++++ b/ext/mysqli/tests/bug45289.phpt
+@@ -25,7 +25,10 @@ require_once('skipifconnectfailure.inc');
+         printf("[003] [%d] %s\n", $stmt->errno, $stmt->error);
+ 
+     if ($res = $link->store_result()) {
+-        printf("[004] Can store result!\n");
++        if ($IS_MYSQLND)
++            printf("[004] Can store result!\n");
++        else
++            printf("[004] [007] http://bugs.mysql.com/bug.php?id=47485\n");
+     } else {
+         printf("[004] [%d] %s\n", $link->errno, $link->error);
+     }
+diff --git a/ext/mysqli/tests/bug46614.phpt b/ext/mysqli/tests/bug46614.phpt
+index 34c03585..1d2a4610 100644
+--- a/ext/mysqli/tests/bug46614.phpt
++++ b/ext/mysqli/tests/bug46614.phpt
+@@ -13,7 +13,6 @@ if (!defined("MYSQLI_ASYNC")) {
+ <?php
+ class MySQL_Ext extends mysqli{
+     protected $fooData = array();
+-    private $extData;
+ 
+     public function isEmpty()
+     {
+diff --git a/ext/mysqli/tests/bug49442.phpt b/ext/mysqli/tests/bug49442.phpt
+index e5741ead..f8829ae3 100644
+--- a/ext/mysqli/tests/bug49442.phpt
++++ b/ext/mysqli/tests/bug49442.phpt
+@@ -4,14 +4,14 @@ Bug #49422 (mysqlnd: mysqli_real_connect() and LOAD DATA INFILE crash)
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+ $link = mysqli_init();
+-if (!@my_mysqli_real_connect($link, $host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++if (!my_mysqli_real_connect($link, $host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf("skip Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ 
+-include_once "local_infile_tools.inc";
++include_once("local_infile_tools.inc");
+ if ($msg = check_local_infile_support($link, $engine))
+     die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
+ 
+@@ -23,7 +23,7 @@ mysqli.allow_persistent=1
+ mysqli.max_persistent=1
+ --FILE--
+ <?php
+-    include "connect.inc";
++    include ("connect.inc");
+ 
+     $link = mysqli_init();
+     if (!my_mysqli_real_connect($link, $host, $user, $passwd, $db, $port, $socket)) {
+@@ -63,49 +63,51 @@ mysqli.max_persistent=1
+     mysqli_query($link, "DELETE FROM test");
+     mysqli_close($link);
+ 
+-    /*
+-        mysqlnd makes a connection created through mysql_init()/mysqli_real_connect() always a 'persistent' one.
+-        At this point 'persistent' is not to be confused with what a user calls a 'persistent' - in this case
+-        'persistent' means that mysqlnd uses malloc() instead of emalloc(). nothing else. ext/mysqli will
+-        not consider it as a 'persistent' connection in a user sense, ext/mysqli will not apply max_persistent etc.
+-        It's only about malloc() vs. emalloc().
+-
+-        However, the bug is about malloc() and efree(). You can make mysqlnd use malloc() by either using
+-        pconnect or mysql_init() - so we should test pconnect as well.
+-    */
+-    $host = 'p:' . $host;
+-    if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-        printf("[007] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+-    }
++    if ($IS_MYSQLND) {
++        /*
++            mysqlnd makes a connection created through mysql_init()/mysqli_real_connect() always a 'persistent' one.
++            At this point 'persistent' is not to be confused with what a user calls a 'persistent' - in this case
++            'persistent' means that mysqlnd uses malloc() instead of emalloc(). nothing else. ext/mysqli will
++            not consider it as a 'persistent' connection in a user sense, ext/mysqli will not apply max_persistent etc.
++            Its only about malloc() vs. emalloc().
++
++            However, the bug is about malloc() and efree(). You can make make mysqlnd use malloc() by either using
++            pconnect or mysql_init() - so we should test pconnect as well..
++        */
++        $host = 'p:' . $host;
++        if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++            printf("[007] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
++        }
+ 
+-    /* bug happened during query processing */
+-    if (!@mysqli_query($link, sprintf("LOAD DATA LOCAL INFILE '%s'
+-        INTO TABLE test
+-        FIELDS TERMINATED BY ';' OPTIONALLY ENCLOSED BY '\''
+-        LINES TERMINATED BY '\n'",
+-        mysqli_real_escape_string($link, $file)))) {
+-        printf("[008] [%d] %s\n",  mysqli_errno($link), mysqli_error($link));
+-    }
++        /* bug happened during query processing */
++        if (!@mysqli_query($link, sprintf("LOAD DATA LOCAL INFILE '%s'
++            INTO TABLE test
++            FIELDS TERMINATED BY ';' OPTIONALLY ENCLOSED BY '\''
++            LINES TERMINATED BY '\n'",
++            mysqli_real_escape_string($link, $file)))) {
++            printf("[008] [%d] %s\n",  mysqli_errno($link), mysqli_error($link));
++        }
+ 
+-    /* we survived? that's good enough... */
++        /* we survived? that's good enough... */
+ 
+-    if (!$res = mysqli_query($link, "SELECT * FROM test ORDER BY id"))
+-        printf("[009] [%d] %s\n",  mysqli_errno($link), mysqli_error($link));
++        if (!$res = mysqli_query($link, "SELECT * FROM test ORDER BY id"))
++            printf("[009] [%d] %s\n",  mysqli_errno($link), mysqli_error($link));
+ 
+-    $i = 0;
+-    while ($row = mysqli_fetch_assoc($res)) {
+-        if (($row['id'] != $rows[$i]['id']) || ($row['label'] != $rows[$i]['label'])) {
+-            printf("[010] Wrong values, check manually!\n");
++        $i = 0;
++        while ($row = mysqli_fetch_assoc($res)) {
++            if (($row['id'] != $rows[$i]['id']) || ($row['label'] != $rows[$i]['label'])) {
++                printf("[010] Wrong values, check manually!\n");
++            }
++            $i++;
+         }
+-        $i++;
++        mysqli_close($link);
+     }
+-    mysqli_close($link);
+ 
+     print "done!";
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++	require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ array(2) {
+diff --git a/ext/mysqli/tests/bug51605.phpt b/ext/mysqli/tests/bug51605.phpt
+index 6a839e27..06b973a0 100644
+--- a/ext/mysqli/tests/bug51605.phpt
++++ b/ext/mysqli/tests/bug51605.phpt
+@@ -10,6 +10,7 @@ require_once('skipifconnectfailure.inc');
+ mysqli.max_links = 1
+ mysqli.allow_persistent = Off
+ mysqli.max_persistent = 0
++mysqli.reconnect = Off
+ --FILE--
+ <?php
+     include ("connect.inc");
+diff --git a/ext/mysqli/tests/bug51647.phpt b/ext/mysqli/tests/bug51647.phpt
+index fb7312ae..3e1e15a6 100644
+--- a/ext/mysqli/tests/bug51647.phpt
++++ b/ext/mysqli/tests/bug51647.phpt
+@@ -4,12 +4,13 @@ Bug #51647 (Certificate file without private key (pk in another file) doesn't wo
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
++require_once('skipifconnectfailure.inc');
++require_once("connect.inc");
+ 
+ if (!defined('MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT'))
+     die("skip Requires MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT");
+ 
+-if (!extension_loaded("openssl"))
++if ($IS_MYSQLND && !extension_loaded("openssl"))
+     die("skip PHP streams lack support for SSL. mysqli is compiled to use mysqlnd which uses PHP streams in turn.");
+ 
+ if (!($link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)))
+@@ -42,7 +43,7 @@ $link->close();
+ ?>
+ --FILE--
+ <?php
+-    include "connect.inc";
++    include ("connect.inc");
+ 
+     if (!is_object($link = mysqli_init()))
+         printf("[001] Cannot create link\n");
+diff --git a/ext/mysqli/tests/bug52891.phpt b/ext/mysqli/tests/bug52891.phpt
+index fc76f89b..1c287d79 100644
+--- a/ext/mysqli/tests/bug52891.phpt
++++ b/ext/mysqli/tests/bug52891.phpt
+@@ -5,6 +5,9 @@ mysqli
+ --SKIPIF--
+ <?php
+ require_once('skipifconnectfailure.inc');
++if (!$IS_MYSQLND) {
++    die("skip: test applies only to mysqlnd");
++}
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/mysqli/tests/bug53503.phpt b/ext/mysqli/tests/bug53503.phpt
+index 86ab2418..9e78ed80 100644
+--- a/ext/mysqli/tests/bug53503.phpt
++++ b/ext/mysqli/tests/bug53503.phpt
+@@ -4,23 +4,23 @@ Bug #53503 (mysqli::query returns false after successful LOAD DATA query)
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die("skip Cannot connect to MySQL");
+ 
+-include_once "local_infile_tools.inc";
++include_once("local_infile_tools.inc");
+ if ($msg = check_local_infile_support($link, $engine))
+     die(sprintf("skip %s, [%d] %s", $msg, $link->errno, $link->error));
+ 
+ mysqli_close($link);
++
+ ?>
+ --INI--
+ mysqli.allow_local_infile=1
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Connect failed, [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+@@ -50,7 +50,7 @@ mysqli.allow_local_infile=1
+ ?>
+ --CLEAN--
+ <?php
+-require_once 'connect.inc';
++require_once('connect.inc');
+ 
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+ 	printf("[clean] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",

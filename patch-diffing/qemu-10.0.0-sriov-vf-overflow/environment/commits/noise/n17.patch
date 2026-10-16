@@ -1,0 +1,588 @@
+diff --git a/include/hw/arm/aspeed_soc.h b/include/hw/arm/aspeed_soc.h
+index 849ba37f95..624d489e0d 100644
+--- a/include/hw/arm/aspeed_soc.h
++++ b/include/hw/arm/aspeed_soc.h
+@@ -164,6 +164,7 @@ struct AspeedSoCClass {
+     const hwaddr *memmap;
+     uint32_t num_cpus;
+     qemu_irq (*get_irq)(AspeedSoCState *s, int dev);
++    bool (*boot_from_emmc)(AspeedSoCState *s);
+ };
+ 
+ const char *aspeed_soc_cpu_type(AspeedSoCClass *sc);
+diff --git a/include/hw/arm/bcm2835_peripherals.h b/include/hw/arm/bcm2835_peripherals.h
+index 636203baa5..1eeaeec9e0 100644
+--- a/include/hw/arm/bcm2835_peripherals.h
++++ b/include/hw/arm/bcm2835_peripherals.h
+@@ -33,6 +33,7 @@
+ #include "hw/usb/hcd-dwc2.h"
+ #include "hw/ssi/bcm2835_spi.h"
+ #include "hw/i2c/bcm2835_i2c.h"
++#include "hw/nvram/bcm2835_otp.h"
+ #include "hw/misc/unimp.h"
+ #include "qom/object.h"
+ 
+@@ -71,7 +72,7 @@ struct BCMSocPeripheralBaseState {
+     BCM2835SPIState spi[1];
+     BCM2835I2CState i2c[3];
+     OrIRQState orgated_i2c_irq;
+-    UnimplementedDeviceState otp;
++    BCM2835OTPState otp;
+     UnimplementedDeviceState dbus;
+     UnimplementedDeviceState ave0;
+     UnimplementedDeviceState v3d;
+diff --git a/include/hw/arm/raspberrypi-fw-defs.h b/include/hw/arm/raspberrypi-fw-defs.h
+index 8b404e0533..60b8e5b451 100644
+--- a/include/hw/arm/raspberrypi-fw-defs.h
++++ b/include/hw/arm/raspberrypi-fw-defs.h
+@@ -56,6 +56,7 @@ enum rpi_firmware_property_tag {
+     RPI_FWREQ_GET_THROTTLED =                          0x00030046,
+     RPI_FWREQ_GET_CLOCK_MEASURED =                     0x00030047,
+     RPI_FWREQ_NOTIFY_REBOOT =                          0x00030048,
++    RPI_FWREQ_GET_PRIVATE_KEY =                        0x00030081,
+     RPI_FWREQ_SET_CLOCK_STATE =                        0x00038001,
+     RPI_FWREQ_SET_CLOCK_RATE =                         0x00038002,
+     RPI_FWREQ_SET_VOLTAGE =                            0x00038003,
+@@ -73,6 +74,7 @@ enum rpi_firmware_property_tag {
+     RPI_FWREQ_SET_PERIPH_REG =                         0x00038045,
+     RPI_FWREQ_GET_POE_HAT_VAL =                        0x00030049,
+     RPI_FWREQ_SET_POE_HAT_VAL =                        0x00038049,
++    RPI_FWREQ_SET_PRIVATE_KEY =                        0x00038081,
+     RPI_FWREQ_SET_POE_HAT_VAL_OLD =                    0x00030050,
+     RPI_FWREQ_NOTIFY_XHCI_RESET =                      0x00030058,
+     RPI_FWREQ_GET_REBOOT_FLAGS =                       0x00030064,
+diff --git a/include/hw/arm/smmu-common.h b/include/hw/arm/smmu-common.h
+index 5ec2e6c1a4..d1a4a64551 100644
+--- a/include/hw/arm/smmu-common.h
++++ b/include/hw/arm/smmu-common.h
+@@ -37,6 +37,9 @@
+ #define VMSA_IDXMSK(isz, strd, lvl)         ((1ULL << \
+                                              VMSA_BIT_LVL(isz, strd, lvl)) - 1)
+ 
++#define CACHED_ENTRY_TO_ADDR(ent, addr)      ((ent)->entry.translated_addr + \
++                                             ((addr) & (ent)->entry.addr_mask))
++
+ /*
+  * Page table walk error types
+  */
+@@ -49,10 +52,18 @@ typedef enum {
+     SMMU_PTW_ERR_PERMISSION,  /* Permission fault */
+ } SMMUPTWEventType;
+ 
++/* SMMU Stage */
++typedef enum {
++    SMMU_STAGE_1 = 1,
++    SMMU_STAGE_2,
++    SMMU_NESTED,
++} SMMUStage;
++
+ typedef struct SMMUPTWEventInfo {
+-    int stage;
++    SMMUStage stage;
+     SMMUPTWEventType type;
+     dma_addr_t addr; /* fetched address that induced an abort, if any */
++    bool is_ipa_descriptor; /* src for fault in nested translation. */
+ } SMMUPTWEventInfo;
+ 
+ typedef struct SMMUTransTableInfo {
+@@ -67,6 +78,7 @@ typedef struct SMMUTLBEntry {
+     IOMMUTLBEntry entry;
+     uint8_t level;
+     uint8_t granule;
++    IOMMUAccessFlags parent_perm;
+ } SMMUTLBEntry;
+ 
+ /* Stage-2 configuration. */
+@@ -77,7 +89,7 @@ typedef struct SMMUS2Cfg {
+     bool record_faults;     /* Record fault events (S2R) */
+     uint8_t granule_sz;     /* Granule page shift (based on S2TG) */
+     uint8_t eff_ps;         /* Effective PA output range (based on S2PS) */
+-    uint16_t vmid;          /* Virtual Machine ID (S2VMID) */
++    int vmid;               /* Virtual Machine ID (S2VMID) */
+     uint64_t vttb;          /* Address of translation table base (S2TTB) */
+ } SMMUS2Cfg;
+ 
+@@ -88,7 +100,7 @@ typedef struct SMMUS2Cfg {
+  */
+ typedef struct SMMUTransCfg {
+     /* Shared fields between stage-1 and stage-2. */
+-    int stage;                 /* translation stage */
++    SMMUStage stage;           /* translation stage */
+     bool disabled;             /* smmu is disabled */
+     bool bypassed;             /* translation is bypassed */
+     bool aborted;              /* translation is aborted */
+@@ -101,7 +113,7 @@ typedef struct SMMUTransCfg {
+     uint64_t ttb;              /* TT base address */
+     uint8_t oas;               /* output address width */
+     uint8_t tbi;               /* Top Byte Ignore */
+-    uint16_t asid;
++    int asid;
+     SMMUTransTableInfo tt[2];
+     /* Used by stage-2 only. */
+     struct SMMUS2Cfg s2cfg;
+@@ -125,8 +137,8 @@ typedef struct SMMUPciBus {
+ 
+ typedef struct SMMUIOTLBKey {
+     uint64_t iova;
+-    uint16_t asid;
+-    uint16_t vmid;
++    int asid;
++    int vmid;
+     uint8_t tg;
+     uint8_t level;
+ } SMMUIOTLBKey;
+@@ -173,8 +185,16 @@ static inline uint16_t smmu_get_sid(SMMUDevice *sdev)
+  * smmu_ptw - Perform the page table walk for a given iova / access flags
+  * pair, according to @cfg translation config
+  */
+-int smmu_ptw(SMMUTransCfg *cfg, dma_addr_t iova, IOMMUAccessFlags perm,
+-             SMMUTLBEntry *tlbe, SMMUPTWEventInfo *info);
++int smmu_ptw(SMMUState *bs, SMMUTransCfg *cfg, dma_addr_t iova,
++             IOMMUAccessFlags perm, SMMUTLBEntry *tlbe,
++             SMMUPTWEventInfo *info);
++
++/*
++ * smmu_translate - Look for a translation in TLB, if not, do a PTW.
++ * Returns NULL on PTW error or incase of TLB permission errors.
++ */
++SMMUTLBEntry *smmu_translate(SMMUState *bs, SMMUTransCfg *cfg, dma_addr_t addr,
++                             IOMMUAccessFlags flag, SMMUPTWEventInfo *info);
+ 
+ /**
+  * select_tt - compute which translation table shall be used according to
+@@ -182,22 +202,24 @@ int smmu_ptw(SMMUTransCfg *cfg, dma_addr_t iova, IOMMUAccessFlags perm,
+  */
+ SMMUTransTableInfo *select_tt(SMMUTransCfg *cfg, dma_addr_t iova);
+ 
+-/* Return the iommu mr associated to @sid, or NULL if none */
+-IOMMUMemoryRegion *smmu_iommu_mr(SMMUState *s, uint32_t sid);
++/* Return the SMMUDevice associated to @sid, or NULL if none */
++SMMUDevice *smmu_find_sdev(SMMUState *s, uint32_t sid);
+ 
+ #define SMMU_IOTLB_MAX_SIZE 256
+ 
+ SMMUTLBEntry *smmu_iotlb_lookup(SMMUState *bs, SMMUTransCfg *cfg,
+                                 SMMUTransTableInfo *tt, hwaddr iova);
+ void smmu_iotlb_insert(SMMUState *bs, SMMUTransCfg *cfg, SMMUTLBEntry *entry);
+-SMMUIOTLBKey smmu_get_iotlb_key(uint16_t asid, uint16_t vmid, uint64_t iova,
++SMMUIOTLBKey smmu_get_iotlb_key(int asid, int vmid, uint64_t iova,
+                                 uint8_t tg, uint8_t level);
+ void smmu_iotlb_inv_all(SMMUState *s);
+-void smmu_iotlb_inv_asid(SMMUState *s, uint16_t asid);
+-void smmu_iotlb_inv_vmid(SMMUState *s, uint16_t vmid);
++void smmu_iotlb_inv_asid_vmid(SMMUState *s, int asid, int vmid);
++void smmu_iotlb_inv_vmid(SMMUState *s, int vmid);
++void smmu_iotlb_inv_vmid_s1(SMMUState *s, int vmid);
+ void smmu_iotlb_inv_iova(SMMUState *s, int asid, int vmid, dma_addr_t iova,
+                          uint8_t tg, uint64_t num_pages, uint8_t ttl);
+-
++void smmu_iotlb_inv_ipa(SMMUState *s, int vmid, dma_addr_t ipa, uint8_t tg,
++                        uint64_t num_pages, uint8_t ttl);
+ /* Unmap the range of all the notifiers registered to any IOMMU mr */
+ void smmu_inv_notifiers_all(SMMUState *s);
+ 
+diff --git a/include/hw/boards.h b/include/hw/boards.h
+index 73ad319d7d..ef6f18f2c1 100644
+--- a/include/hw/boards.h
++++ b/include/hw/boards.h
+@@ -413,6 +413,304 @@ struct MachineState {
+     struct NumaState *numa_state;
+ };
+ 
++/*
++ * The macros which follow are intended to facilitate the
++ * definition of versioned machine types, using a somewhat
++ * similar pattern across targets.
++ *
++ * For example, a macro that can be used to define versioned
++ * 'virt' machine types would look like:
++ *
++ *  #define DEFINE_VIRT_MACHINE_IMPL(latest, ...) \
++ *      static void MACHINE_VER_SYM(class_init, virt, __VA_ARGS__)( \
++ *          ObjectClass *oc, \
++ *          void *data) \
++ *      { \
++ *          MachineClass *mc = MACHINE_CLASS(oc); \
++ *          MACHINE_VER_SYM(options, virt, __VA_ARGS__)(mc); \
++ *          mc->desc = "QEMU " MACHINE_VER_STR(__VA_ARGS__) " Virtual Machine"; \
++ *          MACHINE_VER_DEPRECATION(__VA_ARGS__); \
++ *          if (latest) { \
++ *              mc->alias = "virt"; \
++ *          } \
++ *      } \
++ *      static const TypeInfo MACHINE_VER_SYM(info, virt, __VA_ARGS__) = { \
++ *          .name = MACHINE_VER_TYPE_NAME("virt", __VA_ARGS__), \
++ *          .parent = TYPE_VIRT_MACHINE, \
++ *          .class_init = MACHINE_VER_SYM(class_init, virt, __VA_ARGS__), \
++ *      }; \
++ *      static void MACHINE_VER_SYM(register, virt, __VA_ARGS__)(void) \
++ *      { \
++ *          MACHINE_VER_DELETION(__VA_ARGS__); \
++ *          type_register_static(&MACHINE_VER_SYM(info, virt, __VA_ARGS__)); \
++ *      } \
++ *      type_init(MACHINE_VER_SYM(register, virt, __VA_ARGS__));
++ *
++ * Following this, one (or more) helpers can be added for
++ * whichever scenarios need to be catered for with a machine:
++ *
++ *  // Normal 2 digit, marked as latest e.g. 'virt-9.0'
++ *  #define DEFINE_VIRT_MACHINE_LATEST(major, minor) \
++ *      DEFINE_VIRT_MACHINE_IMPL(true, major, minor)
++ *
++ *  // Normal 2 digit e.g. 'virt-9.0'
++ *  #define DEFINE_VIRT_MACHINE(major, minor) \
++ *      DEFINE_VIRT_MACHINE_IMPL(false, major, minor)
++ *
++ *  // Bugfix 3 digit e.g. 'virt-9.0.1'
++ *  #define DEFINE_VIRT_MACHINE_BUGFIX(major, minor, micro) \
++ *      DEFINE_VIRT_MACHINE_IMPL(false, major, minor, micro)
++ *
++ *  // Tagged 2 digit e.g. 'virt-9.0-extra'
++ *  #define DEFINE_VIRT_MACHINE_TAGGED(major, minor, tag) \
++ *      DEFINE_VIRT_MACHINE_IMPL(false, major, minor, _, tag)
++ *
++ *  // Tagged bugfix 2 digit e.g. 'virt-9.0.1-extra'
++ *  #define DEFINE_VIRT_MACHINE_TAGGED(major, minor, micro, tag) \
++ *      DEFINE_VIRT_MACHINE_IMPL(false, major, minor, micro, _, tag)
++ */
++
++/*
++ * Helper for dispatching different macros based on how
++ * many __VA_ARGS__ are passed. Supports 1 to 5 variadic
++ * arguments, with the called target able to be prefixed
++ * with 0 or more fixed arguments too. To be called thus:
++ *
++ *  _MACHINE_VER_PICK(__VA_ARGS,
++ *                    MACRO_MATCHING_5_ARGS,
++ *                    MACRO_MATCHING_4_ARGS,
++ *                    MACRO_MATCHING_3_ARGS,
++ *                    MACRO_MATCHING_2_ARGS,
++ *                    MACRO_MATCHING_1_ARG) (FIXED-ARG-1,
++ *                                           ...,
++ *                                           FIXED-ARG-N,
++ *                                           __VA_ARGS__)
++ */
++#define _MACHINE_VER_PICK(x1, x2, x3, x4, x5, x6, ...) x6
++
++/*
++ * Construct a human targeted machine version string.
++ *
++ * Can be invoked with various signatures
++ *
++ *  MACHINE_VER_STR(sym, prefix, major, minor)
++ *  MACHINE_VER_STR(sym, prefix, major, minor, micro)
++ *  MACHINE_VER_STR(sym, prefix, major, minor, _, tag)
++ *  MACHINE_VER_STR(sym, prefix, major, minor, micro, _, tag)
++ *
++ * Respectively emitting symbols with the format
++ *
++ *   "{major}.{minor}"
++ *   "{major}.{minor}-{tag}"
++ *   "{major}.{minor}.{micro}"
++ *   "{major}.{minor}.{micro}-{tag}"
++ */
++#define _MACHINE_VER_STR2(major, minor) \
++    #major "." #minor
++
++#define _MACHINE_VER_STR3(major, minor, micro) \
++    #major "." #minor "." #micro
++
++#define _MACHINE_VER_STR4(major, minor, _unused_, tag) \
++    #major "." #minor "-" #tag
++
++#define _MACHINE_VER_STR5(major, minor, micro, _unused_, tag) \
++    #major "." #minor "." #micro "-" #tag
++
++#define MACHINE_VER_STR(...) \
++    _MACHINE_VER_PICK(__VA_ARGS__, \
++                      _MACHINE_VER_STR5, \
++                      _MACHINE_VER_STR4, \
++                      _MACHINE_VER_STR3, \
++                      _MACHINE_VER_STR2) (__VA_ARGS__)
++
++
++/*
++ * Construct a QAPI type name for a versioned machine
++ * type
++ *
++ * Can be invoked with various signatures
++ *
++ *  MACHINE_VER_TYPE_NAME(prefix, major, minor)
++ *  MACHINE_VER_TYPE_NAME(prefix, major, minor, micro)
++ *  MACHINE_VER_TYPE_NAME(prefix, major, minor, _, tag)
++ *  MACHINE_VER_TYPE_NAME(prefix, major, minor, micro, _, tag)
++ *
++ * Respectively emitting symbols with the format
++ *
++ *   "{prefix}-{major}.{minor}"
++ *   "{prefix}-{major}.{minor}.{micro}"
++ *   "{prefix}-{major}.{minor}-{tag}"
++ *   "{prefix}-{major}.{minor}.{micro}-{tag}"
++ */
++#define _MACHINE_VER_TYPE_NAME2(prefix, major, minor)   \
++    prefix "-" #major "." #minor TYPE_MACHINE_SUFFIX
++
++#define _MACHINE_VER_TYPE_NAME3(prefix, major, minor, micro) \
++    prefix "-" #major "." #minor "." #micro TYPE_MACHINE_SUFFIX
++
++#define _MACHINE_VER_TYPE_NAME4(prefix, major, minor, _unused_, tag) \
++    prefix "-" #major "." #minor "-" #tag TYPE_MACHINE_SUFFIX
++
++#define _MACHINE_VER_TYPE_NAME5(prefix, major, minor, micro, _unused_, tag) \
++    prefix "-" #major "." #minor "." #micro "-" #tag TYPE_MACHINE_SUFFIX
++
++#define MACHINE_VER_TYPE_NAME(prefix, ...) \
++    _MACHINE_VER_PICK(__VA_ARGS__, \
++                      _MACHINE_VER_TYPE_NAME5, \
++                      _MACHINE_VER_TYPE_NAME4, \
++                      _MACHINE_VER_TYPE_NAME3, \
++                      _MACHINE_VER_TYPE_NAME2) (prefix, __VA_ARGS__)
++
++/*
++ * Construct a name for a versioned machine type that is
++ * suitable for use as a C symbol (function/variable/etc).
++ *
++ * Can be invoked with various signatures
++ *
++ *  MACHINE_VER_SYM(sym, prefix, major, minor)
++ *  MACHINE_VER_SYM(sym, prefix, major, minor, micro)
++ *  MACHINE_VER_SYM(sym, prefix, major, minor, _, tag)
++ *  MACHINE_VER_SYM(sym, prefix, major, minor, micro, _, tag)
++ *
++ * Respectively emitting symbols with the format
++ *
++ *   {prefix}_machine_{major}_{minor}_{sym}
++ *   {prefix}_machine_{major}_{minor}_{micro}_{sym}
++ *   {prefix}_machine_{major}_{minor}_{tag}_{sym}
++ *   {prefix}_machine_{major}_{minor}_{micro}_{tag}_{sym}
++ */
++#define _MACHINE_VER_SYM2(sym, prefix, major, minor) \
++    prefix ## _machine_ ## major ## _ ## minor ## _ ## sym
++
++#define _MACHINE_VER_SYM3(sym, prefix, major, minor, micro) \
++    prefix ## _machine_ ## major ## _ ## minor ## _ ## micro ## _ ## sym
++
++#define _MACHINE_VER_SYM4(sym, prefix, major, minor, _unused_, tag) \
++    prefix ## _machine_ ## major ## _ ## minor ## _ ## tag ## _ ## sym
++
++#define _MACHINE_VER_SYM5(sym, prefix, major, minor, micro, _unused_, tag) \
++    prefix ## _machine_ ## major ## _ ## minor ## _ ## micro ## _ ## tag ## _ ## sym
++
++#define MACHINE_VER_SYM(sym, prefix, ...) \
++    _MACHINE_VER_PICK(__VA_ARGS__, \
++                      _MACHINE_VER_SYM5, \
++                      _MACHINE_VER_SYM4, \
++                      _MACHINE_VER_SYM3, \
++                      _MACHINE_VER_SYM2) (sym, prefix, __VA_ARGS__)
++
++
++/*
++ * How many years/major releases for each phase
++ * of the life cycle. Assumes use of versioning
++ * scheme where major is bumped each year
++ */
++#define MACHINE_VER_DELETION_MAJOR 6
++#define MACHINE_VER_DEPRECATION_MAJOR 3
++
++/*
++ * Expands to a static string containing a deprecation
++ * message for a versioned machine type
++ */
++#define MACHINE_VER_DEPRECATION_MSG \
++    "machines more than " stringify(MACHINE_VER_DEPRECATION_MAJOR) \
++    " years old are subject to deletion after " \
++    stringify(MACHINE_VER_DELETION_MAJOR) " years"
++
++#define _MACHINE_VER_IS_EXPIRED_IMPL(cutoff, major, minor) \
++    (((QEMU_VERSION_MAJOR - major) > cutoff) || \
++     (((QEMU_VERSION_MAJOR - major) == cutoff) && \
++      (QEMU_VERSION_MINOR - minor) >= 0))
++
++#define _MACHINE_VER_IS_EXPIRED2(cutoff, major, minor) \
++    _MACHINE_VER_IS_EXPIRED_IMPL(cutoff, major, minor)
++#define _MACHINE_VER_IS_EXPIRED3(cutoff, major, minor, micro) \
++    _MACHINE_VER_IS_EXPIRED_IMPL(cutoff, major, minor)
++#define _MACHINE_VER_IS_EXPIRED4(cutoff, major, minor, _unused, tag) \
++    _MACHINE_VER_IS_EXPIRED_IMPL(cutoff, major, minor)
++#define _MACHINE_VER_IS_EXPIRED5(cutoff, major, minor, micro, _unused, tag)   \
++    _MACHINE_VER_IS_EXPIRED_IMPL(cutoff, major, minor)
++
++#define _MACHINE_IS_EXPIRED(cutoff, ...) \
++    _MACHINE_VER_PICK(__VA_ARGS__, \
++                      _MACHINE_VER_IS_EXPIRED5, \
++                      _MACHINE_VER_IS_EXPIRED4, \
++                      _MACHINE_VER_IS_EXPIRED3, \
++                      _MACHINE_VER_IS_EXPIRED2) (cutoff, __VA_ARGS__)
++
++/*
++ * Evaluates true when a machine type with (major, minor)
++ * or (major, minor, micro) version should be considered
++ * deprecated based on the current versioned machine type
++ * lifecycle rules
++ */
++#define MACHINE_VER_IS_DEPRECATED(...) \
++    _MACHINE_IS_EXPIRED(MACHINE_VER_DEPRECATION_MAJOR, __VA_ARGS__)
++
++/*
++ * Evaluates true when a machine type with (major, minor)
++ * or (major, minor, micro) version should be considered
++ * for deletion based on the current versioned machine type
++ * lifecycle rules
++ */
++#define MACHINE_VER_SHOULD_DELETE(...) \
++    _MACHINE_IS_EXPIRED(MACHINE_VER_DELETION_MAJOR, __VA_ARGS__)
++
++/*
++ * Sets the deprecation reason for a versioned machine based
++ * on its age
++ *
++ * This must be unconditionally used in the _class_init
++ * function for all machine types which support versioning.
++ *
++ * Initially it will effectively be a no-op, but after a
++ * suitable period of time has passed, it will set the
++ * 'deprecation_reason' field on the machine, to warn users
++ * about forthcoming removal.
++ */
++#define MACHINE_VER_DEPRECATION(...) \
++    do { \
++        if (MACHINE_VER_IS_DEPRECATED(__VA_ARGS__)) { \
++            mc->deprecation_reason = MACHINE_VER_DEPRECATION_MSG; \
++        } \
++    } while (0)
++
++/*
++ * Prevents registration of a versioned machined based on
++ * its age
++ *
++ * This must be unconditionally used in the register
++ * method for all machine types which support versioning.
++ *
++ * Inijtially it will effectively be a no-op, but after a
++ * suitable period of time has passed, it will cause
++ * execution of the method to return, avoiding registration
++ * of the machine
++ *
++ * The new deprecation and deletion policy for versioned
++ * machine types was introduced in QEMU 9.1.0.
++ *
++ * Under the new policy a number of old machine types (any
++ * prior to 2.12) would be liable for immediate deletion
++ * which would be a violation of our historical deprecation
++ * and removal policy
++ *
++ * Thus deletions are temporarily gated on existance of
++ * the env variable "QEMU_DELETE_MACHINES" / QEMU version
++ * number >= 10.1.0. This gate can be deleted in the 10.1.0
++ * dev cycle
++ */
++#define MACHINE_VER_DELETION(...) \
++    do { \
++        if (MACHINE_VER_SHOULD_DELETE(__VA_ARGS__)) { \
++            if (getenv("QEMU_DELETE_MACHINES") || \
++                QEMU_VERSION_MAJOR > 10 || (QEMU_VERSION_MAJOR == 10 && \
++                                            QEMU_VERSION_MINOR >= 1)) { \
++                return; \
++            } \
++        } \
++    } while (0)
++
+ #define DEFINE_MACHINE(namestr, machine_initfn) \
+     static void machine_initfn##_class_init(ObjectClass *oc, void *data) \
+     { \
+diff --git a/include/hw/core/cpu.h b/include/hw/core/cpu.h
+index a2c8536943..d946161717 100644
+--- a/include/hw/core/cpu.h
++++ b/include/hw/core/cpu.h
+@@ -984,6 +984,14 @@ void cpu_reset_interrupt(CPUState *cpu, int mask);
+  */
+ void cpu_exit(CPUState *cpu);
+ 
++/**
++ * cpu_pause:
++ * @cpu: The CPU to pause.
++ *
++ * Pauses CPU, i.e. puts CPU into stopped state.
++ */
++void cpu_pause(CPUState *cpu);
++
+ /**
+  * cpu_resume:
+  * @cpu: The CPU to resume.
+@@ -1000,6 +1008,12 @@ void cpu_resume(CPUState *cpu);
+  */
+ void cpu_remove_sync(CPUState *cpu);
+ 
++/**
++ * free_queued_cpu_work() - free all items on CPU work queue
++ * @cpu: The CPU which work queue to free.
++ */
++void free_queued_cpu_work(CPUState *cpu);
++
+ /**
+  * process_queued_cpu_work() - process all items on CPU work queue
+  * @cpu: The CPU which work queue to process.
+diff --git a/include/hw/core/tcg-cpu-ops.h b/include/hw/core/tcg-cpu-ops.h
+index 099de3375e..34318cf0e6 100644
+--- a/include/hw/core/tcg-cpu-ops.h
++++ b/include/hw/core/tcg-cpu-ops.h
+@@ -122,10 +122,13 @@ struct TCGCPUOps {
+      * to do when the CPU is in the halted state.
+      *
+      * Return true to indicate that the CPU should now leave halt, false
+-     * if it should remain in the halted state.
++     * if it should remain in the halted state. (This should generally
++     * be the same value that cpu_has_work() would return.)
+      *
+-     * If this method is not provided, the default is to do nothing, and
+-     * to leave halt if cpu_has_work() returns true.
++     * This method must be provided. If the target does not need to
++     * do anything special for halt, the same function used for its
++     * CPUClass::has_work method can be used here, as they have the
++     * same function signature.
+      */
+     bool (*cpu_exec_halt)(CPUState *cpu);
+     /**
+diff --git a/include/hw/gpio/aspeed_gpio.h b/include/hw/gpio/aspeed_gpio.h
+index 904eecf62c..90a12ae318 100644
+--- a/include/hw/gpio/aspeed_gpio.h
++++ b/include/hw/gpio/aspeed_gpio.h
+@@ -75,6 +75,7 @@ struct AspeedGPIOClass {
+     uint32_t nr_gpio_pins;
+     uint32_t nr_gpio_sets;
+     const AspeedGPIOReg *reg_table;
++    unsigned reg_table_count;
+ };
+ 
+ struct AspeedGPIOState {
+diff --git a/include/hw/i2c/aspeed_i2c.h b/include/hw/i2c/aspeed_i2c.h
+index a064479e59..fad5e9259a 100644
+--- a/include/hw/i2c/aspeed_i2c.h
++++ b/include/hw/i2c/aspeed_i2c.h
+@@ -34,7 +34,7 @@
+ OBJECT_DECLARE_TYPE(AspeedI2CState, AspeedI2CClass, ASPEED_I2C)
+ 
+ #define ASPEED_I2C_NR_BUSSES 16
+-#define ASPEED_I2C_MAX_POOL_SIZE 0x800
++#define ASPEED_I2C_SHARE_POOL_SIZE 0x800
+ #define ASPEED_I2C_OLD_NUM_REG 11
+ #define ASPEED_I2C_NEW_NUM_REG 22
+ 
+@@ -257,7 +257,7 @@ struct AspeedI2CState {
+     uint32_t ctrl_global;
+     uint32_t new_clk_divider;
+     MemoryRegion pool_iomem;
+-    uint8_t pool[ASPEED_I2C_MAX_POOL_SIZE];
++    uint8_t share_pool[ASPEED_I2C_SHARE_POOL_SIZE];
+ 
+     AspeedI2CBus busses[ASPEED_I2C_NR_BUSSES];
+     MemoryRegion *dram_mr;
+@@ -283,7 +283,7 @@ struct AspeedI2CClass {
+     uint8_t *(*bus_pool_base)(AspeedI2CBus *);
+     bool check_sram;
+     bool has_dma;
+-
++    uint64_t mem_size;
+ };
+ 
+ static inline bool aspeed_i2c_is_new_mode(AspeedI2CState *s)

@@ -4,10 +4,10 @@
 
 | Attribute        | Value                |
 |------------------|----------------------|
-| **Difficulty**   | hard       |
+| **Difficulty**   | expert     |
 | **Challenge ID** | unbound-1.22.0-keytrap-ds-grind          |
 | **Domain**       | 1-day vulnerability analysis (patch diffing) |
-| **Focus**        | none (R2 v1 flags-only) |
+| **Focus**        | tigress virtualization on the validator fix-site functions |
 
 **Objective.** isolate the security fix between two builds of the same program, characterize the vulnerability it closes, and prove the finding with a differential trigger, per the contract in `instruction.md`.
 
@@ -26,15 +26,16 @@ This challenge instantiates a REAL upstream defect/fix pair mined from the progr
 
 ## Difficulty axes
 
-Difficulty is the sole derived quantity. The band `hard` is computed from the draw (the law lives in reference/levels.md). What feeds it.
+Difficulty is the sole derived quantity. The band `expert` is computed from the draw (the law lives in reference/levels.md). What feeds it.
 
 | Input | Covers                                                                    |
 |-------|---------------------------------------------------------------------------|
 | realism | real historical CVE pair > realistic crash-inducing modification > synthetic archetype |
 | series volume | how many unlabeled commits the fix hides among                          |
-| topology | cluster count, cross-file dispersal, decoy mixing                        |
+| ladder depth | how many ordered analysis stages the rubric demands                     |
+| protection | armor on the pair, explicit grind bars on the ladder                     |
 
-The v1 build stance is flags-only. Both sides compile with the same profile, so no surface indicator tells you which build is vulnerable.
+Both sides compile with the same profile. The tigress armor (source virtualization) covers the same validator functions on both sides, so it adds analysis friction without telling you which build is vulnerable.
 
 ## Intended solve path
 

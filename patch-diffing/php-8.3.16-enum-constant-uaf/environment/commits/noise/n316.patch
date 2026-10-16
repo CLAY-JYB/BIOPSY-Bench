@@ -1,0 +1,180 @@
+diff --git a/ext/spl/tests/bug64782.phpt b/ext/spl/tests/bug64782.phpt
+new file mode 100644
+index 00000000..ffe8a30b
+--- /dev/null
++++ b/ext/spl/tests/bug64782.phpt
+@@ -0,0 +1,21 @@
++--TEST--
++Bug #64782: SplFileObject constructor make $context optional / give it a default value
++--FILE--
++<?php
++
++var_dump(new SplFileObject(__FILE__, "r", false, null));
++
++?>
++--EXPECTF--
++object(SplFileObject)#1 (%d) {
++  ["pathName":"SplFileInfo":private]=>
++  string(%d) "%sbug64782.php"
++  ["fileName":"SplFileInfo":private]=>
++  string(12) "bug64782.php"
++  ["openMode":"SplFileObject":private]=>
++  string(1) "r"
++  ["delimiter":"SplFileObject":private]=>
++  string(1) ","
++  ["enclosure":"SplFileObject":private]=>
++  string(1) """
++}
+diff --git a/ext/spl/tests/bug65006.phpt b/ext/spl/tests/bug65006.phpt
+index 27d15038..954811a7 100644
+--- a/ext/spl/tests/bug65006.phpt
++++ b/ext/spl/tests/bug65006.phpt
+@@ -22,10 +22,7 @@ second::init();
+ var_dump(spl_autoload_functions());
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
+-
+-Deprecated: Use of "self" in callables is deprecated in %s on line %d
++--EXPECT--
+ array(2) {
+   [0]=>
+   array(2) {
+diff --git a/ext/spl/tests/bug65069.phpt b/ext/spl/tests/bug65069.phpt
+deleted file mode 100644
+index 384e3246..00000000
+--- a/ext/spl/tests/bug65069.phpt
++++ /dev/null
+@@ -1,57 +0,0 @@
+---TEST--
+-Bug #65069: GlobIterator fails to access files inside an open_basedir restricted dir
+---FILE--
+-<?php
+-$file_path = __DIR__;
+-// temp dirname used here
+-$dirname = "$file_path/bug65069";
+-// temp dir created
+-mkdir($dirname);
+-
+-ini_set('open_basedir', $dirname);
+-
+-// temp files created
+-touch("$dirname/wonder12345");
+-touch("$dirname/wonder.txt");
+-touch("$dirname/file.text");
+-
+-$spl_glob_it = new \GlobIterator("$dirname/*.txt");
+-foreach ($spl_glob_it as $file_info) {
+-    echo $file_info->getFilename() . "\n";
+-}
+-
+-$spl_glob_it = new \GlobIterator(dirname(dirname($dirname)) . "/*/*/*");
+-foreach ($spl_glob_it as $file_info) {
+-    echo $file_info->getFilename() . "\n";
+-}
+-
+-$spl_glob_empty = new \GlobIterator("$dirname/*.php");
+-var_dump($spl_glob_empty->count());
+-
+-// top directory
+-var_dump(iterator_to_array(new \GlobIterator(dirname(dirname($dirname)))));
+-
+-// not existing file
+-var_dump(iterator_to_array(new \GlobIterator("$file_path/bug65069-this-will-never-exists")));
+-
+-
+-?>
+---CLEAN--
+-<?php
+-$file_path = dirname(__FILE__);
+-$dirname = "$file_path/bug65069";
+-unlink("$dirname/wonder12345");
+-unlink("$dirname/wonder.txt");
+-unlink("$dirname/file.text");
+-rmdir($dirname);
+-?>
+---EXPECT--
+-wonder.txt
+-file.text
+-wonder.txt
+-wonder12345
+-int(0)
+-array(0) {
+-}
+-array(0) {
+-}
+diff --git a/ext/spl/tests/bug65387.phpt b/ext/spl/tests/bug65387.phpt
+index 243be76e..1e3c8fe4 100644
+--- a/ext/spl/tests/bug65387.phpt
++++ b/ext/spl/tests/bug65387.phpt
+@@ -14,7 +14,6 @@ $it2 = new CallbackFilterIterator($it, function($elem) use(&$it2) {
+ 
+ // Callback object
+ new class {
+-    private $it;
+     public function __construct() {
+         $it = new ArrayIterator([1, 2, 3]);
+         $this->it = new CallbackFilterIterator($it, function($elem) {
+diff --git a/ext/spl/tests/bug65545.phpt b/ext/spl/tests/bug65545.phpt
+new file mode 100644
+index 00000000..8ebbf648
+--- /dev/null
++++ b/ext/spl/tests/bug65545.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++SplFileObject::fread function
++--FILE--
++<?php
++$obj = new SplFileObject(__FILE__, 'r');
++$data = $obj->fread(5);
++var_dump($data);
++
++try {
++    $data = $obj->fread(0);
++    var_dump($data);
++} catch (\ValueError $e) {
++    echo $e->getMessage() . \PHP_EOL;
++}
++
++// read more data than is available
++$data = $obj->fread(filesize(__FILE__) + 32);
++var_dump(strlen($data) === filesize(__FILE__) - 5);
++
++?>
++--EXPECT--
++string(5) "<?php"
++SplFileObject::fread(): Argument #1 ($length) must be greater than 0
++bool(true)
+diff --git a/ext/spl/tests/bug65967.phpt b/ext/spl/tests/bug65967.phpt
+index abb83ebf..e3bb6471 100644
+--- a/ext/spl/tests/bug65967.phpt
++++ b/ext/spl/tests/bug65967.phpt
+@@ -10,5 +10,5 @@ gc_collect_cycles();
+ var_export($objstore);
+ ?>
+ --EXPECT--
+-\SplObjectStorage::__set_state(array(
++SplObjectStorage::__set_state(array(
+ ))
+diff --git a/ext/spl/tests/bug67805.phpt b/ext/spl/tests/bug67805.phpt
+new file mode 100644
+index 00000000..1f64f0fc
+--- /dev/null
++++ b/ext/spl/tests/bug67805.phpt
+@@ -0,0 +1,15 @@
++--TEST--
++Bug #67805 SplFileObject setMaxLineLength
++--CREDITS--
++Willian Gustavo Veiga <contact@willianveiga.com>
++--FILE--
++<?php
++$splFileObject = new SplFileObject(__FILE__);
++$splFileObject->setMaxLineLen(3);
++$line = $splFileObject->getCurrentLine();
++var_dump($line === '<?p');
++var_dump(strlen($line) === 3);
++?>
++--EXPECT--
++bool(true)
++bool(true)

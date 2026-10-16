@@ -1,0 +1,118 @@
+diff --git a/ext/phar/tests/tar/phar_setalias2.phpt b/ext/phar/tests/tar/phar_setalias2.phpt
+index 31df9ae5..54aa99b9 100644
+--- a/ext/phar/tests/tar/phar_setalias2.phpt
++++ b/ext/phar/tests/tar/phar_setalias2.phpt
+@@ -42,6 +42,8 @@ try {
+ --CLEAN--
+ <?php
+ unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phartmp.tar');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ hio
+diff --git a/ext/phar/tests/tar/truncated.phpt b/ext/phar/tests/tar/truncated.phpt
+index 95ed3c1c..183c2148 100644
+--- a/ext/phar/tests/tar/truncated.phpt
++++ b/ext/phar/tests/tar/truncated.phpt
+@@ -10,6 +10,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ 
++?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.tar');
++unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar');
+ ?>
+ --EXPECTF--
+ phar error: "%strunc.tar" is a corrupted tar file (truncated)
+diff --git a/ext/phar/tests/test_unset.phpt b/ext/phar/tests/test_unset.phpt
+index 8aa422cb..5f593dd4 100644
+--- a/ext/phar/tests/test_unset.phpt
++++ b/ext/phar/tests/test_unset.phpt
+@@ -32,6 +32,7 @@ var_dump(file_exists($fname));
+ 
+ ?>
+ --CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.php'); ?>
+ <?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.php'); ?>
+ --EXPECTF--
+ NULL
+diff --git a/ext/phar/tests/zip/all.phpt b/ext/phar/tests/zip/all.phpt
+index 937bfbd0..440d59b0 100644
+--- a/ext/phar/tests/zip/all.phpt
++++ b/ext/phar/tests/zip/all.phpt
+@@ -41,10 +41,8 @@ var_dump($phar->getMetadata());
+ var_dump($phar['a']->getMetadata());
+ ?>
+ --CLEAN--
+-<?php
+-@unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip.php');
+-unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.zip.php');
+-?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip.php'); ?>
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.2.phar.zip.php'); ?>
+ --EXPECT--
+ bool(false)
+ bool(false)
+diff --git a/ext/phar/tests/zip/create_new_phar_b.phpt b/ext/phar/tests/zip/create_new_phar_b.phpt
+index 0f4e239f..cf70abfd 100644
+--- a/ext/phar/tests/zip/create_new_phar_b.phpt
++++ b/ext/phar/tests/zip/create_new_phar_b.phpt
+@@ -12,6 +12,9 @@ file_put_contents('phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.pha
+     'brand new!');
+ include 'phar://' . __DIR__ . '/' . basename(__FILE__, '.php') . '.phar.zip/a.php';
+ ?>
++
++--CLEAN--
++<?php unlink(__DIR__ . '/' . basename(__FILE__, '.clean.php') . '.phar.zip'); ?>
+ --EXPECTF--
+ Warning: file_put_contents(phar://%screate_new_phar_b.phar.zip/a.php): Failed to open stream: phar error: write operations disabled by the php.ini setting phar.readonly in %screate_new_phar_b.php on line %d
+ 
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator4.phpt b/ext/phar/tests/zip/phar_buildfromiterator4.phpt
+index 8c109675..6d44e2f8 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator4.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator4.phpt
+@@ -35,14 +35,20 @@ class myIterator implements Iterator
+         reset($this->a);
+     }
+ }
+-chdir(__DIR__);
+-$phar = new Phar(__DIR__ . '/buildfromiterator4.phar.zip');
+-var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
+-var_dump($phar->isFileFormat(Phar::ZIP));
++try {
++    chdir(__DIR__);
++    $phar = new Phar(__DIR__ . '/buildfromiterator.phar.zip');
++    var_dump($phar->buildFromIterator(new myIterator(array('a' => basename(__FILE__, 'php') . 'phpt'))));
++    var_dump($phar->isFileFormat(Phar::ZIP));
++} catch (Exception $e) {
++    var_dump(get_class($e));
++    echo $e->getMessage() . "\n";
++}
+ ?>
+ --CLEAN--
+ <?php
+-unlink(__DIR__ . '/buildfromiterator4.phar.zip');
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
+ ?>
+ --EXPECTF--
+ rewind
+diff --git a/ext/phar/tests/zip/phar_buildfromiterator5.phpt b/ext/phar/tests/zip/phar_buildfromiterator5.phpt
+index fb34f090..dafd6ced 100644
+--- a/ext/phar/tests/zip/phar_buildfromiterator5.phpt
++++ b/ext/phar/tests/zip/phar_buildfromiterator5.phpt
+@@ -44,6 +44,11 @@ try {
+     echo $e->getMessage() . "\n";
+ }
+ ?>
++--CLEAN--
++<?php
++unlink(__DIR__ . '/buildfromiterator.phar.zip');
++__HALT_COMPILER();
++?>
+ --EXPECTF--
+ rewind
+ valid

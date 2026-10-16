@@ -1,0 +1,224 @@
+diff --git a/ext/zend_test/tests/observer_closure_03.phpt b/ext/zend_test/tests/observer_closure_03.phpt
+deleted file mode 100644
+index e36cca4a..00000000
+--- a/ext/zend_test/tests/observer_closure_03.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Observer: Observability of closures of builtin functions
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+---FILE--
+-<?php
+-var_dump(strlen(...)('test'));
+-echo 'DONE' . PHP_EOL;
+-?>
+---EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init strlen() -->
+-  <strlen>
+-  </strlen>
+-  <!-- init var_dump() -->
+-  <var_dump>
+-int(4)
+-  </var_dump>
+-DONE
+-</file '%s'>
+diff --git a/ext/zend_test/tests/observer_declarations_01.phpt b/ext/zend_test/tests/observer_declarations_01.phpt
+deleted file mode 100644
+index 6d91834e..00000000
+--- a/ext/zend_test/tests/observer_declarations_01.phpt
++++ /dev/null
+@@ -1,54 +0,0 @@
+---TEST--
+-Observer: Observe function and class declarations
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_all=1
+-zend_test.observer.observe_declaring=1
+---FILE--
+-<?php
+-function foo()
+-{
+-    echo "foo\n";
+-}
+-
+-class A {
+-}
+-
+-class B extends A {
+-}
+-
+-if (time() > 0) {
+-    function nested()
+-    {
+-    }
+-
+-    class C
+-    {
+-    }
+-
+-    class D extends A
+-    {
+-    }
+-}
+-
+-foo();
+-?>
+---EXPECTF--
+-<!-- declared function 'foo' -->
+-<!-- declared class 'a' -->
+-<!-- declared class 'b' -->
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init time() -->
+-  <time>
+-  </time>
+-  <!-- declared function 'nested' -->
+-  <!-- declared class 'c' -->
+-  <!-- declared class 'd' -->
+-  <!-- init foo() -->
+-  <foo>
+-foo
+-  </foo>
+-</file '%s'>
+diff --git a/ext/zend_test/tests/observer_declarations_file_cache.phpt b/ext/zend_test/tests/observer_declarations_file_cache.phpt
+deleted file mode 100644
+index 1cff5165..00000000
+--- a/ext/zend_test/tests/observer_declarations_file_cache.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Observer: Observe function and class declarations with file_cache_only
+---EXTENSIONS--
+-zend_test
+---INI--
+-zend_test.observer.enabled=1
+-zend_test.observer.observe_declaring=1
+-opcache.enable_cli=1
+-opcache.file_cache="{TMP}"
+-opcache.file_cache_only=1
+---FILE--
+-<?php
+-
+-function a() {}
+-class A {}
+-class B extends A {}
+-
+-?>
+---EXPECTF--
+-<!-- declared function 'a' -->
+-<!-- declared class 'a' -->
+-<!-- declared class 'b' -->
+-<!-- init '%s' -->
+diff --git a/ext/zend_test/tests/observer_error_01.phpt b/ext/zend_test/tests/observer_error_01.phpt
+index 97108008..534e484c 100644
+--- a/ext/zend_test/tests/observer_error_01.phpt
++++ b/ext/zend_test/tests/observer_error_01.phpt
+@@ -7,10 +7,6 @@ zend_test.observer.enabled=1
+ zend_test.observer.observe_all=1
+ zend_test.observer.show_return_value=1
+ memory_limit=2M
+---SKIPIF--
+-<?php
+-if (getenv("USE_ZEND_ALLOC") === "0") die("skip requires zmm");
+-?>
+ --FILE--
+ <?php
+ function foo()
+@@ -23,14 +19,11 @@ foo();
+ echo 'You should not see this.';
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_error_%d.php' -->
++<file '%s%eobserver_error_%d.php'>
+   <!-- init foo() -->
+   <foo>
+-    <!-- init str_repeat() -->
+-    <str_repeat>
+ 
+ Fatal error: Allowed memory size of 2097152 bytes exhausted%s(tried to allocate %d bytes) in %s on line %d
+-    </str_repeat:NULL>
+   </foo:NULL>
+ </file '%s%eobserver_error_%d.php'>
+diff --git a/ext/zend_test/tests/observer_error_02.phpt b/ext/zend_test/tests/observer_error_02.phpt
+index 58b2d5ea..426c345e 100644
+--- a/ext/zend_test/tests/observer_error_02.phpt
++++ b/ext/zend_test/tests/observer_error_02.phpt
+@@ -18,14 +18,11 @@ foo();
+ echo 'You should not see this.';
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
++<!-- init '%s%eobserver_error_%d.php' -->
++<file '%s%eobserver_error_%d.php'>
+   <!-- init foo() -->
+   <foo>
+-    <!-- init trigger_error() -->
+-    <trigger_error>
+ 
+ Fatal error: Foo error in %s on line %d
+-    </trigger_error:NULL>
+   </foo:NULL>
+-</file '%s'>
++</file '%s%eobserver_error_%d.php'>
+diff --git a/ext/zend_test/tests/observer_error_04.phpt b/ext/zend_test/tests/observer_error_04.phpt
+index f8c68ebe..da0bc4b6 100644
+--- a/ext/zend_test/tests/observer_error_04.phpt
++++ b/ext/zend_test/tests/observer_error_04.phpt
+@@ -36,18 +36,10 @@ echo 'Done.' . PHP_EOL;
+   <main>
+     <!-- init foo() -->
+     <foo>
+-      <!-- init SoapClient::__construct() -->
+-      <SoapClient::__construct>
+-        <!-- Exception: SoapFault -->
+-      </SoapClient::__construct:NULL>
+       <!-- Exception: SoapFault -->
+     </foo:NULL>
+     <!-- Exception: SoapFault -->
+   </main:NULL>
+-  <!-- init Exception::getMessage() -->
+-  <Exception::getMessage>
+-  </Exception::getMessage:'SOAP-ERROR: Parsing WSDL: Couldn\'t load from \'foo\' : failed to load external entity "foo"
+-'>
+ SOAP-ERROR: Parsing WSDL: Couldn't load from 'foo' : failed to load external entity "foo"
+ 
+ Done.
+diff --git a/ext/zend_test/tests/observer_error_05.phpt b/ext/zend_test/tests/observer_error_05.phpt
+index 9debfc2b..58a34096 100644
+--- a/ext/zend_test/tests/observer_error_05.phpt
++++ b/ext/zend_test/tests/observer_error_05.phpt
+@@ -22,20 +22,14 @@ foo();
+ echo 'You should not see this.';
+ ?>
+ --EXPECTF--
+-<!-- init '%s' -->
+-<file '%s'>
+-  <!-- init set_error_handler() -->
+-  <set_error_handler>
+-  </set_error_handler:NULL>
++<!-- init '%s%eobserver_error_%d.php' -->
++<file '%s%eobserver_error_%d.php'>
+   <!-- init foo() -->
+   <foo>
+     <!-- init {closure}() -->
+     <{closure}>
+-      <!-- init trigger_error() -->
+-      <trigger_error>
+ 
+ Fatal error: Foo error in %s on line %d
+-      </trigger_error:NULL>
+     </{closure}:NULL>
+   </foo:NULL>
+-</file '%s'>
++</file '%s%eobserver_error_%d.php'>

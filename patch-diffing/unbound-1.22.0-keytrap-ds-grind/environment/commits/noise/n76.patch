@@ -1,0 +1,76 @@
+diff --git a/testdata/fwd_zero.tdir/fwd_zero.test b/testdata/fwd_zero.tdir/fwd_zero.test
+index 2e0806d6f..c93918883 100644
+--- a/testdata/fwd_zero.tdir/fwd_zero.test
++++ b/testdata/fwd_zero.tdir/fwd_zero.test
+@@ -17,7 +17,7 @@ echo "b4380100000100000000000003777777076578616d706c6503636f6d00" | xxd -r -p |
+ 
+ # now test that server is still up
+ echo "> dig www.example.com."
+-dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ echo "> cat logfiles"
+ cat fwd.log 
+ cat unbound.log
+diff --git a/testdata/http_user_agent.tdir/http_user_agent.test b/testdata/http_user_agent.tdir/http_user_agent.test
+index dce2d476c..958030895 100644
+--- a/testdata/http_user_agent.tdir/http_user_agent.test
++++ b/testdata/http_user_agent.tdir/http_user_agent.test
+@@ -9,35 +9,35 @@ PRE="../.."
+ # Query and check check that we get the correct answer from the auth_zone
+ query () {
+ 	echo "> dig www.example.com."
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+ 		sleep 1
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+ 		sleep 1
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+ 		sleep 1
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+ 		sleep 10
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	if grep SERVFAIL outfile; then
+ 		echo "> try again"
+ 		sleep 10
+-		dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++		dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ 	fi
+ 	echo "> check answer"
+ 	if grep "1.2.3.4" outfile; then
+diff --git a/testdata/ipset.tdir/ipset.pre b/testdata/ipset.tdir/ipset.pre
+index 42c94fac4..7c61e6468 100644
+--- a/testdata/ipset.tdir/ipset.pre
++++ b/testdata/ipset.tdir/ipset.pre
+@@ -8,6 +8,11 @@
+ 
+ PRE="../.."
+ if grep "define USE_IPSET 1" $PRE/config.h; then echo test enabled; else skip_test "test skipped"; fi
++if grep "define HAVE_NET_PFVAR_H 1" $PRE/config.h; then
++	if test ! -f /dev/pf; then
++		skip_test "no /dev/pf"
++	fi
++fi
+ 
+ get_random_port 2
+ UNBOUND_PORT=$RND_PORT

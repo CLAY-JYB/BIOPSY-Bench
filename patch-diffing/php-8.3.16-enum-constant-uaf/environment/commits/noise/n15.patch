@@ -1,0 +1,116 @@
+diff --git a/Zend/tests/bug48770_3.phpt b/Zend/tests/bug48770_3.phpt
+index 98311eb8..8e5d6033 100644
+--- a/Zend/tests/bug48770_3.phpt
++++ b/Zend/tests/bug48770_3.phpt
+@@ -44,12 +44,7 @@ $c = new C;
+ $c->func('This should work!');
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Callables of the form ["C", "self::func2"] are deprecated in %s on line %d
++--EXPECT--
+ string(27) "B::func2: This should work!"
+-
+-Deprecated: Callables of the form ["C", "self::func3"] are deprecated in %s on line %d
+ string(27) "B::func3: This should work!"
+-
+-Deprecated: Callables of the form ["C", "self::inexistent"] are deprecated in %s on line %d
+ call_user_func_array(): Argument #1 ($callback) must be a valid callback, class C does not have a method "inexistent"
+diff --git a/Zend/tests/bug48899-deprecated.phpt b/Zend/tests/bug48899-deprecated.phpt
+deleted file mode 100644
+index d731d578..00000000
+--- a/Zend/tests/bug48899-deprecated.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Bug #48899 (is_callable returns true even if method does not exist in parent class) [original test with deprecated syntax]
+---FILE--
+-<?php
+-
+-class ParentClass { }
+-
+-class ChildClass extends ParentClass {
+-    public function testIsCallable() {
+-        var_dump(is_callable(array($this, 'parent::testIsCallable')));
+-    }
+-    public function testIsCallable2() {
+-        var_dump(is_callable(array($this, 'static::testIsCallable2')));
+-    }
+-}
+-
+-$child = new ChildClass();
+-$child->testIsCallable();
+-$child->testIsCallable2();
+-
+-?>
+---EXPECTF--
+-Deprecated: Callables of the form ["ChildClass", "parent::testIsCallable"] are deprecated in %s on line %d
+-bool(false)
+-
+-Deprecated: Callables of the form ["ChildClass", "static::testIsCallable2"] are deprecated in %s on line %d
+-bool(true)
+diff --git a/Zend/tests/bug48899.phpt b/Zend/tests/bug48899.phpt
+index 6edf3076..2cbf308c 100644
+--- a/Zend/tests/bug48899.phpt
++++ b/Zend/tests/bug48899.phpt
+@@ -7,10 +7,10 @@ class ParentClass { }
+ 
+ class ChildClass extends ParentClass {
+     public function testIsCallable() {
+-        var_dump(is_callable(array('ParentClass', 'testIsCallable')));
++        var_dump(is_callable(array($this, 'parent::testIsCallable')));
+     }
+     public function testIsCallable2() {
+-        var_dump(is_callable(array('ChildClass', 'testIsCallable2')));
++        var_dump(is_callable(array($this, 'static::testIsCallable2')));
+     }
+ }
+ 
+diff --git a/Zend/tests/bug49893.phpt b/Zend/tests/bug49893.phpt
+index 0832b0b0..adab4421 100644
+--- a/Zend/tests/bug49893.phpt
++++ b/Zend/tests/bug49893.phpt
+@@ -12,7 +12,6 @@ class A {
+     }
+ }
+ class B {
+-    public $a;
+     function __construct() {
+         $this->a = new A();
+         throw new Exception("1");
+diff --git a/Zend/tests/bug51822.phpt b/Zend/tests/bug51822.phpt
+index 6bfacf8d..0a3813b2 100644
+--- a/Zend/tests/bug51822.phpt
++++ b/Zend/tests/bug51822.phpt
+@@ -12,7 +12,6 @@ class DestructableObject
+ 
+ class DestructorCreator
+ {
+-    public $test;
+     public function __destruct()
+     {
+         $this->test = new DestructableObject;
+diff --git a/Zend/tests/bug54268.phpt b/Zend/tests/bug54268.phpt
+index 3567aaa6..e4ce5c0e 100644
+--- a/Zend/tests/bug54268.phpt
++++ b/Zend/tests/bug54268.phpt
+@@ -20,7 +20,6 @@ class DestructableObject
+ }
+ class DestructorCreator
+ {
+-        public $test;
+         public function __destruct()
+         {
+                 $this->test = new DestructableObject;
+diff --git a/Zend/tests/bug55305.phpt b/Zend/tests/bug55305.phpt
+index 90d4c5b5..7f0749a3 100644
+--- a/Zend/tests/bug55305.phpt
++++ b/Zend/tests/bug55305.phpt
+@@ -2,7 +2,6 @@
+ Bug #55305 (ref lost: 1st ref instantiated in class def, 2nd ref made w/o instantiating)
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Foo {
+   var $foo = "test";
+ }

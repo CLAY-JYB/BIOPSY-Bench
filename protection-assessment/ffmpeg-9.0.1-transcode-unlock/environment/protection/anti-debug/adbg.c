@@ -14,6 +14,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <pwd.h>
 #include <stdarg.h>
 #include <sys/types.h>
 
@@ -23,7 +24,8 @@
  * into such a TU those calls would be implicitly declared (-Werror=implicit-
  * function-declaration, and a wrong int-width return for syscall). Declare
  * them locally instead; skipped whenever the feature macros are visible, so
- * C++ TUs (g++ defines _GNU_SOURCE) keep glibc's own prototypes. */
+ * C++ TUs (g++ defines _GNU_SOURCE) keep glibc's own prototypes.
+ */
 #if !defined(_GNU_SOURCE) && !defined(_DEFAULT_SOURCE) && \
     !defined(_BSD_SOURCE) && !defined(__USE_MISC)
 extern long syscall(long sysno, ...);
@@ -718,6 +720,58 @@ int ADBG_SECTION_ATTR adbg_check_frida(void)
  * Main API Functions
  * ============================================================ */
 
+/**
+ * Analysis-sandbox artifact detection (ADBG_CHECK_SANDBOX).
+ *
+ * Three deterministic presence signals; none can fire inside the task's own
+ * deployment containers (root/nobody users, no sandbox paths, no harness env):
+ *   1. sandbox-convention usernames (Cuckoo "sandbox"/"currentuser",
+ *      Joe Sandbox "malware"/"virus"/"cuckoo")
+ *   2. sandbox host artifacts (/cuckoo, /var/run/cuckoo, /cuckoo_root)
+ *   3. analysis-harness environment markers (SANDBOX, CUCKOO, MALWARE)
+ *
+ * The CPUID hypervisor bit is DELIBERATELY excluded — the tasks deploy inside
+ * virtualized containers, so a hypervisor probe fires on the verifier's own
+ * replay and breaks the isolation law (obstruct the analyst, never the
+ * grader).
+ */
+int ADBG_SECTION_ATTR adbg_check_sandbox(void)
+{
+    /* 1. sandbox-convention usernames */
+    {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw && pw->pw_name) {
+            const char *names[] = { "sandbox", "currentuser", "malware",
+                                    "virus", "cuckoo", NULL };
+            for (const char **n = names; *n; n++) {
+                if (strcmp(pw->pw_name, *n) == 0)
+                    return 1;
+            }
+        }
+    }
+
+    /* 2. sandbox host artifacts */
+    {
+        const char *paths[] = { "/cuckoo", "/var/run/cuckoo", "/cuckoo_root",
+                                NULL };
+        for (const char **p = paths; *p; p++) {
+            if (access(*p, F_OK) == 0)
+                return 1;
+        }
+    }
+
+    /* 3. analysis-harness environment markers */
+    {
+        const char *vars[] = { "SANDBOX", "CUCKOO", "MALWARE", NULL };
+        for (const char **v = vars; *v; v++) {
+            if (getenv(*v) != NULL)
+                return 1;
+        }
+    }
+
+    return 0;
+}
+
 int ADBG_SECTION_ATTR adbg_check_all(void)
 {
     return adbg_check_mask(ADBG_CHECK_ALL);
@@ -774,6 +828,11 @@ int ADBG_SECTION_ATTR adbg_check_mask(int checks)
 
     if (checks & ADBG_CHECK_FRIDA) {
         detected |= adbg_check_frida();
+        if (detected) return 1;
+    }
+
+    if (checks & ADBG_CHECK_SANDBOX) {
+        detected |= adbg_check_sandbox();
         if (detected) return 1;
     }
 
@@ -858,6 +917,13 @@ int ADBG_SECTION_ATTR adbg_check_config(const adbg_config_t *config)
         }
     }
 
+    if (config->enabled_checks & ADBG_CHECK_SANDBOX) {
+        if (adbg_check_sandbox()) {
+            _debug_log(config, "Analysis sandbox artifacts detected\n");
+            detected = 1;
+        }
+    }
+
     if (detected && config->verbose) {
         _debug_log(config, "Debugger detected!\n");
     } else if (!detected && config->verbose) {
@@ -924,6 +990,7 @@ const char *adbg_get_check_name(int flag)
         case ADBG_CHECK_BREAKPOINT:  return "Breakpoint";
         case ADBG_CHECK_TIMING:      return "Timing";
         case ADBG_CHECK_FRIDA:       return "Frida";
+        case ADBG_CHECK_SANDBOX:     return "Sandbox";
         case ADBG_CHECK_BASIC:       return "Basic";
         case ADBG_CHECK_ADVANCED:    return "Advanced";
         case ADBG_CHECK_STEALTH:     return "Stealth";

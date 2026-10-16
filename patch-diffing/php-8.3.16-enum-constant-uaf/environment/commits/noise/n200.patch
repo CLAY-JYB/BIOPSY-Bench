@@ -1,0 +1,1160 @@
+diff --git a/ext/oci8/tests/bug27303_1_11gR1.phpt b/ext/oci8/tests/bug27303_1_11gR1.phpt
+new file mode 100644
+index 00000000..bbc682b9
+--- /dev/null
++++ b/ext/oci8/tests/bug27303_1_11gR1.phpt
+@@ -0,0 +1,255 @@
++--TEST--
++Bug #27303 (OCIBindByName binds numeric PHP values as characters)
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--FILE--
++<?php
++
++require(__DIR__.'/connect.inc');
++
++$stmtarray = array(
++    "drop sequence myseq",
++    "drop table mytab",
++    "create sequence myseq",
++    "create table mytab (mydata varchar2(20), seqcol number)"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++define('MYLIMIT', 200);
++
++$stmt = "insert into mytab (mydata, seqcol) values ('Some data', myseq.nextval) returning seqcol into :mybv";
++
++$stid = oci_parse($c, $stmt);
++if (!$stid) { echo "Parse error"; die; }
++
++$r = oci_bind_by_name($stid, ':MYBV', $mybv);
++if (!$r) { echo "Bind error"; die; }
++
++for ($i = 1; $i < MYLIMIT; $i++) {
++    $r = oci_execute($stid, OCI_DEFAULT);
++    if (!$r) { echo "Execute error"; die; }
++    var_dump($mybv);
++}
++
++oci_commit($c);
++
++$stmtarray = array(
++    "drop sequence myseq",
++    "drop table mytab"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++?>
++--EXPECT--
++string(1) "1"
++string(1) "2"
++string(1) "3"
++string(1) "4"
++string(1) "5"
++string(1) "6"
++string(1) "7"
++string(1) "8"
++string(1) "9"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++Done
+diff --git a/ext/oci8/tests/bug27303_2_11gR1.phpt b/ext/oci8/tests/bug27303_2_11gR1.phpt
+new file mode 100644
+index 00000000..e1abab19
+--- /dev/null
++++ b/ext/oci8/tests/bug27303_2_11gR1.phpt
+@@ -0,0 +1,259 @@
++--TEST--
++Bug #27303 (OCIBindByName binds numeric PHP values as characters)
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--ENV--
++NLS_LANG=
++--FILE--
++<?php
++
++require __DIR__.'/connect.inc';
++
++$stmtarray = array(
++    "drop sequence myseq",
++    "drop table mytab",
++    "create sequence myseq",
++    "create table mytab (mydata varchar2(20), seqcol number)"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++define('MYLIMIT', 200);
++define('INITMYBV', 11);
++
++$stmt = "insert into mytab (mydata, seqcol) values ('Some data', myseq.nextval) returning seqcol into :mybv";
++
++$stid = oci_parse($c, $stmt);
++if (!$stid) { echo "Parse error"; die; }
++
++$mybv = INITMYBV;
++$r = oci_bind_by_name($stid, ':MYBV', $mybv);
++if (!$r) { echo "Bind error"; die; }
++
++for ($i = 1; $i < MYLIMIT; $i++) {
++    $r = oci_execute($stid, OCI_DEFAULT);
++    if (!$r) { echo "Execute error"; die; }
++    var_dump($mybv);
++}
++
++oci_commit($c);
++
++$stmtarray = array(
++    "drop sequence myseq",
++    "drop table mytab"
++);
++
++oci8_test_sql_execute($c, $stmtarray);
++
++echo "Done\n";
++?>
++--EXPECT--
++string(1) "1"
++string(1) "2"
++string(1) "3"
++string(1) "4"
++string(1) "5"
++string(1) "6"
++string(1) "7"
++string(1) "8"
++string(1) "9"
++string(2) "10"
++string(2) "11"
++string(2) "12"
++string(2) "13"
++string(2) "14"
++string(2) "15"
++string(2) "16"
++string(2) "17"
++string(2) "18"
++string(2) "19"
++string(2) "20"
++string(2) "21"
++string(2) "22"
++string(2) "23"
++string(2) "24"
++string(2) "25"
++string(2) "26"
++string(2) "27"
++string(2) "28"
++string(2) "29"
++string(2) "30"
++string(2) "31"
++string(2) "32"
++string(2) "33"
++string(2) "34"
++string(2) "35"
++string(2) "36"
++string(2) "37"
++string(2) "38"
++string(2) "39"
++string(2) "40"
++string(2) "41"
++string(2) "42"
++string(2) "43"
++string(2) "44"
++string(2) "45"
++string(2) "46"
++string(2) "47"
++string(2) "48"
++string(2) "49"
++string(2) "50"
++string(2) "51"
++string(2) "52"
++string(2) "53"
++string(2) "54"
++string(2) "55"
++string(2) "56"
++string(2) "57"
++string(2) "58"
++string(2) "59"
++string(2) "60"
++string(2) "61"
++string(2) "62"
++string(2) "63"
++string(2) "64"
++string(2) "65"
++string(2) "66"
++string(2) "67"
++string(2) "68"
++string(2) "69"
++string(2) "70"
++string(2) "71"
++string(2) "72"
++string(2) "73"
++string(2) "74"
++string(2) "75"
++string(2) "76"
++string(2) "77"
++string(2) "78"
++string(2) "79"
++string(2) "80"
++string(2) "81"
++string(2) "82"
++string(2) "83"
++string(2) "84"
++string(2) "85"
++string(2) "86"
++string(2) "87"
++string(2) "88"
++string(2) "89"
++string(2) "90"
++string(2) "91"
++string(2) "92"
++string(2) "93"
++string(2) "94"
++string(2) "95"
++string(2) "96"
++string(2) "97"
++string(2) "98"
++string(2) "99"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "10"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "11"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "12"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "13"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "14"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "15"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "16"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "17"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "18"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++string(2) "19"
++Done
+diff --git a/ext/oci8/tests/bug27303_4_11gR1.phpt b/ext/oci8/tests/bug27303_4_11gR1.phpt
+new file mode 100644
+index 00000000..98dc7005
+--- /dev/null
++++ b/ext/oci8/tests/bug27303_4_11gR1.phpt
+@@ -0,0 +1,253 @@
++--TEST--
++Bug #27303 (OCIBindByName binds numeric PHP values as characters)
++--EXTENSIONS--
++oci8
++--SKIPIF--
++<?php
++require(__DIR__."/connect.inc");
++// The bind buffer size edge cases seem to change each DB version.
++preg_match('/.*Release ([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)*/', oci_server_version($c), $matches);
++if (!(isset($matches[0]) && $matches[1] < 12)) {
++    die("skip expected output only valid when using pre-Oracle 12c database");
++}
++?>
++--FILE--
++<?php
++
++require __DIR__.'/connect.inc';
++
++$create_st = array();
++$create_st[] = "drop sequence myseq";
++$create_st[] = "drop table mytab";
++$create_st[] = "create sequence myseq";
++$create_st[] = "create table mytab (mydata varchar2(20), seqcol number)";
++
++oci8_test_sql_execute($c, $create_st);
++
++define('MYLIMIT', 200);
++
++$stmt = "insert into mytab (mydata, seqcol) values ('Some data', myseq.nextval) returning seqcol into :mybv";
++
++$stid = oci_parse($c, $stmt);
++if (!$stid) { echo "Parse error"; die; }
++
++$r = oci_bind_by_name($stid, ':MYBV', $mybv, 0 );
++if (!$r) { echo "Bind error"; die; }
++
++for ($i = 1; $i < MYLIMIT; $i++) {
++    $r = oci_execute($stid, OCI_DEFAULT);
++    if (!$r) { echo "Execute error"; die; }
++    var_dump($mybv);
++}
++
++oci_commit($c);
++
++$drop_st = array();
++$drop_st[] = "drop sequence myseq";
++$drop_st[] = "drop table mytab";
++
++oci8_test_sql_execute($c, $drop_st);
++
++echo "Done\n";
++?>
++--EXPECT--
++string(1) "1"
++string(1) "2"
++string(1) "3"
++string(1) "4"
++string(1) "5"
++string(1) "6"
++string(1) "7"
++string(1) "8"
++string(1) "9"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "2"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "3"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "4"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "5"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "6"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "7"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "8"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "9"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++string(1) "1"
++Done
+diff --git a/ext/oci8/tests/driver_name.phpt b/ext/oci8/tests/driver_name.phpt
+index 32cb75a5..12639227 100644
+--- a/ext/oci8/tests/driver_name.phpt
++++ b/ext/oci8/tests/driver_name.phpt
+@@ -57,11 +57,11 @@ function get_attr($conn)
+ ?>
+ --EXPECT--
+ **Test 1.1 - Default values for the attribute **************
+-The value of DRIVER_NAME is PHP OCI8 : 3.3.0
++The value of DRIVER_NAME is PHP OCI8 : 3.1.0
+ 
+ ***Test 1.2 - Get the values from different connections **************
+ Testing with oci_pconnect()
+-The value of DRIVER_NAME is PHP OCI8 : 3.3.0
++The value of DRIVER_NAME is PHP OCI8 : 3.1.0
+ Testing with oci_new_connect()
+-The value of DRIVER_NAME is PHP OCI8 : 3.3.0
++The value of DRIVER_NAME is PHP OCI8 : 3.1.0
+ Done
+diff --git a/ext/oci8/tests/lob_prefetch.phpt b/ext/oci8/tests/lob_prefetch.phpt
+deleted file mode 100755
+index 909e20b3..00000000
+--- a/ext/oci8/tests/lob_prefetch.phpt
++++ /dev/null
+@@ -1,166 +0,0 @@
+---TEST--
+-LOB prefetching
+---EXTENSIONS--
+-oci8
+---SKIPIF--
+-<?php
+-$target_dbs = array('oracledb' => true, 'timesten' => false);  // test runs on these DBs
+-require(__DIR__.'/skipif.inc');
+-?>
+---FILE--
+-<?php
+-
+-require __DIR__.'/connect.inc';
+-require __DIR__.'/create_table.inc';
+-
+-define("NUMROWS", 200);
+-define("LOBSIZE", 64000);
+-
+-$ora_sql =
+-  "declare
+-    c clob;
+-    b blob;
+-    numrows number := " . NUMROWS . ";
+-    dest_offset integer := 1;
+-    src_offset  integer := 1;
+-    warn        integer;
+-    ctx         integer := dbms_lob.default_lang_ctx;
+-  begin
+-    for j in 1..numrows
+-    loop
+-      c := DBMS_RANDOM.string('L',TRUNC(DBMS_RANDOM.value(1000,1000)));
+-      for i in 1..6
+-      loop
+-        c := c||c;
+-      end loop;
+-      dbms_lob.createtemporary(b, false);
+-      dbms_lob.converttoblob(b, c, dbms_lob.lobmaxsize, dest_offset, src_offset, dbms_lob.default_csid, ctx, warn);
+-      insert /*+ APPEND */ into {$schema}{$table_name} (id, clob, blob) values (j, c, b);
+-    end loop;
+-    commit;
+-  end;";
+-
+-$statement = oci_parse($c,$ora_sql);
+-oci_execute($statement);
+-
+-
+-function get_clob_loc($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC)) != false) {
+-        $l[] = $row['CLOB']->load();
+-        $row['CLOB']->free();
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" .  strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-function get_clob_inline($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC+OCI_RETURN_LOBS)) != false) {
+-        $l[] = $row['CLOB'];
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" . strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-function check_clobs($locarr, $inlinearr) {
+-    print("Comparing CLOBS\n");
+-    for ($i = 0; $i < NUMROWS; ++$i) {
+-        if (strlen($locarr[$i]) != LOBSIZE) {
+-            trigger_error("size mismatch at $i " . strlen($locarr[$i]), E_USER_ERROR);
+-            exit;
+-        }
+-        if (strcmp($locarr[$i], $inlinearr[$i])) {
+-            trigger_error("data mismatch at $i " . strlen($locarr[$i]) . " " . strlen($inlinearr[$i]), E_USER_ERROR);
+-            exit;
+-        }
+-    }
+-}
+-
+-function get_blob_loc($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC)) != false) {
+-        $l[] = $row['BLOB']->load();
+-        $row['BLOB']->free();
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" .  strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-
+-print("Test 1 - Default prefetch_lob_size\n");
+-
+-$r = ini_get("oci8.prefetch_lob_size");
+-var_dump($r);
+-
+-print("Test 2\n");
+-
+-$s = oci_parse($c, 'select * from dual');
+-$r = oci_set_prefetch_lob($s, 0);
+-var_dump($r);
+-
+-try {
+-    oci_set_prefetch_lob($s, -1);
+-} catch (ValueError $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-print("Test 3 - CLOB prefetch_lob_size 100000\n");
+-
+-$sql = "select clob from {$schema}{$table_name}" . " order by id";
+-$locarr = get_clob_loc($c, $sql, 100000);
+-$inlinearr = get_clob_inline($c, $sql, 100000);
+-
+-print(count($locarr) . "\n");
+-print(count($inlinearr) . "\n");
+-check_clobs($locarr, $inlinearr);
+-
+-print("Test 3 - CLOB prefetch_lob_size 100\n");
+-
+-$locarr = get_clob_loc($c, $sql, 100);
+-$inlinearr = get_clob_inline($c, $sql, 100);
+-
+-print(count($locarr) . "\n");
+-print(count($inlinearr) . "\n");
+-check_clobs($locarr, $inlinearr);
+-
+-print("Test 4 - BLOB prefetch_lob_size 100000\n");
+-
+-$sql = "select blob from {$schema}{$table_name}" . " order by id";
+-$locarr = get_blob_loc($c, $sql, 100000);
+-
+-print(count($locarr) . "\n");
+-
+-require __DIR__.'/drop_table.inc';
+-
+-?>
+-DONE
+---EXPECTF--
+-Test 1 - Default prefetch_lob_size
+-string(1) "0"
+-Test 2
+-bool(true)
+-oci_set_prefetch_lob(): Argument #2 ($prefetch_lob_size) must be greater than or equal to 0
+-Test 3 - CLOB prefetch_lob_size 100000
+-200
+-200
+-Comparing CLOBS
+-Test 3 - CLOB prefetch_lob_size 100
+-200
+-200
+-Comparing CLOBS
+-Test 4 - BLOB prefetch_lob_size 100000
+-200
+-DONE
+diff --git a/ext/oci8/tests/lob_prefetch_ini.phpt b/ext/oci8/tests/lob_prefetch_ini.phpt
+deleted file mode 100755
+index 51ae2e3c..00000000
+--- a/ext/oci8/tests/lob_prefetch_ini.phpt
++++ /dev/null
+@@ -1,165 +0,0 @@
+---TEST--
+-LOB prefetching with oci8.
+---EXTENSIONS--
+-oci8
+---SKIPIF--
+-<?php
+-$target_dbs = array('oracledb' => true, 'timesten' => false);  // test runs on these DBs
+-require(__DIR__.'/skipif.inc');
+-?>
+---INI--
+-oci8.prefetch_lob_size=100000
+---FILE--
+-<?php
+-
+-require __DIR__.'/connect.inc';
+-require __DIR__.'/create_table.inc';
+-
+-define("NUMROWS", 200);
+-define("LOBSIZE", 64000);
+-
+-$ora_sql =
+-  "declare
+-    c clob;
+-    b blob;
+-    numrows number := " . NUMROWS . ";
+-    dest_offset integer := 1;
+-    src_offset  integer := 1;
+-    warn        integer;
+-    ctx         integer := dbms_lob.default_lang_ctx;
+-  begin
+-    for j in 1..numrows
+-    loop
+-      c := DBMS_RANDOM.string('L',TRUNC(DBMS_RANDOM.value(1000,1000)));
+-      for i in 1..6
+-      loop
+-        c := c||c;
+-      end loop;
+-      dbms_lob.createtemporary(b, false);
+-      dbms_lob.converttoblob(b, c, dbms_lob.lobmaxsize, dest_offset, src_offset, dbms_lob.default_csid, ctx, warn);
+-      insert /*+ APPEND */ into {$schema}{$table_name} (id, clob, blob) values (j, c, b);
+-    end loop;
+-    commit;
+-  end;";
+-
+-$statement = oci_parse($c,$ora_sql);
+-oci_execute($statement);
+-
+-function get_clob_loc($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC)) != false) {
+-        $l[] = $row['CLOB']->load();
+-        $row['CLOB']->free();
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" .  strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-function get_clob_inline($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC+OCI_RETURN_LOBS)) != false) {
+-        $l[] = $row['CLOB'];
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" . strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-function check_clobs($locarr, $inlinearr) {
+-    print("Comparing CLOBS\n");
+-    for ($i = 0; $i < NUMROWS; ++$i) {
+-        if (strlen($locarr[$i]) != LOBSIZE) {
+-            trigger_error("size mismatch at $i " . strlen($locarr[$i]), E_USER_ERROR);
+-            exit;
+-        }
+-        if (strcmp($locarr[$i], $inlinearr[$i])) {
+-            trigger_error("data mismatch at $i " . strlen($locarr[$i]) . " " . strlen($inlinearr[$i]), E_USER_ERROR);
+-            exit;
+-        }
+-    }
+-}
+-
+-function get_blob_loc($c, $sql, $pfl) {
+-    $stid = oci_parse($c, $sql);
+-    if ($pfl >= 0)
+-        oci_set_prefetch_lob($stid, $pfl);
+-    oci_execute($stid);
+-    $l = [];
+-    while (($row = oci_fetch_array($stid, OCI_ASSOC)) != false) {
+-        $l[] = $row['BLOB']->load();
+-        $row['BLOB']->free();
+-        if (strlen($l[0]) != LOBSIZE) { print("strlen(l) failure" .  strlen($l)); exit; }
+-    }
+-    return($l);
+-}
+-
+-
+-print("Test 1 - prefetch_lob_size\n");
+-
+-$r = ini_get("oci8.prefetch_lob_size");
+-var_dump($r);
+-
+-print("Test 2 - CLOB with current oci8.prefetch_lob_size\n");
+-
+-$sql = "select clob from {$schema}{$table_name}" . " order by id";
+-$locarr = get_clob_loc($c, $sql, -1);
+-$inlinearr = get_clob_inline($c, $sql, -1);
+-
+-print(count($locarr) . "\n");
+-print(count($inlinearr) . "\n");
+-check_clobs($locarr, $inlinearr);
+-
+-print("Test 3 - CLOB override prefetch_lob_size 0\n");
+-
+-$locarr = get_clob_loc($c, $sql, 0);
+-$inlinearr = get_clob_inline($c, $sql, 0);
+-
+-print(count($locarr) . "\n");
+-print(count($inlinearr) . "\n");
+-check_clobs($locarr, $inlinearr);
+-
+-print("Test 4 - CLOB override prefetch_lob_size 1000\n");
+-
+-$locarr = get_clob_loc($c, $sql, 1000);
+-$inlinearr = get_clob_inline($c, $sql, 1000);
+-
+-print(count($locarr) . "\n");
+-print(count($inlinearr) . "\n");
+-check_clobs($locarr, $inlinearr);
+-
+-print("Test 5 - BLOB with current ocig8.prefetch_lob_size\n");
+-
+-$sql = "select blob from {$schema}{$table_name}" . " order by id";
+-$locarr = get_blob_loc($c, $sql, -1);
+-
+-print(count($locarr) . "\n");
+-
+-require __DIR__.'/drop_table.inc';
+-
+-?>
+-DONE
+---EXPECTF--
+-Test 1 - prefetch_lob_size
+-string(6) "100000"
+-Test 2 - CLOB with current oci8.prefetch_lob_size
+-200
+-200
+-Comparing CLOBS
+-Test 3 - CLOB override prefetch_lob_size 0
+-200
+-200
+-Comparing CLOBS
+-Test 4 - CLOB override prefetch_lob_size 1000
+-200
+-200
+-Comparing CLOBS
+-Test 5 - BLOB with current ocig8.prefetch_lob_size
+-200
+-DONE
+diff --git a/ext/odbc/config.m4 b/ext/odbc/config.m4
+index 3ebf0217..5a4c09ef 100644
+--- a/ext/odbc/config.m4
++++ b/ext/odbc/config.m4
+@@ -461,7 +461,7 @@ if test -n "$ODBC_TYPE"; then
+   PHP_SUBST_OLD(ODBC_LFLAGS)
+   PHP_SUBST_OLD(ODBC_TYPE)
+ 
+-  PHP_NEW_EXTENSION(odbc, php_odbc.c odbc_utils.c, $ext_shared,, [$ODBC_CFLAGS -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1])
++  PHP_NEW_EXTENSION(odbc, php_odbc.c, $ext_shared,, [$ODBC_CFLAGS -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1])
+ else
+   AC_MSG_CHECKING([for any ODBC driver support])
+   AC_MSG_RESULT(no)

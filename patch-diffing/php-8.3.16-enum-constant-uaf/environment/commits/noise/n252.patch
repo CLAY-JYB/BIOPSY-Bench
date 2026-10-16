@@ -1,0 +1,322 @@
+diff --git a/ext/random/tests/03_randomizer/methods/getInt.phpt b/ext/random/tests/03_randomizer/methods/getInt.phpt
+deleted file mode 100644
+index faa098ad..00000000
+--- a/ext/random/tests/03_randomizer/methods/getInt.phpt
++++ /dev/null
+@@ -1,54 +0,0 @@
+---TEST--
+-Random: Randomizer: getInt(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    // Basic range test.
+-    for ($i = 0; $i < 10_000; $i++) {
+-        $result = $randomizer->getInt(-$i, $i);
+-
+-        if ($result > $i || $result < -$i) {
+-            die("failure: out of range at {$i}");
+-        }
+-    }
+-
+-    // Test that extreme ranges do not throw.
+-    for ($i = 0; $i < 10_000; $i++) {
+-        $randomizer->getInt(PHP_INT_MIN, PHP_INT_MAX);
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/methods/getInt_expansion_32.phpt b/ext/random/tests/03_randomizer/methods/getInt_expansion_32.phpt
+deleted file mode 100644
+index 6e932081..00000000
+--- a/ext/random/tests/03_randomizer/methods/getInt_expansion_32.phpt
++++ /dev/null
+@@ -1,25 +0,0 @@
+---TEST--
+-Random: Randomizer: getInt(): Returned values with insufficient bits are correctly expanded
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class ByteEngine implements Engine
+-{
+-    public $count = 0;
+-
+-    public function generate(): string
+-    {
+-        return "\x01\x02\x03\x04\x05\x06\x07\x08"[$this->count++];
+-    }
+-}
+-
+-$randomizer = new Randomizer(new ByteEngine());
+-
+-var_dump(bin2hex(pack('V', $randomizer->getInt(0, 0x00FF_FFFF))));
+-
+-?>
+---EXPECT--
+-string(8) "01020300"
+diff --git a/ext/random/tests/03_randomizer/methods/getInt_expansion_64.phpt b/ext/random/tests/03_randomizer/methods/getInt_expansion_64.phpt
+deleted file mode 100644
+index 87c6bfea..00000000
+--- a/ext/random/tests/03_randomizer/methods/getInt_expansion_64.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Random: Randomizer: getInt(): Returned values with insufficient bits are correctly expanded (64 Bit)
+---SKIPIF--
+-<?php if (PHP_INT_SIZE != 8) die("skip 64-bit only"); ?>
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class ByteEngine implements Engine
+-{
+-    public $count = 0;
+-
+-    public function generate(): string
+-    {
+-        return "\x01\x02\x03\x04\x05\x06\x07\x08"[$this->count++];
+-    }
+-}
+-
+-$randomizer = new Randomizer(new ByteEngine());
+-
+-var_dump(bin2hex(pack('P', $randomizer->getInt(0, 0x00FF_FFFF_FFFF_FFFF))));
+-
+-?>
+---EXPECT--
+-string(16) "0102030405060700"
+diff --git a/ext/random/tests/03_randomizer/methods/getInt_gh9415.phpt b/ext/random/tests/03_randomizer/methods/getInt_gh9415.phpt
+deleted file mode 100644
+index c624cb78..00000000
+--- a/ext/random/tests/03_randomizer/methods/getInt_gh9415.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-GH-9415: Randomizer::getInt(0, 2**32 - 1) with Mt19937 always returns 1
+---FILE--
+-<?php
+-
+-use Random\Randomizer;
+-use Random\Engine\Mt19937;
+-
+-$randomizer = new Randomizer(new Mt19937(1234));
+-// Parameters shifted by -2147483648 to be compatible with 32-bit.
+-var_dump($randomizer->getInt(-2147483648, 2147483647));
+-
+-$randomizer = new Randomizer(new Mt19937(4321));
+-var_dump($randomizer->getInt(-2147483648, 2147483647));
+-
+-?>
+---EXPECT--
+-int(-1324913873)
+-int(-1843387587)
+diff --git a/ext/random/tests/03_randomizer/methods/nextInt.phpt b/ext/random/tests/03_randomizer/methods/nextInt.phpt
+deleted file mode 100644
+index fd4460cb..00000000
+--- a/ext/random/tests/03_randomizer/methods/nextInt.phpt
++++ /dev/null
+@@ -1,50 +0,0 @@
+---TEST--
+-Random: Randomizer: nextInt(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    for ($i = 0; $i < 10_000; $i++) {
+-        try {
+-            $randomizer->nextInt();
+-        } catch (\Random\RandomException $e) {
+-            if ($e->getMessage() !== 'Generated value exceeds size of int' || PHP_INT_SIZE !== 4) {
+-                throw $e;
+-            }
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/methods/nextInt_64_engine_on_32_platform.phpt b/ext/random/tests/03_randomizer/methods/nextInt_64_engine_on_32_platform.phpt
+deleted file mode 100644
+index 2a408e56..00000000
+--- a/ext/random/tests/03_randomizer/methods/nextInt_64_engine_on_32_platform.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Random: Randomizer: nextInt(): Throws for 64 bit engines on 32 bit platforms
+---SKIPIF--
+-<?php if (PHP_INT_SIZE == 8) die("skip 32-bit only"); ?>
+---FILE--
+-<?php
+-
+-use Random\Randomizer;
+-use Random\Engine\Xoshiro256StarStar;
+-
+-$randomizer = new Randomizer(new Xoshiro256StarStar());
+-
+-try {
+-    var_dump($randomizer->nextInt());
+-} catch (Random\RandomException $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-Generated value exceeds size of int
+diff --git a/ext/random/tests/03_randomizer/methods/pickArrayKeys.phpt b/ext/random/tests/03_randomizer/methods/pickArrayKeys.phpt
+deleted file mode 100644
+index 41784558..00000000
+--- a/ext/random/tests/03_randomizer/methods/pickArrayKeys.phpt
++++ /dev/null
+@@ -1,84 +0,0 @@
+---TEST--
+-Random: Randomizer: pickArrayKeys(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-$array1 = []; // list
+-$array2 = []; // associative array with only strings
+-$array3 = []; // mixed key array
+-for ($i = 0; $i < 500; $i++) {
+-    $string = sha1((string)$i);
+-
+-    $array1[] = $i;
+-    $array2[$string] = $i;
+-    $array3[$string] = $i;
+-    $array3[$i] = $string;
+-}
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    for ($i = 1; $i < 100; $i++) {
+-        $result = $randomizer->pickArrayKeys($array1, $i);
+-
+-        if (array_unique($result) !== $result) {
+-            die("failure: duplicates returned at {$i} for array1");
+-        }
+-
+-        if (array_diff($result, array_keys($array1)) !== []) {
+-            die("failure: non-keys returned at {$i} for array1");
+-        }
+-
+-        $result = $randomizer->pickArrayKeys($array2, $i);
+-
+-        if (array_unique($result) !== $result) {
+-            die("failure: duplicates returned at {$i} for array2");
+-        }
+-
+-        if (array_diff($result, array_keys($array2)) !== []) {
+-            die("failure: non-keys returned at {$i} for array2");
+-        }
+-
+-        $result = $randomizer->pickArrayKeys($array3, $i);
+-
+-        if (array_unique($result) !== $result) {
+-            die("failure: duplicates returned at {$i} for array3");
+-        }
+-
+-        if (array_diff($result, array_keys($array3)) !== []) {
+-            die("failure: non-keys returned at {$i} for array3");
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success

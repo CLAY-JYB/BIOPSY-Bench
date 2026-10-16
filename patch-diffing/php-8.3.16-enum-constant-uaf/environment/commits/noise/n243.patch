@@ -1,0 +1,512 @@
+diff --git a/ext/posix/posix.c b/ext/posix/posix.c
+index 788fca0b..d32f1cfa 100644
+--- a/ext/posix/posix.c
++++ b/ext/posix/posix.c
+@@ -23,6 +23,7 @@
+ #include "ext/standard/info.h"
+ #include "ext/standard/php_string.h"
+ #include "php_posix.h"
++#include "posix_arginfo.h"
+ 
+ #ifdef HAVE_POSIX
+ 
+@@ -46,8 +47,6 @@
+ # include <sys/sysmacros.h>
+ #endif
+ 
+-#include "posix_arginfo.h"
+-
+ ZEND_DECLARE_MODULE_GLOBALS(posix)
+ static PHP_MINFO_FUNCTION(posix);
+ 
+@@ -72,8 +71,82 @@ static PHP_GINIT_FUNCTION(posix) /* {{{ */
+ /* {{{ PHP_MINIT_FUNCTION(posix) */
+ static PHP_MINIT_FUNCTION(posix)
+ {
+-	register_posix_symbols(module_number);
+-
++	REGISTER_LONG_CONSTANT("POSIX_F_OK", F_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("POSIX_X_OK", X_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("POSIX_W_OK", W_OK, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("POSIX_R_OK", R_OK, CONST_CS | CONST_PERSISTENT);
++#ifdef S_IFREG
++	REGISTER_LONG_CONSTANT("POSIX_S_IFREG", S_IFREG, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef S_IFCHR
++	REGISTER_LONG_CONSTANT("POSIX_S_IFCHR", S_IFCHR, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef S_IFBLK
++	REGISTER_LONG_CONSTANT("POSIX_S_IFBLK", S_IFBLK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef S_IFIFO
++	REGISTER_LONG_CONSTANT("POSIX_S_IFIFO", S_IFIFO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef S_IFSOCK
++	REGISTER_LONG_CONSTANT("POSIX_S_IFSOCK", S_IFSOCK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_AS
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_AS", RLIMIT_AS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_CORE
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_CORE", RLIMIT_CORE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_CPU
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_CPU", RLIMIT_CPU, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_DATA
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_DATA", RLIMIT_DATA, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_FSIZE
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_FSIZE", RLIMIT_FSIZE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_LOCKS
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_LOCKS", RLIMIT_LOCKS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_MEMLOCK
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_MEMLOCK", RLIMIT_MEMLOCK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_MSGQUEUE
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_MSGQUEUE", RLIMIT_MSGQUEUE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_NICE
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NICE", RLIMIT_NICE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_NOFILE
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NOFILE", RLIMIT_NOFILE, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_NPROC
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NPROC", RLIMIT_NPROC, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_RSS
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RSS", RLIMIT_RSS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_RTPRIO
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RTPRIO", RLIMIT_RTPRIO, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_RTTIME
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RTTIME", RLIMIT_RTTIME, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_SIGPENDING
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_SIGPENDING", RLIMIT_SIGPENDING, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_STACK
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_STACK", RLIMIT_STACK, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_KQUEUES
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_KQUEUES", RLIMIT_KQUEUES, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef RLIMIT_NPTS
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NPTS", RLIMIT_NPTS, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef HAVE_SETRLIMIT
++	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_INFINITY", RLIM_INFINITY, CONST_CS | CONST_PERSISTENT);
++#endif
+ 	return SUCCESS;
+ }
+ /* }}} */
+diff --git a/ext/posix/posix.stub.php b/ext/posix/posix.stub.php
+index d3df0cd6..3904bae9 100644
+--- a/ext/posix/posix.stub.php
++++ b/ext/posix/posix.stub.php
+@@ -2,196 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var int
+- * @cvalue F_OK
+- */
+-const POSIX_F_OK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue X_OK
+- */
+-const POSIX_X_OK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue W_OK
+- */
+-const POSIX_W_OK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue R_OK
+- */
+-const POSIX_R_OK = UNKNOWN;
+-
+-#ifdef S_IFREG
+-/**
+- * @var int
+- * @cvalue S_IFREG
+- */
+-const POSIX_S_IFREG = UNKNOWN;
+-#endif
+-#ifdef S_IFCHR
+-/**
+- * @var int
+- * @cvalue S_IFCHR
+- */
+-const POSIX_S_IFCHR = UNKNOWN;
+-#endif
+-#ifdef S_IFBLK
+-/**
+- * @var int
+- * @cvalue S_IFBLK
+- */
+-const POSIX_S_IFBLK = UNKNOWN;
+-#endif
+-#ifdef S_IFIFO
+-/**
+- * @var int
+- * @cvalue S_IFIFO
+- */
+-const POSIX_S_IFIFO = UNKNOWN;
+-#endif
+-#ifdef S_IFSOCK
+-/**
+- * @var int
+- * @cvalue S_IFSOCK
+- */
+-const POSIX_S_IFSOCK = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_AS
+-/**
+- * @var int
+- * @cvalue RLIMIT_AS
+- */
+-const POSIX_RLIMIT_AS = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_CORE
+-/**
+- * @var int
+- * @cvalue RLIMIT_CORE
+- */
+-const POSIX_RLIMIT_CORE = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_CPU
+-/**
+- * @var int
+- * @cvalue RLIMIT_CPU
+- */
+-const POSIX_RLIMIT_CPU = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_DATA
+-/**
+- * @var int
+- * @cvalue RLIMIT_DATA
+- */
+-const POSIX_RLIMIT_DATA = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_FSIZE
+-/**
+- * @var int
+- * @cvalue RLIMIT_FSIZE
+- */
+-const POSIX_RLIMIT_FSIZE = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_LOCKS
+-/**
+- * @var int
+- * @cvalue RLIMIT_LOCKS
+- */
+-const POSIX_RLIMIT_LOCKS = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_MEMLOCK
+-/**
+- * @var int
+- * @cvalue RLIMIT_MEMLOCK
+- */
+-const POSIX_RLIMIT_MEMLOCK = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_MSGQUEUE
+-/**
+- * @var int
+- * @cvalue RLIMIT_MSGQUEUE
+- */
+-const POSIX_RLIMIT_MSGQUEUE = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_NICE
+-/**
+- * @var int
+- * @cvalue RLIMIT_NICE
+- */
+-const POSIX_RLIMIT_NICE = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_NOFILE
+-/**
+- * @var int
+- * @cvalue RLIMIT_NOFILE
+- */
+-const POSIX_RLIMIT_NOFILE = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_NPROC
+-/**
+- * @var int
+- * @cvalue RLIMIT_NPROC
+- */
+-const POSIX_RLIMIT_NPROC = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_RSS
+-/**
+- * @var int
+- * @cvalue RLIMIT_RSS
+- */
+-const POSIX_RLIMIT_RSS = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_RTPRIO
+-/**
+- * @var int
+- * @cvalue RLIMIT_RTPRIO
+- */
+-const POSIX_RLIMIT_RTPRIO = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_RTTIME
+-/**
+- * @var int
+- * @cvalue RLIMIT_RTTIME
+- */
+-const POSIX_RLIMIT_RTTIME = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_SIGPENDING
+-/**
+- * @var int
+- * @cvalue RLIMIT_SIGPENDING
+- */
+-const POSIX_RLIMIT_SIGPENDING = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_STACK
+-/**
+- * @var int
+- * @cvalue RLIMIT_STACK
+- */
+-const POSIX_RLIMIT_STACK = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_KQUEUES
+-/**
+- * @var int
+- * @cvalue RLIMIT_KQUEUES
+- */
+-const POSIX_RLIMIT_KQUEUES = UNKNOWN;
+-#endif
+-#ifdef RLIMIT_NPTS
+-/**
+- * @var int
+- * @cvalue RLIMIT_NPTS
+- */
+-const POSIX_RLIMIT_NPTS = UNKNOWN;
+-#endif
+-#ifdef HAVE_SETRLIMIT
+-/**
+- * @var int
+- * @cvalue RLIM_INFINITY
+- */
+-const POSIX_RLIMIT_INFINITY = UNKNOWN;
+-#endif
+-
+ function posix_kill(int $process_id, int $signal): bool {}
+ 
+ function posix_getpid(): int {}
+diff --git a/ext/posix/posix_arginfo.h b/ext/posix/posix_arginfo.h
+index e91a9950..19c423fa 100644
+--- a/ext/posix/posix_arginfo.h
++++ b/ext/posix/posix_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: e7f501e4ca2c30f6bf52ea5912037c1e59743949 */
++ * Stub hash: b8806b9b67bf24cc64fe1957306f1c720a61ea58 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_posix_kill, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, process_id, IS_LONG, 0)
+@@ -290,83 +290,3 @@ static const zend_function_entry ext_functions[] = {
+ #endif
+ 	ZEND_FE_END
+ };
+-
+-static void register_posix_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("POSIX_F_OK", F_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("POSIX_X_OK", X_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("POSIX_W_OK", W_OK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("POSIX_R_OK", R_OK, CONST_PERSISTENT);
+-#if defined(S_IFREG)
+-	REGISTER_LONG_CONSTANT("POSIX_S_IFREG", S_IFREG, CONST_PERSISTENT);
+-#endif
+-#if defined(S_IFCHR)
+-	REGISTER_LONG_CONSTANT("POSIX_S_IFCHR", S_IFCHR, CONST_PERSISTENT);
+-#endif
+-#if defined(S_IFBLK)
+-	REGISTER_LONG_CONSTANT("POSIX_S_IFBLK", S_IFBLK, CONST_PERSISTENT);
+-#endif
+-#if defined(S_IFIFO)
+-	REGISTER_LONG_CONSTANT("POSIX_S_IFIFO", S_IFIFO, CONST_PERSISTENT);
+-#endif
+-#if defined(S_IFSOCK)
+-	REGISTER_LONG_CONSTANT("POSIX_S_IFSOCK", S_IFSOCK, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_AS)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_AS", RLIMIT_AS, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_CORE)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_CORE", RLIMIT_CORE, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_CPU)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_CPU", RLIMIT_CPU, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_DATA)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_DATA", RLIMIT_DATA, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_FSIZE)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_FSIZE", RLIMIT_FSIZE, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_LOCKS)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_LOCKS", RLIMIT_LOCKS, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_MEMLOCK)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_MEMLOCK", RLIMIT_MEMLOCK, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_MSGQUEUE)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_MSGQUEUE", RLIMIT_MSGQUEUE, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_NICE)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NICE", RLIMIT_NICE, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_NOFILE)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NOFILE", RLIMIT_NOFILE, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_NPROC)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NPROC", RLIMIT_NPROC, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_RSS)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RSS", RLIMIT_RSS, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_RTPRIO)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RTPRIO", RLIMIT_RTPRIO, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_RTTIME)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_RTTIME", RLIMIT_RTTIME, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_SIGPENDING)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_SIGPENDING", RLIMIT_SIGPENDING, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_STACK)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_STACK", RLIMIT_STACK, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_KQUEUES)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_KQUEUES", RLIMIT_KQUEUES, CONST_PERSISTENT);
+-#endif
+-#if defined(RLIMIT_NPTS)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_NPTS", RLIMIT_NPTS, CONST_PERSISTENT);
+-#endif
+-#if defined(HAVE_SETRLIMIT)
+-	REGISTER_LONG_CONSTANT("POSIX_RLIMIT_INFINITY", RLIM_INFINITY, CONST_PERSISTENT);
+-#endif
+-}
+diff --git a/ext/pspell/pspell.c b/ext/pspell/pspell.c
+index 7c15472e..58960e9d 100644
+--- a/ext/pspell/pspell.c
++++ b/ext/pspell/pspell.c
+@@ -32,6 +32,7 @@
+ #include "php_pspell.h"
+ #include <pspell.h>
+ #include "ext/standard/info.h"
++#include "pspell_arginfo.h"
+ 
+ #define PSPELL_FAST 1L
+ #define PSPELL_NORMAL 2L
+@@ -39,8 +40,6 @@
+ #define PSPELL_SPEED_MASK_INTERNAL 3L
+ #define PSPELL_RUN_TOGETHER 8L
+ 
+-#include "pspell_arginfo.h"
+-
+ /* Largest ignored word can be 999 characters (this seems sane enough),
+  * and it takes 3 bytes to represent that (see pspell_config_ignore)
+  */
+@@ -168,7 +167,10 @@ static PHP_MINIT_FUNCTION(pspell)
+ 	php_pspell_config_handlers.get_constructor = php_pspell_config_object_get_constructor;
+ 	php_pspell_config_handlers.offset = XtOffsetOf(php_pspell_config_object, std);
+ 
+-	register_pspell_symbols(module_number);
++	REGISTER_LONG_CONSTANT("PSPELL_FAST", PSPELL_FAST, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("PSPELL_NORMAL", PSPELL_NORMAL, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("PSPELL_BAD_SPELLERS", PSPELL_BAD_SPELLERS, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("PSPELL_RUN_TOGETHER", PSPELL_RUN_TOGETHER, CONST_PERSISTENT | CONST_CS);
+ 
+ 	return SUCCESS;
+ }
+diff --git a/ext/pspell/pspell.stub.php b/ext/pspell/pspell.stub.php
+index 3397edc9..3e19e58d 100644
+--- a/ext/pspell/pspell.stub.php
++++ b/ext/pspell/pspell.stub.php
+@@ -3,6 +3,7 @@
+ /** @generate-class-entries */
+ 
+ namespace PSpell {
++
+     /**
+      * @strict-properties
+      * @not-serializable
+@@ -14,29 +15,10 @@ namespace PSpell {
+      * @not-serializable
+      */
+     final class Config {}
++
+ }
+ 
+ namespace {
+-    /**
+-     * @var int
+-     * @cvalue PSPELL_FAST
+-     */
+-    const PSPELL_FAST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PSPELL_NORMAL
+-     */
+-    const PSPELL_NORMAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PSPELL_BAD_SPELLERS
+-     */
+-    const PSPELL_BAD_SPELLERS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PSPELL_RUN_TOGETHER
+-     */
+-    const PSPELL_RUN_TOGETHER = UNKNOWN;
+ 
+     function pspell_new(string $language, string $spelling = "", string $jargon = "", string $encoding = "", int $mode = 0): PSpell\Dictionary|false {}
+ 
+diff --git a/ext/pspell/pspell_arginfo.h b/ext/pspell/pspell_arginfo.h
+index 98d09ad0..59741e2c 100644
+--- a/ext/pspell/pspell_arginfo.h
++++ b/ext/pspell/pspell_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 8d35f61a0b48c5422b31e78f587d9258fd3e8e37 */
++ * Stub hash: 54253af8d28520254e062171733c753d7104ec6b */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_pspell_new, 0, 1, PSpell\\Dictionary, MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, language, IS_STRING, 0)
+@@ -144,14 +144,6 @@ static const zend_function_entry class_PSpell_Config_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_pspell_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("PSPELL_FAST", PSPELL_FAST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PSPELL_NORMAL", PSPELL_NORMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PSPELL_BAD_SPELLERS", PSPELL_BAD_SPELLERS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PSPELL_RUN_TOGETHER", PSPELL_RUN_TOGETHER, CONST_PERSISTENT);
+-}
+-
+ static zend_class_entry *register_class_PSpell_Dictionary(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/random/CREDITS b/ext/random/CREDITS
+deleted file mode 100644
+index c647fb7d..00000000
+--- a/ext/random/CREDITS
++++ /dev/null
+@@ -1,2 +0,0 @@
+-random
+-Go Kudo, Tim Düsterhus, Guilliam Xavier, Christoph M. Becker, Jakub Zelenka, Bob Weinand, Máté Kocsis, and Original RNG implementators

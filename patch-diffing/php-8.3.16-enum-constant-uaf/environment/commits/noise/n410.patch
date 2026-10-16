@@ -1,0 +1,354 @@
+diff --git a/ext/zip/tests/bug70752.phpt b/ext/zip/tests/bug70752.phpt
+index 9da82e98..fb46bf6c 100644
+--- a/ext/zip/tests/bug70752.phpt
++++ b/ext/zip/tests/bug70752.phpt
+@@ -20,3 +20,8 @@ var_dump(file_exists($filename));
+ --EXPECT--
+ bool(false)
+ bool(false)
++--CLEAN--
++<?php
++$filename =  __DIR__ . DIRECTORY_SEPARATOR . 'bug70752.txt';
++unlink($filename);
++?>
+diff --git a/ext/zip/tests/oo_getstatusstring.phpt b/ext/zip/tests/oo_getstatusstring.phpt
+index 489b7719..476bbbd5 100644
+--- a/ext/zip/tests/oo_getstatusstring.phpt
++++ b/ext/zip/tests/oo_getstatusstring.phpt
+@@ -20,7 +20,7 @@ $arch->close();
+ ?>
+ --CLEAN--
+ <?php
+-@unlink(__DIR__.'/foo.zip');
++unlink($dirname.'foo.zip');
+ ?>
+ --EXPECT--
+ string(8) "No error"
+diff --git a/ext/zip/tests/oo_getstreamindex.phpt b/ext/zip/tests/oo_getstreamindex.phpt
+deleted file mode 100644
+index 5703b2c8..00000000
+--- a/ext/zip/tests/oo_getstreamindex.phpt
++++ /dev/null
+@@ -1,70 +0,0 @@
+---TEST--
+-ZipArchive::getStreamIndex / ZipArchive::getName
+---EXTENSIONS--
+-zip
+---FILE--
+-<?php
+-
+-$name = __DIR__ . '/getstream.zip';
+-
+-$zip = new ZipArchive;
+-$r = $zip->open($name, ZIPARCHIVE::CREATE);
+-$zip->addFromString('foo.txt', 'foo');
+-$zip->addFromString('bar.txt', 'bar');
+-$zip->close();
+-
+-$r = $zip->open($name);
+-
+-$zip->addFromString('bar.txt', 'baz', ZipArchive::FL_OVERWRITE);
+-
+-
+-echo "== Name\n";
+-$fp = $zip->getStreamName('foo.txt');
+-var_dump($zip->status);
+-var_dump(stream_get_contents($fp));
+-$zip->clearError();
+-fclose($fp);
+-
+-echo "== Index\n";
+-$fp = $zip->getStreamIndex(0);
+-var_dump($zip->status);
+-var_dump(stream_get_contents($fp));
+-$zip->clearError();
+-fclose($fp);
+-
+-echo "== Index, changed\n";
+-$fp = $zip->getStreamIndex(1);
+-if (version_compare(ZipArchive::LIBZIP_VERSION, "1.10.0", "<")) {
+-	/* not supported in old version */
+-	var_dump($zip->status === ZipArchive::ER_CHANGED);
+-} else {
+-	var_dump($zip->status === 0 && stream_get_contents($fp) === "baz");
+-}
+-$zip->clearError();
+-
+-echo "== Index, unchanged\n";
+-$fp = $zip->getStreamIndex(1, ZipArchive::FL_UNCHANGED);
+-var_dump($zip->status === 0 && stream_get_contents($fp) === "bar");
+-$zip->clearError();
+-fclose($fp);
+-
+-$zip->close();
+-?>
+-== Done
+---CLEAN--
+-<?php
+-$name = __DIR__ . '/getstream.zip';
+-@unlink($name);
+-?>
+---EXPECTF--
+-== Name
+-int(0)
+-string(3) "foo"
+-== Index
+-int(0)
+-string(3) "foo"
+-== Index, changed
+-bool(true)
+-== Index, unchanged
+-bool(true)
+-== Done
+diff --git a/ext/zip/tests/oo_stream_seek.phpt b/ext/zip/tests/oo_stream_seek.phpt
+deleted file mode 100644
+index 4955f9eb..00000000
+--- a/ext/zip/tests/oo_stream_seek.phpt
++++ /dev/null
+@@ -1,79 +0,0 @@
+---TEST--
+-getStream and seek
+---EXTENSIONS--
+-zip
+---SKIPIF--
+-<?php
+-if(version_compare(ZipArchive::LIBZIP_VERSION, '1.9.1', '<')) die('skip libzip < 1.9.1');
+-?>
+---FILE--
+-<?php
+-var_dump(ZipArchive::LIBZIP_VERSION);
+-$file = __DIR__ . '/test.zip';
+-$zip = new ZipArchive;
+-if (!$zip->open($file)) {
+-	exit('failed');
+-}
+-echo "+ ZipArchive::getStream\n";
+-$fp = $zip->getStream('bar');
+-if(!$fp) exit("\n");
+-var_dump($fp);
+-
+-var_dump(fseek($fp, 1, SEEK_SET));
+-var_dump(fread($fp, 2));
+-var_dump(ftell($fp));
+-var_dump(fseek($fp, 0, SEEK_SET));
+-var_dump(fread($fp, 2));
+-var_dump(ftell($fp));
+-
+-fclose($fp);
+-
+-echo "+ ZipArchive::getStream no supported\n";
+-$fp = $zip->getStream('entry1.txt');
+-if(!$fp) exit("\n");
+-var_dump($fp);
+-
+-var_dump(fseek($fp, 2, SEEK_SET));
+-var_dump(fread($fp, 2));
+-fclose($fp);
+-
+-$zip->close();
+-
+-
+-echo "+ Zip Stream\n";
+-$fp = fopen('zip://' . __DIR__ . '/test.zip#bar', 'rb');
+-if(!$fp) exit("\n");
+-var_dump($fp);
+-var_dump(fseek($fp, 1, SEEK_SET));
+-var_dump(fread($fp, 2));
+-var_dump(ftell($fp));
+-var_dump(fseek($fp, 0, SEEK_SET));
+-var_dump(fread($fp, 2));
+-var_dump(ftell($fp));
+-fclose($fp);
+-
+-?>
+---EXPECTF--
+-string(%d) "%s"
+-+ ZipArchive::getStream
+-resource(%d) of type (stream)
+-int(0)
+-string(2) "ar"
+-int(3)
+-int(0)
+-string(2) "ba"
+-int(2)
+-+ ZipArchive::getStream no supported
+-resource(%d) of type (stream)
+-
+-Warning: fseek(): %s does not support seeking in %s
+-int(-1)
+-string(2) "en"
+-+ Zip Stream
+-resource(%d) of type (stream)
+-int(0)
+-string(2) "ar"
+-int(3)
+-int(0)
+-string(2) "ba"
+-int(2)
+diff --git a/ext/zip/tests/stream_meta_data.phpt b/ext/zip/tests/stream_meta_data.phpt
+index 82c4ee89..59115f2b 100644
+--- a/ext/zip/tests/stream_meta_data.phpt
++++ b/ext/zip/tests/stream_meta_data.phpt
+@@ -45,7 +45,7 @@ array(8) {
+   ["unread_bytes"]=>
+   int(0)
+   ["seekable"]=>
+-  bool(%s)
++  bool(false)
+   ["uri"]=>
+   string(3) "foo"
+ }
+@@ -65,7 +65,7 @@ array(9) {
+   ["unread_bytes"]=>
+   int(0)
+   ["seekable"]=>
+-  bool(%s)
++  bool(false)
+   ["uri"]=>
+   string(%d) "zip://%stest_with_comment.zip#foo"
+ }
+diff --git a/ext/zip/zip_stream.c b/ext/zip/zip_stream.c
+index 28c363ed..3ee31445 100644
+--- a/ext/zip/zip_stream.c
++++ b/ext/zip/zip_stream.c
+@@ -197,35 +197,6 @@ static int php_zip_ops_stat(php_stream *stream, php_stream_statbuf *ssb) /* {{{
+ }
+ /* }}} */
+ 
+-#if LIBZIP_ATLEAST(1,9,1)
+-/* {{{ php_zip_ops_seek */
+-static int php_zip_ops_seek(php_stream *stream, zend_off_t offset, int whence, zend_off_t *newoffset)
+-{
+-	int ret = -1;
+-	STREAM_DATA_FROM_STREAM();
+-
+-	if (self->zf) {
+-		ret = zip_fseek(self->zf, offset, whence);
+-		*newoffset = zip_ftell(self->zf);
+-	}
+-
+-	return ret;
+-}
+-/* }}} */
+-
+-/* with seek command */
+-const php_stream_ops php_stream_zipio_seek_ops = {
+-	php_zip_ops_write, php_zip_ops_read,
+-	php_zip_ops_close, php_zip_ops_flush,
+-	"zip",
+-	php_zip_ops_seek, /* seek */
+-	NULL, /* cast */
+-	php_zip_ops_stat, /* stat */
+-	NULL  /* set_option */
+-};
+-#endif
+-
+-/* without seek command */
+ const php_stream_ops php_stream_zipio_ops = {
+ 	php_zip_ops_write, php_zip_ops_read,
+ 	php_zip_ops_close, php_zip_ops_flush,
+@@ -237,7 +208,7 @@ const php_stream_ops php_stream_zipio_ops = {
+ };
+ 
+ /* {{{ php_stream_zip_open */
+-php_stream *php_stream_zip_open(struct zip *arch, struct zip_stat *sb, const char *mode, zip_flags_t flags STREAMS_DC)
++php_stream *php_stream_zip_open(struct zip *arch, const char *path, const char *mode STREAMS_DC)
+ {
+ 	struct zip_file *zf = NULL;
+ 
+@@ -249,7 +220,7 @@ php_stream *php_stream_zip_open(struct zip *arch, struct zip_stat *sb, const cha
+ 	}
+ 
+ 	if (arch) {
+-		zf = zip_fopen_index(arch, sb->index, flags);
++		zf = zip_fopen(arch, path, 0);
+ 		if (zf) {
+ 			self = emalloc(sizeof(*self));
+ 
+@@ -257,15 +228,8 @@ php_stream *php_stream_zip_open(struct zip *arch, struct zip_stat *sb, const cha
+ 			self->zf = zf;
+ 			self->stream = NULL;
+ 			self->cursor = 0;
+-#if LIBZIP_ATLEAST(1,9,1)
+-			if (zip_file_is_seekable(zf) > 0) {
+-				stream = php_stream_alloc(&php_stream_zipio_seek_ops, self, NULL, mode);
+-			} else
+-#endif
+-			{
+-				stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+-			}
+-			stream->orig_path = estrdup(sb->name);
++			stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
++			stream->orig_path = estrdup(path);
+ 		}
+ 	}
+ 
+@@ -343,14 +307,7 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
+ 			self->zf = zf;
+ 			self->stream = NULL;
+ 			self->cursor = 0;
+-#if LIBZIP_ATLEAST(1,9,1)
+-			if (zip_file_is_seekable(zf) > 0) {
+-				stream = php_stream_alloc(&php_stream_zipio_seek_ops, self, NULL, mode);
+-			} else
+-#endif
+-			{
+-				stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+-			}
++			stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+ 
+ 			if (opened_path) {
+ 				*opened_path = zend_string_init(path, strlen(path), 0);
+diff --git a/ext/zlib/zlib.c b/ext/zlib/zlib.c
+index 8f1df51c..9058f4a2 100644
+--- a/ext/zlib/zlib.c
++++ b/ext/zlib/zlib.c
+@@ -1277,7 +1277,7 @@ static PHP_INI_MH(OnUpdate_zlib_output_compression)
+ 	} else if (zend_string_equals_literal_ci(new_value, "on")) {
+ 		int_value = 1;
+ 	} else {
+-		int_value = (int) zend_ini_parse_quantity_warn(new_value, entry->name);
++		int_value = zend_atoi(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
+ 	}
+ 	ini_value = zend_ini_string("output_handler", sizeof("output_handler") - 1, 0);
+ 
+@@ -1358,7 +1358,38 @@ static PHP_MINIT_FUNCTION(zlib)
+ 	deflate_context_object_handlers.clone_obj = NULL;
+ 	deflate_context_object_handlers.compare = zend_objects_not_comparable;
+ 
+-	register_zlib_symbols(module_number);
++	REGISTER_LONG_CONSTANT("FORCE_GZIP", PHP_ZLIB_ENCODING_GZIP, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("FORCE_DEFLATE", PHP_ZLIB_ENCODING_DEFLATE, CONST_CS|CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("ZLIB_ENCODING_RAW", PHP_ZLIB_ENCODING_RAW, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_ENCODING_GZIP", PHP_ZLIB_ENCODING_GZIP, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_ENCODING_DEFLATE", PHP_ZLIB_ENCODING_DEFLATE, CONST_CS|CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("ZLIB_NO_FLUSH", Z_NO_FLUSH, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_PARTIAL_FLUSH", Z_PARTIAL_FLUSH, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_SYNC_FLUSH", Z_SYNC_FLUSH, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_FULL_FLUSH", Z_FULL_FLUSH, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_BLOCK", Z_BLOCK, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_FINISH", Z_FINISH, CONST_CS|CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("ZLIB_FILTERED", Z_FILTERED, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_HUFFMAN_ONLY", Z_HUFFMAN_ONLY, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_RLE", Z_RLE, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_FIXED", Z_FIXED, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_DEFAULT_STRATEGY", Z_DEFAULT_STRATEGY, CONST_CS|CONST_PERSISTENT);
++
++	REGISTER_STRING_CONSTANT("ZLIB_VERSION", ZLIB_VERSION, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_VERNUM", ZLIB_VERNUM, CONST_CS|CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("ZLIB_OK", Z_OK, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_STREAM_END", Z_STREAM_END, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_NEED_DICT", Z_NEED_DICT, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_ERRNO", Z_ERRNO, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_STREAM_ERROR", Z_STREAM_ERROR, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_DATA_ERROR", Z_DATA_ERROR, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_MEM_ERROR", Z_MEM_ERROR, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_BUF_ERROR", Z_BUF_ERROR, CONST_CS|CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ZLIB_VERSION_ERROR", Z_VERSION_ERROR, CONST_CS|CONST_PERSISTENT);
+ 
+ 	REGISTER_INI_ENTRIES();
+ 	return SUCCESS;

@@ -1,0 +1,408 @@
+diff --git a/ext/mbstring/tests/gh9248.phpt b/ext/mbstring/tests/gh9248.phpt
+deleted file mode 100644
+index 8c513885..00000000
+--- a/ext/mbstring/tests/gh9248.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-Bug GH-9248 (Segmentation fault in mb_strimwidth())
+---EXTENSIONS--
+-mbstring
+---FILE--
+-<?php
+-var_dump(mb_strimwidth('The quick brown fox', 0, 8));
+-?>
+---EXPECT--
+-string(8) "The quic"
+diff --git a/ext/mbstring/tests/gh9535.phpt b/ext/mbstring/tests/gh9535.phpt
+index 9b491673..f22a4735 100644
+--- a/ext/mbstring/tests/gh9535.phpt
++++ b/ext/mbstring/tests/gh9535.phpt
+@@ -5,6 +5,9 @@ mbstring
+ --FILE--
+ <?php
+ $encodings = [
++	'BASE64',
++	'HTML-ENTITIES',
++	'Quoted-Printable',
+     'UTF-16',
+     'UTF-16BE',
+     'UTF-16LE',
+@@ -55,8 +58,6 @@ echo PHP_EOL;
+ 
+ $input = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+ $bytes_length = 10;
+-// For ISO-2022-KR, the initial escape sequence 'ESC $ ) C' will occupy 4 bytes of the output;
+-// this will make mb_strcut only pick out 6 'A' characters from the input string and not 10
+ foreach($encodings as $encoding) {
+     $converted_str = mb_convert_encoding($input, $encoding, mb_internal_encoding());
+     $cut_str = mb_strcut($converted_str, 0, $bytes_length, $encoding);
+@@ -68,22 +69,24 @@ echo PHP_EOL;
+ 
+ $input = '???';
+ $bytes_length = 2;
+-// ISO-2022-KR will be affected by the initial escape sequence as stated above
+ foreach($encodings as $encoding) {
+     $converted_str = mb_convert_encoding($input, $encoding, mb_internal_encoding());
+     $cut_str = mb_strcut($converted_str, 0, $bytes_length, $encoding);
+     $reconverted_str = mb_convert_encoding($cut_str, mb_internal_encoding(), $encoding);
+-    echo $encoding.trim(': '.$reconverted_str).PHP_EOL;
++    echo $encoding.': '.$reconverted_str.PHP_EOL;
+ }
+ 
+ echo PHP_EOL;
+ 
+ foreach($encodings as $encoding) {
+-    echo $encoding.trim(': '.mb_strcut($input, 0, $bytes_length, $encoding)).PHP_EOL;
++    var_dump(mb_strcut($input, 0, $bytes_length, $encoding));
+ }
+ 
+ ?>
+---EXPECT--
++--EXPECTF--
++BASE64: 宛如繁
++HTML-ENTITIES: 宛&#22914
++Quoted-Printable: %s
+ UTF-16: 宛如繁星般宛如
+ UTF-16BE: 宛如繁星般宛如
+ UTF-16LE: 宛如繁星般宛如
+@@ -98,6 +101,9 @@ CP50220: 宛如繁星
+ CP50221: 宛如繁星
+ CP50222: 宛如繁星
+ 
++BASE64: 星のように
++HTML-ENTITIES: 星の&#12
++Quoted-Printable: 星の
+ UTF-16: 星のように月のように
+ UTF-16BE: 星のように月のように
+ UTF-16LE: 星のように月のように
+@@ -112,6 +118,9 @@ CP50220: 星のように月の
+ CP50221: 星のように月の
+ CP50222: 星のように月の
+ 
++BASE64: %s
++HTML-ENTITIES: あa&
++Quoted-Printable: あa
+ UTF-16: あaいb
+ UTF-16BE: あaいb
+ UTF-16LE: あaいb
+@@ -126,6 +135,9 @@ CP50220: あa
+ CP50221: あa
+ CP50222: あa
+ 
++BASE64: AAAAAA
++HTML-ENTITIES: AAAAAAAAAA
++Quoted-Printable: AAAAAAAAAA
+ UTF-16: AAAAA
+ UTF-16BE: AAAAA
+ UTF-16LE: AAAAA
+@@ -134,12 +146,15 @@ UTF7-IMAP: AAAAAAAAAA
+ ISO-2022-JP-MS: AAAAAAAAAA
+ GB18030: AAAAAAAAAA
+ HZ: AAAAAAAAAA
+-ISO-2022-KR: AAAAAA
++ISO-2022-KR: AAAAAAAAAA
+ ISO-2022-JP-MOBILE#KDDI: AAAAAAAAAA
+ CP50220: AAAAAAAAAA
+ CP50221: AAAAAAAAAA
+ CP50222: AAAAAAAAAA
+ 
++BASE64:%s
++HTML-ENTITIES: ??
++Quoted-Printable: ??
+ UTF-16: ?
+ UTF-16BE: ?
+ UTF-16LE: ?
+@@ -148,22 +163,25 @@ UTF7-IMAP: ??
+ ISO-2022-JP-MS: ??
+ GB18030: ??
+ HZ: ??
+-ISO-2022-KR:
++ISO-2022-KR: ??
+ ISO-2022-JP-MOBILE#KDDI: ??
+ CP50220: ??
+ CP50221: ??
+ CP50222: ??
+ 
+-UTF-16: ??
+-UTF-16BE: ??
+-UTF-16LE: ??
+-UTF-7: ??
+-UTF7-IMAP: ??
+-ISO-2022-JP-MS: ??
+-GB18030: ??
+-HZ: ??
+-ISO-2022-KR:
+-ISO-2022-JP-MOBILE#KDDI: ??
+-CP50220: ??
+-CP50221: ??
+-CP50222: ??
++string(0) ""
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
++string(2) "??"
+diff --git a/ext/mbstring/tests/htmlent_encoding.phpt b/ext/mbstring/tests/htmlent_encoding.phpt
+deleted file mode 100644
+index 3b548138..00000000
+--- a/ext/mbstring/tests/htmlent_encoding.phpt
++++ /dev/null
+@@ -1,68 +0,0 @@
+---TEST--
+-Temporary test of mbstring's HTML-ENTITIES 'encoding'
+---EXTENSIONS--
+-mbstring
+---FILE--
+-<?php
+-
+-/* Using mbstring to convert strings to and from HTML entities has already been deprecated
+- * So this test should be removed when the HTML-ENTITIES 'encoding' is */
+-
+-function convertToEntities($raw, $htmlent) {
+-  $converted = mb_convert_encoding($raw, 'HTML-ENTITIES', 'UTF-8');
+-  if ($converted !== $htmlent)
+-    die('Expected ' . bin2hex($raw) . ' to convert to "' . $htmlent . '"; actually got "' . $converted . '"');
+-}
+-
+-function convertFromEntities($raw, $htmlent) {
+-  $converted = mb_convert_encoding($htmlent, 'UTF-8', 'HTML-ENTITIES');
+-  if ($converted !== $raw)
+-    die('Expected "' . $htmlent . '" to convert to ' . bin2hex($raw) . '; actually got ' . bin2hex($converted));
+-}
+-
+-function testConversion($raw, $htmlent) {
+-  convertToEntities($raw, $htmlent);
+-  convertFromEntities($raw, $htmlent);
+-}
+-
+-testConversion('', '');
+-testConversion('abc', 'abc');
+-testConversion('&<>', '&<>');
+-
+-convertFromEntities('"', '&quot;');
+-convertFromEntities("\xC3\xAC", '&igrave;');
+-
+-convertFromEntities('あ', '&#x3042;');
+-testConversion('あ', '&#12354;');
+-testConversion('abcあxyz', 'abc&#12354;xyz');
+-
+-convertFromEntities('&#x;', '&#x;');
+-convertFromEntities('&#;', '&#;');
+-convertFromEntities('&#', '&#');
+-convertFromEntities('&', '&');
+-
+-convertFromEntities("\x00", '&#00000;');
+-
+-testConversion(str_repeat('あ', 100), str_repeat('&#12354;', 100));
+-
+-convertFromEntities("&;", "&;");
+-convertFromEntities("&f;", "&f;");
+-
+-convertFromEntities("&A", "&&#65;");
+-convertFromEntities("&A", "&&#x41;");
+-
+-echo "Done!\n";
+-?>
+---EXPECTF--
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s
+-Done!
+diff --git a/ext/mbstring/tests/hz_encoding.phpt b/ext/mbstring/tests/hz_encoding.phpt
+index 885140c0..665980c9 100644
+--- a/ext/mbstring/tests/hz_encoding.phpt
++++ b/ext/mbstring/tests/hz_encoding.phpt
+@@ -33,7 +33,6 @@ testValidString('~~', '~', 'HZ', 'ASCII');
+ testValidString("~\n", '', 'HZ', 'ASCII', false);
+ testValidString('~{~}', '', 'HZ', 'ASCII', false);
+ testValidString("~{~\n~}", '', 'HZ', 'ASCII', false);
+-testValidString('~~?', '~?', 'HZ', 'ASCII');
+ echo "Tested valid ~ escapes\n";
+ 
+ for ($i = 0; $i < 0xFF; $i++) {
+@@ -119,18 +118,6 @@ while (!empty($badChars)) {
+ 
+ echo "Tested UTF-16BE -> HZ (for all GB2312 characters)\n";
+ 
+-// Regression tests
+-if (mb_convert_encoding("\x7A\xFA\x00\x00", 'HZ', 'UTF-16BE') !== "~{\x73\x43~}\x00")
+-    die("Bad");
+-if (mb_convert_encoding("~", 'UTF-16BE', 'HZ') !== "")
+-    die("Bad");
+-// There had once been a bug whereby the output buffer would be overrun by one byte.
+-// It was found by fuzzing. Reproducing it required a string which was long enough
+-// and had a GB2312 character at the end.
+-$str = "\xD9\x96C\xA7\x1B\xF6\xD8\x86\x94\xB0\xA0\xE1\x9D\x8C\xF8G\xBBMk\xD2Y\tt\xF1\x96d\x17JA\xF9\xF8\xCF\xDC\xFE\x8E\x0E\xC1\x84\xDA\xDBM\xC1\x87\x1AZ\xD5\xA6)\xFF%2\\\xCC\x02\x16]Y\xF0\x00\xEA\xE8{)\x81\xD5VQZ\x12\xB5\xBC\x9A\x91\xA0x\x02\xBA\xF6c\xACo\x9BH\xB7qx\xF5\x0F\t\x15\xDByx\xBA[\xC9\xE8r\xCD*:\xBF\x10P\xF1>Q\x07\xEE\xE5\x80\xAD\xB9\xA2\x9B\xF6\xE1,\x82\xC6q\x94E\xD4\x0B\xC6\xBCQe=\xC3\xE0\xC8\xE0R\x97\x14q\x0C\x1A\x7F\xE1\xC4\xB8U\x8A\x86\x93\xB6/\x84\x95\x06\x91W\xB2\xB6\x1F!\t X\x1A\xD5\xD6\xDA<\x81ib\x9A\x1B3\xD3\xB7:\xE2QS\xD0\x91\x99[K\xF2E\xBBjoh_5\x15 \xA4\xCC\xB0\x7F\x06\xB3,\xB3\xA7u\xB9\x82\x00\xE2f$\x1C\x84NsP\xFAiPB{\x8D\xBA\xB3[\x88\xA9\xB1\xA2r\x86\xFF<\xFD\xFB\xF8\xD6\xABq\x00z\xFA\x87\x8C_\xD9N\xF2\xFA\xEA\xEA\xAA\xD7\xFA\xA2\xD4\x85/\xFC\xE1}\xF7\x9C\x86\xDD\x12@\xC3\xDA\nC\x1Di\xA9\xB0\xC3\xB3\x04\xB2\x1A\x07BA\x02\xED\x11\xA4\xDAz\x96\xB5\xD0!p\xE2\xAD\xEDI\xEF\xF7\\\x05d.p\x07\xC4\x8B\x952\xCDz\x90\x8C\xA6U\xDB\xC7\xF4\x94\xE9\x16X\xF1\xCC\xB13\x07a9\x86]\xF9k\xA9\x87E\xCB\x89\x9Fd\x0E\x81m\xC6c\xDA\x9C\xE9\xAF\x80.\xFAq\xD9\xAAd\x1DB\x1F\x854\xE8\x82v)A\xF3\xB4\x1D\xE5\xF0\xFFu\x0E\x0C\xC4q\xF0\xE7\xB4p\x86\xE6]9\xD9\xA5O\xBAw\x1B\x8D&]\x9D\xE2\x0F\xD2\xD5\x13AY#\x81\x90\xB2\xE8\xDA\xD2\xFC>\xA0\x9A\xBD\x0B\xCC\x08>\x1E\xD1\xFEgr1'$\xEE\xA2!\x8A\xBB>\x11j#Pz_!?\xA8\x15\xCF\xCB\x84\x86\xC1\xF78:\xDA\xBCE\xA7\x02SO\x8B\x81>\x96\xBD\xFD2\x84\xC5\xFC\x19\xE5\xF4\xEFp\xF08K\xBB\xAE-[}\xE1\xDB\x8A%6\xC7\xC9";
+-if (substr(mb_convert_encoding($str, 'HZ', 'CP51932'), -4) !== "\x45\x49~}")
+-    die("Bad");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("~A", "%", "HZ", "UTF-8");
+diff --git a/ext/mbstring/tests/illformed_utf_sequences.phpt b/ext/mbstring/tests/illformed_utf_sequences.phpt
+index 6eddaf34..c0283681 100644
+--- a/ext/mbstring/tests/illformed_utf_sequences.phpt
++++ b/ext/mbstring/tests/illformed_utf_sequences.phpt
+@@ -16,6 +16,7 @@ function chk_enc($str, $n, $enc = "UTF-8") {
+ 
+ mb_substitute_character(0xfffd);
+ 
++
+ echo "UTF-8 redundancy\n";
+ var_dump(chk_enc("\x31\x32\x33", 0));
+ var_dump(chk_enc("\x41\x42\x43", 0));
+diff --git a/ext/mbstring/tests/iso2022jp_2004_encoding.phpt b/ext/mbstring/tests/iso2022jp_2004_encoding.phpt
+index 5d7672dc..078881db 100644
+--- a/ext/mbstring/tests/iso2022jp_2004_encoding.phpt
++++ b/ext/mbstring/tests/iso2022jp_2004_encoding.phpt
+@@ -124,12 +124,6 @@ for ($i = 0; $i <= 0x7F; $i++) {
+ 
+ echo "Encoding verification and conversion works for all ASCII characters\n";
+ 
+-for ($i = 0x80; $i <= 0x9F; $i++) {
+-	convertInvalidString("\x00" . chr($i), "%", 'UTF-16BE', 'ISO-2022-JP-2004');
+-}
+-
+-echo "Codepoints from U+0080-009F are rejected\n";
+-
+ /* Try a bare ESC */
+ identifyInvalidString("\x1B", 'ISO-2022-JP-2004');
+ 
+@@ -320,38 +314,17 @@ for ($i = 0; $i < 100; $i++) {
+ 	testValid($testString, $convertsTo, false);
+ }
+ 
+-// Regression test: Test handling of 0x80-0x9F; these have a special meaning in EUC-JP-2004,
+-// but not in ISO-2022-JP-2004
+-for ($i = 0x80; $i <= 0x9F; $i++)
+-	convertInvalidString(chr($i), "%", "ISO-2022-JP-2004", "UTF-8");
+-
+-// Regression test: Codepoint which has a special representation in EUC-JP-2004
+-convertInvalidString("\xFF\x95", "%", "UTF-16BE", "ISO-2022-JP-2004");
+-
+-// Regression test: Old implementation did not switch properly between JIS X 0213 plane 1
+-// and plane 2
+-// So try a character which is in plane 1 followed by one in plane 2
+-testValidString("\x30\x00\x4E\x02", "\x1B\$(Q\x21\x21\x1B\$(P\x21\x22\x1B(B", "UTF-16BE", "ISO-2022-JP-2004");
+-// Try plane 2 followed by plane 1
+-testValidString("\x4E\x02\x30\x00", "\x1B\$(P\x21\x22\x1B\$(Q\x21\x21\x1B(B", "UTF-16BE", "ISO-2022-JP-2004");
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\xE0", "%", "ISO-2022-JP-2004", "UTF-8");
+ convertInvalidString("\x1B\$(X", "%", "ISO-2022-JP-2004", "UTF-8"); // Invalid escape
+ convertInvalidString("\x1B\$B!", "%", "ISO-2022-JP-2004", "UTF-8"); // Truncated character
+ 
+-// Test sequences of 2 Unicode codepoints which convert to a single character in ISO-2022-JP-2004
+-testValidString("\x02\x54\x03\x00", "\x1B\$(Q+H\x1B(B", "UTF-16BE", "ISO-2022-JP-2004");
+-// Including the case where such a codepoint is followed by one which it can't combine with
+-testValidString("\x02\x54\x00A", "\x1B\$(Q+8\x1B(BA", "UTF-16BE", "ISO-2022-JP-2004");
+-
+ echo "All done!\n";
+ 
+ ?>
+ --EXPECT--
+ Encoding verification and conversion works for all ASCII characters
+-Codepoints from U+0080-009F are rejected
+ Encoding verification and conversion rejects all invalid single bytes
+ Encoding verification and conversion work on JISX-0208 characters
+ Encoding verification and conversion work on JISX-0213:2004 plane 1 characters
+diff --git a/ext/mbstring/tests/iso2022jp_encoding.phpt b/ext/mbstring/tests/iso2022jp_encoding.phpt
+index 5da1899c..d47ad140 100644
+--- a/ext/mbstring/tests/iso2022jp_encoding.phpt
++++ b/ext/mbstring/tests/iso2022jp_encoding.phpt
+@@ -127,10 +127,6 @@ for ($i = 0x21; $i <= 0x7E; $i++) {
+ 	testInvalid("\x1B\$B" . chr($i), "\x00%", 'ISO-2022-JP');
+ }
+ 
+-/* Switch from Kanji to ASCII */
+-testValidString("\x30\x00\x00A", "\x1B\$B\x21\x21\x1B(BA", "UTF-16BE", "JIS", false);
+-testValidString("\x30\x00\x00A", "\x1B\$B\x21\x21\x1B(BA", "UTF-16BE", "ISO-2022-JP", false);
+-
+ echo "JIS X 0208 support OK\n";
+ 
+ /* JIS7 supports escape to switch to JIS X 0212 charset, but ISO-2022-JP does not */
+@@ -155,10 +151,6 @@ for ($i = 0x21; $i <= 0x7E; $i++) {
+ 	testInvalid("\x1B\$(D" . chr($i) . "\x1B(B", "\x00%\x00%", 'JIS');
+ }
+ 
+-testValidString("\x00\xA1", "\x1B\$(D\x22\x42\x1B(B", "UTF-16BE", "JIS", false);
+-// Check that ISO-2022-JP treats JISX 0212 chars as error
+-convertInvalidString("\x00\xA1", "%", "UTF-16BE", "ISO-2022-JP", false);
+-
+ echo "JIS X 0212 support OK\n";
+ 
+ /* All possible escape sequences */
+@@ -194,16 +186,6 @@ for ($i = 0; $i <= 0xFF; $i++) {
+ 		identifyInvalidString($escapeSequence . "\x1B(B", 'ISO-2022-JP');
+ 	}
+ }
+-/* Also try a bare ESC */
+-identifyInvalidString("\x1B", 'JIS');
+-identifyInvalidString("\x1B", 'ISO-2022-JP');
+-
+-convertInvalidString("\x1B$", "%", "JIS", "UTF-8");
+-convertInvalidString("\x1B$", "%", "ISO-2022-JP", "UTF-8");
+-convertInvalidString("\x1B(", "%", "JIS", "UTF-8");
+-convertInvalidString("\x1B(", "%", "ISO-2022-JP", "UTF-8");
+-convertInvalidString("\x1B,", "%,", "JIS", "UTF-8");
+-convertInvalidString("\x1B,", "%,", "ISO-2022-JP", "UTF-8");
+ 
+ echo "All escape sequences work as expected\n";
+ 
+@@ -216,30 +198,9 @@ foreach (['JIS', 'ISO-2022-JP'] as $encoding) {
+ 
+ 	testValidString("\x00\xA5", "\x1B(J\x5C\x1B(B", 'UTF-16BE', $encoding, false);
+ }
+-testValidString("\x20\x3E", "\x1B\$B!1\x1B(B", 'UTF-16BE', 'ISO-2022-JP', false);
+ 
+ echo "Other mappings from Unicode -> ISO-2022-JP are OK\n";
+ 
+-// Single bytes from 0xA3-0xDF can be used to encode kana in JIS8
+-$grInvoked = [
+-	"\xA3" => "\x1B(I\x23\x1B(B",
+-	"\xB1" => "\x1B(I\x31\x1B(B",
+-	"\xC2" => "\x1B(I\x42\x1B(B",
+-	"\xDF" => "\x1B(I\x5F\x1B(B"
+-];
+-foreach ($grInvoked as $gr => $jisx) {
+-	// JISX 0201 is used as the canonical form for outputting kana
+-	testValidString($gr, $jisx, 'JIS', 'JIS', false);
+-	if (mb_convert_encoding($gr, 'UTF-16BE', 'JIS') !== mb_convert_encoding($jisx, 'UTF-16BE', 'JIS'))
+-		die("Equivalent GR byte and JISX 0201 sequence do not decode to the same codepoint");
+-}
+-
+-echo "GR-invoked kana support OK\n";
+-
+-// Check handling of BOM
+-convertInvalidString("\xFF\xFE", "%", "UTF-16BE", "JIS", false);
+-convertInvalidString("\xFF\xFE", "%", "UTF-16BE", "ISO-2022-JP", false);
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\xE0", "%", "JIS", "UTF-8");
+@@ -258,5 +219,4 @@ JIS X 0208 support OK
+ JIS X 0212 support OK
+ All escape sequences work as expected
+ Other mappings from Unicode -> ISO-2022-JP are OK
+-GR-invoked kana support OK
+ Done!

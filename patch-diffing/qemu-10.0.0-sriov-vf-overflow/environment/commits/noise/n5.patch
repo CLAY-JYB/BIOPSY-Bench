@@ -1,0 +1,658 @@
+diff --git a/docs/sphinx/kerneldoc.py b/docs/sphinx/kerneldoc.py
+index 72c403a737..3aa972f2e8 100644
+--- a/docs/sphinx/kerneldoc.py
++++ b/docs/sphinx/kerneldoc.py
+@@ -38,20 +38,14 @@ from docutils import nodes, statemachine
+ from docutils.statemachine import ViewList
+ from docutils.parsers.rst import directives, Directive
+ 
+-#
+-# AutodocReporter is only good up to Sphinx 1.7
+-#
+ import sphinx
++from sphinx.util import logging
++from sphinx.util.docutils import switch_source_input
+ 
+-Use_SSI = sphinx.__version__[:3] >= '1.7'
+-if Use_SSI:
+-    from sphinx.util.docutils import switch_source_input
+-else:
+-    from sphinx.ext.autodoc import AutodocReporter
+-
+-import kernellog
+ 
+ __version__  = '1.0'
++logger = logging.getLogger('kerneldoc')
++
+ 
+ class KernelDocDirective(Directive):
+     """Extract kernel-doc comments from the specified file"""
+@@ -111,8 +105,7 @@ class KernelDocDirective(Directive):
+         cmd += [filename]
+ 
+         try:
+-            kernellog.verbose(env.app,
+-                              'calling kernel-doc \'%s\'' % (" ".join(cmd)))
++            logger.verbose('calling kernel-doc \'%s\'' % (" ".join(cmd)))
+ 
+             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+             out, err = p.communicate()
+@@ -122,8 +115,10 @@ class KernelDocDirective(Directive):
+             if p.returncode != 0:
+                 sys.stderr.write(err)
+ 
+-                kernellog.warn(env.app,
+-                               'kernel-doc \'%s\' failed with return code %d' % (" ".join(cmd), p.returncode))
++                logger.warning(
++                    'kernel-doc \'%s\' failed with return code %d' %
++                    (" ".join(cmd), p.returncode)
++                )
+                 return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+             elif env.config.kerneldoc_verbosity > 0:
+                 sys.stderr.write(err)
+@@ -149,22 +144,13 @@ class KernelDocDirective(Directive):
+             return node.children
+ 
+         except Exception as e:  # pylint: disable=W0703
+-            kernellog.warn(env.app, 'kernel-doc \'%s\' processing failed with: %s' %
++            logger.warning('kernel-doc \'%s\' processing failed with: %s' %
+                            (" ".join(cmd), str(e)))
+             return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+ 
+     def do_parse(self, result, node):
+-        if Use_SSI:
+-            with switch_source_input(self.state, result):
+-                self.state.nested_parse(result, 0, node, match_titles=1)
+-        else:
+-            save = self.state.memo.title_styles, self.state.memo.section_level, self.state.memo.reporter
+-            self.state.memo.reporter = AutodocReporter(result, self.state.memo.reporter)
+-            self.state.memo.title_styles, self.state.memo.section_level = [], 0
+-            try:
+-                self.state.nested_parse(result, 0, node, match_titles=1)
+-            finally:
+-                self.state.memo.title_styles, self.state.memo.section_level, self.state.memo.reporter = save
++        with switch_source_input(self.state, result):
++            self.state.nested_parse(result, 0, node, match_titles=1)
+ 
+ 
+ def setup(app):
+diff --git a/docs/sphinx/kernellog.py b/docs/sphinx/kernellog.py
+deleted file mode 100644
+index af924f51a7..0000000000
+--- a/docs/sphinx/kernellog.py
++++ /dev/null
+@@ -1,28 +0,0 @@
+-# SPDX-License-Identifier: GPL-2.0
+-#
+-# Sphinx has deprecated its older logging interface, but the replacement
+-# only goes back to 1.6.  So here's a wrapper layer to keep around for
+-# as long as we support 1.4.
+-#
+-import sphinx
+-
+-if sphinx.__version__[:3] >= '1.6':
+-    UseLogging = True
+-    from sphinx.util import logging
+-    logger = logging.getLogger('kerneldoc')
+-else:
+-    UseLogging = False
+-
+-def warn(app, message):
+-    if UseLogging:
+-        logger.warning(message)
+-    else:
+-        app.warn(message)
+-
+-def verbose(app, message):
+-    if UseLogging:
+-        logger.verbose(message)
+-    else:
+-        app.verbose(message)
+-
+-
+diff --git a/docs/sphinx/qapidoc.py b/docs/sphinx/qapidoc.py
+index f270b494f0..738b2450fb 100644
+--- a/docs/sphinx/qapidoc.py
++++ b/docs/sphinx/qapidoc.py
+@@ -26,38 +26,42 @@ https://www.sphinx-doc.org/en/master/development/index.html
+ 
+ import os
+ import re
++import sys
++import textwrap
++from typing import List
+ 
+ from docutils import nodes
++from docutils.parsers.rst import Directive, directives
+ from docutils.statemachine import ViewList
+-from docutils.parsers.rst import directives, Directive
+-from sphinx.errors import ExtensionError
+-from sphinx.util.nodes import nested_parse_with_titles
+-import sphinx
+-from qapi.gen import QAPISchemaVisitor
+ from qapi.error import QAPIError, QAPISemError
++from qapi.gen import QAPISchemaVisitor
+ from qapi.schema import QAPISchema
+ 
++from sphinx import addnodes
++from sphinx.directives.code import CodeBlock
++from sphinx.errors import ExtensionError
++from sphinx.util.docutils import switch_source_input
++from sphinx.util.nodes import nested_parse_with_titles
++
+ 
+-# Sphinx up to 1.6 uses AutodocReporter; 1.7 and later
+-# use switch_source_input. Check borrowed from kerneldoc.py.
+-Use_SSI = sphinx.__version__[:3] >= '1.7'
+-if Use_SSI:
+-    from sphinx.util.docutils import switch_source_input
+-else:
+-    from sphinx.ext.autodoc import AutodocReporter
++__version__ = "1.0"
+ 
+ 
+-__version__ = '1.0'
++def dedent(text: str) -> str:
++    # Adjust indentation to make description text parse as paragraph.
+ 
++    lines = text.splitlines(True)
++    if re.match(r"\s+", lines[0]):
++        # First line is indented; description started on the line after
++        # the name. dedent the whole block.
++        return textwrap.dedent(text)
+ 
+-# Function borrowed from pydash, which is under the MIT license
+-def intersperse(iterable, separator):
+-    """Yield the members of *iterable* interspersed with *separator*."""
+-    iterable = iter(iterable)
+-    yield next(iterable)
+-    for item in iterable:
+-        yield separator
+-        yield item
++    # Descr started on same line. Dedent line 2+.
++    return lines[0] + textwrap.dedent("".join(lines[1:]))
++
++
++# Disable black auto-formatter until re-enabled:
++# fmt: off
+ 
+ 
+ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+@@ -167,7 +171,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+             term = self._nodes_for_one_member(section.member)
+             # TODO drop fallbacks when undocumented members are outlawed
+             if section.text:
+-                defn = section.text
++                defn = dedent(section.text)
+             else:
+                 defn = [nodes.Text('Not documented')]
+ 
+@@ -205,7 +209,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+                 termtext.extend(self._nodes_for_ifcond(section.member.ifcond))
+             # TODO drop fallbacks when undocumented members are outlawed
+             if section.text:
+-                defn = section.text
++                defn = dedent(section.text)
+             else:
+                 defn = [nodes.Text('Not documented')]
+ 
+@@ -219,15 +223,15 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         section += dlnode
+         return [section]
+ 
+-    def _nodes_for_arguments(self, doc, boxed_arg_type):
++    def _nodes_for_arguments(self, doc, arg_type):
+         """Return list of doctree nodes for the arguments section"""
+-        if boxed_arg_type:
++        if arg_type and not arg_type.is_implicit():
+             assert not doc.args
+             section = self._make_section('Arguments')
+             dlnode = nodes.definition_list()
+             dlnode += self._make_dlitem(
+                 [nodes.Text('The members of '),
+-                 nodes.literal('', boxed_arg_type.name)],
++                 nodes.literal('', arg_type.name)],
+                 None)
+             section += dlnode
+             return [section]
+@@ -240,7 +244,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         dlnode = nodes.definition_list()
+         for section in doc.features.values():
+             dlnode += self._make_dlitem(
+-                [nodes.literal('', section.member.name)], section.text)
++                [nodes.literal('', section.member.name)], dedent(section.text))
+             seen_item = True
+ 
+         if not seen_item:
+@@ -261,11 +265,20 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+             if section.tag and section.tag == 'TODO':
+                 # Hide TODO: sections
+                 continue
++
++            if not section.tag:
++                # Sphinx cannot handle sectionless titles;
++                # Instead, just append the results to the prior section.
++                container = nodes.container()
++                self._parse_text_into_node(section.text, container)
++                nodelist += container.children
++                continue
++
+             snode = self._make_section(section.tag)
+-            if section.tag and section.tag.startswith('Example'):
+-                snode += self._nodes_for_example(section.text)
++            if section.tag.startswith('Example'):
++                snode += self._nodes_for_example(dedent(section.text))
+             else:
+-                self._parse_text_into_node(section.text, snode)
++                self._parse_text_into_node(dedent(section.text), snode)
+             nodelist.append(snode)
+         return nodelist
+ 
+@@ -332,8 +345,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+                       allow_preconfig, coroutine):
+         doc = self._cur_doc
+         self._add_doc('Command',
+-                      self._nodes_for_arguments(doc,
+-                                                arg_type if boxed else None)
++                      self._nodes_for_arguments(doc, arg_type)
+                       + self._nodes_for_features(doc)
+                       + self._nodes_for_sections(doc)
+                       + self._nodes_for_if_section(ifcond))
+@@ -341,8 +353,7 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+     def visit_event(self, name, info, ifcond, features, arg_type, boxed):
+         doc = self._cur_doc
+         self._add_doc('Event',
+-                      self._nodes_for_arguments(doc,
+-                                                arg_type if boxed else None)
++                      self._nodes_for_arguments(doc, arg_type)
+                       + self._nodes_for_features(doc)
+                       + self._nodes_for_sections(doc)
+                       + self._nodes_for_if_section(ifcond))
+@@ -451,6 +462,10 @@ class QAPISchemaGenRSTVisitor(QAPISchemaVisitor):
+         return self._top_node.children
+ 
+ 
++# Turn the black formatter on for the rest of the file.
++# fmt: on
++
++
+ class QAPISchemaGenDepVisitor(QAPISchemaVisitor):
+     """A QAPI schema visitor which adds Sphinx dependencies each module
+ 
+@@ -458,34 +473,52 @@ class QAPISchemaGenDepVisitor(QAPISchemaVisitor):
+     that the generated documentation output depends on the input
+     schema file associated with each module in the QAPI input.
+     """
++
+     def __init__(self, env, qapidir):
+         self._env = env
+         self._qapidir = qapidir
+ 
+     def visit_module(self, name):
+         if name != "./builtin":
+-            qapifile = self._qapidir + '/' + name
++            qapifile = self._qapidir + "/" + name
+             self._env.note_dependency(os.path.abspath(qapifile))
+         super().visit_module(name)
+ 
+ 
+-class QAPIDocDirective(Directive):
++class NestedDirective(Directive):
++    def run(self):
++        raise NotImplementedError
++
++    def do_parse(self, rstlist, node):
++        """
++        Parse rST source lines and add them to the specified node
++
++        Take the list of rST source lines rstlist, parse them as
++        rST, and add the resulting docutils nodes as children of node.
++        The nodes are parsed in a way that allows them to include
++        subheadings (titles) without confusing the rendering of
++        anything else.
++        """
++        with switch_source_input(self.state, rstlist):
++            nested_parse_with_titles(self.state, rstlist, node)
++
++
++class QAPIDocDirective(NestedDirective):
+     """Extract documentation from the specified QAPI .json file"""
++
+     required_argument = 1
+     optional_arguments = 1
+-    option_spec = {
+-        'qapifile': directives.unchanged_required
+-    }
++    option_spec = {"qapifile": directives.unchanged_required}
+     has_content = False
+ 
+     def new_serialno(self):
+         """Return a unique new ID string suitable for use as a node's ID"""
+         env = self.state.document.settings.env
+-        return 'qapidoc-%d' % env.new_serialno('qapidoc')
++        return "qapidoc-%d" % env.new_serialno("qapidoc")
+ 
+     def run(self):
+         env = self.state.document.settings.env
+-        qapifile = env.config.qapidoc_srctree + '/' + self.arguments[0]
++        qapifile = env.config.qapidoc_srctree + "/" + self.arguments[0]
+         qapidir = os.path.dirname(qapifile)
+ 
+         try:
+@@ -508,41 +541,110 @@ class QAPIDocDirective(Directive):
+             # so they are displayed nicely to the user
+             raise ExtensionError(str(err)) from err
+ 
+-    def do_parse(self, rstlist, node):
+-        """Parse rST source lines and add them to the specified node
+ 
+-        Take the list of rST source lines rstlist, parse them as
+-        rST, and add the resulting docutils nodes as children of node.
+-        The nodes are parsed in a way that allows them to include
+-        subheadings (titles) without confusing the rendering of
+-        anything else.
+-        """
+-        # This is from kerneldoc.py -- it works around an API change in
+-        # Sphinx between 1.6 and 1.7. Unlike kerneldoc.py, we use
+-        # sphinx.util.nodes.nested_parse_with_titles() rather than the
+-        # plain self.state.nested_parse(), and so we can drop the saving
+-        # of title_styles and section_level that kerneldoc.py does,
+-        # because nested_parse_with_titles() does that for us.
+-        if Use_SSI:
+-            with switch_source_input(self.state, rstlist):
+-                nested_parse_with_titles(self.state, rstlist, node)
++class QMPExample(CodeBlock, NestedDirective):
++    """
++    Custom admonition for QMP code examples.
++
++    When the :annotated: option is present, the body of this directive
++    is parsed as normal rST, but with any '::' code blocks set to use
++    the QMP lexer. Code blocks must be explicitly written by the user,
++    but this allows for intermingling explanatory paragraphs with
++    arbitrary rST syntax and code blocks for more involved examples.
++
++    When :annotated: is absent, the directive body is treated as a
++    simple standalone QMP code block literal.
++    """
++
++    required_argument = 0
++    optional_arguments = 0
++    has_content = True
++    option_spec = {
++        "annotated": directives.flag,
++        "title": directives.unchanged,
++    }
++
++    def _highlightlang(self) -> addnodes.highlightlang:
++        """Return the current highlightlang setting for the document"""
++        node = None
++        doc = self.state.document
++
++        if hasattr(doc, "findall"):
++            # docutils >= 0.18.1
++            for node in doc.findall(addnodes.highlightlang):
++                pass
++        else:
++            for elem in doc.traverse():
++                if isinstance(elem, addnodes.highlightlang):
++                    node = elem
++
++        if node:
++            return node
++
++        # No explicit directive found, use defaults
++        node = addnodes.highlightlang(
++            lang=self.env.config.highlight_language,
++            force=False,
++            # Yes, Sphinx uses this value to effectively disable line
++            # numbers and not 0 or None or -1 or something. ¯\_(ツ)_/¯
++            linenothreshold=sys.maxsize,
++        )
++        return node
++
++    def admonition_wrap(self, *content) -> List[nodes.Node]:
++        title = "Example:"
++        if "title" in self.options:
++            title = f"{title} {self.options['title']}"
++
++        admon = nodes.admonition(
++            "",
++            nodes.title("", title),
++            *content,
++            classes=["admonition", "admonition-example"],
++        )
++        return [admon]
++
++    def run_annotated(self) -> List[nodes.Node]:
++        lang_node = self._highlightlang()
++
++        content_node: nodes.Element = nodes.section()
++
++        # Configure QMP highlighting for "::" blocks, if needed
++        if lang_node["lang"] != "QMP":
++            content_node += addnodes.highlightlang(
++                lang="QMP",
++                force=False,  # "True" ignores lexing errors
++                linenothreshold=lang_node["linenothreshold"],
++            )
++
++        self.do_parse(self.content, content_node)
++
++        # Restore prior language highlighting, if needed
++        if lang_node["lang"] != "QMP":
++            content_node += addnodes.highlightlang(**lang_node.attributes)
++
++        return content_node.children
++
++    def run(self) -> List[nodes.Node]:
++        annotated = "annotated" in self.options
++
++        if annotated:
++            content_nodes = self.run_annotated()
+         else:
+-            save = self.state.memo.reporter
+-            self.state.memo.reporter = AutodocReporter(
+-                rstlist, self.state.memo.reporter)
+-            try:
+-                nested_parse_with_titles(self.state, rstlist, node)
+-            finally:
+-                self.state.memo.reporter = save
++            self.arguments = ["QMP"]
++            content_nodes = super().run()
++
++        return self.admonition_wrap(*content_nodes)
+ 
+ 
+ def setup(app):
+-    """ Register qapi-doc directive with Sphinx"""
+-    app.add_config_value('qapidoc_srctree', None, 'env')
+-    app.add_directive('qapi-doc', QAPIDocDirective)
+-
+-    return dict(
+-        version=__version__,
+-        parallel_read_safe=True,
+-        parallel_write_safe=True
+-    )
++    """Register qapi-doc directive with Sphinx"""
++    app.add_config_value("qapidoc_srctree", None, "env")
++    app.add_directive("qapi-doc", QAPIDocDirective)
++    app.add_directive("qmp-example", QMPExample)
++
++    return {
++        "version": __version__,
++        "parallel_read_safe": True,
++        "parallel_write_safe": True,
++    }
+diff --git a/docs/system/arm/aspeed.rst b/docs/system/arm/aspeed.rst
+index cd9559e3e2..6733ffd2b9 100644
+--- a/docs/system/arm/aspeed.rst
++++ b/docs/system/arm/aspeed.rst
+@@ -123,6 +123,8 @@ To boot the machine from the flash image, use an MTD drive :
+ 
+ Options specific to Aspeed machines are :
+ 
++ * ``boot-emmc`` to set or unset boot from eMMC (AST2600).
++
+  * ``execute-in-place`` which emulates the boot from the CE0 flash
+    device by using the FMC controller to load the instructions, and
+    not simply from RAM. This takes a little longer.
+diff --git a/docs/system/arm/emulation.rst b/docs/system/arm/emulation.rst
+index 1a06a5feb6..3ab6e72667 100644
+--- a/docs/system/arm/emulation.rst
++++ b/docs/system/arm/emulation.rst
+@@ -41,6 +41,7 @@ the following architecture extensions:
+ - FEAT_Debugv8p1 (Debug with VHE)
+ - FEAT_Debugv8p2 (Debug changes for v8.2)
+ - FEAT_Debugv8p4 (Debug changes for v8.4)
++- FEAT_Debugv8p8 (Debug changes for v8.8)
+ - FEAT_DotProd (Advanced SIMD dot product instructions)
+ - FEAT_DoubleFault (Double Fault Extension)
+ - FEAT_E0PD (Preventing EL0 access to halves of address maps)
+diff --git a/docs/system/arm/xlnx-zynq.rst b/docs/system/arm/xlnx-zynq.rst
+new file mode 100644
+index 0000000000..ade18a3fe1
+--- /dev/null
++++ b/docs/system/arm/xlnx-zynq.rst
+@@ -0,0 +1,47 @@
++Xilinx Zynq board (``xilinx-zynq-a9``)
++======================================
++The Zynq 7000 family is based on the AMD SoC architecture. These products
++integrate a feature-rich dual or single-core Arm Cortex-A9 MPCore based
++processing system (PS) and AMD programmable logic (PL) in a single device.
++
++More details here:
++https://docs.amd.com/r/en-US/ug585-zynq-7000-SoC-TRM/Zynq-7000-SoC-Technical-Reference-Manual
++
++QEMU xilinx-zynq-a9 board supports following devices:
++    - A9 MPCORE
++        - cortex-a9
++        - GIC v1
++        - Generic timer
++        - wdt
++    - OCM 256KB
++    - SMC SRAM@0xe2000000 64MB
++    - Zynq SLCR
++    - SPI x2
++    - QSPI
++    - UART
++    - TTC x2
++    - Gigabit Ethernet Controller x2
++    - SD Controller x2
++    - XADC
++    - Arm PrimeCell DMA Controller
++    - DDR Memory
++    - USB 2.0 x2
++
++Running
++"""""""
++Direct Linux boot of a generic ARM upstream Linux kernel:
++
++.. code-block:: bash
++
++  $ qemu-system-aarch64 -M xilinx-zynq-a9 \
++        -dtb zynq-zc702.dtb  -serial null -serial mon:stdio \
++        -display none  -m 1024 \
++        -initrd rootfs.cpio.gz -kernel zImage
++
++For configuring the boot-mode provide the following on the command line:
++
++.. code-block:: bash
++
++   -machine boot-mode=qspi
++
++Supported values are jtag, sd, qspi, nor.
+diff --git a/docs/system/target-arm.rst b/docs/system/target-arm.rst
+index 870d30e350..7b99272284 100644
+--- a/docs/system/target-arm.rst
++++ b/docs/system/target-arm.rst
+@@ -109,6 +109,7 @@ undocumented; you can get a complete list by running
+    arm/virt
+    arm/xenpvh
+    arm/xlnx-versal-virt
++   arm/xlnx-zynq
+ 
+ Emulated CPU architecture support
+ =================================
+diff --git a/gdb-xml/aarch64-mte.xml b/gdb-xml/aarch64-mte.xml
+new file mode 100644
+index 0000000000..4b70b4f17a
+--- /dev/null
++++ b/gdb-xml/aarch64-mte.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0"?>
++<!-- Copyright (C) 2021-2023 Free Software Foundation, Inc.
++
++     Copying and distribution of this file, with or without modification,
++     are permitted in any medium without royalty provided the copyright
++     notice and this notice are preserved.  -->
++
++<!DOCTYPE feature SYSTEM "gdb-target.dtd">
++<feature name="org.gnu.gdb.aarch64.mte">
++  <reg name="tag_ctl" bitsize="64" type="uint64" group="system" save-restore="no"/>
++</feature>
+diff --git a/gdb-xml/loongarch-lasx.xml b/gdb-xml/loongarch-lasx.xml
+new file mode 100644
+index 0000000000..753b982c65
+--- /dev/null
++++ b/gdb-xml/loongarch-lasx.xml
+@@ -0,0 +1,60 @@
++<?xml version="1.0"?>
++<!-- Copyright (C) 2022-2024 Free Software Foundation, Inc.
++
++     Copying and distribution of this file, with or without modification,
++     are permitted in any medium without royalty provided the copyright
++     notice and this notice are preserved.  -->
++
++<!DOCTYPE feature SYSTEM "gdb-target.dtd">
++<feature name="org.gnu.gdb.loongarch.lasx">
++  <vector id="v8f32" type="ieee_single" count="8"/>
++  <vector id="v4f64" type="ieee_double" count="4"/>
++  <vector id="v32i8" type="int8" count="32"/>
++  <vector id="v16i16" type="int16" count="16"/>
++  <vector id="v8i32" type="int32" count="8"/>
++  <vector id="v4i64" type="int64" count="4"/>
++  <vector id="v2ui128" type="uint128" count="2"/>
++
++  <union id="lasxv">
++    <field name="v8_float" type="v8f32"/>
++    <field name="v4_double" type="v4f64"/>
++    <field name="v32_int8" type="v32i8"/>
++    <field name="v16_int16" type="v16i16"/>
++    <field name="v8_int32" type="v8i32"/>
++    <field name="v4_int64" type="v4i64"/>
++    <field name="v2_uint128" type="v2ui128"/>
++  </union>
++
++  <reg name="xr0" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr1" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr2" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr3" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr4" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr5" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr6" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr7" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr8" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr9" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr10" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr11" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr12" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr13" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr14" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr15" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr16" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr17" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr18" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr19" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr20" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr21" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr22" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr23" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr24" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr25" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr26" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr27" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr28" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr29" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr30" bitsize="256" type="lasxv" group="lasx"/>
++  <reg name="xr31" bitsize="256" type="lasxv" group="lasx"/>
++</feature>

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 interlock_gen.py — standalone reimplementation of the interdependency (mutual /
-circular) protection layer.
+circular ) protection layer.
 
 A self-contained source-to-source transform that injects a *real* guard network
 into a C source file, plus a manifest that interlock_patch.py consumes to embed
@@ -25,6 +25,9 @@ Patterns from the design notes:
   2 Chang-Atallah guard net— multi-guard mutual checking, region overlap (scales
                             with level: ring -> +overlap -> all-to-all)
   7 tamper response (poison)— on mismatch, set _integrity_taint (NEVER trap); the
+     response DIVERSIFIES with level: L2 + delayed crash (abort
+     K seeded sweeps after the taint); L3 + near-miss honeypot (a seeded
+     single-byte corruption whose rejection reads as an almost-correct key)
                             license-check call site is wrapped so a tainted run
                             corrupts the key -> the check fails -> "Invalid key"
   6 self-key from own bytes— (L2+) the corruption mask is the CRC of a guard
@@ -141,6 +144,9 @@ static uint32_t il_crc32(const uint8_t *p, size_t n) {
 
 /* Pattern 7: tamper response is a poison flag, NEVER a trap. */
 volatile uint32_t _integrity_taint = 0u;
+/* Response diversity (level 2+): guard sweeps since the first taint; the
+ * delayed crash fires at the seeded IL threshold (see emit_run_verify). */
+volatile uint32_t _integrity_age = 0u;
 
 /* Header located + rewritten by interlock_patch.py:
  *   u64 sentinel | u32 magic | u32 count | u32 expected[count]
@@ -202,12 +208,12 @@ def emit_mask_block(level, seed, s0_tag):
             f"(size_t)(__stop_{s0_tag} - __start_{s0_tag}));\n"
             "}\n"
             "static uint32_t il_mask(void) { return il_derive_mask(); }\n"
-        )
+)
     m = fixed_mask(seed)
     return (
         "/* Pattern 7 (level 1): fixed-mask poison (no self-key yet). */\n"
         f"static uint32_t il_mask(void) {{ return 0x{m:08X}u; }}\n"
-    )
+)
 
 
 def emit_guard(i, tag, my_edges, edge_index, debug):
@@ -220,24 +226,24 @@ def emit_guard(i, tag, my_edges, edge_index, debug):
         body.append(
             f"    uint32_t c = il_crc32(__start_{t}, "
             f"(size_t)(__stop_{t} - __start_{t}));"
-        )
+)
         body.append(
             f"    if (c != _il_hdr.expected[{idx}]) _integrity_taint |= 0x02u;"
-        )
+)
         if debug:
             body.append(
                 f"    if (getenv(\"IL_DEBUG\")) fprintf(stderr, "
                 f"\"[guard{idx}] {t}: got=0x%08x want=0x%08x len=%lu\\n\", "
                 f"c, _il_hdr.expected[{idx}], "
                 f"(unsigned long)(__stop_{t} - __start_{t}));"
-            )
+)
         body.append("}")
     return (
         f'__attribute__((noinline, used, section("{tag}")))\n'
         f"static void il_guard_{i}(void) {{\n"
         + "\n".join(body)
         + "\n}\n"
-    )
+)
 
 
 LEVEL_DESC = {
@@ -247,7 +253,7 @@ LEVEL_DESC = {
 }
 
 
-def emit_run_verify(level, calls, debug, verify_static, call_name):
+def emit_run_verify(level, calls, debug, verify_static, call_name, seed=0):
     """Emit interlock_run() + interlock_verify(). interlock_run calls every guard
     and (L3) the adbg probe; interlock_verify corrupts the key with il_mask() on
     taint so the real license check rejects it. call_name is the wrapped
@@ -266,14 +272,35 @@ def emit_run_verify(level, calls, debug, verify_static, call_name):
         f'/* forward: the real license check (gen_verification); '
         f'linkage matches the source */\n'
         '#ifdef __cplusplus\n}\n#endif')
+    # ---- response diversity ----
+    import random as _random
+    _rs = _random.Random((seed or 0) ^ 0x1DDE1A5)
+    crash_after = _rs.randint(2, 6)      # delayed-crash threshold, L2+
+    honeypot_pos = _rs.randint(1, 12)    # near-miss byte index, L3
+    crash_blk = (f"\n    if (_integrity_taint) {{\n"
+                 f"        if (++_integrity_age >= {crash_after}u) abort();  /* delayed crash */\n"
+                 f"    }}" if level >= 2 else "")
+    if level >= 3:
+        corrupt_blk = (f"        /* L3 near-miss honeypot: one seeded byte flipped — the rejection\n"
+                       f"         * reads as an almost-correct key (a keygen bug that does not exist). */\n"
+                       f"        buf[{honeypot_pos} % n] = (char)((uint8_t)buf[{honeypot_pos} % n] ^ 0x01u);\n"
+                       f"        return {call_name}(buf);")
+    else:
+        corrupt_blk = ("        uint32_t m = il_mask();\n"
+                       "        for (size_t i = 0; i < n; i++)\n"
+                       " buf[i] = (char)((uint8_t)buf[i] ^ (uint8_t)(m >> ((i % 4) * 8)));\n"
+                       "        buf[n] = '\\0';\n"
+                       f"        return {call_name}(buf);")
     return f"""
 /* Run every guard{'+ the real adbg probe' if level >= 3 else ''}. */
 void interlock_run(void) {{
-{probe_call}{chr(10).join(calls)}
+{probe_call}{chr(10).join(calls)}{crash_blk}
 {run_debug}}}
 
-/* Pattern 7 wrap: on taint, corrupt the key with il_mask() so the real license
- * check rejects it ("Invalid key"). Untainted -> the call passes through. */
+/* Pattern 7 wrap: on taint, corrupt the key so the real license check rejects
+ * it. Untainted -> the call passes through. Response by level: L1 fixed or
+ * self-key mask poison; L2 adds the delayed crash ({crash_after} sweeps after
+ * the taint); L3 adds the near-miss honeypot (byte {honeypot_pos} flipped). */
 {verify_decl}
 static int interlock_{call_name}(const char *key) {{
     interlock_run();
@@ -281,11 +308,7 @@ static int interlock_{call_name}(const char *key) {{
         char buf[256];
         size_t n = 0;
         while (n + 1 < sizeof(buf) && key[n] != '\\0') {{ buf[n] = key[n]; n++; }}
-        uint32_t m = il_mask();
-        for (size_t i = 0; i < n; i++)
-            buf[i] = (char)((uint8_t)buf[i] ^ (uint8_t)(m >> ((i % 4) * 8)));
-        buf[n] = '\\0';
-        return {call_name}(buf);
+{corrupt_blk}
     }}
     return {call_name}(key);
 }}
@@ -307,8 +330,8 @@ def emit_interlock_block(nodes, edges, level, debug, seed, verify_static=False,
 
     out = []
     out.append(C_PRELUDE.replace("@@NCHECK@@", str(nchecks))
-                        .replace("{LEVEL}", str(level))
-                        .replace("{LEVELDESC}", LEVEL_DESC[level]))
+.replace("{LEVEL}", str(level))
+.replace("{LEVELDESC}", LEVEL_DESC[level]))
     out.append(emit_extern_decls(list(nodes) + extra_sections))
 
     cb = canary_bytes(seed)
@@ -318,7 +341,7 @@ def emit_interlock_block(nodes, edges, level, debug, seed, verify_static=False,
         " * cleanly by guard_0, with no chance of crashing the detecting guard. */\n"
         '__attribute__((used, section("g_canary")))\n'
         f"volatile uint8_t il_canary[{len(cb)}] = {{ {cstr} }};\n"
-    )
+)
 
     if level >= 3:
         out.append(C_ADBG)
@@ -340,7 +363,8 @@ def emit_interlock_block(nodes, edges, level, debug, seed, verify_static=False,
             calls.append(f"    il_guard_{gi}();")
             gi += 1
 
-    out.append(emit_run_verify(level, calls, debug, verify_static, call_name))
+    out.append(emit_run_verify(level, calls, debug, verify_static, call_name,
+                                seed=seed))
     return "\n".join(out)
 
 
@@ -353,7 +377,7 @@ def wrap_verify_calls(src, call_name):
     type_prefix = re.compile(
         r"\b(int|void|unsigned|static|const|char|size_t|uint32_t|long|short|float|double|bool)\b"
         r"(\s|\*)*$"
-    )
+)
 
     def repl(m):
         start = m.start()
@@ -413,7 +437,7 @@ def main():
     # emit matches it (static vs extern) — a mismatch fails to compile.
     verify_static = bool(
         re.search(r"\bstatic\s+int\s+" + re.escape(args.wrap) + r"\s*\(", src)
-    )
+)
 
     functions = [x.strip() for x in args.functions.split(",") if x.strip()]
     nodes = build_nodes(args.num_guards, functions)

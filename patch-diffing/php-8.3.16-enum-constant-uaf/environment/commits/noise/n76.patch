@@ -1,0 +1,1424 @@
+diff --git a/Zend/zend_object_handlers.c b/Zend/zend_object_handlers.c
+index 6a22156d..8f75aa0b 100644
+--- a/Zend/zend_object_handlers.c
++++ b/Zend/zend_object_handlers.c
+@@ -281,24 +281,6 @@ static ZEND_COLD zend_never_inline void zend_forbidden_dynamic_property(
+ 		ZSTR_VAL(ce->name), ZSTR_VAL(member));
+ }
+ 
+-static ZEND_COLD zend_never_inline bool zend_deprecated_dynamic_property(
+-		zend_object *obj, zend_string *member) {
+-	GC_ADDREF(obj);
+-	zend_error(E_DEPRECATED, "Creation of dynamic property %s::$%s is deprecated",
+-		ZSTR_VAL(obj->ce->name), ZSTR_VAL(member));
+-	if (UNEXPECTED(GC_DELREF(obj) == 0)) {
+-		zend_class_entry *ce = obj->ce;
+-		zend_objects_store_del(obj);
+-		if (!EG(exception)) {
+-			/* We cannot continue execution and have to throw an exception */
+-			zend_throw_error(NULL, "Cannot create dynamic property %s::$%s",
+-				ZSTR_VAL(ce->name), ZSTR_VAL(member));
+-		}
+-		return 0;
+-	}
+-	return 1;
+-}
+-
+ static ZEND_COLD zend_never_inline void zend_readonly_property_modification_scope_error(
+ 		zend_class_entry *ce, zend_string *member, zend_class_entry *scope, const char *operation) {
+ 	zend_throw_error(NULL, "Cannot %s readonly property %s::$%s from %s%s",
+@@ -645,10 +627,11 @@ ZEND_API zval *zend_std_read_property(zend_object *zobj, zend_string *name, int
+ 				if (EXPECTED(idx < zobj->properties->nNumUsed * sizeof(Bucket))) {
+ 					Bucket *p = (Bucket*)((char*)zobj->properties->arData + idx);
+ 
+-					if (EXPECTED(p->key == name) ||
+-				        (EXPECTED(p->h == ZSTR_H(name)) &&
+-				         EXPECTED(p->key != NULL) &&
+-				         EXPECTED(zend_string_equal_content(p->key, name)))) {
++					if (EXPECTED(Z_TYPE(p->val) != IS_UNDEF) &&
++				        (EXPECTED(p->key == name) ||
++				         (EXPECTED(p->h == ZSTR_H(name)) &&
++				          EXPECTED(p->key != NULL) &&
++				          EXPECTED(zend_string_equal_content(p->key, name))))) {
+ 						retval = &p->val;
+ 						goto exit;
+ 					}
+@@ -905,12 +888,6 @@ write_std_property:
+ 				variable_ptr = &EG(error_zval);
+ 				goto exit;
+ 			}
+-			if (UNEXPECTED(!(zobj->ce->ce_flags & ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES))) {
+-				if (UNEXPECTED(!zend_deprecated_dynamic_property(zobj, name))) {
+-					variable_ptr = &EG(error_zval);
+-					goto exit;
+-				}
+-			}
+ 
+ 			Z_TRY_ADDREF_P(value);
+ 			if (!zobj->properties) {
+@@ -936,9 +913,7 @@ ZEND_API zval *zend_std_read_dimension(zend_object *object, zval *offset, int ty
+ 	zend_class_entry *ce = object->ce;
+ 	zval tmp_offset;
+ 
+-	/* arrayaccess_funcs_ptr is set if (and only if) the class implements zend_ce_arrayaccess */
+-	zend_class_arrayaccess_funcs *funcs = ce->arrayaccess_funcs_ptr;
+-	if (EXPECTED(funcs)) {
++	if (EXPECTED(zend_class_implements_interface(ce, zend_ce_arrayaccess) != 0)) {
+ 		if (offset == NULL) {
+ 			/* [] construct */
+ 			ZVAL_NULL(&tmp_offset);
+@@ -948,7 +923,7 @@ ZEND_API zval *zend_std_read_dimension(zend_object *object, zval *offset, int ty
+ 
+ 		GC_ADDREF(object);
+ 		if (type == BP_VAR_IS) {
+-			zend_call_known_instance_method_with_1_params(funcs->zf_offsetexists, object, rv, &tmp_offset);
++			zend_call_method_with_1_params(object, ce, NULL, "offsetexists", rv, &tmp_offset);
+ 			if (UNEXPECTED(Z_ISUNDEF_P(rv))) {
+ 				OBJ_RELEASE(object);
+ 				zval_ptr_dtor(&tmp_offset);
+@@ -963,7 +938,7 @@ ZEND_API zval *zend_std_read_dimension(zend_object *object, zval *offset, int ty
+ 			zval_ptr_dtor(rv);
+ 		}
+ 
+-		zend_call_known_instance_method_with_1_params(funcs->zf_offsetget, object, rv, &tmp_offset);
++		zend_call_method_with_1_params(object, ce, NULL, "offsetget", rv, &tmp_offset);
+ 
+ 		OBJ_RELEASE(object);
+ 		zval_ptr_dtor(&tmp_offset);
+@@ -987,15 +962,14 @@ ZEND_API void zend_std_write_dimension(zend_object *object, zval *offset, zval *
+ 	zend_class_entry *ce = object->ce;
+ 	zval tmp_offset;
+ 
+-	zend_class_arrayaccess_funcs *funcs = ce->arrayaccess_funcs_ptr;
+-	if (EXPECTED(funcs)) {
++	if (EXPECTED(zend_class_implements_interface(ce, zend_ce_arrayaccess) != 0)) {
+ 		if (!offset) {
+ 			ZVAL_NULL(&tmp_offset);
+ 		} else {
+ 			ZVAL_COPY_DEREF(&tmp_offset, offset);
+ 		}
+ 		GC_ADDREF(object);
+-		zend_call_known_instance_method_with_2_params(funcs->zf_offsetset, object, NULL, &tmp_offset, value);
++		zend_call_method_with_2_params(object, ce, NULL, "offsetset", NULL, &tmp_offset, value);
+ 		OBJ_RELEASE(object);
+ 		zval_ptr_dtor(&tmp_offset);
+ 	} else {
+@@ -1010,15 +984,14 @@ ZEND_API int zend_std_has_dimension(zend_object *object, zval *offset, int check
+ 	zval retval, tmp_offset;
+ 	int result;
+ 
+-	zend_class_arrayaccess_funcs *funcs = ce->arrayaccess_funcs_ptr;
+-	if (EXPECTED(funcs)) {
++	if (EXPECTED(zend_class_implements_interface(ce, zend_ce_arrayaccess) != 0)) {
+ 		ZVAL_COPY_DEREF(&tmp_offset, offset);
+ 		GC_ADDREF(object);
+-		zend_call_known_instance_method_with_1_params(funcs->zf_offsetexists, object, &retval, &tmp_offset);
++		zend_call_method_with_1_params(object, ce, NULL, "offsetexists", &retval, &tmp_offset);
+ 		result = i_zend_is_true(&retval);
+ 		zval_ptr_dtor(&retval);
+ 		if (check_empty && result && EXPECTED(!EG(exception))) {
+-			zend_call_known_instance_method_with_1_params(funcs->zf_offsetget, object, &retval, &tmp_offset);
++			zend_call_method_with_1_params(object, ce, NULL, "offsetget", &retval, &tmp_offset);
+ 			result = i_zend_is_true(&retval);
+ 			zval_ptr_dtor(&retval);
+ 		}
+@@ -1093,11 +1066,6 @@ ZEND_API zval *zend_std_get_property_ptr_ptr(zend_object *zobj, zend_string *nam
+ 				zend_forbidden_dynamic_property(zobj->ce, name);
+ 				return &EG(error_zval);
+ 			}
+-			if (UNEXPECTED(!(zobj->ce->ce_flags & ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES))) {
+-				if (UNEXPECTED(!zend_deprecated_dynamic_property(zobj, name))) {
+-					return &EG(error_zval);
+-				}
+-			}
+ 			if (UNEXPECTED(!zobj->properties)) {
+ 				rebuild_object_properties(zobj);
+ 			}
+@@ -1196,11 +1164,10 @@ ZEND_API void zend_std_unset_dimension(zend_object *object, zval *offset) /* {{{
+ 	zend_class_entry *ce = object->ce;
+ 	zval tmp_offset;
+ 
+-	zend_class_arrayaccess_funcs *funcs = ce->arrayaccess_funcs_ptr;
+-	if (EXPECTED(funcs)) {
++	if (zend_class_implements_interface(ce, zend_ce_arrayaccess)) {
+ 		ZVAL_COPY_DEREF(&tmp_offset, offset);
+ 		GC_ADDREF(object);
+-		zend_call_known_instance_method_with_1_params(funcs->zf_offsetunset, object, NULL, &tmp_offset);
++		zend_call_method_with_1_params(object, ce, NULL, "offsetunset", NULL, &tmp_offset);
+ 		OBJ_RELEASE(object);
+ 		zval_ptr_dtor(&tmp_offset);
+ 	} else {
+@@ -1285,7 +1252,7 @@ ZEND_API zend_function *zend_get_call_trampoline_func(zend_class_entry *ce, zend
+ 		func->fn_flags |= ZEND_ACC_STATIC;
+ 	}
+ 	func->opcodes = &EG(call_trampoline_op);
+-	ZEND_MAP_PTR_INIT(func->run_time_cache, (void**)dummy);
++	ZEND_MAP_PTR_INIT(func->run_time_cache, (void***)&dummy);
+ 	func->scope = fbc->common.scope;
+ 	/* reserve space for arguments, local and temporary variables */
+ 	/* EG(trampoline) is reused from other places, like FFI (e.g. zend_ffi_cdata_get_closure()) where
+@@ -1638,39 +1605,51 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
+ 
+ 	if (Z_TYPE_P(o1) != Z_TYPE_P(o2)) {
+ 		/* Object and non-object */
+-		zval *object;
+-		zval *value;
+ 		zval casted;
+-		bool object_lhs;
+ 		if (Z_TYPE_P(o1) == IS_OBJECT) {
+-			object = o1;
+-			value = o2;
+-			object_lhs = true;
++			ZEND_ASSERT(Z_TYPE_P(o2) != IS_OBJECT);
++			zend_uchar target_type = (Z_TYPE_P(o2) == IS_FALSE || Z_TYPE_P(o2) == IS_TRUE)
++				? _IS_BOOL : Z_TYPE_P(o2);
++			if (Z_OBJ_HT_P(o1)->cast_object(Z_OBJ_P(o1), &casted, target_type) == FAILURE) {
++				// TODO: Less crazy.
++				if (target_type == IS_LONG || target_type == IS_DOUBLE) {
++					zend_error(E_NOTICE, "Object of class %s could not be converted to %s",
++						ZSTR_VAL(Z_OBJCE_P(o1)->name), zend_get_type_by_const(target_type));
++					if (target_type == IS_LONG) {
++						ZVAL_LONG(&casted, 1);
++					} else {
++						ZVAL_DOUBLE(&casted, 1.0);
++					}
++				} else {
++					return 1;
++				}
++			}
++			int ret = zend_compare(&casted, o2);
++			zval_ptr_dtor(&casted);
++			return ret;
+ 		} else {
+-			object = o2;
+-			value = o1;
+-			object_lhs = false;
+-		}
+-		ZEND_ASSERT(Z_TYPE_P(value) != IS_OBJECT);
+-		zend_uchar target_type = (Z_TYPE_P(value) == IS_FALSE || Z_TYPE_P(value) == IS_TRUE)
+-								 ? _IS_BOOL : Z_TYPE_P(value);
+-		if (Z_OBJ_HT_P(object)->cast_object(Z_OBJ_P(object), &casted, target_type) == FAILURE) {
+-			// TODO: Less crazy.
+-			if (target_type == IS_LONG || target_type == IS_DOUBLE) {
+-				zend_error(E_NOTICE, "Object of class %s could not be converted to %s",
+-						   ZSTR_VAL(Z_OBJCE_P(object)->name), zend_get_type_by_const(target_type));
+-				if (target_type == IS_LONG) {
+-					ZVAL_LONG(&casted, 1);
++			ZEND_ASSERT(Z_TYPE_P(o2) == IS_OBJECT);
++			zend_uchar target_type = (Z_TYPE_P(o1) == IS_FALSE || Z_TYPE_P(o1) == IS_TRUE)
++				? _IS_BOOL : Z_TYPE_P(o1);
++			if (Z_OBJ_HT_P(o2)->cast_object(Z_OBJ_P(o2), &casted, target_type) == FAILURE) {
++				// TODO: Less crazy.
++				if (target_type == IS_LONG || target_type == IS_DOUBLE) {
++					zend_error(E_NOTICE, "Object of class %s could not be converted to %s",
++						ZSTR_VAL(Z_OBJCE_P(o2)->name), zend_get_type_by_const(target_type));
++					if (target_type == IS_LONG) {
++						ZVAL_LONG(&casted, 1);
++					} else {
++						ZVAL_DOUBLE(&casted, 1.0);
++					}
+ 				} else {
+-					ZVAL_DOUBLE(&casted, 1.0);
++					return -1;
+ 				}
+-			} else {
+-				return object_lhs ? 1 : -1;
+ 			}
++			int ret = zend_compare(o1, &casted);
++			zval_ptr_dtor(&casted);
++			return ret;
+ 		}
+-		int ret = object_lhs ? zend_compare(&casted, value) : zend_compare(value, &casted);
+-		zval_ptr_dtor(&casted);
+-		return ret;
++		return ZEND_UNCOMPARABLE;
+ 	}
+ 
+ 	zobj1 = Z_OBJ_P(o1);
+@@ -1780,10 +1759,11 @@ ZEND_API int zend_std_has_property(zend_object *zobj, zend_string *name, int has
+ 				if (EXPECTED(idx < zobj->properties->nNumUsed * sizeof(Bucket))) {
+ 					Bucket *p = (Bucket*)((char*)zobj->properties->arData + idx);
+ 
+-					if (EXPECTED(p->key == name) ||
+-				        (EXPECTED(p->h == ZSTR_H(name)) &&
+-				         EXPECTED(p->key != NULL) &&
+-				         EXPECTED(zend_string_equal_content(p->key, name)))) {
++					if (EXPECTED(Z_TYPE(p->val) != IS_UNDEF) &&
++				        (EXPECTED(p->key == name) ||
++				         (EXPECTED(p->h == ZSTR_H(name)) &&
++				          EXPECTED(p->key != NULL) &&
++				          EXPECTED(zend_string_equal_content(p->key, name))))) {
+ 						value = &p->val;
+ 						goto found;
+ 					}
+@@ -1859,7 +1839,7 @@ ZEND_API zend_string *zend_std_get_class_name(const zend_object *zobj) /* {{{ */
+ }
+ /* }}} */
+ 
+-ZEND_API zend_result zend_std_cast_object_tostring(zend_object *readobj, zval *writeobj, int type) /* {{{ */
++ZEND_API int zend_std_cast_object_tostring(zend_object *readobj, zval *writeobj, int type) /* {{{ */
+ {
+ 	switch (type) {
+ 		case IS_STRING: {
+@@ -1889,7 +1869,7 @@ ZEND_API zend_result zend_std_cast_object_tostring(zend_object *readobj, zval *w
+ }
+ /* }}} */
+ 
+-ZEND_API zend_result zend_std_get_closure(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only) /* {{{ */
++ZEND_API int zend_std_get_closure(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only) /* {{{ */
+ {
+ 	zend_class_entry *ce = obj->ce;
+ 	zval *func = zend_hash_find_known_hash(&ce->function_table, ZSTR_KNOWN(ZEND_STR_MAGIC_INVOKE));
+diff --git a/Zend/zend_object_handlers.h b/Zend/zend_object_handlers.h
+index 94b7f52c..53eef829 100644
+--- a/Zend/zend_object_handlers.h
++++ b/Zend/zend_object_handlers.h
+@@ -144,17 +144,17 @@ typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
+ /* Cast an object to some other type.
+  * readobj and retval must point to distinct zvals.
+  */
+-typedef zend_result (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
++typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
+ 
+ /* updates *count to hold the number of elements present and returns SUCCESS.
+  * Returns FAILURE if the object does not have any sense of overloaded dimensions */
+-typedef zend_result (*zend_object_count_elements_t)(zend_object *object, zend_long *count);
++typedef int (*zend_object_count_elements_t)(zend_object *object, zend_long *count);
+ 
+-typedef zend_result (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only);
++typedef int (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only);
+ 
+ typedef HashTable *(*zend_object_get_gc_t)(zend_object *object, zval **table, int *n);
+ 
+-typedef zend_result (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
++typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
+ 
+ struct _zend_object_handlers {
+ 	/* offset of real object header (usually zero) */
+@@ -209,7 +209,7 @@ ZEND_API struct _zend_property_info *zend_get_property_info(zend_class_entry *ce
+ ZEND_API HashTable *zend_std_get_properties(zend_object *object);
+ ZEND_API HashTable *zend_std_get_gc(zend_object *object, zval **table, int *n);
+ ZEND_API HashTable *zend_std_get_debug_info(zend_object *object, int *is_temp);
+-ZEND_API zend_result zend_std_cast_object_tostring(zend_object *object, zval *writeobj, int type);
++ZEND_API int zend_std_cast_object_tostring(zend_object *object, zval *writeobj, int type);
+ ZEND_API zval *zend_std_get_property_ptr_ptr(zend_object *object, zend_string *member, int type, void **cache_slot);
+ ZEND_API zval *zend_std_read_property(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
+ ZEND_API zval *zend_std_write_property(zend_object *object, zend_string *member, zval *value, void **cache_slot);
+@@ -222,7 +222,7 @@ ZEND_API void zend_std_unset_dimension(zend_object *object, zval *offset);
+ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *method_name, const zval *key);
+ ZEND_API zend_string *zend_std_get_class_name(const zend_object *zobj);
+ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2);
+-ZEND_API zend_result zend_std_get_closure(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only);
++ZEND_API int zend_std_get_closure(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, bool check_only);
+ ZEND_API void rebuild_object_properties(zend_object *zobj);
+ 
+ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj);
+diff --git a/Zend/zend_objects.c b/Zend/zend_objects.c
+index b09ce3b9..7e3fa039 100644
+--- a/Zend/zend_objects.c
++++ b/Zend/zend_objects.c
+@@ -238,7 +238,7 @@ ZEND_API void ZEND_FASTCALL zend_objects_clone_members(zend_object *new_object,
+ 		HT_FLAGS(new_object->properties) |=
+ 			HT_FLAGS(old_object->properties) & HASH_FLAG_HAS_EMPTY_IND;
+ 
+-		ZEND_HASH_MAP_FOREACH_KEY_VAL(old_object->properties, num_key, key, prop) {
++		ZEND_HASH_FOREACH_KEY_VAL(old_object->properties, num_key, key, prop) {
+ 			if (Z_TYPE_P(prop) == IS_INDIRECT) {
+ 				ZVAL_INDIRECT(&new_prop, new_object->properties_table + (Z_INDIRECT_P(prop) - old_object->properties_table));
+ 			} else {
+diff --git a/Zend/zend_observer.c b/Zend/zend_observer.c
+index 2cb4db91..a8e35d23 100644
+--- a/Zend/zend_observer.c
++++ b/Zend/zend_observer.c
+@@ -23,27 +23,23 @@
+ #include "zend_llist.h"
+ #include "zend_vm.h"
+ 
+-#define ZEND_OBSERVER_DATA(function) \
+-	ZEND_OP_ARRAY_EXTENSION((&(function)->common), zend_observer_fcall_op_array_extension)
++#define ZEND_OBSERVER_DATA(op_array) \
++	ZEND_OP_ARRAY_EXTENSION(op_array, zend_observer_fcall_op_array_extension)
+ 
+ #define ZEND_OBSERVER_NOT_OBSERVED ((void *) 2)
+ 
+-#define ZEND_OBSERVABLE_FN(function) \
+-	(ZEND_MAP_PTR(function->common.run_time_cache) && !(function->common.fn_flags & ZEND_ACC_CALL_VIA_TRAMPOLINE))
++#define ZEND_OBSERVABLE_FN(fn_flags) \
++	(!(fn_flags & ZEND_ACC_CALL_VIA_TRAMPOLINE))
+ 
+ zend_llist zend_observers_fcall_list;
+-zend_llist zend_observer_function_declared_callbacks;
+-zend_llist zend_observer_class_linked_callbacks;
+ zend_llist zend_observer_error_callbacks;
+ zend_llist zend_observer_fiber_init;
+ zend_llist zend_observer_fiber_switch;
+ zend_llist zend_observer_fiber_destroy;
+ 
+ int zend_observer_fcall_op_array_extension;
+-bool zend_observer_errors_observed;
+-bool zend_observer_function_declared_observed;
+-bool zend_observer_class_linked_observed;
+ 
++ZEND_TLS zend_execute_data *first_observed_frame;
+ ZEND_TLS zend_execute_data *current_observed_frame;
+ 
+ // Call during minit/startup ONLY
+@@ -56,8 +52,6 @@ ZEND_API void zend_observer_fcall_register(zend_observer_fcall_init init)
+ ZEND_API void zend_observer_startup(void)
+ {
+ 	zend_llist_init(&zend_observers_fcall_list, sizeof(zend_observer_fcall_init), NULL, 1);
+-	zend_llist_init(&zend_observer_function_declared_callbacks, sizeof(zend_observer_function_declared_cb), NULL, 1);
+-	zend_llist_init(&zend_observer_class_linked_callbacks, sizeof(zend_observer_class_linked_cb), NULL, 1);
+ 	zend_llist_init(&zend_observer_error_callbacks, sizeof(zend_observer_error_cb), NULL, 1);
+ 	zend_llist_init(&zend_observer_fiber_init, sizeof(zend_observer_fiber_init_handler), NULL, 1);
+ 	zend_llist_init(&zend_observer_fiber_switch, sizeof(zend_observer_fiber_switch_handler), NULL, 1);
+@@ -84,46 +78,39 @@ ZEND_API void zend_observer_post_startup(void)
+ 		ZEND_VM_SET_OPCODE_HANDLER(EG(exception_op));
+ 		ZEND_VM_SET_OPCODE_HANDLER(EG(exception_op) + 1);
+ 		ZEND_VM_SET_OPCODE_HANDLER(EG(exception_op) + 2);
+-
+-		// Add an observer temporary to store previous observed frames
+-		zend_internal_function *zif;
+-		ZEND_HASH_FOREACH_PTR(CG(function_table), zif) {
+-			++zif->T;
+-		} ZEND_HASH_FOREACH_END();
+-		zend_class_entry *ce;
+-		ZEND_HASH_MAP_FOREACH_PTR(CG(class_table), ce) {
+-			ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, zif) {
+-				++zif->T;
+-			} ZEND_HASH_FOREACH_END();
+-		} ZEND_HASH_FOREACH_END();
+ 	}
+ }
+ 
+ ZEND_API void zend_observer_activate(void)
+ {
++	first_observed_frame = NULL;
+ 	current_observed_frame = NULL;
+ }
+ 
++ZEND_API void zend_observer_deactivate(void)
++{
++	// now empty and unused, but kept for ABI compatibility
++}
++
+ ZEND_API void zend_observer_shutdown(void)
+ {
+ 	zend_llist_destroy(&zend_observers_fcall_list);
+-	zend_llist_destroy(&zend_observer_function_declared_callbacks);
+-	zend_llist_destroy(&zend_observer_class_linked_callbacks);
+ 	zend_llist_destroy(&zend_observer_error_callbacks);
+-	zend_llist_destroy(&zend_observer_fiber_init);
+ 	zend_llist_destroy(&zend_observer_fiber_switch);
+-	zend_llist_destroy(&zend_observer_fiber_destroy);
+ }
+ 
+ static void zend_observer_fcall_install(zend_execute_data *execute_data)
+ {
+ 	zend_llist *list = &zend_observers_fcall_list;
+ 	zend_function *function = execute_data->func;
++	zend_op_array *op_array = &function->op_array;
+ 
+-	ZEND_ASSERT(RUN_TIME_CACHE(&function->common));
+-	zend_observer_fcall_begin_handler *begin_handlers = (zend_observer_fcall_begin_handler *)&ZEND_OBSERVER_DATA(function);
+-	zend_observer_fcall_end_handler *end_handlers = (zend_observer_fcall_end_handler *)begin_handlers + list->count, *end_handlers_start = end_handlers;
++	ZEND_ASSERT(function->type != ZEND_INTERNAL_FUNCTION);
+ 
++	ZEND_ASSERT(RUN_TIME_CACHE(op_array));
++	zend_observer_fcall_begin_handler *begin_handlers = (zend_observer_fcall_begin_handler *)&ZEND_OBSERVER_DATA(op_array);
++	zend_observer_fcall_end_handler *end_handlers = (zend_observer_fcall_end_handler *)begin_handlers + list->count, *end_handlers_start = end_handlers;
++	
+ 	*begin_handlers = ZEND_OBSERVER_NOT_OBSERVED;
+ 	*end_handlers = ZEND_OBSERVER_NOT_OBSERVED;
+ 
+@@ -138,7 +125,7 @@ static void zend_observer_fcall_install(zend_execute_data *execute_data)
+ 			*(end_handlers++) = handlers.end;
+ 		}
+ 	}
+-
++	
+ 	// end handlers are executed in reverse order
+ 	for (--end_handlers; end_handlers_start < end_handlers; --end_handlers, ++end_handlers_start) {
+ 		zend_observer_fcall_end_handler tmp = *end_handlers;
+@@ -147,83 +134,20 @@ static void zend_observer_fcall_install(zend_execute_data *execute_data)
+ 	}
+ }
+ 
+-static bool zend_observer_remove_handler(void **first_handler, void *old_handler) {
+-	size_t registered_observers = zend_observers_fcall_list.count;
+-
+-	void **last_handler = first_handler + registered_observers - 1;
+-	for (void **cur_handler = first_handler; cur_handler <= last_handler; ++cur_handler) {
+-		if (*cur_handler == old_handler) {
+-			if (registered_observers == 1 || (cur_handler == first_handler && cur_handler[1] == NULL)) {
+-				*cur_handler = ZEND_OBSERVER_NOT_OBSERVED;
+-			} else {
+-				if (cur_handler != last_handler) {
+-					memmove(cur_handler, cur_handler + 1, sizeof(cur_handler) * (last_handler - cur_handler));
+-				}
+-				*last_handler = NULL;
+-			}
+-			return true;
+-		}
+-	}
+-	return false;
+-}
+-
+-ZEND_API void zend_observer_add_begin_handler(zend_function *function, zend_observer_fcall_begin_handler begin) {
+-	size_t registered_observers = zend_observers_fcall_list.count;
+-	zend_observer_fcall_begin_handler *first_handler = (void *)&ZEND_OBSERVER_DATA(function), *last_handler = first_handler + registered_observers - 1;
+-	if (*first_handler == ZEND_OBSERVER_NOT_OBSERVED) {
+-		*first_handler = begin;
+-	} else {
+-		for (zend_observer_fcall_begin_handler *cur_handler = first_handler + 1; cur_handler <= last_handler; ++cur_handler) {
+-			if (*cur_handler == NULL) {
+-				*cur_handler = begin;
+-				return;
+-			}
+-		}
+-		// there's no space for new handlers, then it's forbidden to call this function
+-		ZEND_UNREACHABLE();
+-	}
+-}
+-
+-ZEND_API bool zend_observer_remove_begin_handler(zend_function *function, zend_observer_fcall_begin_handler begin) {
+-	return zend_observer_remove_handler((void **)&ZEND_OBSERVER_DATA(function), begin);
+-}
+-
+-ZEND_API void zend_observer_add_end_handler(zend_function *function, zend_observer_fcall_end_handler end) {
+-	size_t registered_observers = zend_observers_fcall_list.count;
+-	zend_observer_fcall_end_handler *end_handler = (zend_observer_fcall_end_handler *)&ZEND_OBSERVER_DATA(function) + registered_observers;
+-	// to allow to preserve the invariant that end handlers are in reverse order of begin handlers, push the new end handler in front
+-	if (*end_handler != ZEND_OBSERVER_NOT_OBSERVED) {
+-		// there's no space for new handlers, then it's forbidden to call this function
+-		ZEND_ASSERT(end_handler[registered_observers - 1] == NULL);
+-		memmove(end_handler + 1, end_handler, sizeof(end_handler) * (registered_observers - 1));
+-	}
+-	*end_handler = end;
+-}
+-
+-ZEND_API bool zend_observer_remove_end_handler(zend_function *function, zend_observer_fcall_end_handler end) {
+-	size_t registered_observers = zend_observers_fcall_list.count;
+-	return zend_observer_remove_handler((void **)&ZEND_OBSERVER_DATA(function) + registered_observers, end);
+-}
+-
+-static inline zend_execute_data **prev_observed_frame(zend_execute_data *execute_data) {
+-	zend_function *func = EX(func);
+-	ZEND_ASSERT(func);
+-	return (zend_execute_data **)&Z_PTR_P(EX_VAR_NUM((ZEND_USER_CODE(func->type) ? func->op_array.last_var : ZEND_CALL_NUM_ARGS(execute_data)) + func->common.T - 1));
+-}
+-
+ static void ZEND_FASTCALL _zend_observe_fcall_begin(zend_execute_data *execute_data)
+ {
+ 	if (!ZEND_OBSERVER_ENABLED) {
+ 		return;
+ 	}
+ 
+-	zend_function *function = execute_data->func;
++	zend_op_array *op_array = &execute_data->func->op_array;
++	uint32_t fn_flags = op_array->fn_flags;
+ 
+-	if (!ZEND_OBSERVABLE_FN(function)) {
++	if (!ZEND_OBSERVABLE_FN(fn_flags)) {
+ 		return;
+ 	}
+ 
+-	zend_observer_fcall_begin_handler *handler = (zend_observer_fcall_begin_handler *)&ZEND_OBSERVER_DATA(function);
++	zend_observer_fcall_begin_handler *handler = (zend_observer_fcall_begin_handler *)&ZEND_OBSERVER_DATA(op_array);
+ 	if (!*handler) {
+ 		zend_observer_fcall_install(execute_data);
+ 	}
+@@ -232,7 +156,9 @@ static void ZEND_FASTCALL _zend_observe_fcall_begin(zend_execute_data *execute_d
+ 
+ 	zend_observer_fcall_end_handler *end_handler = (zend_observer_fcall_end_handler *)possible_handlers_end;
+ 	if (*end_handler != ZEND_OBSERVER_NOT_OBSERVED) {
+-		*prev_observed_frame(execute_data) = current_observed_frame;
++		if (first_observed_frame == NULL) {
++			first_observed_frame = execute_data;
++		}
+ 		current_observed_frame = execute_data;
+ 	}
+ 
+@@ -258,87 +184,71 @@ ZEND_API void ZEND_FASTCALL zend_observer_fcall_begin(zend_execute_data *execute
+ 	}
+ }
+ 
+-static inline void call_end_observers(zend_execute_data *execute_data, zval *return_value) {
++static inline bool zend_observer_is_skipped_frame(zend_execute_data *execute_data) {
+ 	zend_function *func = execute_data->func;
+-	ZEND_ASSERT(func);
+ 
+-	zend_observer_fcall_end_handler *handler = (zend_observer_fcall_end_handler *)&ZEND_OBSERVER_DATA(func) + zend_observers_fcall_list.count;
+-	// TODO: Fix exceptions from generators
+-	// ZEND_ASSERT(fcall_data);
+-	if (!*handler || *handler == ZEND_OBSERVER_NOT_OBSERVED) {
+-		return;
++	if (!func || func->type == ZEND_INTERNAL_FUNCTION || !ZEND_OBSERVABLE_FN(func->common.fn_flags)) {
++		return true;
+ 	}
+ 
+-	zend_observer_fcall_end_handler *possible_handlers_end = handler + zend_observers_fcall_list.count;
+-	do {
+-		(*handler)(execute_data, return_value);
+-	} while (++handler != possible_handlers_end && *handler != NULL);
+-}
+-
+-ZEND_API void ZEND_FASTCALL zend_observer_fcall_end(zend_execute_data *execute_data, zval *return_value)
+-{
+-	if (execute_data != current_observed_frame) {
+-		return;
++	zend_observer_fcall_end_handler end_handler = (&ZEND_OBSERVER_DATA(&func->op_array))[zend_observers_fcall_list.count];
++	if (end_handler == NULL || end_handler == ZEND_OBSERVER_NOT_OBSERVED) {
++		return true;
+ 	}
+-	call_end_observers(execute_data, return_value);
+-	current_observed_frame = *prev_observed_frame(execute_data);
+-}
+ 
+-ZEND_API void zend_observer_fcall_end_all(void)
+-{
+-	zend_execute_data *execute_data = current_observed_frame, *original_execute_data = EG(current_execute_data);
+-	current_observed_frame = NULL;
+-	while (execute_data) {
+-		EG(current_execute_data) = execute_data;
+-		call_end_observers(execute_data, NULL);
+-		execute_data = *prev_observed_frame(execute_data);
+-	}
+-	EG(current_execute_data) = original_execute_data;
++	return false;
+ }
+ 
+-ZEND_API void zend_observer_function_declared_register(zend_observer_function_declared_cb cb)
++ZEND_API void ZEND_FASTCALL zend_observer_fcall_end(zend_execute_data *execute_data, zval *return_value)
+ {
+-	zend_observer_function_declared_observed = true;
+-	zend_llist_add_element(&zend_observer_function_declared_callbacks, &cb);
+-}
++	zend_function *func = execute_data->func;
+ 
+-ZEND_API void ZEND_FASTCALL _zend_observer_function_declared_notify(zend_op_array *op_array, zend_string *name)
+-{
+-	if (CG(compiler_options) & ZEND_COMPILE_IGNORE_OBSERVER) {
++	if (!ZEND_OBSERVER_ENABLED
++	 || !ZEND_OBSERVABLE_FN(func->common.fn_flags)) {
+ 		return;
+ 	}
+ 
+-	for (zend_llist_element *element = zend_observer_function_declared_callbacks.head; element; element = element->next) {
+-		zend_observer_function_declared_cb callback = *(zend_observer_function_declared_cb *) (element->data);
+-		callback(op_array, name);
++	zend_observer_fcall_end_handler *handler = (zend_observer_fcall_end_handler *)&ZEND_OBSERVER_DATA(&func->op_array) + zend_observers_fcall_list.count;
++	// TODO: Fix exceptions from generators
++	// ZEND_ASSERT(fcall_data);
++	if (!*handler || *handler == ZEND_OBSERVER_NOT_OBSERVED) {
++		return;
+ 	}
+-}
+ 
+-ZEND_API void zend_observer_class_linked_register(zend_observer_class_linked_cb cb)
+-{
+-	zend_observer_class_linked_observed = true;
+-	zend_llist_add_element(&zend_observer_class_linked_callbacks, &cb);
+-}
++	zend_observer_fcall_end_handler *possible_handlers_end = handler + zend_observers_fcall_list.count;
++	do {
++		(*handler)(execute_data, return_value);
++	} while (++handler != possible_handlers_end && *handler != NULL);
+ 
+-ZEND_API void ZEND_FASTCALL _zend_observer_class_linked_notify(zend_class_entry *ce, zend_string *name)
+-{
+-	if (CG(compiler_options) & ZEND_COMPILE_IGNORE_OBSERVER) {
+-		return;
++	if (first_observed_frame == execute_data) {
++		first_observed_frame = NULL;
++		current_observed_frame = NULL;
++	} else {
++		zend_execute_data *ex = execute_data->prev_execute_data;
++		while (ex && zend_observer_is_skipped_frame(ex)) {
++			ex = ex->prev_execute_data;
++		}
++		current_observed_frame = ex;
+ 	}
++}
+ 
+-	for (zend_llist_element *element = zend_observer_class_linked_callbacks.head; element; element = element->next) {
+-		zend_observer_class_linked_cb callback = *(zend_observer_class_linked_cb *) (element->data);
+-		callback(ce, name);
++ZEND_API void zend_observer_fcall_end_all(void)
++{
++	zend_execute_data *ex = current_observed_frame;
++	while (ex != NULL) {
++		if (ex->func && ex->func->type != ZEND_INTERNAL_FUNCTION) {
++			zend_observer_fcall_end(ex, NULL);
++		}
++		ex = ex->prev_execute_data;
+ 	}
+ }
+ 
+ ZEND_API void zend_observer_error_register(zend_observer_error_cb cb)
+ {
+-	zend_observer_errors_observed = true;
+ 	zend_llist_add_element(&zend_observer_error_callbacks, &cb);
+ }
+ 
+-ZEND_API void _zend_observer_error_notify(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message)
++void zend_observer_error_notify(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message)
+ {
+ 	for (zend_llist_element *element = zend_observer_error_callbacks.head; element; element = element->next) {
+ 		zend_observer_error_cb callback = *(zend_observer_error_cb *) (element->data);
+@@ -366,8 +276,6 @@ ZEND_API void ZEND_FASTCALL zend_observer_fiber_init_notify(zend_fiber_context *
+ 	zend_llist_element *element;
+ 	zend_observer_fiber_init_handler callback;
+ 
+-	initializing->top_observed_frame = NULL;
+-
+ 	for (element = zend_observer_fiber_init.head; element; element = element->next) {
+ 		callback = *(zend_observer_fiber_init_handler *) element->data;
+ 		callback(initializing);
+@@ -379,17 +287,10 @@ ZEND_API void ZEND_FASTCALL zend_observer_fiber_switch_notify(zend_fiber_context
+ 	zend_llist_element *element;
+ 	zend_observer_fiber_switch_handler callback;
+ 
+-	if (from->status == ZEND_FIBER_STATUS_DEAD) {
+-		zend_observer_fcall_end_all(); // fiber is either finished (call will do nothing) or has bailed out
+-	}
+-
+ 	for (element = zend_observer_fiber_switch.head; element; element = element->next) {
+ 		callback = *(zend_observer_fiber_switch_handler *) element->data;
+ 		callback(from, to);
+ 	}
+-
+-	from->top_observed_frame = current_observed_frame;
+-	current_observed_frame = to->top_observed_frame;
+ }
+ 
+ ZEND_API void ZEND_FASTCALL zend_observer_fiber_destroy_notify(zend_fiber_context *destroying)
+diff --git a/Zend/zend_observer.h b/Zend/zend_observer.h
+index fc4d9a62..b43ff1e4 100644
+--- a/Zend/zend_observer.h
++++ b/Zend/zend_observer.h
+@@ -27,9 +27,6 @@
+ BEGIN_EXTERN_C()
+ 
+ extern ZEND_API int zend_observer_fcall_op_array_extension;
+-extern ZEND_API bool zend_observer_errors_observed;
+-extern ZEND_API bool zend_observer_function_declared_observed;
+-extern ZEND_API bool zend_observer_class_linked_observed;
+ 
+ #define ZEND_OBSERVER_ENABLED (zend_observer_fcall_op_array_extension != -1)
+ 
+@@ -59,16 +56,10 @@ typedef zend_observer_fcall_handlers (*zend_observer_fcall_init)(zend_execute_da
+ // Call during minit/startup ONLY
+ ZEND_API void zend_observer_fcall_register(zend_observer_fcall_init);
+ 
+-// Call during runtime, but only if you have used zend_observer_fcall_register.
+-// You must not have more than one begin and one end handler active at the same time. Remove the old one first, if there is an existing one.
+-ZEND_API void zend_observer_add_begin_handler(zend_function *function, zend_observer_fcall_begin_handler begin);
+-ZEND_API bool zend_observer_remove_begin_handler(zend_function *function, zend_observer_fcall_begin_handler begin);
+-ZEND_API void zend_observer_add_end_handler(zend_function *function, zend_observer_fcall_end_handler end);
+-ZEND_API bool zend_observer_remove_end_handler(zend_function *function, zend_observer_fcall_end_handler end);
+-
+ ZEND_API void zend_observer_startup(void); // Called by engine before MINITs
+ ZEND_API void zend_observer_post_startup(void); // Called by engine after MINITs
+ ZEND_API void zend_observer_activate(void);
++ZEND_API void zend_observer_deactivate(void);
+ ZEND_API void zend_observer_shutdown(void);
+ 
+ ZEND_API void ZEND_FASTCALL zend_observer_fcall_begin(
+@@ -83,35 +74,10 @@ ZEND_API void ZEND_FASTCALL zend_observer_fcall_end(
+ 
+ ZEND_API void zend_observer_fcall_end_all(void);
+ 
+-typedef void (*zend_observer_function_declared_cb)(zend_op_array *op_array, zend_string *name);
+-
+-ZEND_API void zend_observer_function_declared_register(zend_observer_function_declared_cb cb);
+-ZEND_API void ZEND_FASTCALL _zend_observer_function_declared_notify(zend_op_array *op_array, zend_string *name);
+-static inline void zend_observer_function_declared_notify(zend_op_array *op_array, zend_string *name) {
+-    if (UNEXPECTED(zend_observer_function_declared_observed)) {
+-		_zend_observer_function_declared_notify(op_array, name);
+-	}
+-}
+-
+-typedef void (*zend_observer_class_linked_cb)(zend_class_entry *ce, zend_string *name);
+-
+-ZEND_API void zend_observer_class_linked_register(zend_observer_class_linked_cb cb);
+-ZEND_API void ZEND_FASTCALL _zend_observer_class_linked_notify(zend_class_entry *ce, zend_string *name);
+-static inline void zend_observer_class_linked_notify(zend_class_entry *ce, zend_string *name) {
+-	if (UNEXPECTED(zend_observer_class_linked_observed)) {
+-		_zend_observer_class_linked_notify(ce, name);
+-	}
+-}
+-
+ typedef void (*zend_observer_error_cb)(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message);
+ 
+ ZEND_API void zend_observer_error_register(zend_observer_error_cb callback);
+-ZEND_API void _zend_observer_error_notify(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message);
+-static inline void zend_observer_error_notify(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message) {
+-	if (UNEXPECTED(zend_observer_errors_observed)) {
+-		_zend_observer_error_notify(type, error_filename, error_lineno, message);
+-	}
+-}
++void zend_observer_error_notify(int type, zend_string *error_filename, uint32_t error_lineno, zend_string *message);
+ 
+ typedef void (*zend_observer_fiber_init_handler)(zend_fiber_context *initializing);
+ typedef void (*zend_observer_fiber_switch_handler)(zend_fiber_context *from, zend_fiber_context *to);
+diff --git a/Zend/zend_opcode.c b/Zend/zend_opcode.c
+index 3475bc4d..15056f23 100644
+--- a/Zend/zend_opcode.c
++++ b/Zend/zend_opcode.c
+@@ -27,7 +27,6 @@
+ #include "zend_API.h"
+ #include "zend_sort.h"
+ #include "zend_constants.h"
+-#include "zend_observer.h"
+ 
+ #include "zend_vm.h"
+ 
+@@ -112,7 +111,9 @@ ZEND_API void zend_type_release(zend_type type, bool persistent) {
+ 	if (ZEND_TYPE_HAS_LIST(type)) {
+ 		zend_type *list_type;
+ 		ZEND_TYPE_LIST_FOREACH(ZEND_TYPE_LIST(type), list_type) {
+-			zend_type_release(*list_type, persistent);
++			if (ZEND_TYPE_HAS_NAME(*list_type)) {
++				zend_string_release(ZEND_TYPE_NAME(*list_type));
++			}
+ 		} ZEND_TYPE_LIST_FOREACH_END();
+ 		if (!ZEND_TYPE_USES_ARENA(type)) {
+ 			pefree(ZEND_TYPE_LIST(type), persistent);
+@@ -254,7 +255,7 @@ ZEND_API void zend_cleanup_mutable_class_data(zend_class_entry *ce)
+ 		if (constants_table && constants_table != &ce->constants_table) {
+ 			zend_class_constant *c;
+ 
+-			ZEND_HASH_MAP_FOREACH_PTR(constants_table, c) {
++			ZEND_HASH_FOREACH_PTR(constants_table, c) {
+ 				if (c->ce == ce || (Z_CONSTANT_FLAGS(c->value) & CONST_OWNED)) {
+ 					zval_ptr_dtor_nogc(&c->value);
+ 				}
+@@ -274,11 +275,6 @@ ZEND_API void zend_cleanup_mutable_class_data(zend_class_entry *ce)
+ 			mutable_data->default_properties_table = NULL;
+ 		}
+ 
+-		if (mutable_data->backed_enum_table) {
+-			zend_hash_release(mutable_data->backed_enum_table);
+-			mutable_data->backed_enum_table = NULL;
+-		}
+-
+ 		ZEND_MAP_PTR_SET_IMM(ce->mutable_data, NULL);
+ 	}
+ }
+@@ -297,20 +293,18 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 		zend_class_constant *c;
+ 		zval *p, *end;
+ 
+-		ZEND_HASH_MAP_FOREACH_PTR(&ce->constants_table, c) {
++		ZEND_HASH_FOREACH_PTR(&ce->constants_table, c) {
+ 			if (c->ce == ce) {
+ 				zval_ptr_dtor_nogc(&c->value);
+ 			}
+ 		} ZEND_HASH_FOREACH_END();
+ 
+-		if (ce->default_properties_table) {
+-			p = ce->default_properties_table;
+-			end = p + ce->default_properties_count;
++		p = ce->default_properties_table;
++		end = p + ce->default_properties_count;
+ 
+-			while (p < end) {
+-				zval_ptr_dtor_nogc(p);
+-				p++;
+-			}
++		while (p < end) {
++			zval_ptr_dtor_nogc(p);
++			p++;
+ 		}
+ 		return;
+ 	}
+@@ -336,6 +330,9 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 				if (ce->attributes) {
+ 					zend_hash_release(ce->attributes);
+ 				}
++				if (ce->backed_enum_table) {
++					zend_hash_release(ce->backed_enum_table);
++				}
+ 
+ 				if (ce->num_interfaces > 0 && !(ce->ce_flags & ZEND_ACC_RESOLVED_INTERFACES)) {
+ 					uint32_t i;
+@@ -373,7 +370,7 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 				}
+ 				efree(ce->default_static_members_table);
+ 			}
+-			ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop_info) {
++			ZEND_HASH_FOREACH_PTR(&ce->properties_info, prop_info) {
+ 				if (prop_info->ce == ce) {
+ 					zend_string_release_ex(prop_info->name, 0);
+ 					if (prop_info->doc_comment) {
+@@ -390,7 +387,7 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 			if (zend_hash_num_elements(&ce->constants_table)) {
+ 				zend_class_constant *c;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(&ce->constants_table, c) {
++				ZEND_HASH_FOREACH_PTR(&ce->constants_table, c) {
+ 					if (c->ce == ce || (Z_CONSTANT_FLAGS(c->value) & CONST_OWNED)) {
+ 						zval_ptr_dtor_nogc(&c->value);
+ 						if (c->doc_comment) {
+@@ -406,9 +403,6 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 			if (ce->num_interfaces > 0 && (ce->ce_flags & ZEND_ACC_RESOLVED_INTERFACES)) {
+ 				efree(ce->interfaces);
+ 			}
+-			if (ce->backed_enum_table) {
+-				zend_hash_release(ce->backed_enum_table);
+-			}
+ 			break;
+ 		case ZEND_INTERNAL_CLASS:
+ 			if (ce->backed_enum_table) {
+@@ -435,7 +429,7 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 				free(ce->default_static_members_table);
+ 			}
+ 
+-			ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop_info) {
++			ZEND_HASH_FOREACH_PTR(&ce->properties_info, prop_info) {
+ 				if (prop_info->ce == ce) {
+ 					zend_string_release(prop_info->name);
+ 					zend_type_release(prop_info->type, /* persistent */ 1);
+@@ -446,7 +440,7 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 			zend_string_release_ex(ce->name, 1);
+ 
+ 			/* TODO: eliminate this loop for classes without functions with arg_info / attributes */
+-			ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, fn) {
++			ZEND_HASH_FOREACH_PTR(&ce->function_table, fn) {
+ 				if (fn->common.scope == ce) {
+ 					if (fn->common.fn_flags & (ZEND_ACC_HAS_RETURN_TYPE|ZEND_ACC_HAS_TYPE_HINTS)) {
+ 						zend_free_internal_arg_info(&fn->internal_function);
+@@ -463,7 +457,7 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 			if (zend_hash_num_elements(&ce->constants_table)) {
+ 				zend_class_constant *c;
+ 
+-				ZEND_HASH_MAP_FOREACH_PTR(&ce->constants_table, c) {
++				ZEND_HASH_FOREACH_PTR(&ce->constants_table, c) {
+ 					if (c->ce == ce) {
+ 						if (Z_TYPE(c->value) == IS_CONSTANT_AST) {
+ 							/* We marked this as IMMUTABLE, but do need to free it when the
+@@ -487,9 +481,6 @@ ZEND_API void destroy_zend_class(zval *zv)
+ 			if (ce->iterator_funcs_ptr) {
+ 				free(ce->iterator_funcs_ptr);
+ 			}
+-			if (ce->arrayaccess_funcs_ptr) {
+-				free(ce->arrayaccess_funcs_ptr);
+-			}
+ 			if (ce->num_interfaces > 0) {
+ 				free(ce->interfaces);
+ 			}
+@@ -758,29 +749,31 @@ static void emit_live_range(
+ 			while (def_opline + 1 < use_opline) {
+ 				def_opline++;
+ 				start++;
+-				switch (def_opline->opcode) {
+-					case ZEND_INIT_FCALL:
+-					case ZEND_INIT_FCALL_BY_NAME:
+-					case ZEND_INIT_NS_FCALL_BY_NAME:
+-					case ZEND_INIT_DYNAMIC_CALL:
+-					case ZEND_INIT_USER_CALL:
+-					case ZEND_INIT_METHOD_CALL:
+-					case ZEND_INIT_STATIC_METHOD_CALL:
+-					case ZEND_NEW:
+-						level++;
+-						break;
+-					case ZEND_DO_FCALL:
+-					case ZEND_DO_FCALL_BY_NAME:
+-					case ZEND_DO_ICALL:
+-					case ZEND_DO_UCALL:
+-						if (level == 0) {
+-							goto done;
+-						}
+-						level--;
++				if (def_opline->opcode == ZEND_DO_FCALL) {
++					if (level == 0) {
+ 						break;
++					}
++					level--;
++				} else {
++					switch (def_opline->opcode) {
++						case ZEND_INIT_FCALL:
++						case ZEND_INIT_FCALL_BY_NAME:
++						case ZEND_INIT_NS_FCALL_BY_NAME:
++						case ZEND_INIT_DYNAMIC_CALL:
++						case ZEND_INIT_USER_CALL:
++						case ZEND_INIT_METHOD_CALL:
++						case ZEND_INIT_STATIC_METHOD_CALL:
++						case ZEND_NEW:
++							level++;
++							break;
++						case ZEND_DO_ICALL:
++						case ZEND_DO_UCALL:
++						case ZEND_DO_FCALL_BY_NAME:
++							level--;
++							break;
++					}
+ 				}
+ 			}
+-done:
+ 			emit_live_range_raw(op_array, var_num, ZEND_LIVE_NEW, orig_start + 1, start + 1);
+ 			if (start + 1 == end) {
+ 				/* Trivial live-range, no need to store it. */
+@@ -832,8 +825,6 @@ done:
+ 				/* The use might have been optimized away, in which case we will hit the def
+ 				 * instead. */
+ 				if (use_opline->opcode == ZEND_COPY_TMP && use_opline->result.var == rt_var_num) {
+-					start = def_opline + 1 - op_array->opcodes;
+-					emit_live_range_raw(op_array, var_num, kind, start, end);
+ 					return;
+ 				}
+ 			} while (!(
+@@ -1050,8 +1041,6 @@ ZEND_API void pass_two(zend_op_array *op_array)
+ 	CG(context).literals_size = op_array->last_literal;
+ #endif
+ 
+-    op_array->T += ZEND_OBSERVER_ENABLED; // reserve last temporary for observers if enabled
+-
+ 	/* Needs to be set directly after the opcode/literal reallocation, to ensure destruction
+ 	 * happens correctly if any of the following fixups generate a fatal error. */
+ 	op_array->fn_flags |= ZEND_ACC_DONE_PASS_TWO;
+@@ -1097,6 +1086,10 @@ ZEND_API void pass_two(zend_op_array *op_array)
+ 			case ZEND_JMP:
+ 				ZEND_PASS_TWO_UPDATE_JMP_TARGET(op_array, opline, opline->op1);
+ 				break;
++			case ZEND_JMPZNZ:
++				/* absolute index to relative offset */
++				opline->extended_value = ZEND_OPLINE_NUM_TO_OFFSET(op_array, opline, opline->extended_value);
++				ZEND_FALLTHROUGH;
+ 			case ZEND_JMPZ:
+ 			case ZEND_JMPNZ:
+ 			case ZEND_JMPZ_EX:
+diff --git a/Zend/zend_operators.c b/Zend/zend_operators.c
+index 02ca378b..ef5c50c4 100644
+--- a/Zend/zend_operators.c
++++ b/Zend/zend_operators.c
+@@ -54,36 +54,7 @@ static _locale_t current_locale = NULL;
+ 
+ #define TYPE_PAIR(t1,t2) (((t1) << 4) | (t2))
+ 
+-#if __SSE2__
+-#define HAVE_BLOCKCONV
+-
+-/* Common code for SSE2 accelerated character case conversion */
+-
+-#define BLOCKCONV_INIT_RANGE(start, end) \
+-	const __m128i blconv_start_minus_1 = _mm_set1_epi8((start) - 1); \
+-	const __m128i blconv_end_plus_1 = _mm_set1_epi8((end) + 1);
+-
+-#define BLOCKCONV_STRIDE sizeof(__m128i)
+-
+-#define BLOCKCONV_INIT_DELTA(delta) \
+-	const __m128i blconv_delta = _mm_set1_epi8(delta);
+-
+-#define BLOCKCONV_LOAD(input) \
+-	__m128i blconv_operand = _mm_loadu_si128((__m128i*)(input)); \
+-	__m128i blconv_gt = _mm_cmpgt_epi8(blconv_operand, blconv_start_minus_1); \
+-	__m128i blconv_lt = _mm_cmplt_epi8(blconv_operand, blconv_end_plus_1); \
+-	__m128i blconv_mingle = _mm_and_si128(blconv_gt, blconv_lt);
+-
+-#define BLOCKCONV_FOUND() _mm_movemask_epi8(blconv_mingle)
+-
+-#define BLOCKCONV_STORE(dest) \
+-	__m128i blconv_add = _mm_and_si128(blconv_mingle, blconv_delta); \
+-	__m128i blconv_result = _mm_add_epi8(blconv_operand, blconv_add); \
+-	_mm_storeu_si128((__m128i *)(dest), blconv_result);
+-
+-#endif /* __SSE2__ */
+-
+-ZEND_API const unsigned char zend_tolower_map[256] = {
++static const unsigned char tolower_map[256] = {
+ 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+ 0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+ 0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+@@ -102,33 +73,17 @@ ZEND_API const unsigned char zend_tolower_map[256] = {
+ 0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff
+ };
+ 
+-ZEND_API const unsigned char zend_toupper_map[256] = {
+-0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+-0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+-0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+-0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
+-0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+-0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
+-0x60,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+-0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x7b,0x7c,0x7d,0x7e,0x7f,
+-0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
+-0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,
+-0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,
+-0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd,0xbe,0xbf,
+-0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xce,0xcf,
+-0xd0,0xd1,0xd2,0xd3,0xd4,0xd5,0xd6,0xd7,0xd8,0xd9,0xda,0xdb,0xdc,0xdd,0xde,0xdf,
+-0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef,
+-0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff
+-};
+-
++#define zend_tolower_ascii(c) (tolower_map[(unsigned char)(c)])
+ 
+ /**
+  * Functions using locale lowercase:
+  	 	zend_binary_strncasecmp_l
+  	 	zend_binary_strcasecmp_l
+- * Functions using ascii lowercase:
++		zend_binary_zval_strcasecmp
++		zend_binary_zval_strncasecmp
+ 		string_compare_function_ex
+ 		string_case_compare_function
++ * Functions using ascii lowercase:
+   		zend_str_tolower_copy
+ 		zend_str_tolower_dup
+ 		zend_str_tolower
+@@ -136,7 +91,7 @@ ZEND_API const unsigned char zend_toupper_map[256] = {
+ 		zend_binary_strncasecmp
+  */
+ 
+-static zend_long ZEND_FASTCALL zend_atol_internal(const char *str, size_t str_len) /* {{{ */
++ZEND_API zend_long ZEND_FASTCALL zend_atol(const char *str, size_t str_len) /* {{{ */
+ {
+ 	if (!str_len) {
+ 		str_len = strlen(str);
+@@ -168,14 +123,9 @@ static zend_long ZEND_FASTCALL zend_atol_internal(const char *str, size_t str_le
+ }
+ /* }}} */
+ 
+-ZEND_API zend_long ZEND_FASTCALL zend_atol(const char *str, size_t str_len)
+-{
+-	return zend_atol_internal(str, str_len);
+-}
+-
+ ZEND_API int ZEND_FASTCALL zend_atoi(const char *str, size_t str_len)
+ {
+-	return (int) zend_atol_internal(str, str_len);
++	return (int) zend_atol(str, str_len);
+ }
+ 
+ /* {{{ convert_object_to_type: dst will be either ctype or UNDEF */
+@@ -2002,7 +1952,7 @@ ZEND_API int ZEND_FASTCALL string_compare_function_ex(zval *op1, zval *op2, bool
+ 	int ret;
+ 
+ 	if (case_insensitive) {
+-		ret = zend_binary_strcasecmp(ZSTR_VAL(str1), ZSTR_LEN(str1), ZSTR_VAL(str2), ZSTR_LEN(str2));
++		ret = zend_binary_strcasecmp_l(ZSTR_VAL(str1), ZSTR_LEN(str1), ZSTR_VAL(str2), ZSTR_LEN(str2));
+ 	} else {
+ 		ret = zend_binary_strcmp(ZSTR_VAL(str1), ZSTR_LEN(str1), ZSTR_VAL(str2), ZSTR_LEN(str2));
+ 	}
+@@ -2042,13 +1992,13 @@ ZEND_API int ZEND_FASTCALL string_case_compare_function(zval *op1, zval *op2) /*
+ 		if (Z_STR_P(op1) == Z_STR_P(op2)) {
+ 			return 0;
+ 		} else {
+-			return zend_binary_strcasecmp(Z_STRVAL_P(op1), Z_STRLEN_P(op1), Z_STRVAL_P(op2), Z_STRLEN_P(op2));
++			return zend_binary_strcasecmp_l(Z_STRVAL_P(op1), Z_STRLEN_P(op1), Z_STRVAL_P(op2), Z_STRLEN_P(op2));
+ 		}
+ 	} else {
+ 		zend_string *tmp_str1, *tmp_str2;
+ 		zend_string *str1 = zval_get_tmp_string(op1, &tmp_str1);
+ 		zend_string *str2 = zval_get_tmp_string(op2, &tmp_str2);
+-		int ret = zend_binary_strcasecmp(ZSTR_VAL(str1), ZSTR_LEN(str1), ZSTR_VAL(str2), ZSTR_LEN(str2));
++		int ret = zend_binary_strcasecmp_l(ZSTR_VAL(str1), ZSTR_LEN(str1), ZSTR_VAL(str2), ZSTR_LEN(str2));
+ 
+ 		zend_tmp_string_release(tmp_str1);
+ 		zend_tmp_string_release(tmp_str2);
+@@ -2725,16 +2675,22 @@ static zend_always_inline void zend_str_tolower_impl(char *dest, const char *str
+ 	unsigned char *p = (unsigned char*)str;
+ 	unsigned char *q = (unsigned char*)dest;
+ 	unsigned char *end = p + length;
+-#ifdef HAVE_BLOCKCONV
+-	if (length >= BLOCKCONV_STRIDE) {
+-		BLOCKCONV_INIT_RANGE('A', 'Z');
+-		BLOCKCONV_INIT_DELTA('a' - 'A');
++#ifdef __SSE2__
++	if (length >= 16) {
++		const __m128i _A = _mm_set1_epi8('A' - 1);
++		const __m128i Z_ = _mm_set1_epi8('Z' + 1);
++		const __m128i delta = _mm_set1_epi8('a' - 'A');
+ 		do {
+-			BLOCKCONV_LOAD(p);
+-			BLOCKCONV_STORE(q);
+-			p += BLOCKCONV_STRIDE;
+-			q += BLOCKCONV_STRIDE;
+-		} while (p + BLOCKCONV_STRIDE <= end);
++			__m128i op = _mm_loadu_si128((__m128i*)p);
++			__m128i gt = _mm_cmpgt_epi8(op, _A);
++			__m128i lt = _mm_cmplt_epi8(op, Z_);
++			__m128i mingle = _mm_and_si128(gt, lt);
++			__m128i add = _mm_and_si128(mingle, delta);
++			__m128i lower = _mm_add_epi8(op, add);
++			_mm_storeu_si128((__m128i *)q, lower);
++			p += 16;
++			q += 16;
++		} while (p + 16 <= end);
+ 	}
+ #endif
+ 	while (p < end) {
+@@ -2743,28 +2699,6 @@ static zend_always_inline void zend_str_tolower_impl(char *dest, const char *str
+ }
+ /* }}} */
+ 
+-static zend_always_inline void zend_str_toupper_impl(char *dest, const char *str, size_t length) /* {{{ */ {
+-	unsigned char *p = (unsigned char*)str;
+-	unsigned char *q = (unsigned char*)dest;
+-	unsigned char *end = p + length;
+-#ifdef HAVE_BLOCKCONV
+-	if (length >= BLOCKCONV_STRIDE) {
+-		BLOCKCONV_INIT_RANGE('a', 'z');
+-		BLOCKCONV_INIT_DELTA('A' - 'a');
+-		do {
+-			BLOCKCONV_LOAD(p);
+-			BLOCKCONV_STORE(q);
+-			p += BLOCKCONV_STRIDE;
+-			q += BLOCKCONV_STRIDE;
+-		} while (p + BLOCKCONV_STRIDE <= end);
+-	}
+-#endif
+-	while (p < end) {
+-		*q++ = zend_toupper_ascii(*p++);
+-	}
+-}
+-/* }}} */
+-
+ ZEND_API char* ZEND_FASTCALL zend_str_tolower_copy(char *dest, const char *source, size_t length) /* {{{ */
+ {
+ 	zend_str_tolower_impl(dest, source, length);
+@@ -2773,39 +2707,18 @@ ZEND_API char* ZEND_FASTCALL zend_str_tolower_copy(char *dest, const char *sourc
+ }
+ /* }}} */
+ 
+-ZEND_API char* ZEND_FASTCALL zend_str_toupper_copy(char *dest, const char *source, size_t length) /* {{{ */
+-{
+-	zend_str_toupper_impl(dest, source, length);
+-	dest[length] = '\0';
+-	return dest;
+-}
+-/* }}} */
+-
+ ZEND_API char* ZEND_FASTCALL zend_str_tolower_dup(const char *source, size_t length) /* {{{ */
+ {
+ 	return zend_str_tolower_copy((char *)emalloc(length+1), source, length);
+ }
+ /* }}} */
+ 
+-ZEND_API char* ZEND_FASTCALL zend_str_toupper_dup(const char *source, size_t length) /* {{{ */
+-{
+-	return zend_str_toupper_copy((char *)emalloc(length+1), source, length);
+-}
+-/* }}} */
+-
+ ZEND_API void ZEND_FASTCALL zend_str_tolower(char *str, size_t length) /* {{{ */
+ {
+ 	zend_str_tolower_impl(str, (const char*)str, length);
+ }
+ /* }}} */
+ 
+-ZEND_API void ZEND_FASTCALL zend_str_toupper(char *str, size_t length) /* {{{ */
+-{
+-	zend_str_toupper_impl(str, (const char*)str, length);
+-}
+-/* }}} */
+-
+-
+ ZEND_API char* ZEND_FASTCALL zend_str_tolower_dup_ex(const char *source, size_t length) /* {{{ */
+ {
+ 	const unsigned char *p = (const unsigned char*)source;
+@@ -2830,57 +2743,38 @@ ZEND_API char* ZEND_FASTCALL zend_str_tolower_dup_ex(const char *source, size_t
+ }
+ /* }}} */
+ 
+-ZEND_API char* ZEND_FASTCALL zend_str_toupper_dup_ex(const char *source, size_t length) /* {{{ */
+-{
+-	const unsigned char *p = (const unsigned char*)source;
+-	const unsigned char *end = p + length;
+-
+-	while (p < end) {
+-		if (*p != zend_toupper_ascii(*p)) {
+-			char *res = (char*)emalloc(length + 1);
+-			unsigned char *r;
+-
+-			if (p != (const unsigned char*)source) {
+-				memcpy(res, source, p - (const unsigned char*)source);
+-			}
+-			r = (unsigned char*)p + (res - source);
+-			zend_str_toupper_impl((char *)r, (const char*)p, end - p);
+-			res[length] = '\0';
+-			return res;
+-		}
+-		p++;
+-	}
+-	return NULL;
+-}
+-/* }}} */
+-
+ ZEND_API zend_string* ZEND_FASTCALL zend_string_tolower_ex(zend_string *str, bool persistent) /* {{{ */
+ {
+ 	size_t length = ZSTR_LEN(str);
+ 	unsigned char *p = (unsigned char *) ZSTR_VAL(str);
+ 	unsigned char *end = p + length;
+ 
+-#ifdef HAVE_BLOCKCONV
+-	BLOCKCONV_INIT_RANGE('A', 'Z');
+-	while (p + BLOCKCONV_STRIDE <= end) {
+-		BLOCKCONV_LOAD(p);
+-		if (BLOCKCONV_FOUND()) {
++#ifdef __SSE2__
++	while (p + 16 <= end) {
++		const __m128i _A = _mm_set1_epi8('A' - 1);
++		const __m128i Z_ = _mm_set1_epi8('Z' + 1);
++		__m128i op = _mm_loadu_si128((__m128i*)p);
++		__m128i gt = _mm_cmpgt_epi8(op, _A);
++		__m128i lt = _mm_cmplt_epi8(op, Z_);
++		__m128i mingle = _mm_and_si128(gt, lt);
++		if (_mm_movemask_epi8(mingle)) {
+ 			zend_string *res = zend_string_alloc(length, persistent);
+ 			memcpy(ZSTR_VAL(res), ZSTR_VAL(str), p - (unsigned char *) ZSTR_VAL(str));
+ 			unsigned char *q = (unsigned char*) ZSTR_VAL(res) + (p - (unsigned char*) ZSTR_VAL(str));
+ 
+ 			/* Lowercase the chunk we already compared. */
+-			BLOCKCONV_INIT_DELTA('a' - 'A');
+-			BLOCKCONV_STORE(q);
++			const __m128i delta = _mm_set1_epi8('a' - 'A');
++			__m128i add = _mm_and_si128(mingle, delta);
++			__m128i lower = _mm_add_epi8(op, add);
++			_mm_storeu_si128((__m128i *) q, lower);
+ 
+ 			/* Lowercase the rest of the string. */
+-			p += BLOCKCONV_STRIDE;
+-			q += BLOCKCONV_STRIDE;
++			p += 16; q += 16;
+ 			zend_str_tolower_impl((char *) q, (const char *) p, end - p);
+ 			ZSTR_VAL(res)[length] = '\0';
+ 			return res;
+ 		}
+-		p += BLOCKCONV_STRIDE;
++		p += 16;
+ 	}
+ #endif
+ 
+@@ -2903,55 +2797,6 @@ ZEND_API zend_string* ZEND_FASTCALL zend_string_tolower_ex(zend_string *str, boo
+ }
+ /* }}} */
+ 
+-ZEND_API zend_string* ZEND_FASTCALL zend_string_toupper_ex(zend_string *str, bool persistent) /* {{{ */
+-{
+-	size_t length = ZSTR_LEN(str);
+-	unsigned char *p = (unsigned char *) ZSTR_VAL(str);
+-	unsigned char *end = p + length;
+-
+-#ifdef HAVE_BLOCKCONV
+-	BLOCKCONV_INIT_RANGE('a', 'z');
+-	while (p + BLOCKCONV_STRIDE <= end) {
+-		BLOCKCONV_LOAD(p);
+-		if (BLOCKCONV_FOUND()) {
+-			zend_string *res = zend_string_alloc(length, persistent);
+-			memcpy(ZSTR_VAL(res), ZSTR_VAL(str), p - (unsigned char *) ZSTR_VAL(str));
+-			unsigned char *q = (unsigned char *) ZSTR_VAL(res) + (p - (unsigned char *) ZSTR_VAL(str));
+-
+-			/* Uppercase the chunk we already compared. */
+-			BLOCKCONV_INIT_DELTA('A' - 'a');
+-			BLOCKCONV_STORE(q);
+-
+-			/* Uppercase the rest of the string. */
+-			p += BLOCKCONV_STRIDE;
+-			q += BLOCKCONV_STRIDE;
+-			zend_str_toupper_impl((char *) q, (const char *) p, end - p);
+-			ZSTR_VAL(res)[length] = '\0';
+-			return res;
+-		}
+-		p += BLOCKCONV_STRIDE;
+-	}
+-#endif
+-
+-	while (p < end) {
+-		if (*p != zend_toupper_ascii(*p)) {
+-			zend_string *res = zend_string_alloc(length, persistent);
+-			memcpy(ZSTR_VAL(res), ZSTR_VAL(str), p - (unsigned char*) ZSTR_VAL(str));
+-
+-			unsigned char *q = (unsigned char *) ZSTR_VAL(res) + (p - (unsigned char *) ZSTR_VAL(str));
+-			while (p < end) {
+-				*q++ = zend_toupper_ascii(*p++);
+-			}
+-			ZSTR_VAL(res)[length] = '\0';
+-			return res;
+-		}
+-		p++;
+-	}
+-
+-	return zend_string_copy(str);
+-}
+-/* }}} */
+-
+ ZEND_API int ZEND_FASTCALL zend_binary_strcmp(const char *s1, size_t len1, const char *s2, size_t len2) /* {{{ */
+ {
+ 	int retval;
+@@ -2961,7 +2806,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strcmp(const char *s1, size_t len1, const
+ 	}
+ 	retval = memcmp(s1, s2, MIN(len1, len2));
+ 	if (!retval) {
+-		return ZEND_THREEWAY_COMPARE(len1, len2);
++		return (int)(len1 - len2);
+ 	} else {
+ 		return retval;
+ 	}
+@@ -2977,7 +2822,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strncmp(const char *s1, size_t len1, cons
+ 	}
+ 	retval = memcmp(s1, s2, MIN(length, MIN(len1, len2)));
+ 	if (!retval) {
+-		return ZEND_THREEWAY_COMPARE(MIN(length, len1), MIN(length, len2));
++		return (int)(MIN(length, len1) - MIN(length, len2));
+ 	} else {
+ 		return retval;
+ 	}
+@@ -3002,7 +2847,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strcasecmp(const char *s1, size_t len1, c
+ 		}
+ 	}
+ 
+-	return ZEND_THREEWAY_COMPARE(len1, len2);
++	return (int)(len1 - len2);
+ }
+ /* }}} */
+ 
+@@ -3023,7 +2868,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strncasecmp(const char *s1, size_t len1,
+ 		}
+ 	}
+ 
+-	return ZEND_THREEWAY_COMPARE(MIN(length, len1), MIN(length, len2));
++	return (int)(MIN(length, len1) - MIN(length, len2));
+ }
+ /* }}} */
+ 
+@@ -3045,7 +2890,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strcasecmp_l(const char *s1, size_t len1,
+ 		}
+ 	}
+ 
+-	return ZEND_THREEWAY_COMPARE(len1, len2);
++	return (int)(len1 - len2);
+ }
+ /* }}} */
+ 
+@@ -3066,7 +2911,7 @@ ZEND_API int ZEND_FASTCALL zend_binary_strncasecmp_l(const char *s1, size_t len1
+ 		}
+ 	}
+ 
+-	return ZEND_THREEWAY_COMPARE(MIN(length, len1), MIN(length, len2));
++	return (int)(MIN(length, len1) - MIN(length, len2));
+ }
+ /* }}} */
+ 
+@@ -3082,6 +2927,18 @@ ZEND_API int ZEND_FASTCALL zend_binary_zval_strncmp(zval *s1, zval *s2, zval *s3
+ }
+ /* }}} */
+ 
++ZEND_API int ZEND_FASTCALL zend_binary_zval_strcasecmp(zval *s1, zval *s2) /* {{{ */
++{
++	return zend_binary_strcasecmp_l(Z_STRVAL_P(s1), Z_STRLEN_P(s1), Z_STRVAL_P(s2), Z_STRLEN_P(s2));
++}
++/* }}} */
++
++ZEND_API int ZEND_FASTCALL zend_binary_zval_strncasecmp(zval *s1, zval *s2, zval *s3) /* {{{ */
++{
++	return zend_binary_strncasecmp_l(Z_STRVAL_P(s1), Z_STRLEN_P(s1), Z_STRVAL_P(s2), Z_STRLEN_P(s2), Z_LVAL_P(s3));
++}
++/* }}} */
++
+ ZEND_API bool ZEND_FASTCALL zendi_smart_streq(zend_string *s1, zend_string *s2) /* {{{ */
+ {
+ 	zend_uchar ret1, ret2;

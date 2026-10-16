@@ -1,0 +1,91 @@
+diff --git a/testdata/doq_downstream.tdir/doq_downstream.dsc b/testdata/doq_downstream.tdir/doq_downstream.dsc
+new file mode 100644
+index 000000000..1e0b19d50
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/doq_downstream.dsc
+@@ -0,0 +1,16 @@
++BaseName: doq_downstream
++Version: 1.0
++Description: Test DNS-over-QUIC query processing
++CreationDate: Mon Aug 01 16:00:00 CEST 2022
++Maintainer:
++Category: 
++Component:
++CmdDepends: 
++Depends: 
++Help:
++Pre: doq_downstream.pre
++Post: doq_downstream.post
++Test: doq_downstream.test
++AuxFiles: 
++Passed:
++Failure:
+diff --git a/testdata/doq_downstream.tdir/doq_downstream.post b/testdata/doq_downstream.tdir/doq_downstream.post
+new file mode 100644
+index 000000000..f1a31be3c
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/doq_downstream.post
+@@ -0,0 +1,13 @@
++# #-- doq_downstream.post --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# source the test var file when it's there
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++#
++# do your teardown here
++PRE="../.."
++. ../common.sh
++kill_pid $FWD_PID
++if test -f unbound.pid; then
++	kill_pid $UNBOUND_PID
++fi
+diff --git a/testdata/doq_downstream.tdir/doq_downstream.pre b/testdata/doq_downstream.tdir/doq_downstream.pre
+new file mode 100644
+index 000000000..f748cc1f5
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/doq_downstream.pre
+@@ -0,0 +1,44 @@
++# #-- doq_downstream.pre--#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++PRE="../.."
++. ../common.sh
++if grep "define HAVE_NGTCP2 1" $PRE/config.h; then echo test enabled; else skip_test "test skipped"; fi
++
++if test -f $PRE/unbound_do_valgrind_in_test; then
++	do_valgrind=yes
++else
++	do_valgrind=no
++fi
++VALGRIND_FLAGS="--leak-check=full --show-leak-kinds=all"
++
++get_random_port 2
++UNBOUND_PORT=$RND_PORT
++FWD_PORT=$(($RND_PORT + 1))
++echo "UNBOUND_PORT=$UNBOUND_PORT" >> .tpkg.var.test
++echo "FWD_PORT=$FWD_PORT" >> .tpkg.var.test
++
++# start forwarder
++get_ldns_testns
++$LDNS_TESTNS -p $FWD_PORT doq_downstream.testns >fwd.log 2>&1 &
++FWD_PID=$!
++echo "FWD_PID=$FWD_PID" >> .tpkg.var.test
++
++# make config file
++sed -e 's/@PORT\@/'$UNBOUND_PORT'/' -e 's/@TOPORT\@/'$FWD_PORT'/' < doq_downstream.conf > ub.conf
++# start unbound in the background
++if test $do_valgrind = "yes"; then
++valgrind $VALGRIND_FLAGS $PRE/unbound -vvvv -d -c ub.conf >unbound.log 2>&1 &
++else
++$PRE/unbound -vvvv -d -c ub.conf >unbound.log 2>&1 &
++fi
++UNBOUND_PID=$!
++echo "UNBOUND_PID=$UNBOUND_PID" >> .tpkg.var.test
++
++cat .tpkg.var.test
++wait_ldns_testns_up fwd.log
++wait_unbound_up unbound.log
++

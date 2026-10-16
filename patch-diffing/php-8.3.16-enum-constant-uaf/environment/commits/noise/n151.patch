@@ -1,0 +1,1583 @@
+diff --git a/ext/mbstring/config.w32 b/ext/mbstring/config.w32
+index 78350bb1..175f5906 100644
+--- a/ext/mbstring/config.w32
++++ b/ext/mbstring/config.w32
+@@ -25,10 +25,11 @@ if (PHP_MBSTRING != "no") {
+ 			mbfilter_sjis_2004.c mbfilter_qprint.c mbfilter_sjis.c mbfilter_ucs2.c \
+ 			mbfilter_ucs4.c mbfilter_uhc.c mbfilter_utf16.c mbfilter_utf32.c \
+ 			mbfilter_utf7.c mbfilter_utf7imap.c mbfilter_utf8.c \
+-			mbfilter_utf8_mobile.c mbfilter_uuencode.c \
++			mbfilter_utf8_mobile.c mbfilter_euc_jp_2004.c mbfilter_uuencode.c \
+ 			mbfilter_cp5022x.c mbfilter_sjis_mobile.c \
+-			mbfilter_sjis_mac.c \
+-			mbfilter_iso2022jp_mobile.c mbfilter_singlebyte.c", "mbstring");
++			mbfilter_sjis_mac.c mbfilter_iso2022jp_2004.c \
++			mbfilter_iso2022jp_mobile.c mbfilter_singlebyte.c \
++			mbfilter_tl_jisx0201_jisx0208.c", "mbstring");
+ 
+ 		ADD_SOURCES("ext/mbstring/libmbfl/mbfl", "mbfilter.c mbfilter_8bit.c \
+ 			mbfilter_pass.c mbfilter_wchar.c mbfl_convert.c mbfl_encoding.c \
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_7bit.c b/ext/mbstring/libmbfl/filters/mbfilter_7bit.c
+index 54744aa4..4dd51343 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_7bit.c
++++ b/ext/mbstring/libmbfl/filters/mbfilter_7bit.c
+@@ -31,21 +31,20 @@
+ #include "mbfilter.h"
+ #include "mbfilter_7bit.h"
+ 
+-static size_t mb_7bit_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_7bit(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+-
+-const struct mbfl_convert_vtbl vtbl_7bit_wchar = {
++const mbfl_encoding mbfl_encoding_7bit = {
+ 	mbfl_no_encoding_7bit,
+-	mbfl_no_encoding_wchar,
+-	mbfl_filt_conv_common_ctor,
++	"7bit",
++	"7bit",
++	NULL,
++	NULL,
++	MBFL_ENCTYPE_SBCS,
+ 	NULL,
+-	mbfl_filt_conv_7bit_any,
+-	mbfl_filt_conv_common_flush,
+ 	NULL,
++	NULL
+ };
+ 
+-const struct mbfl_convert_vtbl vtbl_wchar_7bit = {
+-	mbfl_no_encoding_wchar,
++const struct mbfl_convert_vtbl vtbl_8bit_7bit = {
++	mbfl_no_encoding_8bit,
+ 	mbfl_no_encoding_7bit,
+ 	mbfl_filt_conv_common_ctor,
+ 	NULL,
+@@ -54,20 +53,17 @@ const struct mbfl_convert_vtbl vtbl_wchar_7bit = {
+ 	NULL,
+ };
+ 
+-const mbfl_encoding mbfl_encoding_7bit = {
++const struct mbfl_convert_vtbl vtbl_7bit_8bit = {
+ 	mbfl_no_encoding_7bit,
+-	"7bit",
+-	"7bit",
++	mbfl_no_encoding_8bit,
++	mbfl_filt_conv_common_ctor,
+ 	NULL,
++	mbfl_filt_conv_7bit_any,
++	mbfl_filt_conv_common_flush,
+ 	NULL,
+-	MBFL_ENCTYPE_SBCS,
+-	&vtbl_7bit_wchar,
+-	&vtbl_wchar_7bit,
+-	mb_7bit_to_wchar,
+-	mb_wchar_to_7bit,
+-	NULL
+ };
+ 
++
+ #define CK(statement)	do { if ((statement) < 0) return (-1); } while (0)
+ 
+ int mbfl_filt_conv_7bit_any(int c, mbfl_convert_filter *filter)
+@@ -75,6 +71,7 @@ int mbfl_filt_conv_7bit_any(int c, mbfl_convert_filter *filter)
+ 	return (*filter->output_function)(c < 0x80 ? c : MBFL_BAD_INPUT, filter->data);
+ }
+ 
++
+ int mbfl_filt_conv_any_7bit(int c, mbfl_convert_filter *filter)
+ {
+ 	if (c >= 0 && c < 0x80) {
+@@ -84,37 +81,3 @@ int mbfl_filt_conv_any_7bit(int c, mbfl_convert_filter *filter)
+ 	}
+ 	return 0;
+ }
+-
+-static size_t mb_7bit_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-  unsigned char *p = *in, *e = p + *in_len;
+-  uint32_t *out = buf, *limit = buf + bufsize;
+-
+-  while (p < e && out < limit) {
+-    unsigned char c = *p++;
+-    *out++ = (c < 0x80) ? c : MBFL_BAD_INPUT;
+-  }
+-
+-  *in_len = e - p;
+-  *in = p;
+-  return out - buf;
+-}
+-
+-static void mb_wchar_to_7bit(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-  unsigned char *out, *limit;
+-  MB_CONVERT_BUF_LOAD(buf, out, limit);
+-  MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-  while (len--) {
+-    uint32_t w = *in++;
+-    if (w <= 0x7F) {
+-      out = mb_convert_buf_add(out, w);
+-    } else {
+-      MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_7bit);
+-      MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-    }
+-  }
+-
+-  MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_base64.c b/ext/mbstring/libmbfl/filters/mbfilter_base64.c
+index 162e9b1b..427211c8 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_base64.c
++++ b/ext/mbstring/libmbfl/filters/mbfilter_base64.c
+@@ -31,9 +31,6 @@
+ #include "mbfilter.h"
+ #include "mbfilter_base64.h"
+ 
+-static size_t mb_base64_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_base64(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+-
+ const mbfl_encoding mbfl_encoding_base64 = {
+ 	mbfl_no_encoding_base64,
+ 	"BASE64",
+@@ -43,8 +40,6 @@ const mbfl_encoding mbfl_encoding_base64 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	NULL,
+ 	NULL,
+-	mb_base64_to_wchar,
+-	mb_wchar_to_base64,
+ 	NULL
+ };
+ 
+@@ -146,11 +141,6 @@ int mbfl_filt_conv_base64enc_flush(mbfl_convert_filter *filter)
+ 			CK((*filter->output_function)(0x3d, filter->data));		/* '=' */
+ 		}
+ 	}
+-
+-	if (filter->flush_function) {
+-		(*filter->flush_function)(filter->data);
+-	}
+-
+ 	return 0;
+ }
+ 
+@@ -176,9 +166,6 @@ int mbfl_filt_conv_base64dec(int c, mbfl_convert_filter *filter)
+ 		n = 62;
+ 	} else if (c == 0x2f) {			/* '/' */
+ 		n = 63;
+-	} else {
+-		CK((*filter->output_function)(MBFL_BAD_INPUT, filter->data));
+-		return 0;
+ 	}
+ 	n &= 0x3f;
+ 
+@@ -222,134 +209,5 @@ int mbfl_filt_conv_base64dec_flush(mbfl_convert_filter *filter)
+ 			CK((*filter->output_function)((cache >> 8) & 0xff, filter->data));
+ 		}
+ 	}
+-
+-	if (filter->flush_function) {
+-		(*filter->flush_function)(filter->data);
+-	}
+-
+ 	return 0;
+ }
+-
+-static int decode_base64(char c)
+-{
+-	if (c >= 'A' && c <= 'Z') {
+-		return c - 'A';
+-	} else if (c >= 'a' && c <= 'z') {	/* a - z */
+-		return c - 'a' + 26;
+-	} else if (c >= '0' && c <= '9') {	/* 0 - 9 */
+-		return c - '0' + 52;
+-	} else if (c == '+') {
+-		return 62;
+-	} else if (c == '/') {
+-		return 63;
+-	}
+-	return -1;
+-}
+-
+-static size_t mb_base64_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-	ZEND_ASSERT(bufsize >= 3);
+-
+-	unsigned char *p = *in, *e = p + *in_len;
+-	uint32_t *out = buf, *limit = buf + bufsize;
+-
+-	unsigned int bits = *state & 0xFF, cache = *state >> 8;
+-
+-	while (p < e && (limit - out) >= 3) {
+-		unsigned char c = *p++;
+-
+-		if (c == '\r' || c == '\n' || c == ' ' || c == '\t' || c == '=') {
+-			continue;
+-		}
+-
+-		int value = decode_base64(c);
+-
+-		if (value == -1) {
+-			*out++ = MBFL_BAD_INPUT;
+-		} else {
+-			bits += 6;
+-			cache = (cache << 6) | (value & 0x3F);
+-			if (bits == 24) {
+-				*out++ = (cache >> 16) & 0xFF;
+-				*out++ = (cache >> 8) & 0xFF;
+-				*out++ = cache & 0xFF;
+-				bits = cache = 0;
+-			}
+-		}
+-	}
+-
+-	if (p == e) {
+-		if (bits) {
+-			/* If we reach here, there will be at least 3 spaces remaining in output buffer */
+-			if (bits == 18) {
+-				*out++ = (cache >> 10) & 0xFF;
+-				*out++ = (cache >> 2) & 0xFF;
+-			} else if (bits == 12) {
+-				*out++ = (cache >> 4) & 0xFF;
+-			}
+-		}
+-	} else {
+-		*state = (cache << 8) | (bits & 0xFF);
+-	}
+-
+-	*in_len = e - p;
+-	*in = p;
+-	return out - buf;
+-}
+-
+-static void mb_wchar_to_base64(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned int bits = (buf->state & 0x3) * 8;
+-	unsigned int chars_output = ((buf->state >> 2) & 0x3F) * 4;
+-	unsigned int cache = buf->state >> 8;
+-
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	/* Every 3 bytes of input converts to 4 bytes of output... but if the number of input
+-	 * bytes is not a multiple of 3, we still pad the output out to a multiple of 4
+-	 * That's `(len + 2) * 4 / 3`, to calculate the amount of space needed in the output buffer
+-	 *
+-	 * But also, we add a CR+LF line ending (2 bytes) for every 76 bytes of output
+-	 * That means we must multiply the above number by 78/76
+-	 * Use `zend_safe_address_guarded` to check that the multiplication doesn't overflow
+-	 *
+-	 * And since we may enter this function multiple times when converting a large string, and
+-	 * we might already be close to where a CR+LF needs to be emitted, make space for an extra
+-	 * CR+LF pair in the output buffer */
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, (zend_safe_address_guarded(len + (bits / 8), 26, 52) / 19) + 2);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		cache = (cache << 8) | (w & 0xFF);
+-		bits += 8;
+-		if (bits == 24) {
+-			if (chars_output > 72) {
+-				out = mb_convert_buf_add2(out, '\r', '\n');
+-				chars_output = 0;
+-			}
+-			out = mb_convert_buf_add4(out,
+-				mbfl_base64_table[(cache >> 18) & 0x3F],
+-				mbfl_base64_table[(cache >> 12) & 0x3F],
+-				mbfl_base64_table[(cache >> 6) & 0x3F],
+-				mbfl_base64_table[cache & 0x3F]);
+-			chars_output += 4;
+-			bits = cache = 0;
+-		}
+-	}
+-
+-	if (end && bits) {
+-		if (chars_output > 72) {
+-			out = mb_convert_buf_add2(out, '\r', '\n');
+-			chars_output = 0;
+-		}
+-		if (bits == 8) {
+-			out = mb_convert_buf_add4(out, mbfl_base64_table[(cache >> 2) & 0x3F], mbfl_base64_table[(cache & 0x3) << 4], '=', '=');
+-		} else {
+-			out = mb_convert_buf_add4(out, mbfl_base64_table[(cache >> 10) & 0x3F], mbfl_base64_table[(cache >> 4) & 0x3F], mbfl_base64_table[(cache & 0xF) << 2], '=');
+-		}
+-	} else {
+-		buf->state = (cache << 8) | (((chars_output / 4) & 0x3F) << 2) | ((bits / 8) & 0x3);
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_big5.c b/ext/mbstring/libmbfl/filters/mbfilter_big5.c
+index 7618130a..8e59343d 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_big5.c
++++ b/ext/mbstring/libmbfl/filters/mbfilter_big5.c
+@@ -33,10 +33,6 @@
+ #include "unicode_table_big5.h"
+ 
+ static int mbfl_filt_conv_big5_wchar_flush(mbfl_convert_filter *filter);
+-static size_t mb_big5_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_big5(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+-static size_t mb_cp950_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_cp950(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+ 
+ static const unsigned char mblen_table_big5[] = { /* 0x81-0xFE */
+   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+@@ -68,8 +64,6 @@ const mbfl_encoding mbfl_encoding_big5 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	&vtbl_big5_wchar,
+ 	&vtbl_wchar_big5,
+-	mb_big5_to_wchar,
+-	mb_wchar_to_big5,
+ 	NULL
+ };
+ 
+@@ -82,8 +76,6 @@ const mbfl_encoding mbfl_encoding_cp950 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	&vtbl_cp950_wchar,
+ 	&vtbl_wchar_cp950,
+-	mb_cp950_to_wchar,
+-	mb_wchar_to_cp950,
+ 	NULL
+ };
+ 
+@@ -249,7 +241,9 @@ int mbfl_filt_conv_big5_wchar(int c, mbfl_convert_filter *filter)
+ 		}
+ 		break;
+ 
+-		EMPTY_SWITCH_DEFAULT_CASE();
++	default:
++		filter->status = 0;
++		break;
+ 	}
+ 
+ 	return 0;
+@@ -387,259 +381,3 @@ int mbfl_filt_conv_wchar_big5(int c, mbfl_convert_filter *filter)
+ 
+ 	return 0;
+ }
+-
+-static size_t mb_big5_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-	unsigned char *p = *in, *e = p + *in_len;
+-	uint32_t *out = buf, *limit = buf + bufsize;
+-
+-	while (p < e && out < limit) {
+-		unsigned char c = *p++;
+-
+-		if (c <= 0x7F) {
+-			*out++ = c;
+-		} else if (c > 0xA0 && c <= 0xF9 && c != 0xC8 && p < e) {
+-			unsigned char c2 = *p++;
+-
+-			if ((c2 >= 0x40 && c2 <= 0x7E) || (c2 >= 0xA1 && c2 <= 0xFE)) {
+-				unsigned int w = ((c - 0xA1)*157) + c2 - ((c2 <= 0x7E) ? 0x40 : 0xA1 - 0x3F);
+-				w = (w < big5_ucs_table_size) ? big5_ucs_table[w] : 0;
+-				if (!w)
+-					w = MBFL_BAD_INPUT;
+-				*out++ = w;
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-			}
+-		} else {
+-			*out++ = MBFL_BAD_INPUT;
+-		}
+-	}
+-
+-	*in_len = e - p;
+-	*in = p;
+-	return out - buf;
+-}
+-
+-static void mb_wchar_to_big5(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		unsigned int s = 0;
+-
+-		if (w >= ucs_a1_big5_table_min && w < ucs_a1_big5_table_max) {
+-			s = ucs_a1_big5_table[w - ucs_a1_big5_table_min];
+-		} else if (w >= ucs_a2_big5_table_min && w < ucs_a2_big5_table_max) {
+-			s = ucs_a2_big5_table[w - ucs_a2_big5_table_min];
+-		} else if (w >= ucs_a3_big5_table_min && w < ucs_a3_big5_table_max) {
+-			s = ucs_a3_big5_table[w - ucs_a3_big5_table_min];
+-		} else if (w >= ucs_i_big5_table_min && w < ucs_i_big5_table_max) {
+-			s = ucs_i_big5_table[w - ucs_i_big5_table_min];
+-		} else if (w >= ucs_r1_big5_table_min && w < ucs_r1_big5_table_max) {
+-			s = ucs_r1_big5_table[w - ucs_r1_big5_table_min];
+-		} else if (w >= ucs_r2_big5_table_min && w < ucs_r2_big5_table_max) {
+-			s = ucs_r2_big5_table[w - ucs_r2_big5_table_min];
+-		}
+-
+-		if (!s) {
+-			if (w == 0) {
+-				out = mb_convert_buf_add(out, 0);
+-			} else {
+-				MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_big5);
+-				MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-			}
+-		} else if (s <= 0x80) {
+-			out = mb_convert_buf_add(out, s);
+-		} else {
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 2);
+-			out = mb_convert_buf_add2(out, (s >> 8) & 0xFF, s & 0xFF);
+-		}
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+-
+-static size_t mb_cp950_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-	unsigned char *p = *in, *e = p + *in_len;
+-	uint32_t *out = buf, *limit = buf + bufsize;
+-
+-	while (p < e && out < limit) {
+-		unsigned char c = *p++;
+-
+-		if (c <= 0x7F) {
+-			*out++ = c;
+-		} else if (c > 0x80 && c <= 0xFE && p < e) {
+-			unsigned char c2 = *p++;
+-
+-			if ((c2 >= 0x40 && c2 <= 0x7E) || (c2 >= 0xA1 && c2 <= 0xFE)) {
+-				unsigned int w = ((c - 0xA1)*157) + c2 - ((c2 <= 0x7E) ? 0x40 : 0xA1 - 0x3F);
+-				w = (w < big5_ucs_table_size) ? big5_ucs_table[w] : 0;
+-
+-				/* PUA for CP950 */
+-				if (is_in_cp950_pua(c, c2)) {
+-					unsigned int s = (c << 8) | c2;
+-
+-					int k;
+-					for (k = 0; k < sizeof(cp950_pua_tbl) / (sizeof(unsigned short)*4); k++) {
+-						if (s >= cp950_pua_tbl[k][2] && s <= cp950_pua_tbl[k][3]) {
+-							break;
+-						}
+-					}
+-
+-					if ((cp950_pua_tbl[k][2] & 0xFF) == 0x40) {
+-						w = 157*(c - (cp950_pua_tbl[k][2] >> 8)) + c2 - (c2 >= 0xA1 ? 0x62 : 0x40) + cp950_pua_tbl[k][0];
+-					} else {
+-						w = s - cp950_pua_tbl[k][2] + cp950_pua_tbl[k][0];
+-					}
+-				} else if (c == 0xA1) {
+-					if (c2 == 0x45) {
+-						w = 0x2027;
+-					} else if (c2 == 0x4E) {
+-						w = 0xFE51;
+-					} else if (c2 == 0x5A) {
+-						w = 0x2574;
+-					} else if (c2 == 0xC2) {
+-						w = 0x00AF;
+-					} else if (c2 == 0xC3) {
+-						w = 0xFFE3;
+-					} else if (c2 == 0xC5) {
+-						w = 0x02CD;
+-					} else if (c2 == 0xE3) {
+-						w = 0xFF5E;
+-					} else if (c2 == 0xF2) {
+-						w = 0x2295;
+-					} else if (c2 == 0xF3) {
+-						w = 0x2299;
+-					} else if (c2 == 0xFE) {
+-						w = 0xFF0F;
+-					}
+-				} else if (c == 0xA2) {
+-					if (c2 == 0x40) {
+-						w = 0xFF3C;
+-					} else if (c2 == 0x41) {
+-						w = 0x2215;
+-					} else if (c2 == 0x42) {
+-						w = 0xFE68;
+-					} else if (c2 == 0x46) {
+-						w = 0xFFE0;
+-					} else if (c2 == 0x47) {
+-						w = 0xFFE1;
+-					} else if (c2 == 0xCC) {
+-						w = 0x5341;
+-					} else if (c2 == 0xCE) {
+-						w = 0x5345;
+-					}
+-				}
+-
+-				if (!w)
+-					w = MBFL_BAD_INPUT;
+-				*out++ = w;
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-			}
+-		} else {
+-			*out++ = MBFL_BAD_INPUT;
+-		}
+-	}
+-
+-	*in_len = e - p;
+-	*in = p;
+-	return out - buf;
+-}
+-
+-static void mb_wchar_to_cp950(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		unsigned int s = 0;
+-
+-		if (w >= ucs_a1_big5_table_min && w < ucs_a1_big5_table_max) {
+-			s = ucs_a1_big5_table[w - ucs_a1_big5_table_min];
+-		} else if (w >= ucs_a2_big5_table_min && w < ucs_a2_big5_table_max) {
+-			s = ucs_a2_big5_table[w - ucs_a2_big5_table_min];
+-		} else if (w >= ucs_a3_big5_table_min && w < ucs_a3_big5_table_max) {
+-			s = ucs_a3_big5_table[w - ucs_a3_big5_table_min];
+-		} else if (w >= ucs_i_big5_table_min && w < ucs_i_big5_table_max) {
+-			s = ucs_i_big5_table[w - ucs_i_big5_table_min];
+-		} else if (w >= ucs_r1_big5_table_min && w < ucs_r1_big5_table_max) {
+-			s = ucs_r1_big5_table[w - ucs_r1_big5_table_min];
+-		} else if (w >= ucs_r2_big5_table_min && w < ucs_r2_big5_table_max) {
+-			s = ucs_r2_big5_table[w - ucs_r2_big5_table_min];
+-		}
+-
+-		if (w >= 0xE000 && w <= 0xF848) {
+-			int k;
+-			for (k = 0; k < sizeof(cp950_pua_tbl) / (sizeof(unsigned short)*4); k++) {
+-				if (w <= cp950_pua_tbl[k][1]) {
+-					break;
+-				}
+-			}
+-
+-			int c1 = w - cp950_pua_tbl[k][0];
+-			if ((cp950_pua_tbl[k][2] & 0xFF) == 0x40) {
+-				int c2 = cp950_pua_tbl[k][2] >> 8;
+-				s = ((c1 / 157) + c2) << 8;
+-				c1 %= 157;
+-				s |= c1 + (c1 >= 0x3F ? 0x62 : 0x40);
+-			} else {
+-				s = c1 + cp950_pua_tbl[k][2];
+-			}
+-		} else if (w == 0xA2 || w == 0xA3 || w == 0x401 || (w >= 0x414 && w <= 0x41C) || (w >= 0x423 && w <= 0x44F) || w == 0x451 || w == 0x2022 || w == 0x203E || w == 0x223C || (w >= 0x2460 && w <= 0x247D) || w == 0x2609 || w == 0x2641 || w == 0x3005 || (w >= 0x302A && w <= 0x30FF) || w == 0xFF64) {
+-			s = 0;
+-		} else if (w == 0xAF) {
+-			s = 0xA1C2;
+-		} else if (w == 0x2CD) {
+-			s = 0xA1C5;
+-		} else if (w == 0x2027) {
+-			s = 0xA145;
+-		} else if (w == 0x2215) {
+-			s = 0xA241;
+-		} else if (w == 0x2295) {
+-			s = 0xA1F2;
+-		} else if (w == 0x2299) {
+-			s = 0xA1F3;
+-		} else if (w == 0x2574) {
+-			s = 0xA15A;
+-		} else if (w == 0xFE51) {
+-			s = 0xA14E;
+-		} else if (w == 0xFE68) {
+-			s = 0xA242;
+-		} else if (w == 0xFF3C) {
+-			s = 0xA240;
+-		} else if (w == 0xFF5E) {
+-			s = 0xA1E3;
+-		} else if (w == 0xFFE0) {
+-			s = 0xA246;
+-		} else if (w == 0xFFE1) {
+-			s = 0xA247;
+-		} else if (w == 0xFFE3) {
+-			s = 0xA1C3;
+-		} else if (w == 0xFF0F) {
+-			s = 0xA1FE;
+-		}
+-
+-		if (!s) {
+-			if (w == 0) {
+-				out = mb_convert_buf_add(out, 0);
+-			} else {
+-				MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_big5);
+-				MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-			}
+-		} else if (s <= 0x80) {
+-			out = mb_convert_buf_add(out, s);
+-		} else {
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 2);
+-			out = mb_convert_buf_add2(out, (s >> 8) & 0xFF, s & 0xFF);
+-		}
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.c b/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.c
+index 93c33da9..557ee7f4 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.c
++++ b/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.c
+@@ -25,20 +25,15 @@
+ #include "mbfilter.h"
+ #include "mbfilter_cp5022x.h"
+ #include "mbfilter_jis.h"
++#include "mbfilter_tl_jisx0201_jisx0208.h"
+ 
+ #include "unicode_table_cp932_ext.h"
+ #include "unicode_table_jis.h"
+ #include "cp932_table.h"
+-#include "translit_kana_jisx0201_jisx0208.h"
+ 
+ static int mbfl_filt_conv_cp5022x_wchar_flush(mbfl_convert_filter *filter);
+ static int mbfl_filt_conv_wchar_cp50220_flush(mbfl_convert_filter *filter);
+-static int mbfl_filt_conv_wchar_cp50222_flush(mbfl_convert_filter *filter);
+ static int mbfl_filt_conv_wchar_cp50220(int c, mbfl_convert_filter *filter);
+-static size_t mb_cp5022x_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_cp50220(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+-static void mb_wchar_to_cp50221(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+-static void mb_wchar_to_cp50222(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+ 
+ /* Previously, a dubious 'encoding' called 'cp50220raw' was supported
+  * This was just CP50220, but the implementation was less strict regarding
+@@ -60,8 +55,6 @@ const mbfl_encoding mbfl_encoding_cp50220 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	&vtbl_cp50220_wchar,
+ 	&vtbl_wchar_cp50220,
+-	mb_cp5022x_to_wchar,
+-	mb_wchar_to_cp50220,
+ 	NULL
+ };
+ 
+@@ -74,8 +67,6 @@ const mbfl_encoding mbfl_encoding_cp50221 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	&vtbl_cp50221_wchar,
+ 	&vtbl_wchar_cp50221,
+-	mb_cp5022x_to_wchar,
+-	mb_wchar_to_cp50221,
+ 	NULL
+ };
+ 
+@@ -88,8 +79,6 @@ const mbfl_encoding mbfl_encoding_cp50222 = {
+ 	MBFL_ENCTYPE_GL_UNSAFE,
+ 	&vtbl_cp50222_wchar,
+ 	&vtbl_wchar_cp50222,
+-	mb_cp5022x_to_wchar,
+-	mb_wchar_to_cp50222,
+ 	NULL
+ };
+ 
+@@ -312,7 +301,9 @@ retry:
+ 		}
+ 		break;
+ 
+-		EMPTY_SWITCH_DEFAULT_CASE();
++	default:
++		filter->status = 0;
++		break;
+ 	}
+ 
+ 	return 0;
+@@ -320,9 +311,8 @@ retry:
+ 
+ static int mbfl_filt_conv_cp5022x_wchar_flush(mbfl_convert_filter *filter)
+ {
+-	if (filter->status & 0xF) {
+-		/* 2-byte (JIS X 0208 or 0212) character was truncated, or else
+-		 * escape sequence was truncated */
++	if ((filter->status & 0xF) == 1) {
++		/* 2-byte (JIS X 0208 or 0212) character was truncated */
+ 		CK((*filter->output_function)(MBFL_BAD_INPUT, filter->data));
+ 	}
+ 	filter->status = 0;
+@@ -334,213 +324,17 @@ static int mbfl_filt_conv_cp5022x_wchar_flush(mbfl_convert_filter *filter)
+ 	return 0;
+ }
+ 
+-/* Apply various transforms to input codepoint, such as converting halfwidth katakana
+- * to fullwidth katakana. `mode` is a bitfield which controls which transforms are
+- * actually performed. The bit values are defined in translit_kana_jisx0201_jisx0208.h.
+- * `mode` must not call for transforms which are inverses (i.e. which would cancel
+- * each other out).
+- *
+- * In some cases, successive input codepoints may be merged into one output codepoint.
+- * (That is the purpose of the `next` parameter.) If the `next` codepoint is consumed
+- * and should be skipped over, `*consumed` will be set to true. Otherwise, `*consumed`
+- * will not be modified. If there is no following codepoint, `next` should be zero.
+- *
+- * Again, in some cases, one input codepoint may convert to two output codepoints.
+- * If so, the second output codepoint will be stored in `*second`.
+- *
+- * Return the resulting codepoint. If none of the requested transforms apply, return
+- * the input codepoint unchanged.
+- */
+-uint32_t mb_convert_kana_codepoint(uint32_t c, uint32_t next, bool *consumed, uint32_t *second, unsigned int mode)
+-{
+-	if ((mode & MBFL_HAN2ZEN_ALL) && c >= 0x21 && c <= 0x7D && c != '"' && c != '\'' && c != '\\') {
+-		return c + 0xFEE0;
+-	}
+-	if ((mode & MBFL_HAN2ZEN_ALPHA) && ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
+-		return c + 0xFEE0;
+-	}
+-	if ((mode & MBFL_HAN2ZEN_NUMERIC) && c >= '0' && c <= '9') {
+-		return c + 0xFEE0;
+-	}
+-	if ((mode & MBFL_HAN2ZEN_SPACE) && c == ' ') {
+-		return 0x3000;
+-	}
+-
+-	if (mode & (MBFL_HAN2ZEN_KATAKANA | MBFL_HAN2ZEN_HIRAGANA)) {
+-		/* Convert Hankaku kana to Zenkaku kana
+-		 * Either all Hankaku kana (including katakana and hiragana) will be converted
+-		 * to Zenkaku katakana, or to Zenkaku hiragana */
+-		if ((mode & MBFL_HAN2ZEN_KATAKANA) && (mode & MBFL_HAN2ZEN_GLUE)) {
+-			if (c >= 0xFF61 && c <= 0xFF9F) {
+-				int n = c - 0xFF60;
+-
+-				if (next >= 0xFF61 && next <= 0xFF9F) {
+-					if (next == 0xFF9E && ((n >= 22 && n <= 36) || (n >= 42 && n <= 46))) {
+-						*consumed = true;
+-						return 0x3001 + hankana2zenkana_table[n];
+-					}
+-					if (next == 0xFF9E && n == 19) {
+-						*consumed = true;
+-						return 0x30F4;
+-					}
+-					if (next == 0xFF9F && n >= 42 && n <= 46) {
+-						*consumed = true;
+-						return 0x3002 + hankana2zenkana_table[n];
+-					}
+-				}
+-
+-				return 0x3000 + hankana2zenkana_table[n];
+-			}
+-		}
+-		if ((mode & MBFL_HAN2ZEN_HIRAGANA) && (mode & MBFL_HAN2ZEN_GLUE)) {
+-			if (c >= 0xFF61 && c <= 0xFF9F) {
+-				int n = c - 0xFF60;
+-
+-				if (next >= 0xFF61 && next <= 0xFF9F) {
+-					if (next == 0xFF9E && ((n >= 22 && n <= 36) || (n >= 42 && n <= 46))) {
+-						*consumed = true;
+-						return 0x3001 + hankana2zenhira_table[n];
+-					}
+-					if (next == 0xFF9F && n >= 42 && n <= 46) {
+-						*consumed = true;
+-						return 0x3002 + hankana2zenhira_table[n];
+-					}
+-				}
+-
+-				return 0x3000 + hankana2zenhira_table[n];
+-			}
+-		}
+-		if ((mode & MBFL_HAN2ZEN_KATAKANA) && c >= 0xFF61 && c <= 0xFF9F) {
+-			return 0x3000 + hankana2zenkana_table[c - 0xFF60];
+-		}
+-		if ((mode & MBFL_HAN2ZEN_HIRAGANA) && c >= 0xFF61 && c <= 0xFF9F) {
+-			return 0x3000 + hankana2zenhira_table[c - 0xFF60];
+-		}
+-	}
+-
+-	if (mode & MBFL_HAN2ZEN_SPECIAL) { /* special ascii to symbol */
+-		if (c == '\\' || c == 0xA5) { /* YEN SIGN */
+-			return 0xFFE5; /* FULLWIDTH YEN SIGN */
+-		}
+-		if (c == 0x7E || c == 0x203E) {
+-			return 0xFFE3; /* FULLWIDTH MACRON */
+-		}
+-		if (c == '\'') {
+-			return 0x2019; /* RIGHT SINGLE QUOTATION MARK */
+-		}
+-		if (c == '"') {
+-			return 0x201D; /* RIGHT DOUBLE QUOTATION MARK */
+-		}
+-	}
+-
+-	if (mode & (MBFL_ZEN2HAN_ALL | MBFL_ZEN2HAN_ALPHA | MBFL_ZEN2HAN_NUMERIC | MBFL_ZEN2HAN_SPACE)) {
+-		/* Zenkaku to Hankaku */
+-		if ((mode & MBFL_ZEN2HAN_ALL) && c >= 0xFF01 && c <= 0xFF5D && c != 0xFF02 && c != 0xFF07 && c != 0xFF3C) {
+-			/* all except " ' \ ~ */
+-			return c - 0xFEE0;
+-		}
+-		if ((mode & MBFL_ZEN2HAN_ALPHA) && ((c >= 0xFF21 && c <= 0xFF3A) || (c >= 0xFF41 && c <= 0xFF5A))) {
+-			return c - 0xFEE0;
+-		}
+-		if ((mode & MBFL_ZEN2HAN_NUMERIC) && (c >= 0xFF10 && c <= 0xFF19)) {
+-			return c - 0xFEE0;
+-		}
+-		if ((mode & MBFL_ZEN2HAN_SPACE) && (c == 0x3000)) {
+-			return ' ';
+-		}
+-		if ((mode & MBFL_ZEN2HAN_ALL) && (c == 0x2212)) { /* MINUS SIGN */
+-			return '-';
+-		}
+-	}
+-
+-	if (mode & (MBFL_ZEN2HAN_KATAKANA | MBFL_ZEN2HAN_HIRAGANA)) {
+-		/* Zenkaku kana to hankaku kana */
+-		if ((mode & MBFL_ZEN2HAN_KATAKANA) && c >= 0x30A1 && c <= 0x30F4) {
+-			/* Zenkaku katakana to hankaku kana */
+-			int n = c - 0x30A1;
+-			if (zenkana2hankana_table[n][1]) {
+-				*second = 0xFF00 + zenkana2hankana_table[n][1];
+-			}
+-			return 0xFF00 + zenkana2hankana_table[n][0];
+-		}
+-		if ((mode & MBFL_ZEN2HAN_HIRAGANA) && c >= 0x3041 && c <= 0x3093) {
+-			/* Zenkaku hiragana to hankaku kana */
+-			int n = c - 0x3041;
+-			if (zenkana2hankana_table[n][1]) {
+-				*second = 0xFF00 + zenkana2hankana_table[n][1];
+-			}
+-			return 0xFF00 + zenkana2hankana_table[n][0];
+-		}
+-		if (c == 0x3001) {
+-			return 0xFF64; /* HALFWIDTH IDEOGRAPHIC COMMA */
+-		}
+-		if (c == 0x3002) {
+-			return 0xFF61; /* HALFWIDTH IDEOGRAPHIC FULL STOP */
+-		}
+-		if (c == 0x300C) {
+-			return 0xFF62; /* HALFWIDTH LEFT CORNER BRACKET */
+-		}
+-		if (c == 0x300D) {
+-			return 0xFF63; /* HALFWIDTH RIGHT CORNER BRACKET */
+-		}
+-		if (c == 0x309B) {
+-			return 0xFF9E; /* HALFWIDTH KATAKANA VOICED SOUND MARK */
+-		}
+-		if (c == 0x309C) {
+-			return 0xff9f; /* HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK */
+-		}
+-		if (c == 0x30FC) {
+-			return 0xFF70; /* HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK */
+-		}
+-		if (c == 0x30FB) {
+-			return 0xFF65; /* HALFWIDTH KATAKANA MIDDLE DOT */
+-		}
+-	}
+-
+-	if (mode & (MBFL_ZENKAKU_HIRA2KATA | MBFL_ZENKAKU_KATA2HIRA)) {
+-		if ((mode & MBFL_ZENKAKU_HIRA2KATA) && ((c >= 0x3041 && c <= 0x3093) || c == 0x309D || c == 0x309E)) {
+-			/* Zenkaku hiragana to Zenkaku katakana */
+-			return c + 0x60;
+-		}
+-		if ((mode & MBFL_ZENKAKU_KATA2HIRA) && ((c >= 0x30A1 && c <= 0x30F3) || c == 0x30FD || c == 0x30FE)) {
+-			/* Zenkaku katakana to Zenkaku hiragana */
+-			return c - 0x60;
+-		}
+-	}
+-
+-	if (mode & MBFL_ZEN2HAN_SPECIAL) { /* special symbol to ascii */
+-		if (c == 0xFFE5 || c == 0xFF3C) { /* FULLWIDTH YEN SIGN/FULLWIDTH REVERSE SOLIDUS */
+-			return '\\';
+-		}
+-		if (c == 0xFFE3 || c == 0x203E) { /* FULLWIDTH MACRON/OVERLINE */
+-			return '~';
+-		}
+-		if (c == 0x2018 || c == 0x2019) { /* LEFT/RIGHT SINGLE QUOTATION MARK*/
+-			return '\'';
+-		}
+-		if (c == 0x201C || c == 0x201D) { /* LEFT/RIGHT DOUBLE QUOTATION MARK */
+-			return '"';
+-		}
+-	}
+-
+-	return c;
+-}
+-
+ static int mbfl_filt_conv_wchar_cp50220(int c, mbfl_convert_filter *filter)
+ {
+-	int mode = MBFL_HAN2ZEN_KATAKANA | MBFL_HAN2ZEN_GLUE;
++	int mode = MBFL_FILT_TL_HAN2ZEN_KATAKANA | MBFL_FILT_TL_HAN2ZEN_GLUE, second = 0;
+ 	bool consumed = false;
+ 
+ 	if (filter->cache) {
+-		int s = mb_convert_kana_codepoint(filter->cache, c, &consumed, NULL, mode);
++		int s = mbfl_convert_kana(filter->cache, c, &consumed, &second, mode);
+ 		filter->cache = consumed ? 0 : c;
+-		/* Terrible hack to get CP50220 to emit error markers in the proper
+-		 * position, not reordering them with subsequent characters */
+-		filter->filter_function = mbfl_filt_conv_wchar_cp50221;
+ 		mbfl_filt_conv_wchar_cp50221(s, filter);
+-		filter->filter_function = mbfl_filt_conv_wchar_cp50220;
+-		if (c == 0 && !consumed) {
+-			(*filter->output_function)(0, filter->data);
++		if (second) {
++			mbfl_filt_conv_wchar_cp50221(second, filter);
+ 		}
+ 	} else if (c == 0) {
+ 		/* This case has to be handled separately, since `filter->cache == 0` means
+@@ -555,13 +349,14 @@ static int mbfl_filt_conv_wchar_cp50220(int c, mbfl_convert_filter *filter)
+ 
+ static int mbfl_filt_conv_wchar_cp50220_flush(mbfl_convert_filter *filter)
+ {
+-	int mode = MBFL_HAN2ZEN_KATAKANA | MBFL_HAN2ZEN_GLUE;
++	int mode = MBFL_FILT_TL_HAN2ZEN_KATAKANA | MBFL_FILT_TL_HAN2ZEN_GLUE, second = 0;
+ 
+ 	if (filter->cache) {
+-		int s = mb_convert_kana_codepoint(filter->cache, 0, NULL, NULL, mode);
+-		filter->filter_function = mbfl_filt_conv_wchar_cp50221;
++		int s = mbfl_convert_kana(filter->cache, 0, NULL, &second, mode);
+ 		mbfl_filt_conv_wchar_cp50221(s, filter);
+-		filter->filter_function = mbfl_filt_conv_wchar_cp50220;
++		if (second) {
++			mbfl_filt_conv_wchar_cp50221(s, filter);
++		}
+ 		filter->cache = 0;
+ 	}
+ 
+@@ -641,6 +436,21 @@ int mbfl_filt_conv_wchar_cp50221(int c, mbfl_convert_filter *filter)
+ 			}
+ 		}
+ 
++		if (s < 0) {
++			const int cp932ext3_ucs_table_size =
++					cp932ext3_ucs_table_max - cp932ext3_ucs_table_min;
++			const int limit = cp932ext3_ucs_table_size >
++					cp932ext3_eucjp_table_size ?
++						cp932ext3_eucjp_table_size:
++						cp932ext3_ucs_table_size;
++			for (i = 0; i < limit; i++) {
++				if (c == cp932ext3_ucs_table[i]) {
++					s = cp932ext3_eucjp_table[i];
++					break;
++				}
++			}
++		}
++
+ 		if (c == 0) {
+ 			s = 0;
+ 		} else if (s <= 0) {
+@@ -758,6 +568,21 @@ int mbfl_filt_conv_wchar_cp50222(int c, mbfl_convert_filter *filter)
+ 			}
+ 		}
+ 
++		if (s <= 0) {
++			const int cp932ext3_ucs_table_size =
++					cp932ext3_ucs_table_max - cp932ext3_ucs_table_min;
++			const int limit = cp932ext3_ucs_table_size >
++					cp932ext3_eucjp_table_size ?
++						cp932ext3_eucjp_table_size:
++						cp932ext3_ucs_table_size;
++			for (i = 0; i < limit; i++) {
++				if (c == cp932ext3_ucs_table[i]) {
++					s = cp932ext3_eucjp_table[i];
++					break;
++				}
++			}
++		}
++
+ 		if (c == 0) {
+ 			s = 0;
+ 		} else if (s <= 0) {
+@@ -818,7 +643,8 @@ int mbfl_filt_conv_wchar_cp50222(int c, mbfl_convert_filter *filter)
+ 	return 0;
+ }
+ 
+-static int mbfl_filt_conv_wchar_cp50222_flush(mbfl_convert_filter *filter)
++int
++mbfl_filt_conv_wchar_cp50222_flush(mbfl_convert_filter *filter)
+ {
+ 	/* back to latin */
+ 	if ((filter->status & 0xff00) == 0x500) {
+@@ -836,417 +662,3 @@ static int mbfl_filt_conv_wchar_cp50222_flush(mbfl_convert_filter *filter)
+ 
+ 	return 0;
+ }
+-
+-#define ASCII 0
+-#define JISX_0201_LATIN 1
+-#define JISX_0201_KANA 2
+-#define JISX_0208 3
+-#define JISX_0212 4
+-
+-static size_t mb_cp5022x_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-	ZEND_ASSERT(bufsize >= 3);
+-
+-	unsigned char *p = *in, *e = p + *in_len;
+-	uint32_t *out = buf, *limit = buf + bufsize;
+-
+-	while (p < e && out < limit) {
+-		unsigned char c = *p++;
+-
+-		if (c == 0x1B) {
+-			/* Escape sequence */
+-			if ((e - p) < 2) {
+-				*out++ = MBFL_BAD_INPUT;
+-				/* Duplicate error-handling behavior of legacy code */
+-				if (p < e && (*p == '(' || *p == '$'))
+-					p++;
+-				continue;
+-			}
+-			unsigned char c2 = *p++;
+-			if (c2 == '$') {
+-				unsigned char c3 = *p++;
+-				if (c3 == '@' || c3 == 'B') {
+-					*state = JISX_0208;
+-				} else if (c3 == '(') {
+-					if (p == e) {
+-						*out++ = MBFL_BAD_INPUT;
+-						break;
+-					}
+-					unsigned char c4 = *p++;
+-					if (c4 == '@' || c4 == 'B') {
+-						*state = JISX_0208;
+-					} else if (c4 == 'D') {
+-						*state = JISX_0212;
+-					} else {
+-						if ((limit - out) < 3) {
+-							p -= 4;
+-							break;
+-						}
+-						*out++ = MBFL_BAD_INPUT;
+-						*out++ = '$';
+-						*out++ = '(';
+-						p--;
+-					}
+-				} else {
+-					if ((limit - out) < 2) {
+-						p -= 3;
+-						break;
+-					}
+-					*out++ = MBFL_BAD_INPUT;
+-					*out++ = '$';
+-					p--;
+-				}
+-			} else if (c2 == '(') {
+-				unsigned char c3 = *p++;
+-				if (c3 == 'B' || c3 == 'H') {
+-					*state = ASCII;
+-				} else if (c3 == 'J') {
+-					*state = JISX_0201_LATIN;
+-				} else if (c3 == 'I') {
+-					*state = JISX_0201_KANA;
+-				} else {
+-					if ((limit - out) < 2) {
+-						p -= 3;
+-						break;
+-					}
+-					*out++ = MBFL_BAD_INPUT;
+-					*out++ = '(';
+-					p--;
+-				}
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-				p--;
+-			}
+-		} else if (c == 0xE) {
+-			*state = JISX_0201_KANA;
+-		} else if (c == 0xF) {
+-			*state = ASCII;
+-		} else if (*state == JISX_0201_LATIN && c == 0x5C) { /* YEN SIGN */
+-			*out++ = 0xA5;
+-		} else if (*state == JISX_0201_LATIN && c == 0x7E) { /* OVER LINE */
+-			*out++ = 0x203E;
+-		} else if (*state == JISX_0201_KANA && c > 0x20 && c < 0x60) {
+-			*out++ = 0xFF40 + c;
+-		} else if (*state >= JISX_0208 && c > 0x20 && c <= 0x97) {
+-			if (p == e) {
+-				*out++ = MBFL_BAD_INPUT;
+-				break;
+-			}
+-			unsigned char c2 = *p++;
+-			if (c2 > 0x20 && c2 < 0x7F) {
+-				unsigned int s = (c - 0x21)*94 + c2 - 0x21;
+-				uint32_t w = 0;
+-				if (*state == JISX_0208) {
+-					if (s >= cp932ext1_ucs_table_min && s < cp932ext1_ucs_table_max) {
+-						w = cp932ext1_ucs_table[s - cp932ext1_ucs_table_min];
+-					} else if (s < jisx0208_ucs_table_size) {
+-						w = jisx0208_ucs_table[s];
+-					} else if (s >= cp932ext2_ucs_table_min && s < cp932ext2_ucs_table_max) {
+-						w = cp932ext2_ucs_table[s - cp932ext2_ucs_table_min];
+-					} else if (s >= cp932ext3_ucs_table_min && s < cp932ext3_ucs_table_max) {
+-						w = cp932ext3_ucs_table[s - cp932ext3_ucs_table_min];
+-					} else if (s >= 94*94 && s < 114*94) {
+-						/* MicroSoft extension */
+-						w = s - 94*94 + 0xE000;
+-					}
+-					if (!w)
+-						w = MBFL_BAD_INPUT;
+-				} else {
+-					if (s < jisx0212_ucs_table_size) {
+-						w = jisx0212_ucs_table[s];
+-					}
+-					if (!w)
+-						w = MBFL_BAD_INPUT;
+-				}
+-				*out++ = w;
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-			}
+-		} else if (c < 0x80) {
+-			*out++ = c;
+-		} else if (c >= 0xA1 && c <= 0xDF) {
+-			*out++ = 0xFEC0 + c;
+-		} else {
+-			*out++ = MBFL_BAD_INPUT;
+-		}
+-	}
+-
+-	*in_len = e - p;
+-	*in = p;
+-	return out - buf;
+-}
+-
+-static unsigned int lookup_wchar(uint32_t w)
+-{
+-	unsigned int s = 0;
+-
+-	if (w >= ucs_a1_jis_table_min && w < ucs_a1_jis_table_max) {
+-		s = ucs_a1_jis_table[w - ucs_a1_jis_table_min];
+-	} else if (w == 0x203E) { /* OVERLINE */
+-		s = 0x1007E; /* Convert to JISX 0201 OVERLINE */
+-	} else if (w >= ucs_a2_jis_table_min && w < ucs_a2_jis_table_max) {
+-		s = ucs_a2_jis_table[w - ucs_a2_jis_table_min];
+-	} else if (w >= ucs_i_jis_table_min && w < ucs_i_jis_table_max) {
+-		s = ucs_i_jis_table[w - ucs_i_jis_table_min];
+-	} else if (w >= ucs_r_jis_table_min && w < ucs_r_jis_table_max) {
+-		s = ucs_r_jis_table[w - ucs_r_jis_table_min];
+-	} else if (w >= 0xE000 && w <= 0xE757) {
+-		/* Private Use Area codepoints */
+-		s = w - 0xE000;
+-		s = ((s / 94) + 0x7F) << 8 | ((s % 94) + 0x21);
+-	}
+-
+-	if (!s) {
+-		if (w == 0xA5) { /* YEN SIGN */
+-			s = 0x1005C;
+-		} else if (w == 0xFF3C) { /* FULLWIDTH REVERSE SOLIDUS */
+-			s = 0x2140;
+-		} else if (w == 0x2225) { /* PARALLEL TO */
+-			s = 0x2142;
+-		} else if (w == 0xFF0D) { /* FULLWIDTH HYPHEN-MINUS */
+-			s = 0x215D;
+-		} else if (w == 0xFFE0) { /* FULLWIDTH CENT SIGN */
+-			s = 0x2171;
+-		} else if (w == 0xFFE1) { /* FULLWIDTH POUND SIGN */
+-			s = 0x2172;
+-		} else if (w == 0xFFE2) { /* FULLWIDTH NOT SIGN */
+-			s = 0x224C;
+-		} else if (w == 0) {
+-			return 0;
+-		}
+-	}
+-
+-	/* Above, we do a series of lookups in `ucs_*_jis_table` to find a
+-	 * corresponding kuten code for this Unicode codepoint
+-	 * If we get zero, that means the codepoint is not in JIS X 0208
+-	 * On the other hand, if we get a result with the high bits set on both
+-	 * upper and lower bytes, that is not a code in JIS X 0208 but rather
+-	 * in JIS X 0213
+-	 * In either case, check if this codepoint is one of the extensions added
+-	 * to JIS X 0208 by MicroSoft (to make CP932) */
+-	if (!s || s >= 0x8080) {
+-		for (int i = 0; i < cp932ext1_ucs_table_max - cp932ext1_ucs_table_min; i++) {
+-			if (w == cp932ext1_ucs_table[i]) {
+-				return (((i / 94) + (cp932ext1_ucs_table_min / 94) + 0x21) << 8) + (i % 94) + 0x21;
+-			}
+-		}
+-
+-		for (int i = 0; i < cp932ext2_ucs_table_max - cp932ext2_ucs_table_min; i++) {
+-			if (w == cp932ext2_ucs_table[i]) {
+-				return (((i / 94) + (cp932ext2_ucs_table_min / 94) + 0x21) << 8) + (i % 94) + 0x21;
+-			}
+-		}
+-	}
+-
+-	return s;
+-}
+-
+-static void mb_wchar_to_cp50220(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-	uint32_t w;
+-
+-	if (buf->state & 0xFFFF00) {
+-		/* Reprocess cached codepoint */
+-		w = buf->state >> 8;
+-		buf->state &= 0xFF;
+-		goto reprocess_codepoint;
+-	}
+-
+-	while (len--) {
+-		w = *in++;
+-reprocess_codepoint:
+-
+-		if (w >= 0xFF61 && w <= 0xFF9F && !len && !end) {
+-			/* This codepoint may need to combine with the next one,
+-			 * but the 'next one' will come in a separate buffer */
+-			buf->state |= w << 8;
+-			break;
+-		}
+-
+-		bool consumed = false;
+-		w = mb_convert_kana_codepoint(w, len ? *in : 0, &consumed, NULL, MBFL_HAN2ZEN_KATAKANA | MBFL_HAN2ZEN_GLUE);
+-		if (consumed) {
+-			/* Two successive codepoints were converted into one */
+-			in++; len--; consumed = false;
+-		}
+-
+-		unsigned int s = lookup_wchar(w);
+-
+-		if (!s && w) {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50221);
+-		} else if (s < 0x80) {
+-			/* ASCII */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != ASCII) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-				buf->state = ASCII;
+-			}
+-			out = mb_convert_buf_add(out, s);
+-		} else if (s >= 0xA0 && s < 0xE0) {
+-			/* JISX 0201 Kana */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != JISX_0201_KANA) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'I');
+-				buf->state = JISX_0201_KANA;
+-			}
+-			out = mb_convert_buf_add(out, s - 0x80);
+-		} else if (s <= 0x927E) {
+-			/* JISX 0208 Kanji */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 5);
+-			if (buf->state != JISX_0208) {
+-				out = mb_convert_buf_add3(out, 0x1B, '$', 'B');
+-				buf->state = JISX_0208;
+-			}
+-			out = mb_convert_buf_add2(out, (s >> 8) & 0xFF, s & 0xFF);
+-		} else if (s >= 0x10000) {
+-			/* JISX 0201 Latin; we 'tag' these by adding 0x10000 */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != JISX_0201_LATIN) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'J');
+-				buf->state = JISX_0201_LATIN;
+-			}
+-			out = mb_convert_buf_add(out, s & 0x7F);
+-		} else {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50221);
+-		}
+-	}
+-
+-	if (end && buf->state != ASCII) {
+-		MB_CONVERT_BUF_ENSURE(buf, out, limit, 3);
+-		out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+-
+-static void mb_wchar_to_cp50221(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		unsigned int s = lookup_wchar(w);
+-
+-		if (!s && w) {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50221);
+-		} else if (s < 0x80) {
+-			/* ASCII */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != ASCII) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-				buf->state = ASCII;
+-			}
+-			out = mb_convert_buf_add(out, s);
+-		} else if (s >= 0xA0 && s < 0xE0) {
+-			/* JISX 0201 Kana */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != JISX_0201_KANA) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'I');
+-				buf->state = JISX_0201_KANA;
+-			}
+-			out = mb_convert_buf_add(out, s - 0x80);
+-		} else if (s <= 0x927E) {
+-			/* JISX 0208 Kanji */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 5);
+-			if (buf->state != JISX_0208) {
+-				out = mb_convert_buf_add3(out, 0x1B, '$', 'B');
+-				buf->state = JISX_0208;
+-			}
+-			out = mb_convert_buf_add2(out, (s >> 8) & 0xFF, s & 0xFF);
+-		} else if (s >= 0x10000) {
+-			/* JISX 0201 Latin; we 'tag' these by adding 0x10000 */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state != JISX_0201_LATIN) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'J');
+-				buf->state = JISX_0201_LATIN;
+-			}
+-			out = mb_convert_buf_add(out, s & 0x7F);
+-		} else {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50221);
+-		}
+-	}
+-
+-	if (end && buf->state != ASCII) {
+-		MB_CONVERT_BUF_ENSURE(buf, out, limit, 3);
+-		out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+-
+-static void mb_wchar_to_cp50222(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		unsigned int s = lookup_wchar(w);
+-
+-		if (!s && w) {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50222);
+-		} else if (s < 0x80) {
+-			/* ASCII */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 4);
+-			if (buf->state == JISX_0201_KANA) {
+-				out = mb_convert_buf_add(out, 0xF);
+-				buf->state = ASCII;
+-			} else if (buf->state != ASCII) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-				buf->state = ASCII;
+-			}
+-			out = mb_convert_buf_add(out, s);
+-		} else if (s >= 0xA0 && s < 0xE0) {
+-			/* JISX 0201 Kana */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 2);
+-			if (buf->state != JISX_0201_KANA) {
+-				out = mb_convert_buf_add(out, 0xE);
+-				buf->state = JISX_0201_KANA;
+-			}
+-			out = mb_convert_buf_add(out, s - 0x80);
+-		} else if (s <= 0x927E) {
+-			/* JISX 0208 Kanji */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 6);
+-			if (buf->state == JISX_0201_KANA) {
+-				out = mb_convert_buf_add(out, 0xF);
+-			}
+-			if (buf->state != JISX_0208) {
+-				out = mb_convert_buf_add3(out, 0x1B, '$', 'B');
+-				buf->state = JISX_0208;
+-			}
+-			out = mb_convert_buf_add2(out, (s >> 8) & 0xFF, s & 0xFF);
+-		} else if (s >= 0x10000) {
+-			/* JISX 0201 Latin; we 'tag' these by adding 0x10000 */
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len + 5);
+-			if (buf->state == JISX_0201_KANA) {
+-				out = mb_convert_buf_add(out, 0xF);
+-			}
+-			if (buf->state != JISX_0201_LATIN) {
+-				out = mb_convert_buf_add3(out, 0x1B, '(', 'J');
+-				buf->state = JISX_0201_LATIN;
+-			}
+-			out = mb_convert_buf_add(out, s & 0x7F);
+-		} else {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp50222);
+-		}
+-	}
+-
+-	if (end) {
+-		if (buf->state == JISX_0201_KANA) {
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, 1);
+-			out = mb_convert_buf_add(out, 0xF);
+-		} else if (buf->state != ASCII) {
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, 3);
+-			out = mb_convert_buf_add3(out, 0x1B, '(', 'B');
+-		}
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.h b/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.h
+index 0cc90f4b..fc0fa2f0 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.h
++++ b/ext/mbstring/libmbfl/filters/mbfilter_cp5022x.h
+@@ -46,5 +46,6 @@ extern const struct mbfl_convert_vtbl vtbl_wchar_cp50222;
+ int mbfl_filt_conv_cp5022x_wchar(int c, mbfl_convert_filter *filter);
+ int mbfl_filt_conv_wchar_cp50221(int c, mbfl_convert_filter *filter);
+ int mbfl_filt_conv_wchar_cp50222(int c, mbfl_convert_filter *filter);
++int mbfl_filt_conv_wchar_cp50222_flush(mbfl_convert_filter *filter);
+ 
+ #endif /* MBFL_MBFILTER_CP50221_h */
+diff --git a/ext/mbstring/libmbfl/filters/mbfilter_cp51932.c b/ext/mbstring/libmbfl/filters/mbfilter_cp51932.c
+index d3aae8b1..1741601d 100644
+--- a/ext/mbstring/libmbfl/filters/mbfilter_cp51932.c
++++ b/ext/mbstring/libmbfl/filters/mbfilter_cp51932.c
+@@ -35,8 +35,6 @@
+ #include "cp932_table.h"
+ 
+ static int mbfl_filt_conv_cp51932_wchar_flush(mbfl_convert_filter *filter);
+-static size_t mb_cp51932_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state);
+-static void mb_wchar_to_cp51932(uint32_t *in, size_t len, mb_convert_buf *buf, bool end);
+ 
+ static const unsigned char mblen_table_eucjp[] = { /* 0xA1-0xFE */
+   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+@@ -68,8 +66,6 @@ const mbfl_encoding mbfl_encoding_cp51932 = {
+ 	0,
+ 	&vtbl_cp51932_wchar,
+ 	&vtbl_wchar_cp51932,
+-	mb_cp51932_to_wchar,
+-	mb_wchar_to_cp51932,
+ 	NULL
+ };
+ 
+@@ -168,7 +164,9 @@ mbfl_filt_conv_cp51932_wchar(int c, mbfl_convert_filter *filter)
+ 		}
+ 		break;
+ 
+-		EMPTY_SWITCH_DEFAULT_CASE();
++	default:
++		filter->status = 0;
++		break;
+ 	}
+ 
+ 	return 0;
+@@ -271,142 +269,3 @@ mbfl_filt_conv_wchar_cp51932(int c, mbfl_convert_filter *filter)
+ 
+ 	return 0;
+ }
+-
+-static size_t mb_cp51932_to_wchar(unsigned char **in, size_t *in_len, uint32_t *buf, size_t bufsize, unsigned int *state)
+-{
+-	unsigned char *p = *in, *e = p + *in_len;
+-	uint32_t *out = buf, *limit = buf + bufsize;
+-
+-	while (p < e && out < limit) {
+-		unsigned char c = *p++;
+-
+-		if (c < 0x80) {
+-			*out++ = c;
+-		} else if (c >= 0xA1 && c <= 0xFE && p < e) {
+-			unsigned char c2 = *p++;
+-			if (c2 >= 0xA1 && c2 <= 0xFE) {
+-				unsigned int s = (c - 0xA1)*94 + c2 - 0xA1, w = 0;
+-
+-				if (s <= 137) {
+-					if (s == 31) {
+-						w = 0xFF3C; /* FULLWIDTH REVERSE SOLIDUS */
+-					} else if (s == 32) {
+-						w = 0xFF5E; /* FULLWIDTH TILDE */
+-					} else if (s == 33) {
+-						w = 0x2225; /* PARALLEL TO */
+-					} else if (s == 60) {
+-						w = 0xFF0D; /* FULLWIDTH HYPHEN-MINUS */
+-					} else if (s == 80) {
+-						w = 0xFFE0; /* FULLWIDTH CENT SIGN */
+-					} else if (s == 81) {
+-						w = 0xFFE1; /* FULLWIDTH POUND SIGN */
+-					} else if (s == 137) {
+-						w = 0xFFE2; /* FULLWIDTH NOT SIGN */
+-					}
+-				}
+-
+-				if (w == 0) {
+-					if (s >= cp932ext1_ucs_table_min && s < cp932ext1_ucs_table_max) {
+-						w = cp932ext1_ucs_table[s - cp932ext1_ucs_table_min];
+-					} else if (s < jisx0208_ucs_table_size) {
+-						w = jisx0208_ucs_table[s];
+-					} else if (s >= cp932ext2_ucs_table_min && s < cp932ext2_ucs_table_max) {
+-						w = cp932ext2_ucs_table[s - cp932ext2_ucs_table_min];
+-					}
+-				}
+-
+-				if (!w)
+-					w = MBFL_BAD_INPUT;
+-				*out++ = w;
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-			}
+-		} else if (c == 0x8E && p < e) {
+-			unsigned char c2 = *p++;
+-			if (c2 >= 0xA1 && c2 <= 0xDF) {
+-				*out++ = 0xFEC0 + c2;
+-			} else {
+-				*out++ = MBFL_BAD_INPUT;
+-			}
+-		} else {
+-			*out++ = MBFL_BAD_INPUT;
+-		}
+-	}
+-
+-	*in_len = e - p;
+-	*in = p;
+-	return out - buf;
+-}
+-
+-static void mb_wchar_to_cp51932(uint32_t *in, size_t len, mb_convert_buf *buf, bool end)
+-{
+-	unsigned char *out, *limit;
+-	MB_CONVERT_BUF_LOAD(buf, out, limit);
+-	MB_CONVERT_BUF_ENSURE(buf, out, limit, len * 2);
+-
+-	while (len--) {
+-		uint32_t w = *in++;
+-		unsigned int s = 0;
+-
+-		if (w == 0) {
+-			out = mb_convert_buf_add(out, 0);
+-			continue;
+-		} else if (w >= ucs_a1_jis_table_min && w < ucs_a1_jis_table_max) {
+-			s = ucs_a1_jis_table[w - ucs_a1_jis_table_min];
+-		} else if (w >= ucs_a2_jis_table_min && w < ucs_a2_jis_table_max) {
+-			s = ucs_a2_jis_table[w - ucs_a2_jis_table_min];
+-		} else if (w >= ucs_i_jis_table_min && w < ucs_i_jis_table_max) {
+-			s = ucs_i_jis_table[w - ucs_i_jis_table_min];
+-		} else if (w >= ucs_r_jis_table_min && w < ucs_r_jis_table_max) {
+-			s = ucs_r_jis_table[w - ucs_r_jis_table_min];
+-		}
+-
+-		if (s >= 0x8080) s = 0; /* We don't support JIS X0213 */
+-
+-		if (s == 0) {
+-			if (w == 0xA5) { /* YEN SIGN */
+-				s = 0x216F; /* FULLWIDTH YEN SIGN */
+-			} else if (w == 0xFF3C) { /* FULLWIDTH REVERSE SOLIDUS */
+-				s = 0x2140;
+-			} else if (w == 0x2225) { /* PARALLEL TO */
+-				s = 0x2142;
+-			} else if (w == 0xFF0D) { /* FULLWIDTH HYPHEN-MINUS */
+-				s = 0x215D;
+-			} else if (w == 0xFFE0) { /* FULLWIDTH CENT SIGN */
+-				s = 0x2171;
+-			} else if (w == 0xFFE1) { /* FULLWIDTH POUND SIGN */
+-				s = 0x2172;
+-			} else if (w == 0xFFE2) { /* FULLWIDTH NOT SIGN */
+-				s = 0x224C;
+-			} else {
+-				for (int i = 0; i < cp932ext1_ucs_table_max - cp932ext1_ucs_table_min; i++) {
+-					if (cp932ext1_ucs_table[i] == w) {
+-						s = ((i/94 + 0x2D) << 8) + (i%94) + 0x21;
+-						goto found_it;
+-					}
+-				}
+-
+-				for (int i = 0; i < cp932ext2_ucs_table_max - cp932ext2_ucs_table_min; i++) {
+-					if (cp932ext2_ucs_table[i] == w) {
+-						s = ((i/94 + 0x79) << 8) + (i%94) + 0x21;
+-						goto found_it;
+-					}
+-				}
+-			}
+-found_it: ;
+-		}
+-
+-		if (!s || s >= 0x8080) {
+-			MB_CONVERT_ERROR(buf, out, limit, w, mb_wchar_to_cp51932);
+-			MB_CONVERT_BUF_ENSURE(buf, out, limit, len * 2);
+-		} else if (s < 0x80) {
+-			out = mb_convert_buf_add(out, s);
+-		} else if (s < 0x100) {
+-			out = mb_convert_buf_add2(out, 0x8E, s);
+-		} else {
+-			out = mb_convert_buf_add2(out, ((s >> 8) & 0xFF) | 0x80, (s & 0xFF) | 0x80);
+-		}
+-	}
+-
+-	MB_CONVERT_BUF_STORE(buf, out, limit);
+-}

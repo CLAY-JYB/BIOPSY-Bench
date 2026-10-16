@@ -1,0 +1,207 @@
+diff --git a/Zend/tests/fibers/no-switch-gc.phpt b/Zend/tests/fibers/no-switch-gc.phpt
+index 09e1c809..789e9f03 100644
+--- a/Zend/tests/fibers/no-switch-gc.phpt
++++ b/Zend/tests/fibers/no-switch-gc.phpt
+@@ -5,10 +5,9 @@ Context switches are prevented during GC collect cycles
+ 
+ $fiber = new Fiber(function () {
+     call_user_func(function () {
+-        $a = new class { public $next; };
++        $a = new class () {};
+ 
+-        $b = new class {
+-            public $next;
++        $b = new class () {
+             public function __destruct() {
+                 Fiber::suspend();
+             }
+diff --git a/Zend/tests/fibers/signal-async.phpt b/Zend/tests/fibers/signal-async.phpt
+deleted file mode 100644
+index f1f5a2f4..00000000
+--- a/Zend/tests/fibers/signal-async.phpt
++++ /dev/null
+@@ -1,37 +0,0 @@
+---TEST--
+-Prevent switching fibers when async signals are enabled
+---EXTENSIONS--
+-pcntl
+-posix
+---FILE--
+-<?php
+-
+-pcntl_async_signals(true);
+-
+-pcntl_signal(SIGUSR1, function (): void {
+-    if (Fiber::getCurrent() !== null) {
+-        Fiber::suspend();
+-    }
+-});
+-
+-$fiber = new Fiber(function (): void {
+-    echo "Fiber start\n";
+-    posix_kill(posix_getpid(), SIGUSR1);
+-    time_nanosleep(1);
+-    echo "Fiber end\n";
+-});
+-
+-$fiber->start();
+-
+-?>
+---EXPECTF--
+-Fiber start
+-
+-Fatal error: Uncaught FiberError: Cannot switch fibers in current execution context in %ssignal-async.php:%d
+-Stack trace:
+-#0 %ssignal-async.php(%d): Fiber::suspend()
+-#1 %ssignal-async.php(%d): {closure}(%d, Array)
+-#2 [internal function]: {closure}()
+-#3 %ssignal-async.php(%d): Fiber->start()
+-#4 {main}
+-  thrown in %ssignal-async.php on line %d
+diff --git a/Zend/tests/fibers/signal-dispatch.phpt b/Zend/tests/fibers/signal-dispatch.phpt
+deleted file mode 100644
+index abde8e31..00000000
+--- a/Zend/tests/fibers/signal-dispatch.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Prevent switching fibers when dispatching pending signals
+---EXTENSIONS--
+-pcntl
+-posix
+---FILE--
+-<?php
+-
+-pcntl_signal(SIGUSR1, function (): void {
+-    if (Fiber::getCurrent() !== null) {
+-        Fiber::suspend();
+-    }
+-});
+-
+-$fiber = new Fiber(function (): void {
+-    echo "Fiber start\n";
+-
+-    posix_kill(posix_getpid(), SIGUSR1);
+-
+-    try {
+-        pcntl_signal_dispatch();
+-    } catch (FiberError $e) {
+-        Fiber::suspend($e);
+-    }
+-
+-    echo "Fiber end\n";
+-});
+-
+-$e = $fiber->start();
+-
+-echo $e, "\n";
+-
+-$fiber->resume();
+-
+-?>
+---EXPECTF--
+-Fiber start
+-FiberError: Cannot switch fibers in current execution context in %ssignal-dispatch.php:%d
+-Stack trace:
+-#0 %ssignal-dispatch.php(%d): Fiber::suspend()
+-#1 [internal function]: {closure}(%d, Array)
+-#2 %ssignal-dispatch.php(%d): pcntl_signal_dispatch()
+-#3 [internal function]: {closure}()
+-#4 %ssignal-dispatch.php(%d): Fiber->start()
+-#5 {main}
+-Fiber end
+diff --git a/Zend/tests/fibers/ticks.phpt b/Zend/tests/fibers/ticks.phpt
+deleted file mode 100644
+index fbd050c0..00000000
+--- a/Zend/tests/fibers/ticks.phpt
++++ /dev/null
+@@ -1,33 +0,0 @@
+---TEST--
+-Prevent switching fibers in tick function
+---FILE--
+-<?php
+-
+-declare(ticks=1);
+-
+-register_tick_function(function (): void {
+-    if (Fiber::getCurrent() !== null) {
+-        Fiber::suspend();
+-    }
+-});
+-
+-$fiber = new Fiber(function (): void {
+-    echo "1\n";
+-    echo "2\n";
+-    echo "3\n";
+-});
+-
+-$fiber->start();
+-
+-?>
+---EXPECTF--
+-1
+-
+-Fatal error: Uncaught FiberError: Cannot switch fibers in current execution context in %sticks.php:%d
+-Stack trace:
+-#0 %sticks.php(%d): Fiber::suspend()
+-#1 %sticks.php(%d): {closure}()
+-#2 [internal function]: {closure}()
+-#3 %sticks.php(%d): Fiber->start()
+-#4 {main}
+-  thrown in %sticks.php on line %d
+diff --git a/Zend/tests/first_class_callable_016.phpt b/Zend/tests/first_class_callable_016.phpt
+deleted file mode 100644
+index 3369a6de..00000000
+--- a/Zend/tests/first_class_callable_016.phpt
++++ /dev/null
+@@ -1,16 +0,0 @@
+---TEST--
+-First class callables and &__call()
+---FILE--
+-<?php
+-class Foo {
+-    public function &__call($method, $args) {
+-        return $method;
+-    }
+-}
+-
+-$foo = new Foo;
+-$bar = $foo->bar(...);
+-echo $bar(),"\n";
+-?>
+---EXPECT--
+-bar
+diff --git a/Zend/tests/first_class_callable_optimization.phpt b/Zend/tests/first_class_callable_optimization.phpt
+index 707b6a72..22ced0a8 100644
+--- a/Zend/tests/first_class_callable_optimization.phpt
++++ b/Zend/tests/first_class_callable_optimization.phpt
+@@ -11,11 +11,7 @@ var_dump(test2(...));
+ 
+ ?>
+ --EXPECT--
+-object(Closure)#1 (1) {
+-  ["function"]=>
+-  string(5) "test1"
++object(Closure)#1 (0) {
+ }
+-object(Closure)#1 (1) {
+-  ["function"]=>
+-  string(5) "test2"
++object(Closure)#1 (0) {
+ }
+diff --git a/Zend/tests/flexible-heredoc-complex-test1.phpt b/Zend/tests/flexible-heredoc-complex-test1.phpt
+index 5f3d085e..3e148d06 100644
+--- a/Zend/tests/flexible-heredoc-complex-test1.phpt
++++ b/Zend/tests/flexible-heredoc-complex-test1.phpt
+@@ -21,10 +21,7 @@ var_dump(<<<DOC1
+     DOC1);
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
+-
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ string(5) "a
+ b
+ c"

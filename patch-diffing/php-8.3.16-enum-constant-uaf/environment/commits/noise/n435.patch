@@ -1,0 +1,155 @@
+diff --git a/sapi/fuzzer/fuzzer-unserializehash.c b/sapi/fuzzer/fuzzer-unserializehash.c
+index 5d29eb5f..0f7d81a3 100644
+--- a/sapi/fuzzer/fuzzer-unserializehash.c
++++ b/sapi/fuzzer/fuzzer-unserializehash.c
+@@ -75,7 +75,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t FullSize) {
+ }
+ 
+ int LLVMFuzzerInitialize(int *argc, char ***argv) {
+-	fuzzer_init_php(NULL);
++	fuzzer_init_php();
+ 
+ 	/* fuzzer_shutdown_php(); */
+ 	return 0;
+diff --git a/sapi/fuzzer/generate_all.php b/sapi/fuzzer/generate_all.php
+index 5794bdac..589781b0 100644
+--- a/sapi/fuzzer/generate_all.php
++++ b/sapi/fuzzer/generate_all.php
+@@ -1,21 +1,5 @@
+ <?php
+ require __DIR__ . '/generate_unserialize_dict.php';
+-require __DIR__ . '/generate_mbstring_dict.php';
+ require __DIR__ . '/generate_unserializehash_corpus.php';
+ require __DIR__ . '/generate_parser_corpus.php';
+-
+-require __DIR__ . '/generate_corpus_util.php';
+-
+-$baseDir = __DIR__ . '/../..';
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/execute',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/reflection"]
+-);
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/function-jit',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/opcache/tests/jit"]
+-);
+-generate_corpus_from_phpt(
+-    __DIR__ . '/corpus/tracing-jit',
+-    ["$baseDir/Zend/tests", "$baseDir/ext/opcache/tests/jit"]
+-);
++require __DIR__ . '/generate_execute_corpus.php';
+diff --git a/sapi/fuzzer/generate_corpus_util.php b/sapi/fuzzer/generate_corpus_util.php
+deleted file mode 100644
+index 29d152a1..00000000
+--- a/sapi/fuzzer/generate_corpus_util.php
++++ /dev/null
+@@ -1,25 +0,0 @@
+-<?php
+-
+-function generate_corpus_from_phpt(string $corpusDir, array $testDirs, int $maxLen = 8 * 1024) {
+-    @mkdir($corpusDir);
+-    foreach ($testDirs as $testDir) {
+-        $it = new RecursiveIteratorIterator(
+-            new RecursiveDirectoryIterator($testDir),
+-            RecursiveIteratorIterator::LEAVES_ONLY
+-        );
+-
+-        foreach ($it as $file) {
+-            if (!preg_match('/\.phpt$/', $file)) continue;
+-            $fullCode = file_get_contents($file);
+-            if (!preg_match('/--FILE--\R(.*?)\R--([_A-Z]+)--/s', $fullCode, $matches)) continue;
+-            $code = $matches[1];
+-            if (strlen($code) > $maxLen) continue;
+-
+-            $outFile = str_replace($testDir, '', $file);
+-            $outFile = str_replace('/', '_', $outFile);
+-            if (!preg_match('/SKIP_SLOW_TESTS|SKIP_PERF_SENSITIVE|USE_ZEND_ALLOC/', $fullCode)) {
+-                file_put_contents($corpusDir . '/' . $outFile, $code);
+-            }
+-        }
+-    }
+-}
+diff --git a/sapi/fuzzer/generate_execute_corpus.php b/sapi/fuzzer/generate_execute_corpus.php
+index 8ed922df..e7e72f5b 100644
+--- a/sapi/fuzzer/generate_execute_corpus.php
++++ b/sapi/fuzzer/generate_execute_corpus.php
+@@ -1,7 +1,5 @@
+ <?php
+ 
+-require __DIR__ . '/generate_corpus_util.php';
+-
+ if ($argc >= 2) {
+     $corpusDir = $argv[1];
+ } else {
+@@ -14,4 +12,26 @@ if ($argc >= 3) {
+     $testDirs = ["$baseDir/Zend/tests", "$baseDir/ext/reflection"];
+ }
+ 
+-generate_corpus_from_phpt($corpusDir, $testDirs);
++$maxLen = 8 * 1024;
++@mkdir($corpusDir);
++
++foreach ($testDirs as $testDir) {
++    $it = new RecursiveIteratorIterator(
++        new RecursiveDirectoryIterator($testDir),
++        RecursiveIteratorIterator::LEAVES_ONLY
++    );
++
++    foreach ($it as $file) {
++        if (!preg_match('/\.phpt$/', $file)) continue;
++        $fullCode = file_get_contents($file);
++        if (!preg_match('/--FILE--\R(.*?)\R--([_A-Z]+)--/s', $fullCode, $matches)) continue;
++        $code = $matches[1];
++        if (strlen($code) > $maxLen) continue;
++
++        $outFile = str_replace($testDir, '', $file);
++        $outFile = str_replace('/', '_', $outFile);
++        if (!preg_match('/SKIP_SLOW_TESTS|SKIP_PERF_SENSITIVE|USE_ZEND_ALLOC/', $fullCode)) {
++            file_put_contents($corpusDir . '/' . $outFile, $code);
++        }
++    }
++}
+diff --git a/sapi/fuzzer/generate_mbstring_dict.php b/sapi/fuzzer/generate_mbstring_dict.php
+deleted file mode 100644
+index 520d8679..00000000
+--- a/sapi/fuzzer/generate_mbstring_dict.php
++++ /dev/null
+@@ -1,12 +0,0 @@
+-<?php
+-
+-if (!extension_loaded('mbstring')) {
+-    echo "Skipping mbstring dictionary generation\n";
+-    return;
+-}
+-
+-$dict = "";
+-foreach (mb_list_encodings() as $encoding) {
+-    $dict .= "\"" . $encoding . ",\"\n";
+-}
+-file_put_contents(__DIR__ . "/dict/mbstring", $dict);
+diff --git a/sapi/fuzzer/generate_parser_corpus.php b/sapi/fuzzer/generate_parser_corpus.php
+index 036ca42e..699c1219 100644
+--- a/sapi/fuzzer/generate_parser_corpus.php
++++ b/sapi/fuzzer/generate_parser_corpus.php
+@@ -9,7 +9,7 @@ $it = new RecursiveIteratorIterator(
+ $corpusDir = __DIR__ . '/corpus/parser';
+ @mkdir($corpusDir);
+ 
+-$maxLen = 6 * 1024;
++$maxLen = 32 * 1024;
+ foreach ($it as $file) {
+     if (!preg_match('/\.phpt$/', $file)) continue;
+     $code = file_get_contents($file);
+diff --git a/sapi/fuzzer/generate_unserialize_dict.php b/sapi/fuzzer/generate_unserialize_dict.php
+index 9ea53ed8..cf270788 100644
+--- a/sapi/fuzzer/generate_unserialize_dict.php
++++ b/sapi/fuzzer/generate_unserialize_dict.php
+@@ -3,7 +3,7 @@
+ $dict = "";
+ foreach (get_declared_classes() as $class) {
+     $len = strlen($class);
+-    $dict .= "\"$len:\\\"" . addslashes($class) . "\\\"\"\n";
++    $dict .= "\"$len:\\\"$class\\\"\"\n";
+ }
+ 
+ file_put_contents(__DIR__ . "/dict/unserialize", $dict);

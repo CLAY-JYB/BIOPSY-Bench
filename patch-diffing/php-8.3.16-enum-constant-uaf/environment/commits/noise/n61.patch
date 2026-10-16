@@ -1,0 +1,272 @@
+diff --git a/Zend/tests/type_declarations/iterable/or_null.phpt b/Zend/tests/type_declarations/iterable/or_null.phpt
+deleted file mode 100644
+index 286f1e29..00000000
+--- a/Zend/tests/type_declarations/iterable/or_null.phpt
++++ /dev/null
+@@ -1,46 +0,0 @@
+---TEST--
+-Test "or null"/"or be null" in type-checking errors for userland functions with iterable
+---FILE--
+-<?php
+-
+-// This should test every branch in zend_execute.c's `zend_verify_arg_type`, `zend_verify_return_type` and `zend_verify_missing_return_type` functions which produces an "or null"/"or be null" part in its error message
+-
+-function iterableF(?iterable $param) {}
+-try {
+-    iterableF(1);
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-
+-function returnIterable(): ?iterable {
+-    return 1;
+-}
+-
+-try {
+-    returnIterable();
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-
+-function returnMissingIterable(): ?iterable {
+-}
+-
+-try {
+-    returnMissingIterable();
+-} catch (\TypeError $e) {
+-    echo $e, PHP_EOL;
+-}
+-?>
+---EXPECTF--
+-TypeError: iterableF(): Argument #1 ($param) must be of type Traversable|array|null, int given, called in %s on line %d and defined in %s:%d
+-Stack trace:
+-#0 %s(%d): iterableF(1)
+-#1 {main}
+-TypeError: returnIterable(): Return value must be of type Traversable|array|null, int returned in %s:%d
+-Stack trace:
+-#0 %s(%d): returnIterable()
+-#1 {main}
+-TypeError: returnMissingIterable(): Return value must be of type Traversable|array|null, none returned in %s:%d
+-Stack trace:
+-#0 %s(%d): returnMissingIterable()
+-#1 {main}
+diff --git a/Zend/tests/type_declarations/iterable_001.phpt b/Zend/tests/type_declarations/iterable_001.phpt
+new file mode 100644
+index 00000000..10a001de
+--- /dev/null
++++ b/Zend/tests/type_declarations/iterable_001.phpt
+@@ -0,0 +1,48 @@
++--TEST--
++iterable type#001
++--FILE--
++<?php
++
++function test(iterable $iterable) {
++    var_dump($iterable);
++}
++
++function gen() {
++    yield 1;
++    yield 2;
++    yield 3;
++};
++
++test([1, 2, 3]);
++test(gen());
++test(new ArrayIterator([1, 2, 3]));
++
++try {
++    test(1);
++} catch (Throwable $e) {
++    echo $e->getMessage();
++}
++?>
++--EXPECTF--
++array(3) {
++  [0]=>
++  int(1)
++  [1]=>
++  int(2)
++  [2]=>
++  int(3)
++}
++object(Generator)#1 (0) {
++}
++object(ArrayIterator)#1 (1) {
++  ["storage":"ArrayIterator":private]=>
++  array(3) {
++    [0]=>
++    int(1)
++    [1]=>
++    int(2)
++    [2]=>
++    int(3)
++  }
++}
++test(): Argument #1 ($iterable) must be of type iterable, int given, called in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable_002.phpt b/Zend/tests/type_declarations/iterable_002.phpt
+new file mode 100644
+index 00000000..fdc3b20d
+--- /dev/null
++++ b/Zend/tests/type_declarations/iterable_002.phpt
+@@ -0,0 +1,20 @@
++--TEST--
++iterable type#002 - Default values
++--FILE--
++<?php
++
++function foo(iterable $iterable = null) {
++    // Null should be allowed as a default value
++}
++
++function bar(iterable $iterable = []) {
++    // Array should be allowed as a default value
++}
++
++function baz(iterable $iterable = 1) {
++    // No other values should be allowed as defaults
++}
++
++?>
++--EXPECTF--
++Fatal error: Cannot use int as default value for parameter $iterable of type iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable_003.phpt b/Zend/tests/type_declarations/iterable_003.phpt
+new file mode 100644
+index 00000000..d2a3bcb3
+--- /dev/null
++++ b/Zend/tests/type_declarations/iterable_003.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++iterable type#003 - Return types
++--FILE--
++<?php
++
++function foo(): iterable {
++    return [];
++}
++function bar(): iterable {
++    return (function () { yield; })();
++}
++
++function baz(): iterable {
++    return 1;
++}
++
++var_dump(foo());
++var_dump(bar());
++
++try {
++    baz();
++} catch (Throwable $e) {
++    echo $e->getMessage();
++}
++
++?>
++--EXPECT--
++array(0) {
++}
++object(Generator)#2 (0) {
++}
++baz(): Return value must be of type iterable, int returned
+diff --git a/Zend/tests/type_declarations/iterable_004.phpt b/Zend/tests/type_declarations/iterable_004.phpt
+new file mode 100644
+index 00000000..fe9d4461
+--- /dev/null
++++ b/Zend/tests/type_declarations/iterable_004.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++iterable type#004 - Parameter covariance
++--FILE--
++<?php
++
++class Foo {
++    function testArray(array $array) {}
++
++    function testTraversable(Traversable $traversable) {}
++
++    function testScalar(int $int) {}
++}
++
++class Bar extends Foo {
++    function testArray(iterable $iterable) {}
++
++    function testTraversable(iterable $iterable) {}
++
++    function testScalar(iterable $iterable) {}
++}
++
++?>
++--EXPECTF--
++Fatal error: Declaration of Bar::testScalar(iterable $iterable) must be compatible with Foo::testScalar(int $int) in %s on line %d
+diff --git a/Zend/tests/type_declarations/iterable_005.phpt b/Zend/tests/type_declarations/iterable_005.phpt
+new file mode 100644
+index 00000000..39dede3b
+--- /dev/null
++++ b/Zend/tests/type_declarations/iterable_005.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++iterable type#005 - Return type covariance
++--FILE--
++<?php
++
++class Test {
++    function method(): iterable {
++        return [];
++    }
++}
++
++class TestArray extends Test {
++    function method(): array {
++        return [];
++    }
++}
++
++class TestTraversable extends Test {
++    function method(): Traversable {
++        return new ArrayIterator([]);
++    }
++}
++
++class TestScalar extends Test {
++    function method(): int {
++        return 1;
++    }
++}
++
++?>
++--EXPECTF--
++Fatal error: Declaration of TestScalar::method(): int must be compatible with Test::method(): iterable in %s on line %d
+diff --git a/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt b/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
+deleted file mode 100644
+index 61900f99..00000000
+--- a/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-No coercion should be applied to type false
+---FILE--
+-<?php
+-
+-function test(false $v) { var_dump($v); }
+-
+-try {
+-    test(0);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test('');
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    test([]);
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-test(): Argument #1 ($v) must be of type false, int given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type false, string given, called in %s on line %d
+-test(): Argument #1 ($v) must be of type false, array given, called in %s on line %d

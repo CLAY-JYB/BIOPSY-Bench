@@ -1,0 +1,332 @@
+diff --git a/ext/pgsql/tests/80_bug14383.phpt b/ext/pgsql/tests/80_bug14383.phpt
+index f17af830..c9848e30 100644
+--- a/ext/pgsql/tests/80_bug14383.phpt
++++ b/ext/pgsql/tests/80_bug14383.phpt
+@@ -5,8 +5,7 @@ dba
+ pgsql
+ --SKIPIF--
+ <?php
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-check_skip_any();
++require_once(__DIR__.'/../../dba/tests/skipif.inc');
+ require_once('skipif.inc');
+ ?>
+ --FILE--
+@@ -19,65 +18,46 @@ if (!$dbh) {
+ }
+ pg_close($dbh);
+ 
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-$name = 'bug14383.db';
++require_once(__DIR__.'/../../dba/tests/test.inc');
++require_once(__DIR__.'/../../dba/tests/dba_handler.inc');
+ 
+-$handler = get_any_handler($name);
+-run_standard_tests($handler, $name);
+ ?>
+ --CLEAN--
+ <?php
+-require_once dirname(__DIR__, 2) . '/dba/tests/setup/setup_dba_tests.inc';
+-$name = 'bug14383.db';
+-cleanup_standard_db($name);
++require_once(__DIR__.'/../../dba/tests/clean.inc');
+ ?>
+ --EXPECTF--
+-Using handler: "%s"
+-=== RUNNING WITH FILE LOCK ===
+-Remove key 1 and 3
+-bool(true)
+-bool(true)
+-Try to remove key 1 again
+-bool(false)
+-key2: Content String 2
+-key4: Another Content String
+-key5: The last content string
+-name9: Content String 9
+-[key10]name10: Content String 10
+-[key30]name30: Content String 30
+-Total keys: 6
+-Key 1 exists? N
+-Key 2 exists? Y
+-Key 3 exists? N
+-Key 4 exists? Y
+-Key 5 exists? Y
+-Replace second key data
+-bool(true)
++database handler: %s
++3NYNYY
++Content String 2
++Content 2 replaced
++Read during write:%sallowed
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
++  ["key number 6"]=>
++  string(13) "The 6th value"
++  ["key2"]=>
++  string(27) "Content 2 replaced 2nd time"
++  ["key5"]=>
++  string(23) "The last content string"
++}
++--NO-LOCK--
++3NYNYY
++Content String 2
+ Content 2 replaced
+ Read during write: not allowed
+-Expected: Added a new data entry
+-Expected: Failed to insert data for already used key
+-Replace second key data
+-bool(true)
+-Delete "key4"
+-bool(true)
+-Fetch "key2": Content 2 replaced 2nd time
+-Fetch "key number 6": The 6th value
+-array(6) {
+-  ["[key10]name10"]=>
+-  string(17) "Content String 10"
+-  ["[key30]name30"]=>
+-  string(17) "Content String 30"
++"key number 6" written
++Failed to write "key number 6" 2nd time
++Content 2 replaced 2nd time
++The 6th value
++array(3) {
+   ["key number 6"]=>
+   string(13) "The 6th value"
+   ["key2"]=>
+   string(27) "Content 2 replaced 2nd time"
+   ["key5"]=>
+   string(23) "The last content string"
+-  ["name9"]=>
+-  string(16) "Content String 9"
+ }
+-=== RUNNING WITH DB LOCK (default) ===
+-SAME OUTPUT AS PREVIOUS RUN
+-=== RUNNING WITH NO LOCK ===
+-SAME OUTPUT AS PREVIOUS RUN (modulo read during write due to no lock)
+diff --git a/ext/pgsql/tests/80_bug36625.phpt b/ext/pgsql/tests/80_bug36625.phpt
+index 75d3637b..f905a999 100644
+--- a/ext/pgsql/tests/80_bug36625.phpt
++++ b/ext/pgsql/tests/80_bug36625.phpt
+@@ -39,11 +39,16 @@ array_walk($trace, 'search_trace_file');
+ var_dump($found > 0);
+ var_dump(file_exists($tracefile));
+ 
++@unlink($tracefile);
++
+ ?>
+ --CLEAN--
+ <?php
++
+ $tracefile = __DIR__ . '/trace.tmp';
++
+ unlink($tracefile);
++
+ ?>
+ --EXPECTF--
+ bool(false)
+diff --git a/ext/pgsql/tests/README.md b/ext/pgsql/tests/README.md
+index b649e4f2..ecc2919e 100644
+--- a/ext/pgsql/tests/README.md
++++ b/ext/pgsql/tests/README.md
+@@ -15,4 +15,4 @@ as the same user running the tests you ensure that the user is granted access to
+ the database.
+ 
+ If you find problems in PostgreSQL extension, please report a
+-[bug](https://github.com/php/php-src/issues).
++[bug](https://bugs.php.net).
+diff --git a/ext/pgsql/tests/config.inc b/ext/pgsql/tests/config.inc
+index 66ba4810..fbe58588 100644
+--- a/ext/pgsql/tests/config.inc
++++ b/ext/pgsql/tests/config.inc
+@@ -16,8 +16,8 @@ $view_name   = "php_pgsql_viewtest";
+ $view_def    = "CREATE VIEW {$view_name} AS SELECT * FROM {$table_name};";
+ 
+ // Test table
+-$table_def    = "CREATE TABLE {$table_name} (num int, str text, bin bytea);";
+-$table_def_92 = "CREATE TABLE {$table_name_92} (textary text[],  jsn json);";
++$table_def    = "CREATE TABLE ${table_name} (num int, str text, bin bytea);";
++$table_def_92 = "CREATE TABLE ${table_name_92} (textary text[],  jsn json);";
+ $field_name = "num";             // For pg_field_num()
+ 
+ ?>
+diff --git a/ext/phar/phar.1.in b/ext/phar/phar.1.in
+index ac314fe9..323e77b0 100644
+--- a/ext/phar/phar.1.in
++++ b/ext/phar/phar.1.in
+@@ -1,4 +1,4 @@
+-.TH PHAR 1 "2022" "The PHP Group" "User Commands"
++.TH PHAR 1 "2021" "The PHP Group" "User Commands"
+ .SH NAME
+ phar, phar.phar \- PHAR (PHP archive) command line tool
+ .SH SYNOPSIS
+@@ -497,7 +497,7 @@ You can view the list of known bugs or report any new bug you
+ found at:
+ .PD 0
+ .P
+-.B https://github.com/php/php-src/issues
++.B http://bugs.php.net
+ .PD 1
+ .SH AUTHORS
+ The PHP Group: Thies C. Arntzen, Stig Bakken, Andi Gutmans, Rasmus Lerdorf, Sam Ruby, Sascha Schumann, Zeev Suraski, Jim Winstead, Andrei Zmievski.
+diff --git a/ext/phar/phar.c b/ext/phar/phar.c
+index f60b0d6a..b45586d1 100644
+--- a/ext/phar/phar.c
++++ b/ext/phar/phar.c
+@@ -2024,7 +2024,7 @@ woohoo:
+ 		} else {
+ 			zend_string *str_key;
+ 
+-			ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&PHAR_G(phar_fname_map), str_key, pphar) {
++			ZEND_HASH_FOREACH_STR_KEY_PTR(&PHAR_G(phar_fname_map), str_key, pphar) {
+ 				if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
+ 					continue;
+ 				}
+@@ -2037,7 +2037,7 @@ woohoo:
+ 			} ZEND_HASH_FOREACH_END();
+ 
+ 			if (PHAR_G(manifest_cached)) {
+-				ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&cached_phars, str_key, pphar) {
++				ZEND_HASH_FOREACH_STR_KEY_PTR(&cached_phars, str_key, pphar) {
+ 					if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
+ 						continue;
+ 					}
+@@ -2540,6 +2540,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ {
+ 	char halt_stub[] = "__HALT_COMPILER();";
+ 	zend_string *newstub;
++	char *tmp;
+ 	phar_entry_info *entry, *newentry;
+ 	size_t halt_offset;
+ 	int restore_alias_len, global_flags = 0, closeoldfile;
+@@ -2643,7 +2644,9 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 		} else {
+ 			free_user_stub = 0;
+ 		}
+-		if ((pos = php_stristr(user_stub, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++		tmp = estrndup(user_stub, len);
++		if ((pos = php_stristr(tmp, halt_stub, len, sizeof(halt_stub) - 1)) == NULL) {
++			efree(tmp);
+ 			if (closeoldfile) {
+ 				php_stream_close(oldfile);
+ 			}
+@@ -2656,6 +2659,8 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 			}
+ 			return EOF;
+ 		}
++		pos = user_stub + (pos - tmp);
++		efree(tmp);
+ 		len = pos - user_stub + 18;
+ 		if ((size_t)len != php_stream_write(newfile, user_stub, len)
+ 		||			  5 != php_stream_write(newfile, " ?>\r\n", 5)) {
+@@ -2727,7 +2732,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 	}
+ 	new_manifest_count = 0;
+ 	offset = 0;
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->cfp) {
+ 			/* did we forget to get rid of cfp last time? */
+ 			php_stream_close(entry->cfp);
+@@ -2959,7 +2964,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 	manifest_ftell = php_stream_tell(newfile);
+ 
+ 	/* now write the manifest */
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		const zend_string *metadata_str;
+ 		if (entry->is_deleted || entry->is_mounted) {
+ 			/* remove this from the new phar if deleted, ignore if mounted */
+@@ -3043,7 +3048,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 
+ 	/* now copy the actual file data to the new phar */
+ 	offset = php_stream_tell(newfile);
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->is_deleted || entry->is_dir || entry->is_mounted) {
+ 			continue;
+ 		}
+@@ -3255,7 +3260,7 @@ cleanup:
+ 	if (shared_cfp != NULL) {
+ 		php_stream_close(shared_cfp);
+ 	}
+-	ZEND_HASH_MAP_FOREACH_PTR(&phar->manifest, entry) {
++	ZEND_HASH_FOREACH_PTR(&phar->manifest, entry) {
+ 		if (entry->cfp) {
+ 			entry->cfp = NULL;
+ 			entry->header_offset = 0;
+@@ -3508,7 +3513,7 @@ void phar_request_initialize(void) /* {{{ */
+ 			phar_archive_data *pphar;
+ 			phar_entry_fp *stuff = (phar_entry_fp *) ecalloc(zend_hash_num_elements(&cached_phars), sizeof(phar_entry_fp));
+ 
+-			ZEND_HASH_MAP_FOREACH_PTR(&cached_phars, pphar) {
++			ZEND_HASH_FOREACH_PTR(&cached_phars, pphar) {
+ 				stuff[pphar->phar_pos].manifest = (phar_entry_fp_info *) ecalloc( zend_hash_num_elements(&(pphar->manifest)), sizeof(phar_entry_fp_info));
+ 			} ZEND_HASH_FOREACH_END();
+ 
+diff --git a/ext/phar/phar/clicommand.inc b/ext/phar/phar/clicommand.inc
+index 0b84bd60..7527e1c4 100644
+--- a/ext/phar/phar/clicommand.inc
++++ b/ext/phar/phar/clicommand.inc
+@@ -30,9 +30,9 @@ abstract class CLICommand
+         $this->typs = self::getArgTyps($this);
+ 
+         if ($argc < 2) {
+-            self::error("No command given, check {$argv[0]} help\n");
++            self::error("No command given, check ${argv[0]} help\n");
+         } elseif (!isset($this->cmds[$argv[1]]['run'])) {
+-            self::error("Unknown command '{$argv[1]}', check {$argv[0]} help\n");
++            self::error("Unknown command '${argv[1]}', check ${argv[0]} help\n");
+         } else {
+             $command = $argv[1];
+         }
+@@ -46,12 +46,12 @@ abstract class CLICommand
+                     if (strlen($argv[$i]) == 2 && isset($this->args[$argv[$i][1]])) {
+                         $arg = $argv[$i][1];
+                         if (++$i >= $argc) {
+-                            self::error("Missing argument to parameter '$arg' of command '$command', check {$argv[0]} help\n");
++                            self::error("Missing argument to parameter '$arg' of command '$command', check ${argv[0]} help\n");
+                         } else {
+                             $this->args[$arg]['val'] = $this->checkArgTyp($arg, $i, $argc, $argv);
+                         }
+                     }  else {
+-                        self::error("Unknown parameter '{$argv[$i]}' to command $command, check {$argv[0]} help\n");
++                        self::error("Unknown parameter '${argv[$i]}' to command $command, check ${argv[0]} help\n");
+                     }
+                 } else {
+                     break;
+@@ -61,7 +61,7 @@ abstract class CLICommand
+             if (isset($this->args[''])) {
+                 if ($i >= $argc) {
+                     if (isset($this->args['']['require']) && $this->args['']['require']) {
+-                        self::error("Missing default trailing arguments to command $command, check {$argv[0]} help\n");
++                        self::error("Missing default trailing arguments to command $command, check ${argv[0]} help\n");
+                     }
+                 } else {
+                     $this->args['']['val'] = array();
+@@ -70,12 +70,12 @@ abstract class CLICommand
+                     }
+                 }
+             } else if ($i < $argc) {
+-                self::error("Unexpected default arguments to command $command, check {$argv[0]} help\n");
++                self::error("Unexpected default arguments to command $command, check ${argv[0]} help\n");
+             }
+ 
+             foreach($this->args as $arg => $inf) {
+                 if (strlen($arg) && !isset($inf['val']) && isset($inf['required']) && $inf['required']) {
+-                    $missing .=  "Missing parameter '-$arg' to command $command, check {$argv[0]} help\n";
++                    $missing .=  "Missing parameter '-$arg' to command $command, check ${argv[0]} help\n";
+                 }
+             }
+ 
+@@ -265,7 +265,7 @@ abstract class CLICommand
+                 $sp3 = $this->cli_get_SP3($l, $ls, $inf);
+                 $l3  = strlen($sp3);
+                 foreach($conf['select'] as $opt => $what) {
+-                    $inf .= $this->cli_wordwrap($sp2 . "  " . sprintf("%-{$ls}s  ", $opt) . $what, $l3, $sp3) . "\n";
++                    $inf .= $this->cli_wordwrap($sp2 . "  " . sprintf("%-${ls}s  ", $opt) . $what, $l3, $sp3) . "\n";
+                 }
+             }
+         }

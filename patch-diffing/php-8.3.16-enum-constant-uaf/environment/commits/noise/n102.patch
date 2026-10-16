@@ -1,0 +1,502 @@
+diff --git a/ext/date/tests/gh-124.phpt b/ext/date/tests/gh-124.phpt
+deleted file mode 100644
+index 074e519d..00000000
+--- a/ext/date/tests/gh-124.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Test for timelib #124: Problem with large negative timestamps
+---INI--
+-date.timezone=UTC
+---SKIPIF--
+-<?php
+-if (PHP_INT_SIZE != 8) echo "skip this test is for 64-bit only";
+-if (getenv('SKIP_ASAN')) die('skip triggers undefined behavior');
+-?>
+---FILE--
+-<?php
+-var_dump((new DateTime("@-9223372036854775808"))->getTimestamp());
+-var_dump((new DateTime('-292277022657-01-27 08:29:52 UTC'))->getTimestamp());
+-var_dump((new DateTime('-292277022657-01-27 08:29:53 UTC'))->getTimestamp());
+-
+-var_dump((new DateTime("@9223372036854775807"))->getTimestamp());
+-var_dump((new DateTime('+292277026596-12-04 15:30:07 UTC'))->getTimestamp());
+-echo (new DateTime('+2512370164-01-01 00:00:00Z'))->format(DATE_RFC3339_EXTENDED);
+-?>
+---EXPECT--
+-int(-9223372036854775808)
+-int(-9223372036854775808)
+-int(-9223372036854775807)
+-int(9223372036854775807)
+-int(9223372036854775807)
+-2512370164-01-01T00:00:00.000+00:00
+diff --git a/ext/date/tests/gh10152.phpt b/ext/date/tests/gh10152.phpt
+deleted file mode 100644
+index 8b5ec952..00000000
+--- a/ext/date/tests/gh10152.phpt
++++ /dev/null
+@@ -1,22 +0,0 @@
+---TEST--
+-Bug GH-10152 (Custom properties of DateTimeImmutable child classes are not serialized)
+---FILE--
+-<?php
+-
+-class MyDateTimeImmutable extends DateTimeImmutable {
+-    public function __construct(
+-        string $datetime = "now",
+-        ?DateTimeZone $timezone = null,
+-        public ?bool $myProperty = null,
+-    ) {
+-        parent::__construct($datetime, $timezone);
+-    }
+-}
+-
+-$datetime = new MyDateTimeImmutable('2022-12-22T11:26:00Z', myProperty: true);
+-$serialized = serialize($datetime);
+-$unserialized = unserialize($serialized);
+-var_dump($unserialized->myProperty);
+-?>
+---EXPECT--
+-bool(true)
+diff --git a/ext/date/tests/gh10747-1.phpt b/ext/date/tests/gh10747-1.phpt
+deleted file mode 100644
+index e02d84b0..00000000
+--- a/ext/date/tests/gh10747-1.phpt
++++ /dev/null
+@@ -1,59 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeImmutable objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeImmutable
+-{
+-	private   int $var1 = 1;
+-	private       $var2 = 0;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct()
+-	{
+-		parent::__construct();
+-		$this->var2 = 2;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I;
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(%d) "%s"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(%d) "O:1:"I":7:{s:4:"date";s:%d:"%s";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(%d) "%s"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+diff --git a/ext/date/tests/gh10747-2.phpt b/ext/date/tests/gh10747-2.phpt
+deleted file mode 100644
+index ba5e0273..00000000
+--- a/ext/date/tests/gh10747-2.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeZone objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeZone
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($tz)
+-	{
+-		parent::__construct($tz);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I('Europe/Kyiv');
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (6) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(11) "Europe/Kyiv"
+-}
+-string(143) "O:1:"I":6:{s:13:"timezone_type";i:3;s:8:"timezone";s:11:"Europe/Kyiv";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (6) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(11) "Europe/Kyiv"
+-}
+diff --git a/ext/date/tests/gh10747-3.phpt b/ext/date/tests/gh10747-3.phpt
+deleted file mode 100644
+index ea37c26e..00000000
+--- a/ext/date/tests/gh10747-3.phpt
++++ /dev/null
+@@ -1,87 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateInterval objects throw)
+---FILE--
+-<?php
+-class I extends DateInterval
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($tz)
+-	{
+-		parent::__construct($tz);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I('P3D');
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (14) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["y"]=>
+-  int(0)
+-  ["m"]=>
+-  int(0)
+-  ["d"]=>
+-  int(3)
+-  ["h"]=>
+-  int(0)
+-  ["i"]=>
+-  int(0)
+-  ["s"]=>
+-  int(0)
+-  ["f"]=>
+-  float(0)
+-  ["invert"]=>
+-  int(0)
+-  ["days"]=>
+-  bool(false)
+-  ["from_string"]=>
+-  bool(false)
+-}
+-string(224) "O:1:"I":14:{s:1:"y";i:0;s:1:"m";i:0;s:1:"d";i:3;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";d:0;s:6:"invert";i:0;s:4:"days";b:0;s:11:"from_string";b:0;s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (14) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["y"]=>
+-  int(0)
+-  ["m"]=>
+-  int(0)
+-  ["d"]=>
+-  int(3)
+-  ["h"]=>
+-  int(0)
+-  ["i"]=>
+-  int(0)
+-  ["s"]=>
+-  int(0)
+-  ["f"]=>
+-  float(0)
+-  ["invert"]=>
+-  int(0)
+-  ["days"]=>
+-  bool(false)
+-  ["from_string"]=>
+-  bool(false)
+-}
+diff --git a/ext/date/tests/gh10747-4.phpt b/ext/date/tests/gh10747-4.phpt
+deleted file mode 100644
+index 9933902a..00000000
+--- a/ext/date/tests/gh10747-4.phpt
++++ /dev/null
+@@ -1,147 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DatePeriod objects throw)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-class I extends DatePeriod
+-{
+-	private   int $var1;
+-	private       $var2 = 2;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct($start, $interval, $end)
+-	{
+-		parent::__construct($start, $interval, $end);
+-		$this->var1 = 1;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$i = new I(new DateTimeImmutable('2023-03-03 16:24'), DateInterval::createFromDateString('+1 hour'), new DateTimeImmutable('2023-03-09 16:24'));
+-$s = serialize($i);
+-$u = unserialize($s);
+-
+-var_dump($i, str_replace(chr(0), '!', $s), $u);
+-?>
+---EXPECTF--
+-object(I)#1 (11) {
+-  ["start"]=>
+-  object(DateTimeImmutable)#5 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-03 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTimeImmutable)#6 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-09 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#7 (10) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(0)
+-    ["h"]=>
+-    int(1)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(1)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-}
+-string(631) "O:1:"I":11:{s:5:"start";O:17:"DateTimeImmutable":3:{s:4:"date";s:26:"2023-03-03 16:24:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}s:7:"current";N;s:3:"end";O:17:"DateTimeImmutable":3:{s:4:"date";s:26:"2023-03-09 16:24:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}s:8:"interval";O:12:"DateInterval":10:{s:1:"y";i:0;s:1:"m";i:0;s:1:"d";i:0;s:1:"h";i:1;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";d:0;s:6:"invert";i:0;s:4:"days";b:0;s:11:"from_string";b:0;}s:11:"recurrences";i:1;s:18:"include_start_date";b:1;s:16:"include_end_date";b:0;s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (11) {
+-  ["start"]=>
+-  object(DateTimeImmutable)#9 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-03 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["current"]=>
+-  NULL
+-  ["end"]=>
+-  object(DateTimeImmutable)#10 (3) {
+-    ["date"]=>
+-    string(26) "2023-03-09 16:24:00.000000"
+-    ["timezone_type"]=>
+-    int(3)
+-    ["timezone"]=>
+-    string(3) "UTC"
+-  }
+-  ["interval"]=>
+-  object(DateInterval)#11 (10) {
+-    ["y"]=>
+-    int(0)
+-    ["m"]=>
+-    int(0)
+-    ["d"]=>
+-    int(0)
+-    ["h"]=>
+-    int(1)
+-    ["i"]=>
+-    int(0)
+-    ["s"]=>
+-    int(0)
+-    ["f"]=>
+-    float(0)
+-    ["invert"]=>
+-    int(0)
+-    ["days"]=>
+-    bool(false)
+-    ["from_string"]=>
+-    bool(false)
+-  }
+-  ["recurrences"]=>
+-  int(1)
+-  ["include_start_date"]=>
+-  bool(true)
+-  ["include_end_date"]=>
+-  bool(false)
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-}
+diff --git a/ext/date/tests/gh10747-error.phpt b/ext/date/tests/gh10747-error.phpt
+deleted file mode 100644
+index b6c3900e..00000000
+--- a/ext/date/tests/gh10747-error.phpt
++++ /dev/null
+@@ -1,64 +0,0 @@
+---TEST--
+-Bug GH-10747 (Private fields in serialized DateTimeImmutable objects throw)
+---FILE--
+-<?php
+-class I extends DateTimeImmutable
+-{
+-	private   int $var1 = 1;
+-	private       $var2 = 0;
+-	protected int $var3 = 3;
+-	protected     $var4;
+-
+-	function __construct()
+-	{
+-		parent::__construct();
+-		$this->var2 = 2;
+-		$this->var4 = 4;
+-	}
+-}
+-
+-$s = 'O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}';
+-$u = unserialize(str_replace('!', chr(0), $s));
+-var_dump($s, $u);
+-
+-// this one has the class names for the private properties changed to something non-existing
+-$s = 'O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!J!var1";i:1;s:7:"!K!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}';
+-$u = unserialize(str_replace('!', chr(0), $s));
+-var_dump($s, $u);
+-
+-?>
+---EXPECTF--
+-string(179) "O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!I!var1";i:1;s:7:"!I!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#1 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(2)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(26) "2023-03-09 17:03:11.123456"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(179) "O:1:"I":7:{s:4:"date";s:26:"2023-03-09 17:03:11.123456";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";s:7:"!J!var1";i:1;s:7:"!K!var2";i:2;s:7:"!*!var3";i:3;s:7:"!*!var4";i:4;}"
+-object(I)#2 (7) {
+-  ["var1":"I":private]=>
+-  int(1)
+-  ["var2":"I":private]=>
+-  int(0)
+-  ["var3":protected]=>
+-  int(3)
+-  ["var4":protected]=>
+-  int(4)
+-  ["date"]=>
+-  string(26) "2023-03-09 17:03:11.123456"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}

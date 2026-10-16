@@ -1,0 +1,256 @@
+diff --git a/testdata/acl_interface.tdir/acl_interface.conf b/testdata/acl_interface.tdir/acl_interface.conf
+index 157a2d7b7..1d9f8c9aa 100644
+--- a/testdata/acl_interface.tdir/acl_interface.conf
++++ b/testdata/acl_interface.tdir/acl_interface.conf
+@@ -5,9 +5,10 @@ server:
+ 	pidfile: "unbound.pid"
+ 	chroot: ""
+ 	username: ""
++	module-config: "respip validator iterator"  # respip for the RPZ part
+ 	do-not-query-localhost: no
+ 	use-caps-for-id: no
+-	define-tag: "one two refuse"
++	define-tag: "one two refuse rpz-one rpz-two rpz-nx"
+ 
+ # Interface configuration for IPv4
+ 	interface: @IPV4_ADDR@@@PORT_ALLOW@
+@@ -16,6 +17,9 @@ server:
+ 	interface: @IPV4_ADDR@@@PORT_TAG_1@
+ 	interface: @IPV4_ADDR@@@PORT_TAG_2@
+ 	interface: @IPV4_ADDR@@@PORT_TAG_3@
++	interface: @IPV4_ADDR@@@PORT_RPZ_1@
++	interface: @IPV4_ADDR@@@PORT_RPZ_2@
++	interface: @IPV4_ADDR@@@PORT_RPZ_NX@
+ 	interface: @IPV4_ADDR@@@PORT_VIEW_INT@
+ 	interface: @IPV4_ADDR@@@PORT_VIEW_EXT@
+ 	interface: @IPV4_ADDR@@@PORT_VIEW_INTEXT@
+@@ -26,6 +30,9 @@ server:
+ 	interface-action: @IPV4_ADDR@@@PORT_TAG_1@ allow
+ 	interface-action: @IPV4_ADDR@@@PORT_TAG_2@ allow
+ 	interface-action: @IPV4_ADDR@@@PORT_TAG_3@ allow
++	interface-action: @IPV4_ADDR@@@PORT_RPZ_1@ allow
++	interface-action: @IPV4_ADDR@@@PORT_RPZ_2@ allow
++	interface-action: @IPV4_ADDR@@@PORT_RPZ_NX@ allow
+ 	interface-action: @IPV4_ADDR@@@PORT_VIEW_INT@ allow
+ 	interface-action: @IPV4_ADDR@@@PORT_VIEW_EXT@ allow
+ 	interface-action: @IPV4_ADDR@@@PORT_VIEW_INTEXT@ allow
+@@ -33,6 +40,9 @@ server:
+ 	interface-tag: @IPV4_ADDR@@@PORT_TAG_1@ "one"
+ 	interface-tag: @IPV4_ADDR@@@PORT_TAG_2@ "two"
+ 	interface-tag: @IPV4_ADDR@@@PORT_TAG_3@ "refuse"
++	interface-tag: @IPV4_ADDR@@@PORT_RPZ_1@ "rpz-one"
++	interface-tag: @IPV4_ADDR@@@PORT_RPZ_2@ "rpz-two"
++	interface-tag: @IPV4_ADDR@@@PORT_RPZ_NX@ "rpz-nx"
+ 	interface-tag-action: @IPV4_ADDR@@@PORT_TAG_1@ one redirect
+ 	interface-tag-data: @IPV4_ADDR@@@PORT_TAG_1@ one "A 1.1.1.1"
+ 	interface-tag-action: @IPV4_ADDR@@@PORT_TAG_2@ two redirect
+@@ -50,6 +60,9 @@ server:
+ 	interface: @IPV6_ADDR@@@PORT_TAG_1@
+ 	interface: @IPV6_ADDR@@@PORT_TAG_2@
+ 	interface: @IPV6_ADDR@@@PORT_TAG_3@
++	interface: @IPV6_ADDR@@@PORT_RPZ_1@
++	interface: @IPV6_ADDR@@@PORT_RPZ_2@
++	interface: @IPV6_ADDR@@@PORT_RPZ_NX@
+ 	interface: @IPV6_ADDR@@@PORT_VIEW_INT@
+ 	interface: @IPV6_ADDR@@@PORT_VIEW_EXT@
+ 	interface: @IPV6_ADDR@@@PORT_VIEW_INTEXT@
+@@ -60,6 +73,9 @@ server:
+ 	interface-action: @IPV6_ADDR@@@PORT_TAG_1@ allow
+ 	interface-action: @IPV6_ADDR@@@PORT_TAG_2@ allow
+ 	interface-action: @IPV6_ADDR@@@PORT_TAG_3@ allow
++	interface-action: @IPV6_ADDR@@@PORT_RPZ_1@ allow
++	interface-action: @IPV6_ADDR@@@PORT_RPZ_2@ allow
++	interface-action: @IPV6_ADDR@@@PORT_RPZ_NX@ allow
+ 	interface-action: @IPV6_ADDR@@@PORT_VIEW_INT@ allow
+ 	interface-action: @IPV6_ADDR@@@PORT_VIEW_EXT@ allow
+ 	interface-action: @IPV6_ADDR@@@PORT_VIEW_INTEXT@ allow
+@@ -67,6 +83,9 @@ server:
+ 	interface-tag: @IPV6_ADDR@@@PORT_TAG_1@ "one"
+ 	interface-tag: @IPV6_ADDR@@@PORT_TAG_2@ "two"
+ 	interface-tag: @IPV6_ADDR@@@PORT_TAG_3@ "refuse"
++	interface-tag: @IPV6_ADDR@@@PORT_RPZ_1@ "rpz-one"
++	interface-tag: @IPV6_ADDR@@@PORT_RPZ_2@ "rpz-two"
++	interface-tag: @IPV6_ADDR@@@PORT_RPZ_NX@ "rpz-nx"
+ 	interface-tag-action: @IPV6_ADDR@@@PORT_TAG_1@ one redirect
+ 	interface-tag-data: @IPV6_ADDR@@@PORT_TAG_1@ one "A 1.1.1.1"
+ 	interface-tag-action: @IPV6_ADDR@@@PORT_TAG_2@ two redirect
+@@ -84,6 +103,9 @@ server:
+ 	interface: @INTERFACE@@@PORT_TAG_1@
+ 	interface: @INTERFACE@@@PORT_TAG_2@
+ 	interface: @INTERFACE@@@PORT_TAG_3@
++	interface: @INTERFACE@@@PORT_RPZ_1@
++	interface: @INTERFACE@@@PORT_RPZ_2@
++	interface: @INTERFACE@@@PORT_RPZ_NX@
+ 	interface: @INTERFACE@@@PORT_VIEW_INT@
+ 	interface: @INTERFACE@@@PORT_VIEW_EXT@
+ 	interface: @INTERFACE@@@PORT_VIEW_INTEXT@
+@@ -94,6 +116,9 @@ server:
+ 	interface-action: @INTERFACE@@@PORT_TAG_1@ allow
+ 	interface-action: @INTERFACE@@@PORT_TAG_2@ allow
+ 	interface-action: @INTERFACE@@@PORT_TAG_3@ allow
++	interface-action: @INTERFACE@@@PORT_RPZ_1@ allow
++	interface-action: @INTERFACE@@@PORT_RPZ_2@ allow
++	interface-action: @INTERFACE@@@PORT_RPZ_NX@ allow
+ 	interface-action: @INTERFACE@@@PORT_VIEW_INT@ allow
+ 	interface-action: @INTERFACE@@@PORT_VIEW_EXT@ allow
+ 	interface-action: @INTERFACE@@@PORT_VIEW_INTEXT@ allow
+@@ -101,6 +126,9 @@ server:
+ 	interface-tag: @INTERFACE@@@PORT_TAG_1@ "one"
+ 	interface-tag: @INTERFACE@@@PORT_TAG_2@ "two"
+ 	interface-tag: @INTERFACE@@@PORT_TAG_3@ "refuse"
++	interface-tag: @INTERFACE@@@PORT_RPZ_1@ "rpz-one"
++	interface-tag: @INTERFACE@@@PORT_RPZ_2@ "rpz-two"
++	interface-tag: @INTERFACE@@@PORT_RPZ_NX@ "rpz-nx"
+ 	interface-tag-action: @INTERFACE@@@PORT_TAG_1@ one redirect
+ 	interface-tag-data: @INTERFACE@@@PORT_TAG_1@ one "A 1.1.1.1"
+ 	interface-tag-action: @INTERFACE@@@PORT_TAG_2@ two redirect
+@@ -130,6 +158,22 @@ view:
+ 	name: "intext"
+ 	view-first: yes
+ 
++# RPZ configuration
++rpz:
++	name: "rpz-one"
++	zonefile: "rpz-one.zone"
++	tags: "rpz-one"
++
++rpz:
++	name: "rpz-two"
++	zonefile: "rpz-two.zone"
++	tags: "rpz-two"
++
++rpz:
++	name: "rpz-nx"
++	zonefile: "rpz-nx.zone"
++	tags: "rpz-nx"
++
+ # Stubs configuration
+ forward-zone:
+ 	name: "."
+diff --git a/testdata/acl_interface.tdir/acl_interface.pre b/testdata/acl_interface.tdir/acl_interface.pre
+index ce5358c1b..88ebc4ff9 100644
+--- a/testdata/acl_interface.tdir/acl_interface.pre
++++ b/testdata/acl_interface.tdir/acl_interface.pre
+@@ -7,7 +7,7 @@ if test ! -x "`which unshare 2>&1`"; then
+ 	skip_test "no unshare (from util-linux package) available, skip test"
+ fi
+ 
+-get_random_port 11
++get_random_port 14
+ 
+ PORT_ALLOW=$RND_PORT
+ PORT_DENY=$(($RND_PORT + 1))
+@@ -18,8 +18,11 @@ PORT_TAG_3=$(($RND_PORT + 5))
+ PORT_VIEW_INT=$(($RND_PORT + 6))
+ PORT_VIEW_EXT=$(($RND_PORT + 7))
+ PORT_VIEW_INTEXT=$(($RND_PORT + 8))
+-FORWARD_PORT=$(($RND_PORT + 9))
+-STUB_PORT=$(($RND_PORT + 10))
++PORT_RPZ_1=$(($RND_PORT + 9))
++PORT_RPZ_2=$(($RND_PORT + 10))
++PORT_RPZ_NX=$(($RND_PORT + 11))
++FORWARD_PORT=$(($RND_PORT + 12))
++STUB_PORT=$(($RND_PORT + 13))
+ 
+ IPV4_ADDR=192.168.1.1
+ IPV6_ADDR=2001:db8::1
+@@ -41,6 +44,9 @@ sed \
+ 	-e 's/@PORT_VIEW_INT\@/'$PORT_VIEW_INT'/' \
+ 	-e 's/@PORT_VIEW_EXT\@/'$PORT_VIEW_EXT'/' \
+ 	-e 's/@PORT_VIEW_INTEXT\@/'$PORT_VIEW_INTEXT'/' \
++	-e 's/@PORT_RPZ_1\@/'$PORT_RPZ_1'/' \
++	-e 's/@PORT_RPZ_2\@/'$PORT_RPZ_2'/' \
++	-e 's/@PORT_RPZ_NX\@/'$PORT_RPZ_NX'/' \
+ 	-e 's/@FORWARD_PORT\@/'$FORWARD_PORT'/' \
+ 	-e 's/@STUB_PORT\@/'$STUB_PORT'/' \
+ 	-e 's/@IPV4_ADDR\@/'$IPV4_ADDR'/' \
+@@ -63,6 +69,9 @@ echo "PORT_TAG_3=$PORT_TAG_3" >> .tpkg.var.test
+ echo "PORT_VIEW_INT=$PORT_VIEW_INT" >> .tpkg.var.test
+ echo "PORT_VIEW_EXT=$PORT_VIEW_EXT" >> .tpkg.var.test
+ echo "PORT_VIEW_INTEXT=$PORT_VIEW_INTEXT" >> .tpkg.var.test
++echo "PORT_RPZ_1=$PORT_RPZ_1" >> .tpkg.var.test
++echo "PORT_RPZ_2=$PORT_RPZ_2" >> .tpkg.var.test
++echo "PORT_RPZ_NX=$PORT_RPZ_NX" >> .tpkg.var.test
+ echo "FORWARD_PORT=$FORWARD_PORT" >> .tpkg.var.test
+ echo "STUB_PORT=$STUB_PORT" >> .tpkg.var.test
+ echo "IPV4_ADDR=$IPV4_ADDR" >> .tpkg.var.test
+diff --git a/testdata/acl_interface.tdir/acl_interface.test.scenario b/testdata/acl_interface.tdir/acl_interface.test.scenario
+index 00b2b059f..4ae0a42f0 100644
+--- a/testdata/acl_interface.tdir/acl_interface.test.scenario
++++ b/testdata/acl_interface.tdir/acl_interface.test.scenario
+@@ -78,6 +78,16 @@ expect_refused () {
+ 	fi
+ }
+ 
++expect_nx_answer () {
++	echo "> check answer for NXDOMAIN"
++	if grep "NXDOMAIN" outfile; then
++		echo "OK"
++	else
++		echo "Not OK"
++		end 1
++	fi
++}
++
+ expect_external_answer () {
+ 	echo "> check external answer"
+ 	if grep "1.2.3.4" outfile; then
+@@ -118,6 +128,26 @@ expect_tag_two_answer () {
+ 	fi
+ }
+ 
++expect_rpz_one_answer () {
++	echo "> check tag 'one' answer"
++	if grep "11.11.11.11" outfile; then
++		echo "OK"
++	else
++		echo "Not OK"
++		end 1
++	fi
++}
++
++expect_rpz_two_answer () {
++	echo "> check tag 'two' answer"
++	if grep "22.22.22.22" outfile; then
++		echo "OK"
++	else
++		echo "Not OK"
++		end 1
++	fi
++}
++
+ # do the test
+ 
+ for i in 4 6; do
+@@ -142,6 +172,15 @@ for i in 4 6; do
+ 	query $i $PORT_TAG_3 "local"
+ 	expect_refused
+ 
++	query $i $PORT_RPZ_1 "local"
++	expect_rpz_one_answer
++
++	query $i $PORT_RPZ_2 "local"
++	expect_rpz_two_answer
++
++	query $i $PORT_RPZ_NX "local"
++	expect_nx_answer
++
+ 	query $i $PORT_VIEW_INT "www.internal"
+ 	expect_internal_answer
+ 
+@@ -183,6 +222,15 @@ for addr in $INTERFACE_ADDR_1 $INTERFACE_ADDR_2 $INTERFACE_ADDR_3 $INTERFACE_ADD
+ 	query_addr $addr $PORT_TAG_3 "local"
+ 	expect_refused
+ 
++	query_addr $addr $PORT_RPZ_1 "local"
++	expect_rpz_one_answer
++
++	query_addr $addr $PORT_RPZ_2 "local"
++	expect_rpz_two_answer
++
++	query_addr $addr $PORT_RPZ_NX "local"
++	expect_nx_answer
++
+ 	query_addr $addr $PORT_VIEW_INT "www.internal"
+ 	expect_internal_answer
+ 

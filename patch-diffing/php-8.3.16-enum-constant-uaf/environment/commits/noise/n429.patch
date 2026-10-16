@@ -1,0 +1,210 @@
+diff --git a/sapi/fpm/fpm/fpm_worker_pool.c b/sapi/fpm/fpm/fpm_worker_pool.c
+index 6016b586..974238de 100644
+--- a/sapi/fpm/fpm/fpm_worker_pool.c
++++ b/sapi/fpm/fpm/fpm_worker_pool.c
+@@ -34,9 +34,6 @@ void fpm_worker_pool_free(struct fpm_worker_pool_s *wp) /* {{{ */
+ 	if (wp->user) {
+ 		free(wp->user);
+ 	}
+-	if (wp->set_user) {
+-		free(wp->set_user);
+-	}
+ 	if (wp->home) {
+ 		free(wp->home);
+ 	}
+diff --git a/sapi/fpm/fpm/fpm_worker_pool.h b/sapi/fpm/fpm/fpm_worker_pool.h
+index efb8640c..809f53a0 100644
+--- a/sapi/fpm/fpm/fpm_worker_pool.h
++++ b/sapi/fpm/fpm/fpm_worker_pool.h
+@@ -24,7 +24,6 @@ struct fpm_worker_pool_s {
+ 	enum fpm_address_domain listen_address_domain;
+ 	int listening_socket;
+ 	int set_uid, set_gid;								/* config uid and gid */
+-	char *set_user;										/* config user name */
+ 	int socket_uid, socket_gid, socket_mode;
+ 
+ 	/* runtime */
+diff --git a/sapi/fpm/fpm/zlog.c b/sapi/fpm/fpm/zlog.c
+index e5e49f83..95f98e6a 100644
+--- a/sapi/fpm/fpm/zlog.c
++++ b/sapi/fpm/fpm/zlog.c
+@@ -286,8 +286,14 @@ static zlog_bool zlog_stream_buf_alloc_ex(struct zlog_stream *stream, size_t nee
+ {
+ 	char *buf;
+ 	size_t size = stream->buf.size ?: stream->buf_init_size;
+-	size = MIN(zlog_limit, MAX((stream->buf.data ? (size << 1) : size), needed));
+-	buf = realloc(stream->buf.data, size);
++
++	if (stream->buf.data) {
++		size = MIN(zlog_limit, MAX(size * 2, needed));
++		buf = realloc(stream->buf.data, size);
++	} else {
++		size = MIN(zlog_limit, MAX(size, needed));
++		buf = malloc(size);
++	}
+ 
+ 	if (buf == NULL) {
+ 		return 0;
+diff --git a/sapi/fpm/php-fpm.8.in b/sapi/fpm/php-fpm.8.in
+index b972a2bd..905946e7 100644
+--- a/sapi/fpm/php-fpm.8.in
++++ b/sapi/fpm/php-fpm.8.in
+@@ -1,4 +1,4 @@
+-.TH PHP-FPM 8 "2022" "The PHP Group" "Scripting Language"
++.TH PHP-FPM 8 "2021" "The PHP Group" "Scripting Language"
+ .SH NAME
+ .TP 15
+ php-fpm \- PHP FastCGI Process Manager 'PHP-FPM'
+@@ -77,8 +77,6 @@ Show compiled in modules
+ .PD 1
+ .B \-v
+ Version number
+-.TP
+-.PD 0
+ .B \-\-prefix \fIpath\fP
+ .TP
+ .PD 1
+@@ -197,7 +195,7 @@ You can view the list of known bugs or report any new bug you
+ found at:
+ .PD 0
+ .P
+-.B https://github.com/php/php-src/issues
++.B http://bugs.php.net
+ .PD 1
+ .SH AUTHORS
+ PHP-FPM SAPI was written by Andrei Nigmatulin. The mailing-lists are highload-php-en (English) and highload-php-ru (Russian).
+diff --git a/sapi/fpm/tests/bug68591-conf-test-group.phpt b/sapi/fpm/tests/bug68591-conf-test-group.phpt
+deleted file mode 100644
+index d496d054..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-group.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test group existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-user = root
+-group = aaaaaa
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECT--
+-ERROR: [pool unconfined] cannot get gid for group 'aaaaaa'
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt b/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt
+deleted file mode 100644
+index 71ca71ad..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-listen-group.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test listen group existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-listen.group = aaaaaa
+-user = root
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECTF--
+-ERROR: [pool unconfined] cannot get gid for group 'aaaaaa': %s
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>
+diff --git a/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt b/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt
+deleted file mode 100644
+index c6108bcd..00000000
+--- a/sapi/fpm/tests/bug68591-conf-test-listen-owner.phpt
++++ /dev/null
+@@ -1,39 +0,0 @@
+---TEST--
+-FPM: bug68591 - config test listen owner existence
+---SKIPIF--
+-<?php
+-include "skipif.inc";
+-?>
+---FILE--
+-<?php
+-
+-require_once "tester.inc";
+-
+-$cfg = <<<EOT
+-[global]
+-error_log = {{FILE:LOG}}
+-[unconfined]
+-listen = {{ADDR:UDS}}
+-listen.owner = aaaaaa
+-user = root
+-pm = dynamic
+-pm.max_children = 5
+-pm.start_servers = 2
+-pm.min_spare_servers = 1
+-pm.max_spare_servers = 3
+-EOT;
+-
+-$tester = new FPM\Tester($cfg);
+-$tester->testConfig();
+-
+-?>
+-Done
+---EXPECTF--
+-ERROR: [pool unconfined] cannot get uid for user 'aaaaaa': %s
+-ERROR: FPM initialization failed
+-Done
+---CLEAN--
+-<?php
+-require_once "tester.inc";
+-FPM\Tester::clean();
+-?>

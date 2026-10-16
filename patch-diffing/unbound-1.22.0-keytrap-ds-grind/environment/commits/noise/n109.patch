@@ -1,0 +1,756 @@
+diff --git a/util/configparser.y b/util/configparser.y
+index da5d6608f..c10a5f475 100644
+--- a/util/configparser.y
++++ b/util/configparser.y
+@@ -137,6 +137,7 @@ extern struct config_parser_state* cfg_parser;
+ %token VAR_DNSTAP_LOG_CLIENT_RESPONSE_MESSAGES
+ %token VAR_DNSTAP_LOG_FORWARDER_QUERY_MESSAGES
+ %token VAR_DNSTAP_LOG_FORWARDER_RESPONSE_MESSAGES
++%token VAR_DNSTAP_SAMPLE_RATE
+ %token VAR_RESPONSE_IP_TAG VAR_RESPONSE_IP VAR_RESPONSE_IP_DATA
+ %token VAR_HARDEN_ALGO_DOWNGRADE VAR_IP_TRANSPARENT
+ %token VAR_IP_DSCP
+@@ -153,6 +154,7 @@ extern struct config_parser_state* cfg_parser;
+ %token VAR_MIN_CLIENT_SUBNET_IPV4 VAR_MIN_CLIENT_SUBNET_IPV6
+ %token VAR_MAX_ECS_TREE_SIZE_IPV4 VAR_MAX_ECS_TREE_SIZE_IPV6
+ %token VAR_CAPS_WHITELIST VAR_CACHE_MAX_NEGATIVE_TTL VAR_PERMIT_SMALL_HOLDDOWN
++%token VAR_CACHE_MIN_NEGATIVE_TTL
+ %token VAR_QNAME_MINIMISATION VAR_QNAME_MINIMISATION_STRICT VAR_IP_FREEBIND
+ %token VAR_DEFINE_TAG VAR_LOCAL_ZONE_TAG VAR_ACCESS_CONTROL_TAG
+ %token VAR_LOCAL_ZONE_OVERRIDE VAR_ACCESS_CONTROL_TAG_ACTION
+@@ -180,6 +182,7 @@ extern struct config_parser_state* cfg_parser;
+ %token VAR_CACHEDB_REDISHOST VAR_CACHEDB_REDISPORT VAR_CACHEDB_REDISTIMEOUT
+ %token VAR_CACHEDB_REDISEXPIRERECORDS VAR_CACHEDB_REDISPATH VAR_CACHEDB_REDISPASSWORD
+ %token VAR_CACHEDB_REDISLOGICALDB
++%token VAR_CACHEDB_REDISCOMMANDTIMEOUT VAR_CACHEDB_REDISCONNECTTIMEOUT
+ %token VAR_UDP_UPSTREAM_WITHOUT_DOWNSTREAM VAR_FOR_UPSTREAM
+ %token VAR_AUTH_ZONE VAR_ZONEFILE VAR_MASTER VAR_URL VAR_FOR_DOWNSTREAM
+ %token VAR_FALLBACK_ENABLED VAR_TLS_ADDITIONAL_PORT VAR_LOW_RTT VAR_LOW_RTT_PERMIL
+@@ -188,6 +191,8 @@ extern struct config_parser_state* cfg_parser;
+ %token VAR_ANSWER_COOKIE VAR_COOKIE_SECRET VAR_IP_RATELIMIT_COOKIE
+ %token VAR_FORWARD_NO_CACHE VAR_STUB_NO_CACHE VAR_LOG_SERVFAIL VAR_DENY_ANY
+ %token VAR_UNKNOWN_SERVER_TIME_LIMIT VAR_LOG_TAG_QUERYREPLY
++%token VAR_DISCARD_TIMEOUT VAR_WAIT_LIMIT VAR_WAIT_LIMIT_COOKIE
++%token VAR_WAIT_LIMIT_NETBLOCK VAR_WAIT_LIMIT_COOKIE_NETBLOCK
+ %token VAR_STREAM_WAIT_SIZE VAR_TLS_CIPHERS VAR_TLS_CIPHERSUITES VAR_TLS_USE_SNI
+ %token VAR_IPSET VAR_IPSET_NAME_V4 VAR_IPSET_NAME_V6
+ %token VAR_TLS_SESSION_TICKET_KEYS VAR_RPZ VAR_TAGS VAR_RPZ_ACTION_OVERRIDE
+@@ -198,14 +203,18 @@ extern struct config_parser_state* cfg_parser;
+ %token VAR_RPZ_SIGNAL_NXDOMAIN_RA VAR_INTERFACE_AUTOMATIC_PORTS VAR_EDE
+ %token VAR_INTERFACE_ACTION VAR_INTERFACE_VIEW VAR_INTERFACE_TAG
+ %token VAR_INTERFACE_TAG_ACTION VAR_INTERFACE_TAG_DATA
++%token VAR_QUIC_PORT VAR_QUIC_SIZE
+ %token VAR_PROXY_PROTOCOL_PORT VAR_STATISTICS_INHIBIT_ZERO
+ %token VAR_HARDEN_UNKNOWN_ADDITIONAL VAR_DISABLE_EDNS_DO VAR_CACHEDB_NO_STORE
++%token VAR_LOG_DESTADDR VAR_CACHEDB_CHECK_WHEN_SERVE_EXPIRED
++%token VAR_COOKIE_SECRET_FILE VAR_ITER_SCRUB_NS VAR_ITER_SCRUB_CNAME
++%token VAR_MAX_GLOBAL_QUOTA VAR_HARDEN_UNVERIFIED_GLUE VAR_LOG_TIME_ISO
+ 
+ %%
+ toplevelvars: /* empty */ | toplevelvars toplevelvar ;
+-toplevelvar: serverstart contents_server | stubstart contents_stub |
+-	forwardstart contents_forward | pythonstart contents_py |
+-	rcstart contents_rc | dtstart contents_dt | viewstart contents_view |
++toplevelvar: serverstart contents_server | stub_clause |
++	forward_clause | pythonstart contents_py |
++	rcstart contents_rc | dtstart contents_dt | view_clause |
+ 	dnscstart contents_dnsc | cachedbstart contents_cachedb |
+ 	ipsetstart contents_ipset | authstart contents_auth |
+ 	rpzstart contents_rpz | dynlibstart contents_dl |
+@@ -297,6 +306,7 @@ content_server: server_num_threads | server_verbosity | server_port |
+ 	server_min_client_subnet_ipv4 | server_min_client_subnet_ipv6 |
+ 	server_max_ecs_tree_size_ipv4 | server_max_ecs_tree_size_ipv6 |
+ 	server_caps_whitelist | server_cache_max_negative_ttl |
++	server_cache_min_negative_ttl |
+ 	server_permit_small_holddown | server_qname_minimisation |
+ 	server_ip_freebind | server_define_tag | server_local_zone_tag |
+ 	server_disable_dnssec_lame_check | server_access_control_tag |
+@@ -324,6 +334,8 @@ content_server: server_num_threads | server_verbosity | server_port |
+ 	server_fast_server_permil | server_fast_server_num  | server_tls_win_cert |
+ 	server_tcp_connection_limit | server_log_servfail | server_deny_any |
+ 	server_unknown_server_time_limit | server_log_tag_queryreply |
++	server_discard_timeout | server_wait_limit | server_wait_limit_cookie |
++	server_wait_limit_netblock | server_wait_limit_cookie_netblock |
+ 	server_stream_wait_size | server_tls_ciphers |
+ 	server_tls_ciphersuites | server_tls_session_ticket_keys |
+ 	server_answer_cookie | server_cookie_secret | server_ip_ratelimit_cookie |
+@@ -331,9 +343,21 @@ content_server: server_num_threads | server_verbosity | server_port |
+ 	server_edns_client_string_opcode | server_nsid |
+ 	server_zonemd_permissive_mode | server_max_reuse_tcp_queries |
+ 	server_tcp_reuse_timeout | server_tcp_auth_query_timeout |
++	server_quic_port | server_quic_size |
+ 	server_interface_automatic_ports | server_ede |
+ 	server_proxy_protocol_port | server_statistics_inhibit_zero |
+-	server_harden_unknown_additional | server_disable_edns_do
++	server_harden_unknown_additional | server_disable_edns_do |
++	server_log_destaddr | server_cookie_secret_file |
++	server_iter_scrub_ns | server_iter_scrub_cname | server_max_global_quota |
++	server_harden_unverified_glue | server_log_time_iso
++	;
++stub_clause: stubstart contents_stub
++	{
++		/* stub end */
++		if(cfg_parser->cfg->stubs &&
++			!cfg_parser->cfg->stubs->name)
++			yyerror("stub-zone without name");
++	}
+ 	;
+ stubstart: VAR_STUB_ZONE
+ 	{
+@@ -354,6 +378,14 @@ contents_stub: contents_stub content_stub
+ content_stub: stub_name | stub_host | stub_addr | stub_prime | stub_first |
+ 	stub_no_cache | stub_ssl_upstream | stub_tcp_upstream
+ 	;
++forward_clause: forwardstart contents_forward
++	{
++		/* forward end */
++		if(cfg_parser->cfg->forwards &&
++			!cfg_parser->cfg->forwards->name)
++			yyerror("forward-zone without name");
++	}
++	;
+ forwardstart: VAR_FORWARD_ZONE
+ 	{
+ 		struct config_stub* s;
+@@ -373,6 +405,14 @@ contents_forward: contents_forward content_forward
+ content_forward: forward_name | forward_host | forward_addr | forward_first |
+ 	forward_no_cache | forward_ssl_upstream | forward_tcp_upstream
+ 	;
++view_clause: viewstart contents_view
++	{
++		/* view end */
++		if(cfg_parser->cfg->views &&
++			!cfg_parser->cfg->views->name)
++			yyerror("view without name");
++	}
++	;
+ viewstart: VAR_VIEW
+ 	{
+ 		struct config_view* s;
+@@ -381,8 +421,6 @@ viewstart: VAR_VIEW
+ 		s = (struct config_view*)calloc(1, sizeof(struct config_view));
+ 		if(s) {
+ 			s->next = cfg_parser->cfg->views;
+-			if(s->next && !s->next->name)
+-				yyerror("view without name");
+ 			cfg_parser->cfg->views = s;
+ 		} else {
+ 			yyerror("out of memory");
+@@ -1173,6 +1211,26 @@ server_http_notls_downstream: VAR_HTTP_NOTLS_DOWNSTREAM STRING_ARG
+ 		else cfg_parser->cfg->http_notls_downstream = (strcmp($2, "yes")==0);
+ 		free($2);
+ 	};
++server_quic_port: VAR_QUIC_PORT STRING_ARG
++	{
++		OUTYY(("P(server_quic_port:%s)\n", $2));
++#ifndef HAVE_NGTCP2
++		log_warn("%s:%d: Unbound is not compiled with "
++			"ngtcp2. This is required to use DNS "
++			"over QUIC.", cfg_parser->filename, cfg_parser->line);
++#endif
++		if(atoi($2) == 0)
++			yyerror("port number expected");
++		else cfg_parser->cfg->quic_port = atoi($2);
++		free($2);
++	};
++server_quic_size: VAR_QUIC_SIZE STRING_ARG
++	{
++		OUTYY(("P(server_quic_size:%s)\n", $2));
++		if(!cfg_parse_memsize($2, &cfg_parser->cfg->quic_size))
++			yyerror("memory size expected");
++		free($2);
++	};
+ server_use_systemd: VAR_USE_SYSTEMD STRING_ARG
+ 	{
+ 		OUTYY(("P(server_use_systemd:%s)\n", $2));
+@@ -1214,6 +1272,15 @@ server_log_time_ascii: VAR_LOG_TIME_ASCII STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++server_log_time_iso: VAR_LOG_TIME_ISO STRING_ARG
++	{
++		OUTYY(("P(server_log_time_iso:%s)\n", $2));
++		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
++			yyerror("expected yes or no.");
++		else cfg_parser->cfg->log_time_iso = (strcmp($2, "yes")==0);
++		free($2);
++	}
++	;
+ server_log_queries: VAR_LOG_QUERIES STRING_ARG
+ 	{
+ 		OUTYY(("P(server_log_queries:%s)\n", $2));
+@@ -1250,6 +1317,15 @@ server_log_servfail: VAR_LOG_SERVFAIL STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++server_log_destaddr: VAR_LOG_DESTADDR STRING_ARG
++	{
++		OUTYY(("P(server_log_destaddr:%s)\n", $2));
++		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
++			yyerror("expected yes or no.");
++		else cfg_parser->cfg->log_destaddr = (strcmp($2, "yes")==0);
++		free($2);
++	}
++	;
+ server_log_local_actions: VAR_LOG_LOCAL_ACTIONS STRING_ARG
+ 	{
+ 		OUTYY(("P(server_log_local_actions:%s)\n", $2));
+@@ -1770,6 +1846,16 @@ server_harden_glue: VAR_HARDEN_GLUE STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++server_harden_unverified_glue: VAR_HARDEN_UNVERIFIED_GLUE STRING_ARG
++       {
++               OUTYY(("P(server_harden_unverified_glue:%s)\n", $2));
++               if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
++                       yyerror("expected yes or no.");
++               else cfg_parser->cfg->harden_unverified_glue =
++                       (strcmp($2, "yes")==0);
++               free($2);
++       }
++       ;
+ server_harden_dnssec_stripped: VAR_HARDEN_DNSSEC_STRIPPED STRING_ARG
+ 	{
+ 		OUTYY(("P(server_harden_dnssec_stripped:%s)\n", $2));
+@@ -2003,6 +2089,15 @@ server_cache_max_negative_ttl: VAR_CACHE_MAX_NEGATIVE_TTL STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++server_cache_min_negative_ttl: VAR_CACHE_MIN_NEGATIVE_TTL STRING_ARG
++	{
++		OUTYY(("P(server_cache_min_negative_ttl:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("number expected");
++		else cfg_parser->cfg->min_negative_ttl = atoi($2);
++		free($2);
++	}
++	;
+ server_cache_min_ttl: VAR_CACHE_MIN_TTL STRING_ARG
+ 	{
+ 		OUTYY(("P(server_cache_min_ttl:%s)\n", $2));
+@@ -2355,6 +2450,57 @@ server_unknown_server_time_limit: VAR_UNKNOWN_SERVER_TIME_LIMIT STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++server_discard_timeout: VAR_DISCARD_TIMEOUT STRING_ARG
++	{
++		OUTYY(("P(server_discard_timeout:%s)\n", $2));
++		cfg_parser->cfg->discard_timeout = atoi($2);
++		free($2);
++	}
++	;
++server_wait_limit: VAR_WAIT_LIMIT STRING_ARG
++	{
++		OUTYY(("P(server_wait_limit:%s)\n", $2));
++		cfg_parser->cfg->wait_limit = atoi($2);
++		free($2);
++	}
++	;
++server_wait_limit_cookie: VAR_WAIT_LIMIT_COOKIE STRING_ARG
++	{
++		OUTYY(("P(server_wait_limit_cookie:%s)\n", $2));
++		cfg_parser->cfg->wait_limit_cookie = atoi($2);
++		free($2);
++	}
++	;
++server_wait_limit_netblock: VAR_WAIT_LIMIT_NETBLOCK STRING_ARG STRING_ARG
++	{
++		OUTYY(("P(server_wait_limit_netblock:%s %s)\n", $2, $3));
++		if(atoi($3) == 0 && strcmp($3, "0") != 0) {
++			yyerror("number expected");
++			free($2);
++			free($3);
++		} else {
++			if(!cfg_str2list_insert(&cfg_parser->cfg->
++				wait_limit_netblock, $2, $3))
++				fatal_exit("out of memory adding "
++					"wait-limit-netblock");
++		}
++	}
++	;
++server_wait_limit_cookie_netblock: VAR_WAIT_LIMIT_COOKIE_NETBLOCK STRING_ARG STRING_ARG
++	{
++		OUTYY(("P(server_wait_limit_cookie_netblock:%s %s)\n", $2, $3));
++		if(atoi($3) == 0 && strcmp($3, "0") != 0) {
++			yyerror("number expected");
++			free($2);
++			free($3);
++		} else {
++			if(!cfg_str2list_insert(&cfg_parser->cfg->
++				wait_limit_cookie_netblock, $2, $3))
++				fatal_exit("out of memory adding "
++					"wait-limit-cookie-netblock");
++		}
++	}
++	;
+ server_max_udp_size: VAR_MAX_UDP_SIZE STRING_ARG
+ 	{
+ 		OUTYY(("P(server_max_udp_size:%s)\n", $2));
+@@ -3360,7 +3506,8 @@ content_dt: dt_dnstap_enable | dt_dnstap_socket_path | dt_dnstap_bidirectional |
+ 	dt_dnstap_log_client_query_messages |
+ 	dt_dnstap_log_client_response_messages |
+ 	dt_dnstap_log_forwarder_query_messages |
+-	dt_dnstap_log_forwarder_response_messages
++	dt_dnstap_log_forwarder_response_messages |
++	dt_dnstap_sample_rate
+ 	;
+ dt_dnstap_enable: VAR_DNSTAP_ENABLE STRING_ARG
+ 	{
+@@ -3524,6 +3671,17 @@ dt_dnstap_log_forwarder_response_messages: VAR_DNSTAP_LOG_FORWARDER_RESPONSE_MES
+ 		free($2);
+ 	}
+ 	;
++dt_dnstap_sample_rate: VAR_DNSTAP_SAMPLE_RATE STRING_ARG
++	{
++		OUTYY(("P(dt_dnstap_sample_rate:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("number expected");
++		else if(atoi($2) < 0)
++			yyerror("dnstap sample rate too small");
++		else	cfg_parser->cfg->dnstap_sample_rate = atoi($2);
++		free($2);
++	}
++	;
+ pythonstart: VAR_PYTHON
+ 	{
+ 		OUTYY(("\nP(python:)\n"));
+@@ -3712,7 +3870,8 @@ contents_cachedb: contents_cachedb content_cachedb
+ content_cachedb: cachedb_backend_name | cachedb_secret_seed |
+ 	redis_server_host | redis_server_port | redis_timeout |
+ 	redis_expire_records | redis_server_path | redis_server_password |
+-	cachedb_no_store | redis_logical_db
++	cachedb_no_store | redis_logical_db | cachedb_check_when_serve_expired |
++	redis_command_timeout | redis_connect_timeout
+ 	;
+ cachedb_backend_name: VAR_CACHEDB_BACKEND STRING_ARG
+ 	{
+@@ -3751,6 +3910,19 @@ cachedb_no_store: VAR_CACHEDB_NO_STORE STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++cachedb_check_when_serve_expired: VAR_CACHEDB_CHECK_WHEN_SERVE_EXPIRED STRING_ARG
++	{
++	#ifdef USE_CACHEDB
++		OUTYY(("P(cachedb_check_when_serve_expired:%s)\n", $2));
++		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
++			yyerror("expected yes or no.");
++		else cfg_parser->cfg->cachedb_check_when_serve_expired = (strcmp($2, "yes")==0);
++	#else
++		OUTYY(("P(Compiled without cachedb, ignoring)\n"));
++	#endif
++		free($2);
++	}
++	;
+ redis_server_host: VAR_CACHEDB_REDISHOST STRING_ARG
+ 	{
+ 	#if defined(USE_CACHEDB) && defined(USE_REDIS)
+@@ -3815,6 +3987,32 @@ redis_timeout: VAR_CACHEDB_REDISTIMEOUT STRING_ARG
+ 		free($2);
+ 	}
+ 	;
++redis_command_timeout: VAR_CACHEDB_REDISCOMMANDTIMEOUT STRING_ARG
++	{
++	#if defined(USE_CACHEDB) && defined(USE_REDIS)
++		OUTYY(("P(redis_command_timeout:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("redis command timeout value expected");
++		else cfg_parser->cfg->redis_command_timeout = atoi($2);
++	#else
++		OUTYY(("P(Compiled without cachedb or redis, ignoring)\n"));
++	#endif
++		free($2);
++	}
++	;
++redis_connect_timeout: VAR_CACHEDB_REDISCONNECTTIMEOUT STRING_ARG
++	{
++	#if defined(USE_CACHEDB) && defined(USE_REDIS)
++		OUTYY(("P(redis_connect_timeout:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("redis connect timeout value expected");
++		else cfg_parser->cfg->redis_connect_timeout = atoi($2);
++	#else
++		OUTYY(("P(Compiled without cachedb or redis, ignoring)\n"));
++	#endif
++		free($2);
++	}
++	;
+ redis_expire_records: VAR_CACHEDB_REDISEXPIRERECORDS STRING_ARG
+ 	{
+ 	#if defined(USE_CACHEDB) && defined(USE_REDIS)
+@@ -3879,45 +4077,79 @@ server_cookie_secret: VAR_COOKIE_SECRET STRING_ARG
+ 		free($2);
+ 	}
+ 	;
+-	ipsetstart: VAR_IPSET
+-		{
+-			OUTYY(("\nP(ipset:)\n"));
+-			cfg_parser->started_toplevel = 1;
+-		}
+-		;
+-	contents_ipset: contents_ipset content_ipset
+-		| ;
+-	content_ipset: ipset_name_v4 | ipset_name_v6
+-		;
+-	ipset_name_v4: VAR_IPSET_NAME_V4 STRING_ARG
+-		{
+-		#ifdef USE_IPSET
+-			OUTYY(("P(name-v4:%s)\n", $2));
+-			if(cfg_parser->cfg->ipset_name_v4)
+-				yyerror("ipset name v4 override, there must be one "
+-					"name for ip v4");
+-			free(cfg_parser->cfg->ipset_name_v4);
+-			cfg_parser->cfg->ipset_name_v4 = $2;
+-		#else
+-			OUTYY(("P(Compiled without ipset, ignoring)\n"));
+-			free($2);
+-		#endif
+-		}
++server_cookie_secret_file: VAR_COOKIE_SECRET_FILE STRING_ARG
++	{
++		OUTYY(("P(cookie_secret_file:%s)\n", $2));
++		free(cfg_parser->cfg->cookie_secret_file);
++		cfg_parser->cfg->cookie_secret_file = $2;
++	}
+ 	;
+-	ipset_name_v6: VAR_IPSET_NAME_V6 STRING_ARG
+-	{
+-		#ifdef USE_IPSET
+-			OUTYY(("P(name-v6:%s)\n", $2));
+-			if(cfg_parser->cfg->ipset_name_v6)
+-				yyerror("ipset name v6 override, there must be one "
+-					"name for ip v6");
+-			free(cfg_parser->cfg->ipset_name_v6);
+-			cfg_parser->cfg->ipset_name_v6 = $2;
+-		#else
+-			OUTYY(("P(Compiled without ipset, ignoring)\n"));
+-			free($2);
+-		#endif
+-		}
++server_iter_scrub_ns: VAR_ITER_SCRUB_NS STRING_ARG
++	{
++		OUTYY(("P(server_iter_scrub_ns:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("number expected");
++		else cfg_parser->cfg->iter_scrub_ns = atoi($2);
++		free($2);
++	}
++	;
++server_iter_scrub_cname: VAR_ITER_SCRUB_CNAME STRING_ARG
++	{
++		OUTYY(("P(server_iter_scrub_cname:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("number expected");
++		else cfg_parser->cfg->iter_scrub_cname = atoi($2);
++		free($2);
++	}
++	;
++server_max_global_quota: VAR_MAX_GLOBAL_QUOTA STRING_ARG
++	{
++		OUTYY(("P(server_max_global_quota:%s)\n", $2));
++		if(atoi($2) == 0 && strcmp($2, "0") != 0)
++			yyerror("number expected");
++		else cfg_parser->cfg->max_global_quota = atoi($2);
++		free($2);
++	}
++	;
++ipsetstart: VAR_IPSET
++	{
++		OUTYY(("\nP(ipset:)\n"));
++		cfg_parser->started_toplevel = 1;
++	}
++	;
++contents_ipset: contents_ipset content_ipset
++	| ;
++content_ipset: ipset_name_v4 | ipset_name_v6
++	;
++ipset_name_v4: VAR_IPSET_NAME_V4 STRING_ARG
++	{
++	#ifdef USE_IPSET
++		OUTYY(("P(name-v4:%s)\n", $2));
++		if(cfg_parser->cfg->ipset_name_v4)
++			yyerror("ipset name v4 override, there must be one "
++				"name for ip v4");
++		free(cfg_parser->cfg->ipset_name_v4);
++		cfg_parser->cfg->ipset_name_v4 = $2;
++	#else
++		OUTYY(("P(Compiled without ipset, ignoring)\n"));
++		free($2);
++	#endif
++	}
++	;
++ipset_name_v6: VAR_IPSET_NAME_V6 STRING_ARG
++	{
++	#ifdef USE_IPSET
++		OUTYY(("P(name-v6:%s)\n", $2));
++		if(cfg_parser->cfg->ipset_name_v6)
++			yyerror("ipset name v6 override, there must be one "
++				"name for ip v6");
++		free(cfg_parser->cfg->ipset_name_v6);
++		cfg_parser->cfg->ipset_name_v6 = $2;
++	#else
++		OUTYY(("P(Compiled without ipset, ignoring)\n"));
++		free($2);
++	#endif
++	}
+ 	;
+ %%
+ 
+diff --git a/util/data/dname.h b/util/data/dname.h
+index cb0f6735d..15e28bd97 100644
+--- a/util/data/dname.h
++++ b/util/data/dname.h
+@@ -225,7 +225,7 @@ int dname_strict_subdomain(uint8_t* d1, int labs1, uint8_t* d2, int labs2);
+ int dname_strict_subdomain_c(uint8_t* d1, uint8_t* d2);
+ 
+ /**
+- * Counts labels. Tests is d1 is a subdomain of d2.
++ * Counts labels. Tests if d1 is a subdomain of d2.
+  * @param d1: domain name, uncompressed wireformat
+  * @param d2: domain name, uncompressed wireformat
+  * @return true if d1 is a subdomain of d2.
+diff --git a/util/data/msgencode.c b/util/data/msgencode.c
+index 80ae33a38..6d116fb52 100644
+--- a/util/data/msgencode.c
++++ b/util/data/msgencode.c
+@@ -62,6 +62,10 @@
+ #define RETVAL_TRUNC	-4
+ /** return code that means all is peachy keen. Equal to DNS rcode NOERROR */
+ #define RETVAL_OK	0
++/** Max compressions we are willing to perform; more than that will result
++ *  in semi-compressed messages, or truncated even on TCP for huge messages, to
++ *  avoid locking the CPU for long */
++#define MAX_COMPRESSION_PER_MESSAGE 120
+ 
+ /**
+  * Data structure to help domain name compression in outgoing messages.
+@@ -284,15 +288,17 @@ write_compressed_dname(sldns_buffer* pkt, uint8_t* dname, int labs,
+ 
+ /** compress owner name of RR, return RETVAL_OUTMEM RETVAL_TRUNC */
+ static int
+-compress_owner(struct ub_packed_rrset_key* key, sldns_buffer* pkt, 
+-	struct regional* region, struct compress_tree_node** tree, 
+-	size_t owner_pos, uint16_t* owner_ptr, int owner_labs)
++compress_owner(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
++	struct regional* region, struct compress_tree_node** tree,
++	size_t owner_pos, uint16_t* owner_ptr, int owner_labs,
++	size_t* compress_count)
+ {
+ 	struct compress_tree_node* p;
+ 	struct compress_tree_node** insertpt = NULL;
+ 	if(!*owner_ptr) {
+ 		/* compress first time dname */
+-		if((p = compress_tree_lookup(tree, key->rk.dname, 
++		if(*compress_count < MAX_COMPRESSION_PER_MESSAGE &&
++			(p = compress_tree_lookup(tree, key->rk.dname,
+ 			owner_labs, &insertpt))) {
+ 			if(p->labs == owner_labs) 
+ 				/* avoid ptr chains, since some software is
+@@ -301,6 +307,7 @@ compress_owner(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 			if(!write_compressed_dname(pkt, key->rk.dname, 
+ 				owner_labs, p))
+ 				return RETVAL_TRUNC;
++			(*compress_count)++;
+ 			/* check if typeclass+4 ttl + rdatalen is available */
+ 			if(sldns_buffer_remaining(pkt) < 4+4+2)
+ 				return RETVAL_TRUNC;
+@@ -313,7 +320,8 @@ compress_owner(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 			if(owner_pos <= PTR_MAX_OFFSET)
+ 				*owner_ptr = htons(PTR_CREATE(owner_pos));
+ 		}
+-		if(!compress_tree_store(key->rk.dname, owner_labs, 
++		if(*compress_count < MAX_COMPRESSION_PER_MESSAGE &&
++			!compress_tree_store(key->rk.dname, owner_labs,
+ 			owner_pos, region, p, insertpt))
+ 			return RETVAL_OUTMEM;
+ 	} else {
+@@ -333,20 +341,24 @@ compress_owner(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 
+ /** compress any domain name to the packet, return RETVAL_* */
+ static int
+-compress_any_dname(uint8_t* dname, sldns_buffer* pkt, int labs, 
+-	struct regional* region, struct compress_tree_node** tree)
++compress_any_dname(uint8_t* dname, sldns_buffer* pkt, int labs,
++	struct regional* region, struct compress_tree_node** tree,
++	size_t* compress_count)
+ {
+ 	struct compress_tree_node* p;
+ 	struct compress_tree_node** insertpt = NULL;
+ 	size_t pos = sldns_buffer_position(pkt);
+-	if((p = compress_tree_lookup(tree, dname, labs, &insertpt))) {
++	if(*compress_count < MAX_COMPRESSION_PER_MESSAGE &&
++		(p = compress_tree_lookup(tree, dname, labs, &insertpt))) {
+ 		if(!write_compressed_dname(pkt, dname, labs, p))
+ 			return RETVAL_TRUNC;
++		(*compress_count)++;
+ 	} else {
+ 		if(!dname_buffer_write(pkt, dname))
+ 			return RETVAL_TRUNC;
+ 	}
+-	if(!compress_tree_store(dname, labs, pos, region, p, insertpt))
++	if(*compress_count < MAX_COMPRESSION_PER_MESSAGE &&
++		!compress_tree_store(dname, labs, pos, region, p, insertpt))
+ 		return RETVAL_OUTMEM;
+ 	return RETVAL_OK;
+ }
+@@ -364,9 +376,9 @@ type_rdata_compressable(struct ub_packed_rrset_key* key)
+ 
+ /** compress domain names in rdata, return RETVAL_* */
+ static int
+-compress_rdata(sldns_buffer* pkt, uint8_t* rdata, size_t todolen, 
+-	struct regional* region, struct compress_tree_node** tree, 
+-	const sldns_rr_descriptor* desc)
++compress_rdata(sldns_buffer* pkt, uint8_t* rdata, size_t todolen,
++	struct regional* region, struct compress_tree_node** tree,
++	const sldns_rr_descriptor* desc, size_t* compress_count)
+ {
+ 	int labs, r, rdf = 0;
+ 	size_t dname_len, len, pos = sldns_buffer_position(pkt);
+@@ -380,8 +392,8 @@ compress_rdata(sldns_buffer* pkt, uint8_t* rdata, size_t todolen,
+ 		switch(desc->_wireformat[rdf]) {
+ 		case LDNS_RDF_TYPE_DNAME:
+ 			labs = dname_count_size_labels(rdata, &dname_len);
+-			if((r=compress_any_dname(rdata, pkt, labs, region, 
+-				tree)) != RETVAL_OK)
++			if((r=compress_any_dname(rdata, pkt, labs, region,
++				tree, compress_count)) != RETVAL_OK)
+ 				return r;
+ 			rdata += dname_len;
+ 			todolen -= dname_len;
+@@ -449,7 +461,8 @@ static int
+ packed_rrset_encode(struct ub_packed_rrset_key* key, sldns_buffer* pkt, 
+ 	uint16_t* num_rrs, time_t timenow, struct regional* region,
+ 	int do_data, int do_sig, struct compress_tree_node** tree,
+-	sldns_pkt_section s, uint16_t qtype, int dnssec, size_t rr_offset)
++	sldns_pkt_section s, uint16_t qtype, int dnssec, size_t rr_offset,
++	size_t* compress_count)
+ {
+ 	size_t i, j, owner_pos;
+ 	int r, owner_labs;
+@@ -477,9 +490,9 @@ packed_rrset_encode(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 		for(i=0; i<data->count; i++) {
+ 			/* rrset roundrobin */
+ 			j = (i + rr_offset) % data->count;
+-			if((r=compress_owner(key, pkt, region, tree, 
+-				owner_pos, &owner_ptr, owner_labs))
+-				!= RETVAL_OK)
++			if((r=compress_owner(key, pkt, region, tree,
++				owner_pos, &owner_ptr, owner_labs,
++				compress_count)) != RETVAL_OK)
+ 				return r;
+ 			sldns_buffer_write(pkt, &key->rk.type, 2);
+ 			sldns_buffer_write(pkt, &key->rk.rrset_class, 2);
+@@ -489,8 +502,8 @@ packed_rrset_encode(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 			else	sldns_buffer_write_u32(pkt, data->rr_ttl[j]-adjust);
+ 			if(c) {
+ 				if((r=compress_rdata(pkt, data->rr_data[j],
+-					data->rr_len[j], region, tree, c))
+-					!= RETVAL_OK)
++					data->rr_len[j], region, tree, c,
++					compress_count)) != RETVAL_OK)
+ 					return r;
+ 			} else {
+ 				if(sldns_buffer_remaining(pkt) < data->rr_len[j])
+@@ -510,9 +523,9 @@ packed_rrset_encode(struct ub_packed_rrset_key* key, sldns_buffer* pkt,
+ 					return RETVAL_TRUNC;
+ 				sldns_buffer_write(pkt, &owner_ptr, 2);
+ 			} else {
+-				if((r=compress_any_dname(key->rk.dname, 
+-					pkt, owner_labs, region, tree))
+-					!= RETVAL_OK)
++				if((r=compress_any_dname(key->rk.dname,
++					pkt, owner_labs, region, tree,
++					compress_count)) != RETVAL_OK)
+ 					return r;
+ 				if(sldns_buffer_remaining(pkt) < 
+ 					4+4+data->rr_len[i])
+@@ -544,7 +557,8 @@ static int
+ insert_section(struct reply_info* rep, size_t num_rrsets, uint16_t* num_rrs,
+ 	sldns_buffer* pkt, size_t rrsets_before, time_t timenow, 
+ 	struct regional* region, struct compress_tree_node** tree,
+-	sldns_pkt_section s, uint16_t qtype, int dnssec, size_t rr_offset)
++	sldns_pkt_section s, uint16_t qtype, int dnssec, size_t rr_offset,
++	size_t* compress_count)
+ {
+ 	int r;
+ 	size_t i, setstart;
+@@ -560,7 +574,7 @@ insert_section(struct reply_info* rep, size_t num_rrsets, uint16_t* num_rrs,
+ 			setstart = sldns_buffer_position(pkt);
+ 			if((r=packed_rrset_encode(rep->rrsets[rrsets_before+i], 
+ 				pkt, num_rrs, timenow, region, 1, 1, tree,
+-				s, qtype, dnssec, rr_offset))
++				s, qtype, dnssec, rr_offset, compress_count))
+ 				!= RETVAL_OK) {
+ 				/* Bad, but if due to size must set TC bit */
+ 				/* trim off the rrset neatly. */
+@@ -573,7 +587,7 @@ insert_section(struct reply_info* rep, size_t num_rrsets, uint16_t* num_rrs,
+ 			setstart = sldns_buffer_position(pkt);
+ 			if((r=packed_rrset_encode(rep->rrsets[rrsets_before+i], 
+ 				pkt, num_rrs, timenow, region, 1, 0, tree,
+-				s, qtype, dnssec, rr_offset))
++				s, qtype, dnssec, rr_offset, compress_count))
+ 				!= RETVAL_OK) {
+ 				sldns_buffer_set_position(pkt, setstart);
+ 				return r;
+@@ -584,7 +598,7 @@ insert_section(struct reply_info* rep, size_t num_rrsets, uint16_t* num_rrs,
+ 			setstart = sldns_buffer_position(pkt);
+ 			if((r=packed_rrset_encode(rep->rrsets[rrsets_before+i], 
+ 				pkt, num_rrs, timenow, region, 0, 1, tree,
+-				s, qtype, dnssec, rr_offset))
++				s, qtype, dnssec, rr_offset, compress_count))
+ 				!= RETVAL_OK) {
+ 				sldns_buffer_set_position(pkt, setstart);
+ 				return r;
+@@ -677,6 +691,7 @@ reply_info_encode(struct query_info* qinfo, struct reply_info* rep,
+ 	struct compress_tree_node* tree = 0;
+ 	int r;
+ 	size_t rr_offset;
++	size_t compress_count=0;
+ 
+ 	sldns_buffer_clear(buffer);
+ 	if(udpsize < sldns_buffer_limit(buffer))
+@@ -723,7 +738,7 @@ reply_info_encode(struct query_info* qinfo, struct reply_info* rep,
+ 		arep.rrsets = &qinfo->local_alias->rrset;
+ 		if((r=insert_section(&arep, 1, &ancount, buffer, 0,
+ 			timezero, region, &tree, LDNS_SECTION_ANSWER,
+-			qinfo->qtype, dnssec, rr_offset)) != RETVAL_OK) {
++			qinfo->qtype, dnssec, rr_offset, &compress_count)) != RETVAL_OK) {
+ 			if(r == RETVAL_TRUNC) {
+ 				/* create truncated message */
+ 				sldns_buffer_write_u16_at(buffer, 6, ancount);
+@@ -738,7 +753,7 @@ reply_info_encode(struct query_info* qinfo, struct reply_info* rep,
+ 	/* insert answer section */
+ 	if((r=insert_section(rep, rep->an_numrrsets, &ancount, buffer,
+ 		0, timenow, region, &tree, LDNS_SECTION_ANSWER, qinfo->qtype,
+-		dnssec, rr_offset)) != RETVAL_OK) {
++		dnssec, rr_offset, &compress_count)) != RETVAL_OK) {
+ 		if(r == RETVAL_TRUNC) {
+ 			/* create truncated message */
+ 			sldns_buffer_write_u16_at(buffer, 6, ancount);
+@@ -756,7 +771,7 @@ reply_info_encode(struct query_info* qinfo, struct reply_info* rep,
+ 		if((r=insert_section(rep, rep->ns_numrrsets, &nscount, buffer,
+ 			rep->an_numrrsets, timenow, region, &tree,
+ 			LDNS_SECTION_AUTHORITY, qinfo->qtype,
+-			dnssec, rr_offset)) != RETVAL_OK) {
++			dnssec, rr_offset, &compress_count)) != RETVAL_OK) {
+ 			if(r == RETVAL_TRUNC) {
+ 				/* create truncated message */
+ 				sldns_buffer_write_u16_at(buffer, 8, nscount);
+@@ -773,7 +788,7 @@ reply_info_encode(struct query_info* qinfo, struct reply_info* rep,
+ 			if((r=insert_section(rep, rep->ar_numrrsets, &arcount, buffer,
+ 				rep->an_numrrsets + rep->ns_numrrsets, timenow, region,
+ 				&tree, LDNS_SECTION_ADDITIONAL, qinfo->qtype,
+-				dnssec, rr_offset)) != RETVAL_OK) {
++				dnssec, rr_offset, &compress_count)) != RETVAL_OK) {
+ 				if(r == RETVAL_TRUNC) {
+ 					/* no need to set TC bit, this is the additional */
+ 					sldns_buffer_write_u16_at(buffer, 10, arcount);
+@@ -886,6 +901,9 @@ ede_trim_text(struct edns_option** list)
+ 				curr->opt_len = 2;
+ 				prev = curr;
+ 				curr = curr->next;
++			} else {
++				prev = curr;
++				curr = curr->next;
+ 			}
+ 		} else {
+ 			/* continue */

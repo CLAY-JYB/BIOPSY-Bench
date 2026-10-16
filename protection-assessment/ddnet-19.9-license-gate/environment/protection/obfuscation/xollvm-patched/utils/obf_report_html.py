@@ -13,7 +13,7 @@ Renderers:
                   Graphviz `dot` if installed, else browser-side Graphviz WASM.
   cyto:           interactive Cytoscape.js viewer (pan/zoom, drag nodes, layouts, click-to-inspect)
                   (requires DOT artifacts; uses CDN)
-  dot:            render DOT -> inline SVG server-side (requires `dot` in PATH)
+  dot: render DOT -> inline SVG server-side (requires `dot` in PATH)
   wasm:           render DOT -> SVG in the browser via d3-graphviz + Graphviz WASM
   text:           show DOT sources as text
 

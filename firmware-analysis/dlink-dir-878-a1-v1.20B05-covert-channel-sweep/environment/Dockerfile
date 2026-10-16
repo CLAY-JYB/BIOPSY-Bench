@@ -266,10 +266,10 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends libfont
 
 FROM apt-build AS firmwalker
 # FIRMWARE: firmwalker: sensitive-data sweep (credentials, keys, certs).
-# upstream craigz28/firmwalker is gone (GitHub 404, seen 2026-09-09);
+# upstream craigz28/firmwalker is gone (GitHub 404);
 # zhibx/firmwalker_pro is its continuation — firmwalker.sh byte-identical
 # (md5 490e1504ba0aa44d1787dbe9b15dc61a), data lists mildly extended.
-# Pinned to the 2026-08-08 merge commit.
+# Pinned to the Aug-2026 merge commit.
 RUN git clone https://github.com/zhibx/firmwalker_pro.git /opt/firmwalker && \
     cd /opt/firmwalker && \
     git checkout 76d80300d3e0c1b0a509bd8e69c85d4e6e178294 && \
@@ -323,7 +323,7 @@ RUN curl -L https://raw.githubusercontent.com/slimm609/checksec.sh/2.7.0/checkse
 # ============================================================================================
 FROM apt-build AS gt-export
 # the copy list = "firmware.bin assembled.bin" (+ firmware_v1.1.bin + its pre-F2 assembled_v1.1.bin on chain (I6/I7) tasks; the overlay tree derives from the PRE-CONCEALMENT v1.1, whose superblock is still a plain hsqs)
-COPY firmware.bin assembled.bin firmware_v1.1.bin /work/
+COPY firmware.bin assembled.bin /work/
 
 # Oracle tree derivation only: this stage never sees the GT config (the
 # integrity gate and the oracle-binary staging run host-side in the export
@@ -436,7 +436,7 @@ RUN ldconfig && \
 # Challenge artifact: generated outside Docker by gen_firmware.py, arrives via the build context (never built inside this image)
 # ============================================================================================
 # the copy list = firmware.bin to /app (+ firmware_v1.1.bin on chain (I6/I7) tasks: the agent receives BOTH images)
-COPY firmware.bin firmware_v1.1.bin /app/
+COPY firmware.bin /app/firmware.bin
 RUN chmod 0444 /app/*.bin
 
 RUN mkdir -p /app /logs/artifacts/agent_output /logs/verifier && \

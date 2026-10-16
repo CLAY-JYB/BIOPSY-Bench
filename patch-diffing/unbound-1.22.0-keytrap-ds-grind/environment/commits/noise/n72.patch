@@ -1,0 +1,53 @@
+diff --git a/testdata/fwd_three.tdir/fwd_three.post b/testdata/fwd_three.tdir/fwd_three.post
+index 7b2971d62..00a92103c 100644
+--- a/testdata/fwd_three.tdir/fwd_three.post
++++ b/testdata/fwd_three.tdir/fwd_three.post
+@@ -11,7 +11,7 @@
+ kill_pid $FWD_PID
+ 
+ # find all extra forked testns and kill them.
+-pidlist=`fgrep "forked pid:" fwd.log | sed -e 's/forked pid: //'`
++pidlist=`grep -F "forked pid:" fwd.log | sed -e 's/forked pid: //'`
+ for p in $pidlist; do
+ 	kill_pid $p
+ done
+diff --git a/testdata/fwd_three.tdir/fwd_three.test b/testdata/fwd_three.tdir/fwd_three.test
+index 962d0bf1c..b0c8b9af9 100644
+--- a/testdata/fwd_three.tdir/fwd_three.test
++++ b/testdata/fwd_three.tdir/fwd_three.test
+@@ -7,7 +7,7 @@
+ PRE="../.."
+ # do the test
+ echo "> dig www1.example.com."
+-dig @localhost -p $UNBOUND_PORT www1.example.com. | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT www1.example.com. | tee outfile
+ echo "> cat logfiles"
+ cat fwd.log 
+ cat unbound.log
+@@ -20,11 +20,11 @@ else
+ fi
+ 
+ echo "> do three queries"
+-dig @localhost -p $UNBOUND_PORT +retry=10 +time=1 www1.example.com. >outfile1 &
++dig @127.0.0.1 -p $UNBOUND_PORT +retry=10 +time=1 www1.example.com. >outfile1 &
+ digpid1=$!
+-dig @localhost -p $UNBOUND_PORT +retry=10 +time=1 www2.example.com. >outfile2 &
++dig @127.0.0.1 -p $UNBOUND_PORT +retry=10 +time=1 www2.example.com. >outfile2 &
+ digpid2=$!
+-dig @localhost -p $UNBOUND_PORT +retry=10 +time=1 www3.example.com. >outfile3 &
++dig @127.0.0.1 -p $UNBOUND_PORT +retry=10 +time=1 www3.example.com. >outfile3 &
+ digpid3=$!
+ sleep 5
+ kill -9 $digpid1
+diff --git a/testdata/fwd_three_service.tdir/fwd_three_service.conf b/testdata/fwd_three_service.tdir/fwd_three_service.conf
+index 05fafe015..d6c9a205f 100644
+--- a/testdata/fwd_three_service.tdir/fwd_three_service.conf
++++ b/testdata/fwd_three_service.tdir/fwd_three_service.conf
+@@ -11,6 +11,7 @@ server:
+ 	num-queries-per-thread: 1024
+ 	use-syslog: no
+ 	do-not-query-localhost: no
++	discard-timeout: 3000  # testns uses sleep=2
+ forward-zone:
+ 	name: "."
+ 	forward-addr: "127.0.0.1@@TOPORT@"

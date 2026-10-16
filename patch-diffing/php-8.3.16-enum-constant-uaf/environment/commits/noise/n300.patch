@@ -1,0 +1,207 @@
+diff --git a/ext/spl/tests/SplFileObject/bug77024.phpt b/ext/spl/tests/SplFileObject/bug77024.phpt
+deleted file mode 100644
+index d61dc941..00000000
+--- a/ext/spl/tests/SplFileObject/bug77024.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Bug #77024 SplFileObject::__toString() may return array
+---FILE--
+-<?php
+-
+-$file = new SplTempFileObject;
+-$file->fputcsv(['foo', 'bar', 'baz']);
+-$file->rewind();
+-$file->setFlags(SplFileObject::READ_CSV);
+-echo $file . "\n";
+-
+-$tmp = tempnam(sys_get_temp_dir(), "php-tests-");
+-file_put_contents($tmp, "line1\nline2\nline3\n");
+-$file = new SplFileObject($tmp);
+-$file->rewind();
+-echo $file . "\n";
+-unset($file);
+-unlink($tmp);
+-
+-?>
+---EXPECT--
+-foo,bar,baz
+-
+-line1
+diff --git a/ext/spl/tests/SplFileObject/bug78976.phpt b/ext/spl/tests/SplFileObject/bug78976.phpt
+deleted file mode 100644
+index 059807eb..00000000
+--- a/ext/spl/tests/SplFileObject/bug78976.phpt
++++ /dev/null
+@@ -1,9 +0,0 @@
+---TEST--
+-Bug #78976 (SplFileObject::fputcsv returns -1 on failure)
+---FILE--
+-<?php
+-$file = new SplFileObject('php://memory', 'r');
+-var_dump($file->fputcsv(['foo', 'bar']));
+-?>
+---EXPECT--
+-bool(false)
+diff --git a/ext/spl/tests/SplFileObject/bug79710.phpt b/ext/spl/tests/SplFileObject/bug79710.phpt
+deleted file mode 100644
+index 8bfaddb0..00000000
+--- a/ext/spl/tests/SplFileObject/bug79710.phpt
++++ /dev/null
+@@ -1,40 +0,0 @@
+---TEST--
+-Bug #79710: Reproducible segfault in error_handler during GC involved an SplFileObject
+---FILE--
+-<?php
+-
+-class Target
+-{
+-    public $sfo;
+-    public function __construct($sfo) {
+-        $this->sfo = $sfo;
+-    }
+-    public function __destruct() {
+-        // If the SplFileObject is destructed first,
+-        // underlying FD is no longer valid and will cause error upon calling flock
+-        $this->sfo->flock(2);
+-    }
+-}
+-
+-class Run
+-{
+-    static $sfo;
+-    static $foo;
+-    public static function main() {
+-        // Creation ordering is important for repro
+-        // $sfo needed to be destructed before $foo.
+-        Run::$sfo = new SplTempFileObject();
+-        Run::$foo = new Target(Run::$sfo);
+-    }
+-}
+-
+-Run::main();
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object not initialized in %s:%d
+-Stack trace:
+-#0 %s(%d): SplFileObject->flock(2)
+-#1 [internal function]: Target->__destruct()
+-#2 {main}
+-  thrown in %s on line %d
+diff --git a/ext/spl/tests/SplFileObject/bug80933.phpt b/ext/spl/tests/SplFileObject/bug80933.phpt
+deleted file mode 100644
+index 78e94aba..00000000
+--- a/ext/spl/tests/SplFileObject/bug80933.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Bug #80933 (SplFileObject::DROP_NEW_LINE is broken for NUL and CR)
+---FILE--
+-<?php
+-$lines = [
+-    "Lorem ipsum \0 dolor sit amet", // string with NUL
+-    "Lorem ipsum \r dolor sit amet", // string with CR
+-];
+-foreach ($lines as $line) {
+-    $temp = new SplTempFileObject();
+-    $temp->fwrite($line);
+-
+-    $temp->rewind();
+-    $read = $temp->fgets();
+-    var_dump($line === $read);
+-
+-    $temp->rewind();
+-    $temp->setFlags(SplFileObject::DROP_NEW_LINE);
+-    $read = $temp->fgets();
+-    var_dump($line === $read);
+-}
+-?>
+---EXPECT--
+-bool(true)
+-bool(true)
+-bool(true)
+-bool(true)
+diff --git a/ext/spl/tests/SplFileObject/bug81477.phpt b/ext/spl/tests/SplFileObject/bug81477.phpt
+deleted file mode 100644
+index f7730a79..00000000
+--- a/ext/spl/tests/SplFileObject/bug81477.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Bug #81477 (LimitIterator + SplFileObject regression in 8.0.1)
+---FILE--
+-<?php
+-$filename = __DIR__ . '/bug81477.csv';
+-
+-$s = fopen($filename, 'w+');
+-fwrite($s, "foo,bar\nbaz,bat\nmore,data\n");
+-fclose($s);
+-
+-$sfo = new SplFileObject($filename);
+-$sfo->setFlags(SplFileObject::READ_AHEAD);
+-$limitIter = new LimitIterator($sfo, 1, -1);
+-
+-foreach($limitIter as $row) {
+-    var_dump($row);
+-}
+-?>
+---EXPECT--
+-string(8) "baz,bat
+-"
+-string(10) "more,data
+-"
+-string(0) ""
+---CLEAN--
+-<?php
+-@unlink(__DIR__ . '/bug81477.csv');
+-?>
+diff --git a/ext/spl/tests/SplFileObject/fgetcsv_blank_file.phpt b/ext/spl/tests/SplFileObject/fgetcsv_blank_file.phpt
+deleted file mode 100644
+index f34dafce..00000000
+--- a/ext/spl/tests/SplFileObject/fgetcsv_blank_file.phpt
++++ /dev/null
+@@ -1,31 +0,0 @@
+---TEST--
+-SplFileObject: fgetcsv() on a blank line
+---FILE--
+-<?php
+-
+-$file_path = __DIR__ . '/SplFileObject_fgetcsv_empty.csv';
+-$file = new SplFileObject($file_path, 'w');
+-$file = new SplTempFileObject();
+-
+-// write to file
+-$file->fwrite("");
+-
+-// read from file
+-$file->rewind();
+-var_dump($file->fgetcsv());
+-
+-$file->setFlags(SplFileObject::SKIP_EMPTY);
+-$file->rewind();
+-var_dump($file->fgetcsv());
+-?>
+---CLEAN--
+-<?php
+-$file_path = __DIR__ . '/SplFileObject_fgetcsv_empty.csv';
+-unlink($file_path);
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  NULL
+-}
+-bool(false)
+diff --git a/ext/spl/tests/SplFileObject/fileobject_001a.txt b/ext/spl/tests/SplFileObject/fileobject_001a.txt
+deleted file mode 100644
+index e8371f00..00000000
+--- a/ext/spl/tests/SplFileObject/fileobject_001a.txt
++++ /dev/null
+@@ -1,6 +0,0 @@
+-0
+-1
+-2
+-3
+-4
+-5

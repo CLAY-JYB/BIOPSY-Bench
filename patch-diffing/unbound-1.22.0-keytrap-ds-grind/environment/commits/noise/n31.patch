@@ -1,0 +1,269 @@
+diff --git a/sldns/wire2str.c b/sldns/wire2str.c
+index 2b5dc0513..ff8399947 100644
+--- a/sldns/wire2str.c
++++ b/sldns/wire2str.c
+@@ -228,6 +228,11 @@ static sldns_lookup_table sldns_edns_ede_codes_data[] = {
+ 	{ LDNS_EDE_NO_REACHABLE_AUTHORITY, "No Reachable Authority" },
+ 	{ LDNS_EDE_NETWORK_ERROR, "Network Error" },
+ 	{ LDNS_EDE_INVALID_DATA, "Invalid Data" },
++	{ LDNS_EDE_SIGNATURE_EXPIRED_BEFORE_VALID, "Signature Expired Before Valid" },
++	{ LDNS_EDE_TOO_EARLY, "Non-Replayable Transactions Received in 0-RTT Data" },
++	{ LDNS_EDE_UNSUPPORTED_NSEC3_ITERATIONS, "Unsupported NSEC3 Iterations Value" },
++	{ LDNS_EDE_BADPROXYPOLICY, "Unable to Conform to Policy" },
++	{ LDNS_EDE_SYNTHESIZED, "Synthesized Answer" },
+ 	{ 0, NULL}
+ };
+ sldns_lookup_table* sldns_edns_ede_codes = sldns_edns_ede_codes_data;
+@@ -1236,6 +1241,7 @@ int sldns_wire2str_svcparam_scan(uint8_t** d, size_t* dlen, char** s, size_t* sl
+ 		r = sldns_wire2str_svcparam_ech2str(s, slen, data_len, *d);
+ 		break;
+ 	case SVCB_KEY_DOHPATH:
++		ATTR_FALLTHROUGH
+ 		/* fallthrough */
+ 	default:
+ 		r = sldns_str_print(s, slen, "=\"");
+diff --git a/smallapp/unbound-anchor.c b/smallapp/unbound-anchor.c
+index 20a100cec..bd4a121f7 100644
+--- a/smallapp/unbound-anchor.c
++++ b/smallapp/unbound-anchor.c
+@@ -151,7 +151,7 @@
+ #define HTTPS_PORT 443
+ 
+ #ifdef USE_WINSOCK
+-/* sneakily reuse the the wsa_strerror function, on windows */
++/* sneakily reuse the wsa_strerror function, on windows */
+ char* wsa_strerror(int err);
+ #endif
+ 
+@@ -183,7 +183,9 @@ static const char DS_TRUST_ANCHOR[] =
+ 	/* The anchors must start on a new line with ". IN DS and end with \n"[;]
+ 	 * because the makedist script greps on the source here */
+ 	/* anchor 20326 is from 2017 */
+-". IN DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D\n";
++". IN DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D\n"
++	/* anchor 38696 is from 2024 */
++". IN DS 38696 8 2 683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16\n";
+ 
+ /** verbosity for this application */
+ static int verb = 0;
+@@ -805,7 +807,11 @@ TLS_initiate(SSL_CTX* sslctx, int fd, const char* urlname, int use_sni)
+ 		}
+ 		/* wants to be called again */
+ 	}
++#ifdef HAVE_SSL_GET1_PEER_CERTIFICATE
++	x = SSL_get1_peer_certificate(ssl);
++#else
+ 	x = SSL_get_peer_certificate(ssl);
++#endif
+ 	if(!x) {
+ 		if(verb) printf("Server presented no peer certificate\n");
+ 		SSL_free(ssl);
+@@ -1835,15 +1841,49 @@ verify_p7sig(BIO* data, BIO* p7s, STACK_OF(X509)* trust, const char* p7signer)
+ 	return secure;
+ }
+ 
++/** open a temp file */
++static FILE*
++tempfile_open(char* tempf, size_t tempflen, const char* fname, const char* mode)
++{
++	snprintf(tempf, tempflen, "%s~", fname);
++	return fopen(tempf, mode);
++}
++
++/** close an open temp file and replace the original with it */
++static void
++tempfile_close(FILE* fd, const char* tempf, const char* fname)
++{
++	fflush(fd);
++#ifdef HAVE_FSYNC
++	fsync(fileno(fd));
++#else
++	FlushFileBuffers((HANDLE)_get_osfhandle(_fileno(fd)));
++#endif
++	if(fclose(fd) != 0) {
++		printf("could not complete write: %s: %s\n",
++			tempf, strerror(errno));
++		unlink(tempf);
++		return;
++	}
++	/* success; overwrite actual file */
++#ifdef USE_WINSOCK
++	(void)unlink(fname); /* windows does not replace file with rename() */
++#endif
++	if(rename(tempf, fname) < 0) {
++		printf("rename(%s to %s): %s", tempf, fname, strerror(errno));
++	}
++}
++
+ /** write unsigned root anchor file, a 5011 revoked tp */
+ static void
+ write_unsigned_root(const char* root_anchor_file)
+ {
+ 	FILE* out;
+ 	time_t now = time(NULL);
+-	out = fopen(root_anchor_file, "w");
++	char tempf[2048];
++	out = tempfile_open(tempf, sizeof(tempf), root_anchor_file, "w");
+ 	if(!out) {
+-		if(verb) printf("%s: %s\n", root_anchor_file, strerror(errno));
++		if(verb) printf("%s: %s\n", tempf, strerror(errno));
+ 		return;
+ 	}
+ 	if(fprintf(out, "; autotrust trust anchor file\n"
+@@ -1858,13 +1898,7 @@ write_unsigned_root(const char* root_anchor_file)
+ 			root_anchor_file);
+ 		if(verb && errno != 0) printf("%s\n", strerror(errno));
+ 	}
+-	fflush(out);
+-#ifdef HAVE_FSYNC
+-	fsync(fileno(out));
+-#else
+-	FlushFileBuffers((HANDLE)_get_osfhandle(_fileno(out)));
+-#endif
+-	fclose(out);
++	tempfile_close(out, tempf, root_anchor_file);
+ }
+ 
+ /** write root anchor file */
+@@ -1874,29 +1908,24 @@ write_root_anchor(const char* root_anchor_file, BIO* ds)
+ 	char* pp = NULL;
+ 	int len;
+ 	FILE* out;
++	char tempf[2048];
+ 	(void)BIO_seek(ds, 0);
+ 	len = BIO_get_mem_data(ds, &pp);
+ 	if(!len || !pp) {
+ 		if(verb) printf("out of memory\n");
+ 		return;
+ 	}
+-	out = fopen(root_anchor_file, "w");
++	out = tempfile_open(tempf, sizeof(tempf), root_anchor_file, "w");
+ 	if(!out) {
+-		if(verb) printf("%s: %s\n", root_anchor_file, strerror(errno));
++		if(verb) printf("%s: %s\n", tempf, strerror(errno));
+ 		return;
+ 	}
+ 	if(fwrite(pp, (size_t)len, 1, out) != 1) {
+ 		if(verb) printf("failed to write all data to %s\n",
+-			root_anchor_file);
++			tempf);
+ 		if(verb && errno != 0) printf("%s\n", strerror(errno));
+ 	}
+-	fflush(out);
+-#ifdef HAVE_FSYNC
+-	fsync(fileno(out));
+-#else
+-	FlushFileBuffers((HANDLE)_get_osfhandle(_fileno(out)));
+-#endif
+-	fclose(out);
++	tempfile_close(out, tempf, root_anchor_file);
+ }
+ 
+ /** Perform the verification and update of the trustanchor file */
+@@ -2040,18 +2069,19 @@ try_read_anchor(const char* file)
+ static void
+ write_builtin_anchor(const char* file)
+ {
++	char tempf[2048];
+ 	const char* builtin_root_anchor = get_builtin_ds();
+-	FILE* out = fopen(file, "w");
++	FILE* out = tempfile_open(tempf, sizeof(tempf), file, "w");
+ 	if(!out) {
+ 		printf("could not write builtin anchor, to file %s: %s\n",
+-			file, strerror(errno));
++			tempf, strerror(errno));
+ 		return;
+ 	}
+ 	if(!fwrite(builtin_root_anchor, strlen(builtin_root_anchor), 1, out)) {
+ 		printf("could not complete write builtin anchor, to file %s: %s\n",
+-			file, strerror(errno));
++			tempf, strerror(errno));
+ 	}
+-	fclose(out);
++	tempfile_close(out, tempf, file);
+ }
+ 
+ /** 
+diff --git a/smallapp/unbound-checkconf.c b/smallapp/unbound-checkconf.c
+index 8b45578fa..6cc5285ec 100644
+--- a/smallapp/unbound-checkconf.c
++++ b/smallapp/unbound-checkconf.c
+@@ -88,6 +88,7 @@ usage(void)
+ 	printf("file	if omitted %s is used.\n", CONFIGFILE);
+ 	printf("-o option	print value of option to stdout.\n");
+ 	printf("-f 		output full pathname with chroot applied, eg. with -o pidfile.\n");
++	printf("-q 		quiet (suppress output on success).\n");
+ 	printf("-h		show this usage help.\n");
+ 	printf("Version %s\n", PACKAGE_VERSION);
+ 	printf("BSD licensed, see LICENSE in source package for details.\n");
+@@ -139,10 +140,13 @@ check_mod(struct config_file* cfg, struct module_func_block* fb)
+ 		fatal_exit("out of memory");
+ 	if(!edns_known_options_init(&env))
+ 		fatal_exit("out of memory");
+-	if(!(*fb->init)(&env, 0)) {
+-		fatal_exit("bad config for %s module", fb->name);
+-	}
++	if(fb->startup && !(*fb->startup)(&env, 0))
++		fatal_exit("bad config during startup for %s module", fb->name);
++	if(!(*fb->init)(&env, 0))
++		fatal_exit("bad config during init for %s module", fb->name);
+ 	(*fb->deinit)(&env, 0);
++	if(fb->destartup)
++		(*fb->destartup)(&env, 0);
+ 	sldns_buffer_free(env.scratch_buffer);
+ 	regional_destroy(env.scratch);
+ 	edns_known_options_delete(&env);
+@@ -965,7 +969,7 @@ check_auth(struct config_file* cfg)
+ 
+ /** check config file */
+ static void
+-checkconf(const char* cfgfile, const char* opt, int final)
++checkconf(const char* cfgfile, const char* opt, int final, int quiet)
+ {
+ 	char oldwd[4096];
+ 	struct config_file* cfg = config_create();
+@@ -998,7 +1002,7 @@ checkconf(const char* cfgfile, const char* opt, int final)
+ 	check_fwd(cfg);
+ 	check_hints(cfg);
+ 	check_auth(cfg);
+-	printf("unbound-checkconf: no errors in %s\n", cfgfile);
++	if(!quiet) { printf("unbound-checkconf: no errors in %s\n", cfgfile); }
+ 	config_delete(cfg);
+ }
+ 
+@@ -1012,6 +1016,7 @@ int main(int argc, char* argv[])
+ {
+ 	int c;
+ 	int final = 0;
++	int quiet = 0;
+ 	const char* f;
+ 	const char* opt = NULL;
+ 	const char* cfgfile = CONFIGFILE;
+@@ -1024,7 +1029,7 @@ int main(int argc, char* argv[])
+ 		cfgfile = CONFIGFILE;
+ #endif /* USE_WINSOCK */
+ 	/* parse the options */
+-	while( (c=getopt(argc, argv, "fho:")) != -1) {
++	while( (c=getopt(argc, argv, "fhqo:")) != -1) {
+ 		switch(c) {
+ 		case 'f':
+ 			final = 1;
+@@ -1032,6 +1037,9 @@ int main(int argc, char* argv[])
+ 		case 'o':
+ 			opt = optarg;
+ 			break;
++		case 'q':
++			quiet = 1;
++			break;
+ 		case '?':
+ 		case 'h':
+ 		default:
+@@ -1045,7 +1053,7 @@ int main(int argc, char* argv[])
+ 	if(argc == 1)
+ 		f = argv[0];
+ 	else	f = cfgfile;
+-	checkconf(f, opt, final);
++	checkconf(f, opt, final, quiet);
+ 	checklock_stop();
+ 	return 0;
+ }

@@ -1,0 +1,206 @@
+diff --git a/ext/date/tests/bug-gh11416.phpt b/ext/date/tests/bug-gh11416.phpt
+index aa86116f..f3746fa6 100644
+--- a/ext/date/tests/bug-gh11416.phpt
++++ b/ext/date/tests/bug-gh11416.phpt
+@@ -5,7 +5,6 @@ date.timezone=UTC
+ --FILE--
+ <?php
+ $now = new DateTimeImmutable();
+-$simpleInterval = new DateInterval("P2D");
+ 
+ $date = (new ReflectionClass(DateTime::class))->newInstanceWithoutConstructor();
+ try {
+@@ -21,50 +20,9 @@ try {
+ 	echo get_class($e), ': ', $e->getMessage(), "\n";
+ }
+ 
+-$date = (new ReflectionClass(DateTime::class))->newInstanceWithoutConstructor();
+-$dateperiod = (new ReflectionClass(DatePeriod::class))->newInstanceWithoutConstructor();
+-$dateinterval = (new ReflectionClass(DateInterval::class))->newInstanceWithoutConstructor();
+-try {
+-	$dateperiod->__unserialize(['start' => $date]);
+-} catch (Error $e) {
+-	echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-	$dateperiod->__unserialize(['start' => $now, 'end' => $date]);
+-} catch (Error $e) {
+-	echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-	$dateperiod->__unserialize(['start' => $now, 'end' => $now, 'current' => $date]);
+-} catch (Error $e) {
+-	echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-	$dateperiod->__unserialize(['start' => $now, 'end' => $now, 'current' => $now, 'interval' => $dateinterval]);
+-} catch (Error $e) {
+-	echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+-
+-try {
+-	$dateperiod->__unserialize([
+-		'start' => $now, 'end' => $now, 'current' => $now, 'interval' => $simpleInterval,
+-		'recurrences' => 2, 'include_start_date' => true, 'include_end_date' => true,
+-	]);
+-	echo "DatePeriod::__unserialize: SUCCESS\n";
+-} catch (Error $e) {
+-	echo get_class($e), ': ', $e->getMessage(), "\n";
+-}
+ echo "OK\n";
+ ?>
+ --EXPECT--
+ Error: The DateTimeInterface object has not been correctly initialized by its constructor
+ Error: The DateTimeInterface object has not been correctly initialized by its constructor
+-Error: Invalid serialization data for DatePeriod object
+-Error: Invalid serialization data for DatePeriod object
+-Error: Invalid serialization data for DatePeriod object
+-Error: Invalid serialization data for DatePeriod object
+-DatePeriod::__unserialize: SUCCESS
+ OK
+diff --git a/ext/date/tests/bug-gh11600.phpt b/ext/date/tests/bug-gh11600.phpt
+deleted file mode 100644
+index 66897362..00000000
+--- a/ext/date/tests/bug-gh11600.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Bug GH-11600: Intl patterns are not parseable DateTime Strings
+---EXTENSIONS--
+-intl
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-$formatter = new IntlDateFormatter('en_US', -1, 3);
+-$pattern = $formatter->getPattern();
+-
+-$timeString = $formatter->format(strtotime('2023-07-11 16:02'));
+-
+-$timestamp = strtotime("2023-07-11 {$timeString}");
+-
+-var_dump($pattern, $timeString, $timestamp);
+-?>
+---EXPECTF--
+-string(%d) "h:mm%sa"
+-string(%d) "4:02%sPM"
+-int(1689091320)
+diff --git a/ext/date/tests/bug40861.phpt b/ext/date/tests/bug40861.phpt
+index 224d8eb0..d4ef9619 100644
+--- a/ext/date/tests/bug40861.phpt
++++ b/ext/date/tests/bug40861.phpt
+@@ -28,6 +28,6 @@ echo $result . "\n";
+ ?>
+ --EXPECT--
+ 2000-01-01 13:00:00
+-2000-01-01 13:00:00
+ 2000-01-01 11:00:00
+ 2000-01-01 13:00:00
++2000-01-01 13:00:00
+diff --git a/ext/date/tests/bug45543.phpt b/ext/date/tests/bug45543.phpt
+index b96428a3..1fdb23d4 100644
+--- a/ext/date/tests/bug45543.phpt
++++ b/ext/date/tests/bug45543.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Test for bug #45543: DateTime::setTimezone cannot set timezones without ID.
++Test for bug #45543: DateTime::setTimezone can not set timezones without ID.
+ --INI--
+ date.timezone=UTC
+ --FILE--
+diff --git a/ext/date/tests/bug45682.phpt b/ext/date/tests/bug45682.phpt
+index 84178aad..636381dc 100644
+--- a/ext/date/tests/bug45682.phpt
++++ b/ext/date/tests/bug45682.phpt
+@@ -13,7 +13,7 @@ $diff = date_diff($date, $other);
+ var_dump($diff);
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -28,10 +28,22 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(3)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug48678.phpt b/ext/date/tests/bug48678.phpt
+index 3934b187..9c1cecd2 100644
+--- a/ext/date/tests/bug48678.phpt
++++ b/ext/date/tests/bug48678.phpt
+@@ -17,9 +17,15 @@ DateInterval Object
+     [i] => 30
+     [s] => 5
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+ DateInterval Object
+ (
+@@ -30,7 +36,13 @@ DateInterval Object
+     [i] => 30
+     [s] => 5
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug49081.phpt b/ext/date/tests/bug49081.phpt
+index 6f98041e..b5d17a6c 100644
+--- a/ext/date/tests/bug49081.phpt
++++ b/ext/date/tests/bug49081.phpt
+@@ -18,7 +18,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 30
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )

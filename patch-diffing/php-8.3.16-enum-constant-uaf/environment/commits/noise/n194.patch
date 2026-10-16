@@ -1,0 +1,223 @@
+diff --git a/ext/mysqli/tests/mysqli_stmt_get_result_types.phpt b/ext/mysqli/tests/mysqli_stmt_get_result_types.phpt
+index d1ac2080..b8e0a7a7 100644
+--- a/ext/mysqli/tests/mysqli_stmt_get_result_types.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_get_result_types.phpt
+@@ -164,7 +164,7 @@ mysqli
+     func_mysqli_stmt_get_result($link, $engine, "d", "FLOAT UNSIGNED", 18446744073709551615 + 1.1, 640);
+     func_mysqli_stmt_get_result($link, $engine, "d", "FLOAT UNSIGNED ", NULL, 660);
+ 
+-    // Yes, we need the temporary variable. The PHP casting will foul us otherwise.
++    // Yes, we need the temporary variable. The PHP casting will fouls us otherwise.
+     $tmp = strval('-99999999.99');
+     func_mysqli_stmt_get_result($link, $engine, "d", "DOUBLE(10,2)", $tmp, 680, "string");
+     func_mysqli_stmt_get_result($link, $engine, "d", "DOUBLE(10,2)", NULL, 700);
+diff --git a/ext/mysqli/tests/mysqli_stmt_get_warnings.phpt b/ext/mysqli/tests/mysqli_stmt_get_warnings.phpt
+index e3729778..0dadb7bb 100644
+--- a/ext/mysqli/tests/mysqli_stmt_get_warnings.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_get_warnings.phpt
+@@ -4,9 +4,11 @@ mysqli_stmt_get_warnings() - TODO
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
++require_once('skipifconnectfailure.inc');
+ 
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++require_once("connect.inc");
++
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+     die(sprintf("skip Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+         $host, $user, $db, $port, $socket));
+ }
+@@ -22,7 +24,9 @@ mysqli_query($link, "DROP TABLE IF EXISTS test");
+ ?>
+ --FILE--
+ <?php
+-    require 'table.inc';
++    require_once("connect.inc");
++
++    require('table.inc');
+ 
+     if (!$stmt = mysqli_stmt_init($link))
+         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+@@ -93,7 +97,7 @@ mysqli_query($link, "DROP TABLE IF EXISTS test");
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli_stmt object is not fully initialized
+diff --git a/ext/mysqli/tests/mysqli_stmt_multires.phpt b/ext/mysqli/tests/mysqli_stmt_multires.phpt
+index 9d883ff3..496fca4e 100644
+--- a/ext/mysqli/tests/mysqli_stmt_multires.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_multires.phpt
+@@ -4,11 +4,16 @@ Multiple result set with PS
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "skipifconnectfailure.inc";
++require_once("connect.inc");
++if (!$IS_MYSQLND) {
++    die("skip mysqlnd only test");
++}
++require_once('skipifconnectfailure.inc');
+ ?>
+ --FILE--
+ <?php
+-    require 'table.inc';
++    require_once("connect.inc");
++    require('table.inc');
+ 
+     $stmt = mysqli_stmt_init($link);
+     if (!$link->query('DROP PROCEDURE IF EXISTS p123')) {
+diff --git a/ext/mysqli/tests/mysqli_stmt_num_rows.phpt b/ext/mysqli/tests/mysqli_stmt_num_rows.phpt
+index 088ce3fd..252f3954 100644
+--- a/ext/mysqli/tests/mysqli_stmt_num_rows.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_num_rows.phpt
+@@ -80,10 +80,10 @@ require_once('skipifconnectfailure.inc');
+         What the test does is cover an implementation detail of the mysqlnd library.
+         This implementation detail may, at any time, change without prior notice.
+         On the contrary, the mysqlnd way is a reasonable one and, maybe, one fine
+-        day, after Klingons visited earth, becomes the official one. Meanwhile, do
++        day, after Klingons visited earh, becomes the official one. Meanwhile do
+         not rely on it.
+         */
+-        if (7 !== ($tmp = mysqli_stmt_num_rows($stmt)))
++        if ($IS_MYSQLND && (7 !== ($tmp = mysqli_stmt_num_rows($stmt))))
+             printf("[54] Expecting int/7, got %s/%s\n", gettype($tmp), $tmp);
+ 
+     } else {
+diff --git a/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_libmysql.phpt b/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_libmysql.phpt
+new file mode 100644
+index 00000000..21b0e462
+--- /dev/null
++++ b/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_libmysql.phpt
+@@ -0,0 +1,98 @@
++--TEST--
++mysqli_stmt_send_long_data() - exceed packet size, libmysql - bug #26824
++--EXTENSIONS--
++mysqli
++--SKIPIF--
++<?php
++require_once('skipifconnectfailure.inc');
++
++if (stristr(mysqli_get_client_info(), 'mysqlnd'))
++    die("skip: test for libmysql");
++?>
++--FILE--
++<?php
++    require('table.inc');
++
++    if (!$stmt = mysqli_stmt_init($link))
++        printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    if (!mysqli_query($link, "DROP TABLE IF EXISTS test"))
++        printf("[002] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    if (!mysqli_query($link, sprintf("CREATE TABLE test(id INT NOT NULL AUTO_INCREMENT, label LONGBLOB, PRIMARY KEY(id)) ENGINE = %s", $engine)))
++        printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    if (!mysqli_stmt_prepare($stmt, "INSERT INTO test(id, label) VALUES (?, ?)"))
++        printf("[004] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++
++    $id = null;
++    $label = null;
++    if (!mysqli_stmt_bind_param($stmt, "ib", $id, $label))
++        printf("[005] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++
++    if (!$res = mysqli_query($link, "SHOW VARIABLES LIKE 'max_allowed_packet'"))
++        printf("[006] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    if (!$row = mysqli_fetch_assoc($res))
++        printf("[007] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
++
++    mysqli_free_result($res);
++
++    if (0 === ($max_allowed_packet = (int)$row['Value']))
++        printf("[008] Cannot determine max_allowed_packet size and/or bogus max_allowed_packet setting used.\n");
++
++    // let's ignore upper limits for LONGBLOB (2^32) ...
++    // maximum packet size up to which we test is 10M
++    $tmp = '';
++    $blob = '';
++    for ($i = 0; $i < 1024; $i++) {
++        $tmp .= 'a';
++    }
++
++    $limit = min(floor($max_allowed_packet / 1024 / 2), 10240);
++    for ($i = 0; $i < $limit; $i++)
++        $blob .= $tmp;
++
++    assert(strlen($blob) <= $max_allowed_packet);
++
++    if (true != ($tmp = mysqli_stmt_send_long_data($stmt, 1, $blob)))
++        printf("[009] Expecting boolean/true, got %s/%s. [%d] %s\n",
++            gettype($tmp), $tmp, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++
++    $id = 1;
++    if (true !== mysqli_stmt_execute($stmt))
++        printf("[010] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++
++    /*
++    TODO - we skip this part of the test for now, because of bugs.mysql.com/26824
++    if (floor($max_allowed_packet / 1024 / 2) <= 10240) {
++            // test with a blob smaller than 10M allows us to test
++            // for too long packages without wasting too much memory
++            $limit = $max_allowed_packet - strlen($blob) + 1;
++            $blob2 = $blob;
++            for ($i = 0; $i < $limit; $i++)
++                    $blob2 .= 'b';
++
++            assert(strlen($blob2) > $max_allowed_packet);
++
++            if (true != ($tmp = mysqli_stmt_send_long_data($stmt, 1, $blob2)))
++                    printf("[011] Expecting boolean/false, got %s/%s. [%d] %s\n",
++                            gettype($tmp), $tmp, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++
++            $id = 2;
++            if (false !== ($tmp = mysqli_stmt_execute($stmt)))
++                    printf("[012] Expecting boolean/false, got %s/%s, [%d] %s\n",
++                            gettype($tmp), $tmp, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
++    }
++    */
++    mysqli_stmt_close($stmt);
++    mysqli_close($link);
++
++    print "done!";
++?>
++--CLEAN--
++<?php
++    require_once("clean_table.inc");
++?>
++--EXPECT--
++done!
+diff --git a/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_mysqlnd.phpt b/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_mysqlnd.phpt
+index eafdfd43..07c2e144 100644
+--- a/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_mysqlnd.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_send_long_data_packet_size_mysqlnd.phpt
+@@ -5,6 +5,9 @@ mysqli
+ --SKIPIF--
+ <?php
+ require_once('skipifconnectfailure.inc');
++
++if (!stristr(mysqli_get_client_info(), 'mysqlnd'))
++    die("skip: warnings only available in mysqlnd");
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/mysqli/tests/mysqli_store_result_copy.phpt b/ext/mysqli/tests/mysqli_store_result_copy.phpt
+index d48701ca..6cf9490c 100644
+--- a/ext/mysqli/tests/mysqli_store_result_copy.phpt
++++ b/ext/mysqli/tests/mysqli_store_result_copy.phpt
+@@ -5,6 +5,9 @@ mysqli
+ --SKIPIF--
+ <?php
+ require_once('skipifconnectfailure.inc');
++if (!$IS_MYSQLND) {
++    die("SKIP mysqlnd only test");
++}
+ ?>
+ --INI--
+ mysqlnd.debug="d:t:O,{TMP}/mysqlnd.trace"

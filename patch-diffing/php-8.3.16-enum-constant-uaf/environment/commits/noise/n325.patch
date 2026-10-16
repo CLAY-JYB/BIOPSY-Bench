@@ -1,0 +1,3693 @@
+diff --git a/ext/standard/base64.c b/ext/standard/base64.c
+index 38934388..7a237d09 100644
+--- a/ext/standard/base64.c
++++ b/ext/standard/base64.c
+@@ -51,7 +51,7 @@ static const short base64_reverse_table[256] = {
+ };
+ /* }}} */
+ 
+-#if defined(__aarch64__) || defined(_M_ARM64)
++#ifdef __aarch64__
+ #include <arm_neon.h>
+ 
+ static zend_always_inline uint8x16_t encode_toascii(const uint8x16_t input, const uint8x16x2_t shift_LUT)
+@@ -118,11 +118,11 @@ static zend_always_inline unsigned char *neon_base64_encode(const unsigned char
+ 	*left = inl;
+ 	return out;
+ }
+-#endif /* defined(__aarch64__) || defined(_M_ARM64) */
++#endif /* __aarch64__ */
+ 
+ static zend_always_inline unsigned char *php_base64_encode_impl(const unsigned char *in, size_t inl, unsigned char *out) /* {{{ */
+ {
+-#if defined(__aarch64__) || defined(_M_ARM64)
++#ifdef __aarch64__
+ 	if (inl >= 16 * 3) {
+ 		size_t left = 0;
+ 		out = neon_base64_encode(in, inl, out, &left);
+@@ -161,7 +161,7 @@ static zend_always_inline unsigned char *php_base64_encode_impl(const unsigned c
+ }
+ /* }}} */
+ 
+-#if defined(__aarch64__) || defined(_M_ARM64)
++#ifdef __aarch64__
+ static zend_always_inline uint8x16_t decode_fromascii(const uint8x16_t input, uint8x16_t *error, const uint8x16x2_t shiftLUT, const uint8x16x2_t maskLUT, const uint8x16x2_t bitposLUT) {
+ 	const uint8x16_t higher_nibble = vshrq_n_u8(input, 4);
+ 	const uint8x16_t lower_nibble = vandq_u8(input, vdupq_n_u8(0x0f));
+@@ -241,14 +241,14 @@ static zend_always_inline size_t neon_base64_decode(const unsigned char *in, siz
+ 	*left = inl;
+ 	return out - out_orig;
+ }
+-#endif /* defined(__aarch64__) || defined(_M_ARM64) */
++#endif /* __aarch64__ */
+ 
+ static zend_always_inline int php_base64_decode_impl(const unsigned char *in, size_t inl, unsigned char *out, size_t *outl, bool strict) /* {{{ */
+ {
+ 	int ch;
+ 	size_t i = 0, padding = 0, j = *outl;
+ 
+-#if defined(__aarch64__) || defined(_M_ARM64)
++#ifdef __aarch64__
+ 	if (inl >= 16 * 4) {
+ 		size_t left = 0;
+ 		j += neon_base64_decode(in, inl, out, &left);
+diff --git a/ext/standard/basic_functions.c b/ext/standard/basic_functions.c
+index 6967307d..1e50a37f 100755
+--- a/ext/standard/basic_functions.c
++++ b/ext/standard/basic_functions.c
+@@ -21,21 +21,18 @@
+ #include "php_globals.h"
+ #include "php_variables.h"
+ #include "php_ini.h"
+-#include "php_image.h"
+ #include "php_standard.h"
+ #include "php_math.h"
+ #include "php_http.h"
+ #include "php_incomplete_class.h"
+ #include "php_getopt.h"
+-#include "php_ext_syslog.h"
+ #include "ext/standard/info.h"
+ #include "ext/session/php_session.h"
+ #include "zend_exceptions.h"
+-#include "zend_attributes.h"
+-#include "zend_ini.h"
+ #include "zend_operators.h"
+ #include "ext/standard/php_dns.h"
+ #include "ext/standard/php_uuencode.h"
++#include "ext/standard/php_mt_rand.h"
+ #include "ext/standard/crc32_x86.h"
+ 
+ #ifdef PHP_WIN32
+@@ -70,22 +67,22 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
+ #include "win32/inet.h"
+ #endif
+ 
+-#ifdef HAVE_ARPA_INET_H
++#if HAVE_ARPA_INET_H
+ # include <arpa/inet.h>
+ #endif
+ 
+-#ifdef HAVE_UNISTD_H
++#if HAVE_UNISTD_H
+ # include <unistd.h>
+ #endif
+ 
+ #include <string.h>
+ #include <locale.h>
+ 
+-#ifdef HAVE_SYS_MMAN_H
++#if HAVE_SYS_MMAN_H
+ # include <sys/mman.h>
+ #endif
+ 
+-#ifdef HAVE_SYS_LOADAVG_H
++#if HAVE_SYS_LOADAVG_H
+ # include <sys/loadavg.h>
+ #endif
+ 
+@@ -94,7 +91,7 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
+ #endif
+ 
+ #ifndef INADDR_NONE
+-# define INADDR_NONE ((zend_ulong) -1)
++#define INADDR_NONE ((zend_ulong) -1)
+ #endif
+ 
+ #include "zend_globals.h"
+@@ -152,13 +149,13 @@ zend_module_entry basic_functions_module = { /* {{{ */
+ };
+ /* }}} */
+ 
+-#ifdef HAVE_PUTENV
++#if defined(HAVE_PUTENV)
+ static void php_putenv_destructor(zval *zv) /* {{{ */
+ {
+ 	putenv_entry *pe = Z_PTR_P(zv);
+ 
+ 	if (pe->previous_value) {
+-# ifdef PHP_WIN32
++# if defined(PHP_WIN32)
+ 		/* MSVCRT has a bug in putenv() when setting a variable that
+ 		 * is already set; if the SetEnvironmentVariable() API call
+ 		 * fails, the Crt will double free() a string.
+@@ -166,11 +163,11 @@ static void php_putenv_destructor(zval *zv) /* {{{ */
+ 		SetEnvironmentVariable(ZSTR_VAL(pe->key), "bugbug");
+ # endif
+ 		putenv(pe->previous_value);
+-# ifdef PHP_WIN32
++# if defined(PHP_WIN32)
+ 		efree(pe->previous_value);
+ # endif
+ 	} else {
+-# ifdef HAVE_UNSETENV
++# if HAVE_UNSETENV
+ 		unsetenv(ZSTR_VAL(pe->key));
+ # elif defined(PHP_WIN32)
+ 		SetEnvironmentVariable(ZSTR_VAL(pe->key), NULL);
+@@ -206,7 +203,11 @@ static void php_putenv_destructor(zval *zv) /* {{{ */
+ 
+ static void basic_globals_ctor(php_basic_globals *basic_globals_p) /* {{{ */
+ {
++	BG(mt_rand_is_seeded) = 0;
++	BG(mt_rand_mode) = MT_RAND_MT19937;
+ 	BG(umask) = -1;
++	BG(next) = NULL;
++	BG(left) = -1;
+ 	BG(user_tick_functions) = NULL;
+ 	BG(user_filter_map) = NULL;
+ 	BG(serialize_lock) = 0;
+@@ -281,29 +282,78 @@ PHP_MINIT_FUNCTION(basic) /* {{{ */
+ {
+ #ifdef ZTS
+ 	ts_allocate_id(&basic_globals_id, sizeof(php_basic_globals), (ts_allocate_ctor) basic_globals_ctor, (ts_allocate_dtor) basic_globals_dtor);
+-# ifdef PHP_WIN32
++#ifdef PHP_WIN32
+ 	ts_allocate_id(&php_win32_core_globals_id, sizeof(php_win32_core_globals), (ts_allocate_ctor)php_win32_core_globals_ctor, (ts_allocate_dtor)php_win32_core_globals_dtor );
+-# endif
++#endif
+ #else
+ 	basic_globals_ctor(&basic_globals);
+-# ifdef PHP_WIN32
++#ifdef PHP_WIN32
+ 	php_win32_core_globals_ctor(&the_php_win32_core_globals);
+-# endif
+ #endif
+-
+-	register_basic_functions_symbols(module_number);
++#endif
+ 
+ 	php_ce_incomplete_class = register_class___PHP_Incomplete_Class();
+ 	php_register_incomplete_class_handlers();
+ 
+ 	assertion_error_ce = register_class_AssertionError(zend_ce_error);
+ 
+-#ifdef ENABLE_TEST_CLASS
++	REGISTER_LONG_CONSTANT("CONNECTION_ABORTED", PHP_CONNECTION_ABORTED, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("CONNECTION_NORMAL",  PHP_CONNECTION_NORMAL,  CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("CONNECTION_TIMEOUT", PHP_CONNECTION_TIMEOUT, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("INI_USER",   ZEND_INI_USER,   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("INI_PERDIR", ZEND_INI_PERDIR, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("INI_SYSTEM", ZEND_INI_SYSTEM, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("INI_ALL",    ZEND_INI_ALL,    CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("INI_SCANNER_NORMAL", ZEND_INI_SCANNER_NORMAL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("INI_SCANNER_RAW",    ZEND_INI_SCANNER_RAW,    CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("INI_SCANNER_TYPED",  ZEND_INI_SCANNER_TYPED,  CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("PHP_URL_SCHEME", PHP_URL_SCHEME, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_HOST", PHP_URL_HOST, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_PORT", PHP_URL_PORT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_USER", PHP_URL_USER, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_PASS", PHP_URL_PASS, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_PATH", PHP_URL_PATH, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_QUERY", PHP_URL_QUERY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_URL_FRAGMENT", PHP_URL_FRAGMENT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_QUERY_RFC1738", PHP_QUERY_RFC1738, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_QUERY_RFC3986", PHP_QUERY_RFC3986, CONST_CS | CONST_PERSISTENT);
++
++#define REGISTER_MATH_CONSTANT(x)  REGISTER_DOUBLE_CONSTANT(#x, x, CONST_CS | CONST_PERSISTENT)
++	REGISTER_MATH_CONSTANT(M_E);
++	REGISTER_MATH_CONSTANT(M_LOG2E);
++	REGISTER_MATH_CONSTANT(M_LOG10E);
++	REGISTER_MATH_CONSTANT(M_LN2);
++	REGISTER_MATH_CONSTANT(M_LN10);
++	REGISTER_MATH_CONSTANT(M_PI);
++	REGISTER_MATH_CONSTANT(M_PI_2);
++	REGISTER_MATH_CONSTANT(M_PI_4);
++	REGISTER_MATH_CONSTANT(M_1_PI);
++	REGISTER_MATH_CONSTANT(M_2_PI);
++	REGISTER_MATH_CONSTANT(M_SQRTPI);
++	REGISTER_MATH_CONSTANT(M_2_SQRTPI);
++	REGISTER_MATH_CONSTANT(M_LNPI);
++	REGISTER_MATH_CONSTANT(M_EULER);
++	REGISTER_MATH_CONSTANT(M_SQRT2);
++	REGISTER_MATH_CONSTANT(M_SQRT1_2);
++	REGISTER_MATH_CONSTANT(M_SQRT3);
++	REGISTER_DOUBLE_CONSTANT("INF", ZEND_INFINITY, CONST_CS | CONST_PERSISTENT);
++	REGISTER_DOUBLE_CONSTANT("NAN", ZEND_NAN, CONST_CS | CONST_PERSISTENT);
++
++	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_UP", PHP_ROUND_HALF_UP, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_DOWN", PHP_ROUND_HALF_DOWN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_EVEN", PHP_ROUND_HALF_EVEN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_ODD", PHP_ROUND_HALF_ODD, CONST_CS | CONST_PERSISTENT);
++
++#if ENABLE_TEST_CLASS
+ 	test_class_startup();
+ #endif
+ 
+ 	register_phpinfo_constants(INIT_FUNC_ARGS_PASSTHRU);
+ 	register_html_constants(INIT_FUNC_ARGS_PASSTHRU);
++	register_string_constants(INIT_FUNC_ARGS_PASSTHRU);
+ 
+ 	BASIC_MINIT_SUBMODULE(var)
+ 	BASIC_MINIT_SUBMODULE(file)
+@@ -312,28 +362,30 @@ PHP_MINIT_FUNCTION(basic) /* {{{ */
+ 	BASIC_MINIT_SUBMODULE(standard_filters)
+ 	BASIC_MINIT_SUBMODULE(user_filters)
+ 	BASIC_MINIT_SUBMODULE(password)
++	BASIC_MINIT_SUBMODULE(mt_rand)
+ 
+-#ifdef ZTS
++#if defined(ZTS)
+ 	BASIC_MINIT_SUBMODULE(localeconv)
+ #endif
+ 
+-#ifdef HAVE_NL_LANGINFO
++#if defined(HAVE_NL_LANGINFO)
+ 	BASIC_MINIT_SUBMODULE(nl_langinfo)
+ #endif
+ 
+-#ifdef ZEND_INTRIN_SSE4_2_FUNC_PTR
++#if ZEND_INTRIN_SSE4_2_FUNC_PTR
+ 	BASIC_MINIT_SUBMODULE(string_intrin)
+ #endif
+ 
+-#ifdef ZEND_INTRIN_SSE4_2_PCLMUL_FUNC_PTR
++#if ZEND_INTRIN_SSE4_2_PCLMUL_FUNC_PTR
+ 	BASIC_MINIT_SUBMODULE(crc32_x86_intrin)
+ #endif
+ 
+-#if defined(ZEND_INTRIN_AVX2_FUNC_PTR) || defined(ZEND_INTRIN_SSSE3_FUNC_PTR)
++#if ZEND_INTRIN_AVX2_FUNC_PTR || ZEND_INTRIN_SSSE3_FUNC_PTR
+ 	BASIC_MINIT_SUBMODULE(base64_intrin)
+ #endif
+ 
+ 	BASIC_MINIT_SUBMODULE(crypt)
++	BASIC_MINIT_SUBMODULE(lcg)
+ 
+ 	BASIC_MINIT_SUBMODULE(dir)
+ #ifdef HAVE_SYSLOG_H
+@@ -348,6 +400,7 @@ PHP_MINIT_FUNCTION(basic) /* {{{ */
+ 	BASIC_MINIT_SUBMODULE(exec)
+ 
+ 	BASIC_MINIT_SUBMODULE(user_streams)
++	BASIC_MINIT_SUBMODULE(imagetypes)
+ 
+ 	php_register_url_stream_wrapper("php", &php_stream_php_wrapper);
+ 	php_register_url_stream_wrapper("file", &php_plain_files_wrapper);
+@@ -358,6 +411,14 @@ PHP_MINIT_FUNCTION(basic) /* {{{ */
+ 	php_register_url_stream_wrapper("http", &php_stream_http_wrapper);
+ 	php_register_url_stream_wrapper("ftp", &php_stream_ftp_wrapper);
+ 
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
++# if defined(PHP_WIN32) || HAVE_FULL_DNS_FUNCS
++	BASIC_MINIT_SUBMODULE(dns)
++# endif
++#endif
++
++	BASIC_MINIT_SUBMODULE(random)
++
+ 	BASIC_MINIT_SUBMODULE(hrtime)
+ 
+ 	return SUCCESS;
+@@ -391,10 +452,11 @@ PHP_MSHUTDOWN_FUNCTION(basic) /* {{{ */
+ 	BASIC_MSHUTDOWN_SUBMODULE(url_scanner_ex)
+ 	BASIC_MSHUTDOWN_SUBMODULE(file)
+ 	BASIC_MSHUTDOWN_SUBMODULE(standard_filters)
+-#ifdef ZTS
++#if defined(ZTS)
+ 	BASIC_MSHUTDOWN_SUBMODULE(localeconv)
+ #endif
+ 	BASIC_MSHUTDOWN_SUBMODULE(crypt)
++	BASIC_MSHUTDOWN_SUBMODULE(random)
+ 	BASIC_MSHUTDOWN_SUBMODULE(password)
+ 
+ 	return SUCCESS;
+@@ -456,6 +518,8 @@ PHP_RSHUTDOWN_FUNCTION(basic) /* {{{ */
+ 	tsrm_env_unlock();
+ #endif
+ 
++	BG(mt_rand_is_seeded) = 0;
++
+ 	if (BG(umask) != -1) {
+ 		umask(BG(umask));
+ 	}
+@@ -812,7 +876,7 @@ PHP_FUNCTION(putenv)
+ 	for (env = environ; env != NULL && *env != NULL; env++) {
+ 		if (!strncmp(*env, ZSTR_VAL(pe.key), ZSTR_LEN(pe.key))
+ 				&& (*env)[ZSTR_LEN(pe.key)] == '=') {	/* found it */
+-#ifdef PHP_WIN32
++#if defined(PHP_WIN32)
+ 			/* must copy previous value because MSVCRT's putenv can free the string without notice */
+ 			pe.previous_value = estrdup(*env);
+ #else
+@@ -822,7 +886,7 @@ PHP_FUNCTION(putenv)
+ 		}
+ 	}
+ 
+-#ifdef HAVE_UNSETENV
++#if HAVE_UNSETENV
+ 	if (!p) { /* no '=' means we want to unset it */
+ 		unsetenv(pe.putenv_string);
+ 	}
+@@ -868,7 +932,7 @@ PHP_FUNCTION(putenv)
+ 		}
+ #endif
+ 		tsrm_env_unlock();
+-#ifdef PHP_WIN32
++#if defined(PHP_WIN32)
+ 		free(keyw);
+ 		free(valw);
+ #endif
+@@ -876,7 +940,7 @@ PHP_FUNCTION(putenv)
+ 	} else {
+ 		free(pe.putenv_string);
+ 		zend_string_release(pe.key);
+-#ifdef PHP_WIN32
++#if defined(PHP_WIN32)
+ 		free(keyw);
+ 		free(valw);
+ #endif
+@@ -1033,7 +1097,7 @@ PHP_FUNCTION(getopt)
+ 
+ 		/* the first <len> slots are filled by the one short ops
+ 		 * we now extend our array and jump to the new added structs */
+-		opts = (opt_struct *) safe_erealloc(opts, sizeof(opt_struct), (len + count + 1), 0);
++		opts = (opt_struct *) erealloc(opts, sizeof(opt_struct) * (len + count + 1));
+ 		orig_opts = opts;
+ 		opts += len;
+ 
+@@ -1181,13 +1245,13 @@ PHP_FUNCTION(usleep)
+ 		RETURN_THROWS();
+ 	}
+ 
+-#ifdef HAVE_USLEEP
++#if HAVE_USLEEP
+ 	usleep((unsigned int)num);
+ #endif
+ }
+ /* }}} */
+ 
+-#ifdef HAVE_NANOSLEEP
++#if HAVE_NANOSLEEP
+ /* {{{ Delay for a number of seconds and nano seconds */
+ PHP_FUNCTION(time_nanosleep)
+ {
+@@ -1905,25 +1969,6 @@ PHP_FUNCTION(highlight_string)
+ }
+ /* }}} */
+ 
+-/* {{{ Get interpreted size from the ini shorthand syntax */
+-PHP_FUNCTION(ini_parse_quantity)
+-{
+-	zend_string *shorthand;
+-	zend_string *errstr;
+-
+-	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_STR(shorthand)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	RETVAL_LONG(zend_ini_parse_quantity(shorthand, &errstr));
+-
+-	if (errstr) {
+-		zend_error(E_WARNING, "%s", ZSTR_VAL(errstr));
+-		zend_string_release(errstr);
+-	}
+-}
+-/* }}} */
+-
+ /* {{{ Get a configuration option */
+ PHP_FUNCTION(ini_get)
+ {
+@@ -1971,7 +2016,7 @@ PHP_FUNCTION(ini_get_all)
+ 	}
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(EG(ini_directives), key, ini_entry) {
++	ZEND_HASH_FOREACH_STR_KEY_PTR(EG(ini_directives), key, ini_entry) {
+ 		zval option;
+ 
+ 		if (module_number != 0 && ini_entry->module_number != module_number) {
+@@ -2200,7 +2245,7 @@ PHP_FUNCTION(ignore_user_abort)
+ }
+ /* }}} */
+ 
+-#ifdef HAVE_GETSERVBYNAME
++#if HAVE_GETSERVBYNAME
+ /* {{{ Returns port associated with service. Protocol must be "tcp" or "udp" */
+ PHP_FUNCTION(getservbyname)
+ {
+@@ -2225,7 +2270,7 @@ PHP_FUNCTION(getservbyname)
+ 
+ 	serv = getservbyname(ZSTR_VAL(name), proto);
+ 
+-#ifdef _AIX
++#if defined(_AIX)
+ 	/*
+         On AIX, imap is only known as imap2 in /etc/services, while on Linux imap is an alias for imap2.
+         If a request for imap gives no result, we try again with imap2.
+@@ -2243,7 +2288,7 @@ PHP_FUNCTION(getservbyname)
+ /* }}} */
+ #endif
+ 
+-#ifdef HAVE_GETSERVBYPORT
++#if HAVE_GETSERVBYPORT
+ /* {{{ Returns service name associated with port. Protocol must be "tcp" or "udp" */
+ PHP_FUNCTION(getservbyport)
+ {
+@@ -2268,7 +2313,7 @@ PHP_FUNCTION(getservbyport)
+ /* }}} */
+ #endif
+ 
+-#ifdef HAVE_GETPROTOBYNAME
++#if HAVE_GETPROTOBYNAME
+ /* {{{ Returns protocol number associated with name as per /etc/protocols */
+ PHP_FUNCTION(getprotobyname)
+ {
+@@ -2291,7 +2336,7 @@ PHP_FUNCTION(getprotobyname)
+ /* }}} */
+ #endif
+ 
+-#ifdef HAVE_GETPROTOBYNUMBER
++#if HAVE_GETPROTOBYNUMBER
+ /* {{{ Returns protocol name associated with protocol number proto */
+ PHP_FUNCTION(getprotobynumber)
+ {
+@@ -2459,9 +2504,8 @@ static void php_simple_ini_parser_cb(zval *arg1, zval *arg2, zval *arg3, int cal
+ 				break;
+ 			}
+ 
+-			/* entry in the form x[a]=b where x might need to be an array index */
+ 			if (!(Z_STRLEN_P(arg1) > 1 && Z_STRVAL_P(arg1)[0] == '0') && is_numeric_string(Z_STRVAL_P(arg1), Z_STRLEN_P(arg1), NULL, NULL, 0) == IS_LONG) {
+-				zend_ulong key = (zend_ulong) ZEND_STRTOUL(Z_STRVAL_P(arg1), NULL, 0);
++				zend_ulong key = (zend_ulong) zend_atol(Z_STRVAL_P(arg1), Z_STRLEN_P(arg1));
+ 				if ((find_hash = zend_hash_index_find(Z_ARRVAL_P(arr), key)) == NULL) {
+ 					array_init(&hash);
+ 					find_hash = zend_hash_index_add_new(Z_ARRVAL_P(arr), key, &hash);
+diff --git a/ext/standard/basic_functions.h b/ext/standard/basic_functions.h
+index 34cec376..434de132 100644
+--- a/ext/standard/basic_functions.h
++++ b/ext/standard/basic_functions.h
+@@ -27,9 +27,6 @@
+ 
+ #include "url_scanner_ex.h"
+ 
+-/* for MT_N */
+-#include "ext/random/php_random.h"
+-
+ #if defined(_WIN32) && !defined(__clang__)
+ #include <intrin.h>
+ #endif
+@@ -54,6 +51,8 @@ PHPAPI int _php_error_log(int opt_err, const char *message, const char *opt, con
+ PHPAPI int _php_error_log_ex(int opt_err, const char *message, size_t message_len, const char *opt, const char *headers);
+ PHPAPI int php_prefix_varname(zval *result, zend_string *prefix, const char *var_name, size_t var_name_len, bool add_underscore);
+ 
++#define MT_N (624)
++
+ /* Deprecated type aliases -- use the standard types instead */
+ typedef uint32_t php_uint32;
+ typedef int32_t php_int32;
+@@ -83,6 +82,14 @@ typedef struct _php_basic_globals {
+ 	zend_string *CurrentStatFile, *CurrentLStatFile;
+ 	php_stream_statbuf ssb, lssb;
+ 
++	/* mt_rand.c */
++	uint32_t state[MT_N+1];  /* state vector + 1 extra to not violate ANSI C */
++	uint32_t *next;       /* next random value is computed from here */
++	int      left;        /* can *next++ this many times before reloading */
++
++	bool mt_rand_is_seeded; /* Whether mt_rand() has been seeded */
++	zend_long mt_rand_mode;
++
+ 	/* syslog.c */
+ 	char *syslog_device;
+ 
+diff --git a/ext/standard/basic_functions.stub.php b/ext/standard/basic_functions.stub.php
+index e64d772a..5c467186 100755
+--- a/ext/standard/basic_functions.stub.php
++++ b/ext/standard/basic_functions.stub.php
+@@ -2,833 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/* array.c */
+-
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_OVERWRITE
+- */
+-const EXTR_OVERWRITE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_SKIP
+- */
+-const EXTR_SKIP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_PREFIX_SAME
+- */
+-const EXTR_PREFIX_SAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_PREFIX_ALL
+- */
+-const EXTR_PREFIX_ALL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_PREFIX_INVALID
+- */
+-const EXTR_PREFIX_INVALID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_PREFIX_IF_EXISTS
+- */
+-const EXTR_PREFIX_IF_EXISTS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_IF_EXISTS
+- */
+-const EXTR_IF_EXISTS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_EXTR_REFS
+- */
+-const EXTR_REFS = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_SORT_ASC
+- */
+-const SORT_ASC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_DESC
+- */
+-const SORT_DESC = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_SORT_REGULAR
+- */
+-const SORT_REGULAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_NUMERIC
+- */
+-const SORT_NUMERIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_STRING
+- */
+-const SORT_STRING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_LOCALE_STRING
+- */
+-const SORT_LOCALE_STRING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_NATURAL
+- */
+-const SORT_NATURAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_SORT_FLAG_CASE
+- */
+-const SORT_FLAG_CASE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_CASE_LOWER
+- */
+-const CASE_LOWER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_CASE_UPPER
+- */
+-const CASE_UPPER = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_COUNT_NORMAL
+- */
+-const COUNT_NORMAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_COUNT_RECURSIVE
+- */
+-const COUNT_RECURSIVE = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue ARRAY_FILTER_USE_BOTH
+- */
+-const ARRAY_FILTER_USE_BOTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ARRAY_FILTER_USE_KEY
+- */
+-const ARRAY_FILTER_USE_KEY = UNKNOWN;
+-
+-/* basic_functions.h */
+-
+-/**
+- * @var int
+- * @cvalue PHP_CONNECTION_ABORTED
+- */
+-const CONNECTION_ABORTED = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_CONNECTION_NORMAL
+- */
+-const CONNECTION_NORMAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_CONNECTION_TIMEOUT
+- */
+-const CONNECTION_TIMEOUT = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue ZEND_INI_USER
+- */
+-const INI_USER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ZEND_INI_PERDIR
+- */
+-const INI_PERDIR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ZEND_INI_SYSTEM
+- */
+-const INI_SYSTEM = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ZEND_INI_ALL
+- */
+-const INI_ALL = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue ZEND_INI_SCANNER_NORMAL
+- */
+-const INI_SCANNER_NORMAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ZEND_INI_SCANNER_RAW
+- */
+-const INI_SCANNER_RAW = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue ZEND_INI_SCANNER_TYPED
+- */
+-const INI_SCANNER_TYPED = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_URL_SCHEME
+- */
+-const PHP_URL_SCHEME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_HOST
+- */
+-const PHP_URL_HOST = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_PORT
+- */
+-const PHP_URL_PORT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_USER
+- */
+-const PHP_URL_USER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_PASS
+- */
+-const PHP_URL_PASS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_PATH
+- */
+-const PHP_URL_PATH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_QUERY
+- */
+-const PHP_URL_QUERY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_URL_FRAGMENT
+- */
+-const PHP_URL_FRAGMENT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_QUERY_RFC1738
+- */
+-const PHP_QUERY_RFC1738 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_QUERY_RFC3986
+- */
+-const PHP_QUERY_RFC3986 = UNKNOWN;
+-
+-/**
+- * @var float
+- * @cvalue M_E
+- */
+-const M_E = 2.718281828459045;
+-/**
+- * @var float
+- * @cvalue M_LOG2E
+- */
+-const M_LOG2E = 1.4426950408889634074;
+-/**
+- * @var float
+- * @cvalue M_LOG10E
+- */
+-const M_LOG10E = 0.43429448190325182765;
+-/**
+- * @var float
+- * @cvalue M_LN2
+- */
+-const M_LN2 = 0.69314718055994530942;
+-/**
+- * @var float
+- * @cvalue M_LN10
+- */
+-const M_LN10 = 2.30258509299404568402;
+-/**
+- * @var float
+- * @cvalue M_PI
+- */
+-const M_PI = 3.14159265358979323846;
+-/**
+- * @var float
+- * @cvalue M_PI_2
+- */
+-const M_PI_2 = 1.57079632679489661923;
+-/**
+- * @var float
+- * @cvalue M_PI_4
+- */
+-const M_PI_4 = 0.78539816339744830962;
+-/**
+- * @var float
+- * @cvalue M_1_PI
+- */
+-const M_1_PI = 0.31830988618379067154;
+-/**
+- * @var float
+- * @cvalue M_2_PI
+- */
+-const M_2_PI = 0.63661977236758134308;
+-/**
+- * @var float
+- * @cvalue M_SQRTPI
+- */
+-const M_SQRTPI = 1.77245385090551602729;
+-/**
+- * @var float
+- * @cvalue M_2_SQRTPI
+- */
+-const M_2_SQRTPI = 1.12837916709551257390;
+-/**
+- * @var float
+- * @cvalue M_LNPI
+- */
+-const M_LNPI = 1.14472988584940017414;
+-/**
+- * @var float
+- * @cvalue M_EULER
+- */
+-const M_EULER = 0.57721566490153286061;
+-/**
+- * @var float
+- * @cvalue M_SQRT2
+- */
+-const M_SQRT2 = 1.41421356237309504880;
+-/**
+- * @var float
+- * @cvalue M_SQRT1_2
+- */
+-const M_SQRT1_2 = 0.70710678118654752440;
+-/**
+- * @var float
+- * @cvalue M_SQRT3
+- */
+-const M_SQRT3 = 1.73205080756887729352;
+-/**
+- * @var float
+- * @cvalue ZEND_INFINITY
+- */
+-const INF = UNKNOWN;
+-/**
+- * @var float
+- * @cvalue ZEND_NAN
+- */
+-const NAN = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue PHP_ROUND_HALF_UP
+- */
+-const PHP_ROUND_HALF_UP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ROUND_HALF_DOWN
+- */
+-const PHP_ROUND_HALF_DOWN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ROUND_HALF_EVEN
+- */
+-const PHP_ROUND_HALF_EVEN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ROUND_HALF_ODD
+- */
+-const PHP_ROUND_HALF_ODD = UNKNOWN;
+-
+-/* dns.c */
+-
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-/**
+- * @var int
+- * @cvalue PHP_DNS_A
+- */
+-const DNS_A = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_NS
+- */
+-const DNS_NS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_CNAME
+- */
+-const DNS_CNAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_SOA
+- */
+-const DNS_SOA = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_PTR
+- */
+-const DNS_PTR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_HINFO
+- */
+-const DNS_HINFO = UNKNOWN;
+-#if (!defined(PHP_WIN32))
+-/**
+- * @var int
+- * @cvalue PHP_DNS_CAA
+- */
+-const DNS_CAA = UNKNOWN;
+-#endif
+-/**
+- * @var int
+- * @cvalue PHP_DNS_MX
+- */
+-const DNS_MX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_TXT
+- */
+-const DNS_TXT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_SRV
+- */
+-const DNS_SRV = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_NAPTR
+- */
+-const DNS_NAPTR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_AAAA
+- */
+-const DNS_AAAA = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_A6
+- */
+-const DNS_A6 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_ANY
+- */
+-const DNS_ANY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_DNS_ALL
+- */
+-const DNS_ALL = UNKNOWN;
+-#endif
+-
+-/* image.c */
+-
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_GIF
+- */
+-const IMAGETYPE_GIF = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JPEG
+- */
+-const IMAGETYPE_JPEG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_PNG
+- */
+-const IMAGETYPE_PNG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_SWF
+- */
+-const IMAGETYPE_SWF = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_PSD
+- */
+-const IMAGETYPE_PSD = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_BMP
+- */
+-const IMAGETYPE_BMP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_TIFF_II
+- */
+-const IMAGETYPE_TIFF_II = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_TIFF_MM
+- */
+-const IMAGETYPE_TIFF_MM = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JPC
+- */
+-const IMAGETYPE_JPC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JP2
+- */
+-const IMAGETYPE_JP2 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JPX
+- */
+-const IMAGETYPE_JPX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JB2
+- */
+-const IMAGETYPE_JB2 = UNKNOWN;
+-#if (defined(HAVE_ZLIB) && !defined(COMPILE_DL_ZLIB))
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_SWC
+- */
+-const IMAGETYPE_SWC = UNKNOWN;
+-#endif
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_IFF
+- */
+-const IMAGETYPE_IFF = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_WBMP
+- */
+-const IMAGETYPE_WBMP = UNKNOWN;
+-/* keep alias */
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_JPC
+- */
+-const IMAGETYPE_JPEG2000 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_XBM
+- */
+-const IMAGETYPE_XBM = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_ICO
+- */
+-const IMAGETYPE_ICO = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_WEBP
+- */
+-const IMAGETYPE_WEBP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_AVIF
+- */
+-const IMAGETYPE_AVIF = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_UNKNOWN
+- */
+-const IMAGETYPE_UNKNOWN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue IMAGE_FILETYPE_COUNT
+- */
+-const IMAGETYPE_COUNT = UNKNOWN;
+-
+-/* syslog.c */
+-
+-/* error levels */
+-
+-/**
+- * system unusable
+- * @var int
+- * @cvalue LOG_EMERG
+- */
+-const LOG_EMERG = UNKNOWN;
+-/**
+- * immediate action required
+- * @var int
+- * @cvalue LOG_ALERT
+- */
+-const LOG_ALERT = UNKNOWN;
+-/**
+- * critical conditions
+- * @var int
+- * @cvalue LOG_CRIT
+- */
+-const LOG_CRIT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_ERR
+- */
+-const LOG_ERR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_WARNING
+- */
+-const LOG_WARNING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_NOTICE
+- */
+-const LOG_NOTICE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_INFO
+- */
+-const LOG_INFO = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_DEBUG
+- */
+-const LOG_DEBUG = UNKNOWN;
+-/* facility: type of program logging the message */
+-/**
+- * @var int
+- * @cvalue LOG_KERN
+- */
+-const LOG_KERN = UNKNOWN;
+-/**
+- * generic user level
+- * @var int
+- * @cvalue LOG_USER
+- */
+-const LOG_USER = UNKNOWN;
+-/**
+- * log to email
+- * @var int
+- * @cvalue LOG_MAIL
+- */
+-const LOG_MAIL = UNKNOWN;
+-/**
+- * other system daemons
+- * @var int
+- * @cvalue LOG_DAEMON
+- */
+-const LOG_DAEMON = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_AUTH
+- */
+-const LOG_AUTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_SYSLOG
+- */
+-const LOG_SYSLOG = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LPR
+- */
+-const LOG_LPR = UNKNOWN;
+-#ifdef LOG_NEWS
+-/* No LOG_NEWS on HP-UX */
+-/**
+- * usenet new
+- * @var int
+- * @cvalue LOG_NEWS
+- */
+-const LOG_NEWS = UNKNOWN;
+-#endif
+-#ifdef LOG_UUCP
+-/* No LOG_UUCP on HP-UX */
+-/**
+- * @var int
+- * @cvalue LOG_UUCP
+- */
+-const LOG_UUCP = UNKNOWN;
+-#endif
+-#ifdef LOG_CRON
+-/* apparently some systems don't have this one */
+-/**
+- * @var int
+- * @cvalue LOG_CRON
+- */
+-const LOG_CRON = UNKNOWN;
+-#endif
+-#ifdef LOG_AUTHPRIV
+-/* AIX doesn't have LOG_AUTHPRIV */
+-/**
+- * @var int
+- * @cvalue LOG_AUTHPRIV
+- */
+-const LOG_AUTHPRIV = UNKNOWN;
+-#endif
+-#ifndef PHP_WIN32
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL0
+- */
+-const LOG_LOCAL0 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL1
+- */
+-const LOG_LOCAL1 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL2
+- */
+-const LOG_LOCAL2 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL3
+- */
+-const LOG_LOCAL3 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL4
+- */
+-const LOG_LOCAL4 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL5
+- */
+-const LOG_LOCAL5 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL6
+- */
+-const LOG_LOCAL6 = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_LOCAL7
+- */
+-const LOG_LOCAL7 = UNKNOWN;
+-#endif
+-/* options */
+-/**
+- * @var int
+- * @cvalue LOG_PID
+- */
+-const LOG_PID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_CONS
+- */
+-const LOG_CONS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_ODELAY
+- */
+-const LOG_ODELAY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LOG_NDELAY
+- */
+-const LOG_NDELAY = UNKNOWN;
+-#ifdef LOG_NOWAIT
+-/**
+- * @var int
+- * @cvalue LOG_NOWAIT
+- */
+-const LOG_NOWAIT = UNKNOWN;
+-#endif
+-#ifdef LOG_PERROR
+-/* AIX doesn't have LOG_PERROR */
+-/**
+- * log to stderr
+- * @var int
+- * @cvalue LOG_PERROR
+- */
+-const LOG_PERROR = UNKNOWN;
+-#endif
+-
+-/* string.c */
+-
+-/**
+- * @var int
+- * @cvalue PHP_STR_PAD_LEFT
+- */
+-const STR_PAD_LEFT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_STR_PAD_RIGHT
+- */
+-const STR_PAD_RIGHT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_STR_PAD_BOTH
+- */
+-const STR_PAD_BOTH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PATHINFO_DIRNAME
+- */
+-const PATHINFO_DIRNAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PATHINFO_BASENAME
+- */
+-const PATHINFO_BASENAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PATHINFO_EXTENSION
+- */
+-const PATHINFO_EXTENSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PATHINFO_FILENAME
+- */
+-const PATHINFO_FILENAME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_PATHINFO_ALL
+- */
+-const PATHINFO_ALL = UNKNOWN;
+-
+-/**
+- * If last members of struct lconv equal CHAR_MAX, no grouping is done
+- * @var int
+- * @cvalue CHAR_MAX
+- */
+-const CHAR_MAX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_CTYPE
+- */
+-const LC_CTYPE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_NUMERIC
+- */
+-const LC_NUMERIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_TIME
+- */
+-const LC_TIME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_COLLATE
+- */
+-const LC_COLLATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_MONETARY
+- */
+-const LC_MONETARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue LC_ALL
+- */
+-const LC_ALL = UNKNOWN;
+-#ifdef LC_MESSAGES
+-/**
+- * @var int
+- * @cvalue LC_MESSAGES
+- */
+-const LC_MESSAGES = UNKNOWN;
+-#endif
+-
+-/** @undocumentable */
+-#[AllowDynamicProperties]
+ final class __PHP_Incomplete_Class
+ {
+ }
+@@ -903,11 +76,12 @@ function stream_wrapper_restore(string $protocol): bool {}
+ 
+ function array_push(array &$array, mixed ...$values): int {}
+ 
+-function krsort(array &$array, int $flags = SORT_REGULAR): true {}
++/** @return true */
++function krsort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+-function ksort(array &$array, int $flags = SORT_REGULAR): true {}
++/** @return true */
++function ksort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+-/** @compile-time-eval */
+ function count(Countable|array $value, int $mode = COUNT_NORMAL): int {}
+ 
+ /** @alias count */
+@@ -917,19 +91,25 @@ function natsort(array &$array): bool {}
+ 
+ function natcasesort(array &$array): bool {}
+ 
+-function asort(array &$array, int $flags = SORT_REGULAR): true {}
++/** @return true */
++function asort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+-function arsort(array &$array, int $flags = SORT_REGULAR): true {}
++/** @return true */
++function arsort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+-function sort(array &$array, int $flags = SORT_REGULAR): true {}
++/** @return true */
++function sort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+ function rsort(array &$array, int $flags = SORT_REGULAR): bool {}
+ 
+-function usort(array &$array, callable $callback): true {}
++/** @return true */
++function usort(array &$array, callable $callback): bool {}
+ 
+-function uasort(array &$array, callable $callback): true {}
++/** @return true */
++function uasort(array &$array, callable $callback): bool {}
+ 
+-function uksort(array &$array, callable $callback): true {}
++/** @return true */
++function uksort(array &$array, callable $callback): bool {}
+ 
+ function end(array|object &$array): mixed {}
+ 
+@@ -946,24 +126,18 @@ function pos(array|object $array): mixed {}
+ 
+ function key(array|object $array): int|string|null {}
+ 
+-/** @compile-time-eval */
+ function min(mixed $value, mixed ...$values): mixed {}
+ 
+-/** @compile-time-eval */
+ function max(mixed $value, mixed ...$values): mixed {}
+ 
+-function array_walk(array|object &$array, callable $callback, mixed $arg = UNKNOWN): true {}
++/** @return true */
++function array_walk(array|object &$array, callable $callback, mixed $arg = UNKNOWN): bool {}
+ 
+-function array_walk_recursive(array|object &$array, callable $callback, mixed $arg = UNKNOWN): true {}
++/** @return true */
++function array_walk_recursive(array|object &$array, callable $callback, mixed $arg = UNKNOWN): bool {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function in_array(mixed $needle, array $haystack, bool $strict = false): bool {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_search(mixed $needle, array $haystack, bool $strict = false): int|string|false {}
+ 
+ /** @prefer-ref $array */
+@@ -989,7 +163,8 @@ function array_fill_keys(array $keys, mixed $value): array {}
+  */
+ function range($start, $end, int|float $step = 1): array {}
+ 
+-function shuffle(array &$array): true {}
++/** @return true */
++function shuffle(array &$array): bool {}
+ 
+ function array_pop(array &$array): mixed {}
+ 
+@@ -1001,48 +176,24 @@ function array_splice(array &$array, int $offset, ?int $length = null, mixed $re
+ 
+ function array_slice(array $array, int $offset, ?int $length = null, bool $preserve_keys = false): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_merge(array ...$arrays): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_merge_recursive(array ...$arrays): array {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function array_replace(array $array, array ...$replacements): array {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function array_replace_recursive(array $array, array ...$replacements): array {}
+ 
+-/**
+- * @return array<int, int|string>
+- * @compile-time-eval
+- */
++/** @return array<int, int|string> */
+ function array_keys(array $array, mixed $filter_value = UNKNOWN, bool $strict = false): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_key_first(array $array): int|string|null {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_key_last(array $array): int|string|null {}
+ 
+-/**
+- * @return array<int, mixed|ref>
+- * @compile-time-eval
+- */
++/** @return array<int, mixed|ref> */
+ function array_values(array $array): array {}
+ 
+ /**
+@@ -1062,19 +213,12 @@ function array_pad(array $array, int $length, mixed $value): array {}
+ /**
+  * @return array<int|string, int|string>
+  * @refcount 1
+- * @compile-time-eval
+  */
+ function array_flip(array $array): array {}
+ 
+-/**
+- * @refcount 1
+- * @compile-time-eval
+- */
++/** @refcount 1 */
+ function array_change_key_case(array $array, int $case = CASE_LOWER): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_unique(array $array, int $flags = SORT_STRING): array {}
+ 
+ /** @refcount 1 */
+@@ -1116,10 +260,7 @@ function array_intersect_uassoc(array $array, ...$rest): array {}
+  */
+ function array_uintersect_uassoc(array $array, ...$rest): array {}
+ 
+-/**
+- * @refcount 1
+- * @compile-time-eval
+- */
++/** @refcount 1 */
+ function array_diff_key(array $array, array ...$arrays): array {}
+ 
+ /**
+@@ -1128,9 +269,6 @@ function array_diff_key(array $array, array ...$arrays): array {}
+  */
+ function array_diff_ukey(array $array, ...$rest): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function array_diff(array $array, array ...$arrays): array {}
+ 
+ /**
+@@ -1139,10 +277,7 @@ function array_diff(array $array, array ...$arrays): array {}
+  */
+ function array_udiff(array $array, ...$rest): array {}
+ 
+-/**
+- * @refcount 1
+- * @compile-time-eval
+- */
++/** @refcount 1 */
+ function array_diff_assoc(array $array, array ...$arrays): array {}
+ 
+ /**
+@@ -1184,10 +319,7 @@ function array_filter(array $array, ?callable $callback = null, int $mode = 0):
+ 
+ function array_map(?callable $callback, array $array, array ...$arrays): array {}
+ 
+-/**
+- * @param string|int $key
+- * @compile-time-eval
+- */
++/** @param string|int $key */
+ function array_key_exists($key, array $array): bool {}
+ 
+ /**
+@@ -1200,21 +332,14 @@ function array_chunk(array $array, int $length, bool $preserve_keys = false): ar
+ 
+ function array_combine(array $keys, array $values): array {}
+ 
+-/** @compile-time-eval */
+ function array_is_list(array $array): bool {}
+ 
+ /* base64.c */
+ 
+-/**
+- * @refcount 1
+- * @compile-time-eval
+- */
++/** @refcount 1 */
+ function base64_encode(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function base64_decode(string $string, bool $strict = false): string|false {}
+ 
+ /* basic_functions.c */
+@@ -1249,7 +374,7 @@ function sleep(int $seconds): int {}
+ 
+ function usleep(int $microseconds): void {}
+ 
+-#ifdef HAVE_NANOSLEEP
++#if HAVE_NANOSLEEP
+ /**
+  * @return array<string, int>|bool
+  * @refcount 1
+@@ -1283,7 +408,8 @@ function forward_static_call(callable $callback, mixed ...$args): mixed {}
+ 
+ function forward_static_call_array(callable $callback, array $args): mixed {}
+ 
+-function register_shutdown_function(callable $callback, mixed ...$args): void {}
++/** @return false|null */
++function register_shutdown_function(callable $callback, mixed ...$args): ?bool {}
+ 
+ /** @refcount 1 */
+ function highlight_file(string $filename, bool $return = false): string|bool {}
+@@ -1312,8 +438,6 @@ function ini_alter(string $option, string|int|float|bool|null $value): string|fa
+ 
+ function ini_restore(string $option): void {}
+ 
+-function ini_parse_quantity(string $shorthand): int {}
+-
+ /** @refcount 1 */
+ function set_include_path(string $include_path): string|false {}
+ 
+@@ -1329,20 +453,20 @@ function connection_status(): int {}
+ 
+ function ignore_user_abort(?bool $enable = null): int {}
+ 
+-#ifdef HAVE_GETSERVBYNAME
++#if HAVE_GETSERVBYNAME
+ function getservbyname(string $service, string $protocol): int|false {}
+ #endif
+ 
+-#ifdef HAVE_GETSERVBYPORT
++#if HAVE_GETSERVBYPORT
+ /** @refcount 1 */
+ function getservbyport(int $port, string $protocol): string|false {}
+ #endif
+ 
+-#ifdef HAVE_GETPROTOBYNAME
++#if HAVE_GETPROTOBYNAME
+ function getprotobyname(string $protocol): int|false {}
+ #endif
+ 
+-#ifdef HAVE_GETPROTOBYNUMBER
++#if HAVE_GETPROTOBYNUMBER
+ /** @refcount 1 */
+ function getprotobynumber(int $protocol): string|false {}
+ #endif
+@@ -1393,17 +517,16 @@ function get_browser(?string $user_agent = null, bool $return_array = false): ob
+ 
+ /* crc32.c */
+ 
+-/** @compile-time-eval */
+ function crc32(string $string): int {}
+ 
+ /* crypt.c */
+ 
+ /** @refcount 1 */
+-function crypt(#[\SensitiveParameter] string $string, string $salt): string {}
++function crypt(string $string, string $salt): string {}
+ 
+ /* datetime.c */
+ 
+-#ifdef HAVE_STRPTIME
++#if HAVE_STRPTIME
+ /**
+  * @return array<string, int|string>|false
+  * @deprecated
+@@ -1431,7 +554,7 @@ function gethostbyname(string $hostname): string {}
+  */
+ function gethostbynamel(string $hostname): array|false {}
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ function dns_check_record(string $hostname, string $type = "MX"): bool {}
+ 
+ /** @alias dns_check_record */
+@@ -1461,13 +584,13 @@ function getmxrr(string $hostname, &$hosts, &$weights = null): bool {}
+ 
+ /* net.c */
+ 
+-#if (defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__))
++#if defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__)
+ function net_get_interfaces(): array|false {}
+ #endif
+ 
+ /* ftok.c */
+ 
+-#ifdef HAVE_FTOK
++#if HAVE_FTOK
+ function ftok(string $filename, string $project_id): int {}
+ #endif
+ 
+@@ -1475,6 +598,10 @@ function ftok(string $filename, string $project_id): int {}
+ 
+ function hrtime(bool $as_number = false): array|int|float|false {}
+ 
++/* lcg.c */
++
++function lcg_value(): float {}
++
+ /* md5.c */
+ 
+ /** @refcount 1 */
+@@ -1506,11 +633,13 @@ function sha1_file(string $filename, bool $binary = false): string|false {}
+ /* syslog.c */
+ 
+ #ifdef HAVE_SYSLOG_H
+-function openlog(string $prefix, int $flags, int $facility): true {}
++function openlog(string $prefix, int $flags, int $facility): bool {}
+ 
+-function closelog(): true {}
++/** @return true */
++function closelog(): bool {}
+ 
+-function syslog(int $priority, string $message): true {} // TODO make return type void
++/** @return true */
++function syslog(int $priority, string $message): bool {} // TODO make return type void
+ #endif
+ 
+ #ifdef HAVE_INET_NTOP
+@@ -1579,39 +708,30 @@ function assert_options(int $option, mixed $value = UNKNOWN): mixed {}
+ 
+ /* string.c */
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function bin2hex(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function hex2bin(string $string): string|false {}
+ 
+ function strspn(string $string, string $characters, int $offset = 0, ?int $length = null): int {}
+ 
+ function strcspn(string $string, string $characters, int $offset = 0, ?int $length = null): int {}
+ 
+-#ifdef HAVE_NL_LANGINFO
++#if HAVE_NL_LANGINFO
+ /** @refcount 1 */
+ function nl_langinfo(int $item): string|false {}
+ #endif
+ 
+ function strcoll(string $string1, string $string2): int {}
+ 
+-/** @compile-time-eval */
+ function trim(string $string, string $characters = " \n\r\t\v\0"): string {}
+ 
+-/** @compile-time-eval */
+ function rtrim(string $string, string $characters = " \n\r\t\v\0"): string {}
+ 
+ /** @alias rtrim */
+ function chop(string $string, string $characters = " \n\r\t\v\0"): string {}
+ 
+-/** @compile-time-eval */
+ function ltrim(string $string, string $characters = " \n\r\t\v\0"): string {}
+ 
+ /** @refcount 1 */
+@@ -1620,13 +740,9 @@ function wordwrap(string $string, int $width = 75, string $break = "\n", bool $c
+ /**
+  * @return array<int, string>
+  * @refcount 1
+- * @compile-time-eval
+  */
+ function explode(string $separator, string $string, int $limit = PHP_INT_MAX): array {}
+ 
+-/**
+- * @compile-time-eval
+- */
+ function implode(string|array $separator, ?array $array = null): string {}
+ 
+ /** @alias implode */
+@@ -1635,10 +751,8 @@ function join(string|array $separator, ?array $array = null): string {}
+ /** @refcount 1 */
+ function strtok(string $string, ?string $token = null): string|false {}
+ 
+-/** @compile-time-eval */
+ function strtoupper(string $string): string {}
+ 
+-/** @compile-time-eval */
+ function strtolower(string $string): string {}
+ 
+ /** @refcount 1 */
+@@ -1656,43 +770,32 @@ function pathinfo(string $path, int $flags = PATHINFO_ALL): array|string {}
+ /** @refcount 1 */
+ function stristr(string $haystack, string $needle, bool $before_needle = false): string|false {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function strstr(string $haystack, string $needle, bool $before_needle = false): string|false {}
+ 
+ /** @alias strstr */
+ function strchr(string $haystack, string $needle, bool $before_needle = false): string|false {}
+ 
+-/** @compile-time-eval */
+ function strpos(string $haystack, string $needle, int $offset = 0): int|false {}
+ 
+-/** @compile-time-eval */
+ function stripos(string $haystack, string $needle, int $offset = 0): int|false {}
+ 
+-/** @compile-time-eval */
+ function strrpos(string $haystack, string $needle, int $offset = 0): int|false {}
+ 
+-/** @compile-time-eval */
+ function strripos(string $haystack, string $needle, int $offset = 0): int|false {}
+ 
+ /** @refcount 1 */
+ function strrchr(string $haystack, string $needle): string|false {}
+ 
+-/** @compile-time-eval */
+ function str_contains(string $haystack, string $needle): bool {}
+ 
+-/** @compile-time-eval */
+ function str_starts_with(string $haystack, string $needle): bool {}
+ 
+-/** @compile-time-eval */
+ function str_ends_with(string $haystack, string $needle): bool {}
+ 
+ /** @refcount 1 */
+ function chunk_split(string $string, int $length = 76, string $separator = "\r\n"): string {}
+ 
+-/** @compile-time-eval */
+ function substr(string $string, int $offset, ?int $length = null): string {}
+ 
+ /** @return string|array<int|string, string> */
+@@ -1701,33 +804,21 @@ function substr_replace(array|string $string, array|string $replace, array|int $
+ /** @refcount 1 */
+ function quotemeta(string $string): string {}
+ 
+-/** @compile-time-eval */
+ function ord(string $character): int {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function chr(int $codepoint): string {}
+ 
+-/** @compile-time-eval */
+ function ucfirst(string $string): string {}
+ 
+-/** @compile-time-eval */
+ function lcfirst(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function ucwords(string $string, string $separators = " \t\r\n\f\v"): string {}
+ 
+ function strtr(string $string, string|array $from, ?string $to = null): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function strrev(string $string): string {}
+ 
+ /** @param float $percent */
+@@ -1746,14 +837,12 @@ function stripslashes(string $string): string {}
+ /**
+  * @param int $count
+  * @return string|array<int|string, string>
+- * @compile-time-eval
+  */
+ function str_replace(array|string $search, array|string $replace, string|array $subject, &$count = null): string|array {}
+ 
+ /**
+  * @param int $count
+  * @return string|array<int|string, string>
+- * @compile-time-eval
+  */
+ function str_ireplace(array|string $search, array|string $replace, string|array $subject, &$count = null): string|array {}
+ 
+@@ -1823,7 +912,7 @@ function str_word_count(string $string, int $format = 0, ?string $characters = n
+ 
+ /**
+  * @return array<int, string>
+- * @compile-time-eval
++ * @refcount 1
+  */
+ function str_split(string $string, int $length = 1): array {}
+ 
+@@ -1832,16 +921,10 @@ function strpbrk(string $string, string $characters): string|false {}
+ 
+ function substr_compare(string $haystack, string $needle, int $offset, ?int $length = null, bool $case_insensitive = false): int {}
+ 
+-/**
+- * @refcount 1
+- * @deprecated
+- */
++/** @refcount 1 */
+ function utf8_encode(string $string): string {}
+ 
+-/**
+- * @refcount 1
+- * @deprecated
+- */
++/** @refcount 1 */
+ function utf8_decode(string $string): string {}
+ 
+ /* dir.c */
+@@ -1863,7 +946,7 @@ function closedir($dir_handle = null): void {}
+ 
+ function chdir(string $directory): bool {}
+ 
+-#if (defined(HAVE_CHROOT) && !defined(ZTS) && defined(ENABLE_CHROOT_FUNC))
++#if defined(HAVE_CHROOT) && !defined(ZTS) && ENABLE_CHROOT_FUNC
+ function chroot(string $directory): bool {}
+ #endif
+ 
+@@ -1909,8 +992,11 @@ function exec(string $command, &$output = null, &$result_code = null): string|fa
+  */
+ function system(string $command, &$result_code = null): string|false {}
+ 
+-/** @param int $result_code */
+-function passthru(string $command, &$result_code = null): false|null {}
++/**
++ * @param int $result_code
++ * @return false|null
++ */
++function passthru(string $command, &$result_code = null): ?bool {}
+ 
+ /** @refcount 1 */
+ function escapeshellcmd(string $command): string {}
+@@ -2142,7 +1228,7 @@ function chown(string $filename, string|int $user): bool {}
+ 
+ function chgrp(string $filename, string|int $group): bool {}
+ 
+-#ifdef HAVE_LCHOWN
++#if HAVE_LCHOWN
+ function lchown(string $filename, string|int $user): bool {}
+ 
+ function lchgrp(string $filename, string|int $group): bool {}
+@@ -2150,7 +1236,7 @@ function lchgrp(string $filename, string|int $group): bool {}
+ 
+ function chmod(string $filename, int $permissions): bool {}
+ 
+-#ifdef HAVE_UTIME
++#if HAVE_UTIME
+ function touch(string $filename, ?int $mtime = null, ?int $atime = null): bool {}
+ #endif
+ 
+@@ -2235,26 +1321,19 @@ function getimagesizefromstring(string $string, &$image_info = null): array|fals
+ 
+ /* info.c */
+ 
+-function phpinfo(int $flags = INFO_ALL): true {} // make return type void
++/** @return true */
++function phpinfo(int $flags = INFO_ALL): bool {} // make return type void
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function phpversion(?string $extension = null): string|false {}
+ 
+-function phpcredits(int $flags = CREDITS_ALL): true {}
++/** @return true */
++function phpcredits(int $flags = CREDITS_ALL): bool {} // make return type void
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function php_sapi_name(): string|false {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function php_uname(string $mode = "a"): string {}
+ 
+ /** @refcount 1 */
+@@ -2280,7 +1359,7 @@ function levenshtein(string $string1, string $string2, int $insertion_cost = 1,
+ 
+ /* link.c */
+ 
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ /** @refcount 1 */
+ function readlink(string $path): string|false {}
+ 
+@@ -2335,22 +1414,16 @@ function expm1(float $num): float {}
+ 
+ function log1p(float $num): float {}
+ 
+-/** @compile-time-eval */
+ function pi(): float {}
+ 
+-/** @compile-time-eval */
+ function is_finite(float $num): bool {}
+ 
+-/** @compile-time-eval */
+ function is_nan(float $num): bool {}
+ 
+-/** @compile-time-eval */
+ function intdiv(int $num1, int $num2): int {}
+ 
+-/** @compile-time-eval */
+ function is_infinite(float $num): bool {}
+ 
+-/** @compile-time-eval */
+ function pow(mixed $num, mixed $exponent): int|float|object {}
+ 
+ function exp(float $num): float {}
+@@ -2367,31 +1440,19 @@ function deg2rad(float $num): float {}
+ 
+ function rad2deg(float $num): float {}
+ 
+-/** @compile-time-eval */
+ function bindec(string $binary_string): int|float {}
+ 
+-/** @compile-time-eval */
+ function hexdec(string $hex_string): int|float {}
+ 
+-/** @compile-time-eval */
+ function octdec(string $octal_string): int|float {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function decbin(int $num): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function decoct(int $num): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function dechex(int $num): string {}
+ 
+ /** @refcount 1 */
+@@ -2444,14 +1505,12 @@ function unpack(string $format, string $string, int $offset = 0): array|false {}
+  */
+ function password_get_info(string $hash): array {}
+ 
+-/**
+- * @refcount 1
+- */
+-function password_hash(#[\SensitiveParameter] string $password, string|int|null $algo, array $options = []): string {}
++/** @refcount 1 */
++function password_hash(string $password, string|int|null $algo, array $options = []): string {}
+ 
+ function password_needs_rehash(string $hash, string|int|null $algo, array $options = []): bool {}
+ 
+-function password_verify(#[\SensitiveParameter] string $password, string $hash): bool {}
++function password_verify(string $password, string $hash): bool {}
+ 
+ function password_algos(): array {}
+ 
+@@ -2487,6 +1546,29 @@ function quoted_printable_decode(string $string): string {}
+ /** @refcount 1 */
+ function quoted_printable_encode(string $string): string {}
+ 
++/* mt_rand.c */
++
++function mt_srand(int $seed = UNKNOWN, int $mode = MT_RAND_MT19937): void {}
++
++/** @alias mt_srand */
++function srand(int $seed = UNKNOWN, int $mode = MT_RAND_MT19937): void {}
++
++function rand(int $min = UNKNOWN, int $max = UNKNOWN): int {}
++
++function mt_rand(int $min = UNKNOWN, int $max = UNKNOWN): int {}
++
++function mt_getrandmax(): int {}
++
++/** @alias mt_getrandmax */
++function getrandmax(): int {}
++
++/* random.c */
++
++/** @refcount 1 */
++function random_bytes(int $length): string {}
++
++function random_int(int $min, int $max): int {}
++
+ /* soundex.c */
+ 
+ /** @refcount 1 */
+@@ -2592,7 +1674,7 @@ function stream_socket_enable_crypto($stream, bool $enable, ?int $crypto_method
+ function stream_socket_shutdown($stream, int $mode): bool {}
+ #endif
+ 
+-#ifdef HAVE_SOCKETPAIR
++#if HAVE_SOCKETPAIR
+ /**
+  * @return array<int, resource>|false
+  * @refcount 1
+@@ -2684,7 +1766,7 @@ function sapi_windows_vt100_support($stream, ?bool $enable = null): bool {}
+ /** @param resource $stream */
+ function stream_set_chunk_size($stream, int $size): int {}
+ 
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ /** @param resource $stream */
+ function stream_set_timeout($stream, int $seconds, int $microseconds = 0): bool {}
+ 
+@@ -2765,28 +1847,16 @@ function uniqid(string $prefix = "", bool $more_entropy = false): string {}
+  */
+ function parse_url(string $url, int $component = -1): int|string|array|null|false {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function urlencode(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function urldecode(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function rawurlencode(string $string): string {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function rawurldecode(string $string): string {}
+ 
+ /**
+@@ -2841,10 +1911,7 @@ function var_export(mixed $value, bool $return = false): ?string {}
+ 
+ function debug_zval_dump(mixed $value, mixed ...$values): void {}
+ 
+-/**
+- * @compile-time-eval
+- * @refcount 1
+- */
++/** @refcount 1 */
+ function serialize(mixed $value): string {}
+ 
+ function unserialize(string $data, array $options = []): mixed {}
+@@ -2853,11 +1920,8 @@ function memory_get_usage(bool $real_usage = false): int {}
+ 
+ function memory_get_peak_usage(bool $real_usage = false): int {}
+ 
+-function memory_reset_peak_usage(): void {}
+-
+ /* versioning.c */
+ 
+-/** @compile-time-eval */
+ function version_compare(string $version1, string $version2, ?string $operator = null): int|bool {}
+ 
+ /* win32/codepage.c */
+diff --git a/ext/standard/basic_functions_arginfo.h b/ext/standard/basic_functions_arginfo.h
+index d7eb83b5..2f93d91d 100644
+--- a/ext/standard/basic_functions_arginfo.h
++++ b/ext/standard/basic_functions_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 87494cb9126aefff143d4f55db9e282d8a30f4a2 */
++ * Stub hash: eb6a3a2e3cf8f62e768d5d4968606438819e6cf0 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_set_time_limit, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, seconds, IS_LONG, 0)
+@@ -74,7 +74,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_array_push, 0, 1, IS_LONG, 0)
+ 	ZEND_ARG_VARIADIC_TYPE_INFO(0, values, IS_MIXED, 0)
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_krsort, 0, 1, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_krsort, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(1, array, IS_ARRAY, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 0, "SORT_REGULAR")
+ ZEND_END_ARG_INFO()
+@@ -100,12 +100,9 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_sort arginfo_krsort
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_rsort, 0, 1, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_INFO(1, array, IS_ARRAY, 0)
+-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 0, "SORT_REGULAR")
+-ZEND_END_ARG_INFO()
++#define arginfo_rsort arginfo_krsort
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_usort, 0, 2, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_usort, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(1, array, IS_ARRAY, 0)
+ 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
+ ZEND_END_ARG_INFO()
+@@ -141,7 +138,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_max arginfo_min
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_array_walk, 0, 2, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_array_walk, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_MASK(1, array, MAY_BE_ARRAY|MAY_BE_OBJECT, NULL)
+ 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
+ 	ZEND_ARG_TYPE_INFO(0, arg, IS_MIXED, 0)
+@@ -189,9 +186,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_range, 0, 2, IS_ARRAY, 0)
+ 	ZEND_ARG_TYPE_MASK(0, step, MAY_BE_LONG|MAY_BE_DOUBLE, "1")
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_shuffle, 0, 1, IS_TRUE, 0)
+-	ZEND_ARG_TYPE_INFO(1, array, IS_ARRAY, 0)
+-ZEND_END_ARG_INFO()
++#define arginfo_shuffle arginfo_natsort
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_array_pop, 0, 1, IS_MIXED, 0)
+ 	ZEND_ARG_TYPE_INFO(1, array, IS_ARRAY, 0)
+@@ -418,14 +413,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_usleep, 0, 1, IS_VOID, 0)
+ 	ZEND_ARG_TYPE_INFO(0, microseconds, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_time_nanosleep, 0, 2, MAY_BE_ARRAY|MAY_BE_BOOL)
+ 	ZEND_ARG_TYPE_INFO(0, seconds, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, nanoseconds, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_time_sleep_until, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, timestamp, IS_DOUBLE, 0)
+ ZEND_END_ARG_INFO()
+@@ -464,7 +459,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_forward_static_call_array arginfo_call_user_func_array
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_register_shutdown_function, 0, 1, IS_VOID, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_register_shutdown_function, 0, 1, _IS_BOOL, 1)
+ 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
+ 	ZEND_ARG_VARIADIC_TYPE_INFO(0, args, IS_MIXED, 0)
+ ZEND_END_ARG_INFO()
+@@ -505,10 +500,6 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ini_restore, 0, 1, IS_VOID, 0)
+ 	ZEND_ARG_TYPE_INFO(0, option, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ini_parse_quantity, 0, 1, IS_LONG, 0)
+-	ZEND_ARG_TYPE_INFO(0, shorthand, IS_STRING, 0)
+-ZEND_END_ARG_INFO()
+-
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_set_include_path, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, include_path, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+@@ -528,27 +519,27 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ignore_user_abort, 0, 0, IS_LONG
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, enable, _IS_BOOL, 1, "null")
+ ZEND_END_ARG_INFO()
+ 
+-#if defined(HAVE_GETSERVBYNAME)
++#if HAVE_GETSERVBYNAME
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_getservbyname, 0, 2, MAY_BE_LONG|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, service, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, protocol, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_GETSERVBYPORT)
++#if HAVE_GETSERVBYPORT
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_getservbyport, 0, 2, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, port, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, protocol, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_GETPROTOBYNAME)
++#if HAVE_GETPROTOBYNAME
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_getprotobyname, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, protocol, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_GETPROTOBYNUMBER)
++#if HAVE_GETPROTOBYNUMBER
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_getprotobynumber, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, protocol, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+@@ -608,7 +599,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_crypt, 0, 2, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, salt, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#if defined(HAVE_STRPTIME)
++#if HAVE_STRPTIME
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_strptime, 0, 2, MAY_BE_ARRAY|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, timestamp, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, format, IS_STRING, 0)
+@@ -632,18 +623,18 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_gethostbynamel, 0, 1, MAY_BE_ARR
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dns_check_record, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, type, IS_STRING, 0, "\"MX\"")
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ #define arginfo_checkdnsrr arginfo_dns_check_record
+ #endif
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dns_get_record, 0, 1, MAY_BE_ARRAY|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, type, IS_LONG, 0, "DNS_ANY")
+@@ -653,7 +644,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_dns_get_record, 0, 1, MAY_BE_ARR
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dns_get_mx, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+ 	ZEND_ARG_INFO(1, hosts)
+@@ -661,16 +652,16 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_dns_get_mx, 0, 2, _IS_BOOL, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ #define arginfo_getmxrr arginfo_dns_get_mx
+ #endif
+ 
+-#if (defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__))
++#if defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__)
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_net_get_interfaces, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_FTOK)
++#if HAVE_FTOK
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_ftok, 0, 2, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, project_id, IS_STRING, 0)
+@@ -681,6 +672,9 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_hrtime, 0, 0, MAY_BE_ARRAY|MAY_B
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, as_number, _IS_BOOL, 0, "false")
+ ZEND_END_ARG_INFO()
+ 
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_lcg_value, 0, 0, IS_DOUBLE, 0)
++ZEND_END_ARG_INFO()
++
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_md5, 0, 1, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, binary, _IS_BOOL, 0, "false")
+@@ -706,7 +700,7 @@ ZEND_END_ARG_INFO()
+ #define arginfo_sha1_file arginfo_md5_file
+ 
+ #if defined(HAVE_SYSLOG_H)
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_openlog, 0, 3, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_openlog, 0, 3, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, prefix, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, flags, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, facility, IS_LONG, 0)
+@@ -714,12 +708,12 @@ ZEND_END_ARG_INFO()
+ #endif
+ 
+ #if defined(HAVE_SYSLOG_H)
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_closelog, 0, 0, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_closelog, 0, 0, _IS_BOOL, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+ #if defined(HAVE_SYSLOG_H)
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_syslog, 0, 2, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_syslog, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, priority, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, message, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+@@ -826,7 +820,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_strcspn arginfo_strspn
+ 
+-#if defined(HAVE_NL_LANGINFO)
++#if HAVE_NL_LANGINFO
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_nl_langinfo, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, item, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+@@ -1119,7 +1113,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_chdir, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, directory, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#if (defined(HAVE_CHROOT) && !defined(ZTS) && defined(ENABLE_CHROOT_FUNC))
++#if defined(HAVE_CHROOT) && !defined(ZTS) && ENABLE_CHROOT_FUNC
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_chroot, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, directory, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+@@ -1157,7 +1151,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_system, 0, 1, MAY_BE_STRING|MAY_
+ 	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(1, result_code, "null")
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_passthru, 0, 1, IS_FALSE, 1)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_passthru, 0, 1, _IS_BOOL, 1)
+ 	ZEND_ARG_TYPE_INFO(0, command, IS_STRING, 0)
+ 	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(1, result_code, "null")
+ ZEND_END_ARG_INFO()
+@@ -1421,14 +1415,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_chgrp, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_MASK(0, group, MAY_BE_STRING|MAY_BE_LONG, NULL)
+ ZEND_END_ARG_INFO()
+ 
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_lchown, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_MASK(0, user, MAY_BE_STRING|MAY_BE_LONG, NULL)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_lchgrp, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_MASK(0, group, MAY_BE_STRING|MAY_BE_LONG, NULL)
+@@ -1440,7 +1434,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_chmod, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, permissions, IS_LONG, 0)
+ ZEND_END_ARG_INFO()
+ 
+-#if defined(HAVE_UTIME)
++#if HAVE_UTIME
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_touch, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, filename, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, mtime, IS_LONG, 1, "null")
+@@ -1533,7 +1527,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_getimagesizefromstring, 0, 1, MA
+ 	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(1, image_info, "null")
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_phpinfo, 0, 0, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_phpinfo, 0, 0, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 0, "INFO_ALL")
+ ZEND_END_ARG_INFO()
+ 
+@@ -1541,7 +1535,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_phpversion, 0, 0, MAY_BE_STRING|
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, extension, IS_STRING, 1, "null")
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_phpcredits, 0, 0, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_phpcredits, 0, 0, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, flags, IS_LONG, 0, "CREDITS_ALL")
+ ZEND_END_ARG_INFO()
+ 
+@@ -1573,26 +1567,26 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_levenshtein, 0, 2, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, deletion_cost, IS_LONG, 0, "1")
+ ZEND_END_ARG_INFO()
+ 
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_readlink, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_linkinfo, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_symlink, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, target, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, link, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ #define arginfo_link arginfo_symlink
+ #endif
+ 
+@@ -1655,8 +1649,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_log1p arginfo_sin
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_pi, 0, 0, IS_DOUBLE, 0)
+-ZEND_END_ARG_INFO()
++#define arginfo_pi arginfo_lcg_value
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_is_finite, 0, 1, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, num, IS_DOUBLE, 0)
+@@ -1819,6 +1812,33 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_quoted_printable_encode arginfo_base64_encode
+ 
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mt_srand, 0, 0, IS_VOID, 0)
++	ZEND_ARG_TYPE_INFO(0, seed, IS_LONG, 0)
++	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, mode, IS_LONG, 0, "MT_RAND_MT19937")
++ZEND_END_ARG_INFO()
++
++#define arginfo_srand arginfo_mt_srand
++
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_rand, 0, 0, IS_LONG, 0)
++	ZEND_ARG_TYPE_INFO(0, min, IS_LONG, 0)
++	ZEND_ARG_TYPE_INFO(0, max, IS_LONG, 0)
++ZEND_END_ARG_INFO()
++
++#define arginfo_mt_rand arginfo_rand
++
++#define arginfo_mt_getrandmax arginfo_ob_get_level
++
++#define arginfo_getrandmax arginfo_ob_get_level
++
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_random_bytes, 0, 1, IS_STRING, 0)
++	ZEND_ARG_TYPE_INFO(0, length, IS_LONG, 0)
++ZEND_END_ARG_INFO()
++
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_random_int, 0, 2, IS_LONG, 0)
++	ZEND_ARG_TYPE_INFO(0, min, IS_LONG, 0)
++	ZEND_ARG_TYPE_INFO(0, max, IS_LONG, 0)
++ZEND_END_ARG_INFO()
++
+ #define arginfo_soundex arginfo_base64_encode
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_stream_select, 0, 4, MAY_BE_LONG|MAY_BE_FALSE)
+@@ -1931,7 +1951,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_stream_socket_shutdown, 0, 2, _I
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(HAVE_SOCKETPAIR)
++#if HAVE_SOCKETPAIR
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_stream_socket_pair, 0, 3, MAY_BE_ARRAY|MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, domain, IS_LONG, 0)
+ 	ZEND_ARG_TYPE_INFO(0, type, IS_LONG, 0)
+@@ -2001,7 +2021,7 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_stream_set_chunk_size arginfo_stream_set_write_buffer
+ 
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_stream_set_timeout, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_INFO(0, stream)
+ 	ZEND_ARG_TYPE_INFO(0, seconds, IS_LONG, 0)
+@@ -2009,7 +2029,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_stream_set_timeout, 0, 2, _IS_BO
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ #define arginfo_socket_set_timeout arginfo_stream_set_timeout
+ #endif
+ 
+@@ -2155,8 +2175,6 @@ ZEND_END_ARG_INFO()
+ 
+ #define arginfo_memory_get_peak_usage arginfo_memory_get_usage
+ 
+-#define arginfo_memory_reset_peak_usage arginfo_flush
+-
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_version_compare, 0, 2, MAY_BE_LONG|MAY_BE_BOOL)
+ 	ZEND_ARG_TYPE_INFO(0, version1, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, version2, IS_STRING, 0)
+@@ -2314,10 +2332,10 @@ ZEND_FUNCTION(getopt);
+ ZEND_FUNCTION(flush);
+ ZEND_FUNCTION(sleep);
+ ZEND_FUNCTION(usleep);
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ ZEND_FUNCTION(time_nanosleep);
+ #endif
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ ZEND_FUNCTION(time_sleep_until);
+ #endif
+ ZEND_FUNCTION(get_current_user);
+@@ -2337,23 +2355,22 @@ ZEND_FUNCTION(ini_get);
+ ZEND_FUNCTION(ini_get_all);
+ ZEND_FUNCTION(ini_set);
+ ZEND_FUNCTION(ini_restore);
+-ZEND_FUNCTION(ini_parse_quantity);
+ ZEND_FUNCTION(set_include_path);
+ ZEND_FUNCTION(get_include_path);
+ ZEND_FUNCTION(print_r);
+ ZEND_FUNCTION(connection_aborted);
+ ZEND_FUNCTION(connection_status);
+ ZEND_FUNCTION(ignore_user_abort);
+-#if defined(HAVE_GETSERVBYNAME)
++#if HAVE_GETSERVBYNAME
+ ZEND_FUNCTION(getservbyname);
+ #endif
+-#if defined(HAVE_GETSERVBYPORT)
++#if HAVE_GETSERVBYPORT
+ ZEND_FUNCTION(getservbyport);
+ #endif
+-#if defined(HAVE_GETPROTOBYNAME)
++#if HAVE_GETPROTOBYNAME
+ ZEND_FUNCTION(getprotobyname);
+ #endif
+-#if defined(HAVE_GETPROTOBYNUMBER)
++#if HAVE_GETPROTOBYNUMBER
+ ZEND_FUNCTION(getprotobynumber);
+ #endif
+ ZEND_FUNCTION(register_tick_function);
+@@ -2371,7 +2388,7 @@ ZEND_FUNCTION(sys_getloadavg);
+ ZEND_FUNCTION(get_browser);
+ ZEND_FUNCTION(crc32);
+ ZEND_FUNCTION(crypt);
+-#if defined(HAVE_STRPTIME)
++#if HAVE_STRPTIME
+ ZEND_FUNCTION(strptime);
+ #endif
+ #if defined(HAVE_GETHOSTNAME)
+@@ -2380,22 +2397,23 @@ ZEND_FUNCTION(gethostname);
+ ZEND_FUNCTION(gethostbyaddr);
+ ZEND_FUNCTION(gethostbyname);
+ ZEND_FUNCTION(gethostbynamel);
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_FUNCTION(dns_check_record);
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_FUNCTION(dns_get_record);
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ ZEND_FUNCTION(dns_get_mx);
+ #endif
+-#if (defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__))
++#if defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__)
+ ZEND_FUNCTION(net_get_interfaces);
+ #endif
+-#if defined(HAVE_FTOK)
++#if HAVE_FTOK
+ ZEND_FUNCTION(ftok);
+ #endif
+ ZEND_FUNCTION(hrtime);
++ZEND_FUNCTION(lcg_value);
+ ZEND_FUNCTION(md5);
+ ZEND_FUNCTION(md5_file);
+ ZEND_FUNCTION(getmyuid);
+@@ -2439,7 +2457,7 @@ ZEND_FUNCTION(bin2hex);
+ ZEND_FUNCTION(hex2bin);
+ ZEND_FUNCTION(strspn);
+ ZEND_FUNCTION(strcspn);
+-#if defined(HAVE_NL_LANGINFO)
++#if HAVE_NL_LANGINFO
+ ZEND_FUNCTION(nl_langinfo);
+ #endif
+ ZEND_FUNCTION(strcoll);
+@@ -2509,7 +2527,7 @@ ZEND_FUNCTION(opendir);
+ ZEND_FUNCTION(dir);
+ ZEND_FUNCTION(closedir);
+ ZEND_FUNCTION(chdir);
+-#if (defined(HAVE_CHROOT) && !defined(ZTS) && defined(ENABLE_CHROOT_FUNC))
++#if defined(HAVE_CHROOT) && !defined(ZTS) && ENABLE_CHROOT_FUNC
+ ZEND_FUNCTION(chroot);
+ #endif
+ ZEND_FUNCTION(getcwd);
+@@ -2588,14 +2606,14 @@ ZEND_FUNCTION(stat);
+ ZEND_FUNCTION(lstat);
+ ZEND_FUNCTION(chown);
+ ZEND_FUNCTION(chgrp);
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ ZEND_FUNCTION(lchown);
+ #endif
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ ZEND_FUNCTION(lchgrp);
+ #endif
+ ZEND_FUNCTION(chmod);
+-#if defined(HAVE_UTIME)
++#if HAVE_UTIME
+ ZEND_FUNCTION(touch);
+ #endif
+ ZEND_FUNCTION(clearstatcache);
+@@ -2626,16 +2644,16 @@ ZEND_FUNCTION(php_ini_loaded_file);
+ ZEND_FUNCTION(iptcembed);
+ ZEND_FUNCTION(iptcparse);
+ ZEND_FUNCTION(levenshtein);
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_FUNCTION(readlink);
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_FUNCTION(linkinfo);
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_FUNCTION(symlink);
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ ZEND_FUNCTION(link);
+ #endif
+ ZEND_FUNCTION(mail);
+@@ -2711,6 +2729,12 @@ ZEND_FUNCTION(proc_get_status);
+ #endif
+ ZEND_FUNCTION(quoted_printable_decode);
+ ZEND_FUNCTION(quoted_printable_encode);
++ZEND_FUNCTION(mt_srand);
++ZEND_FUNCTION(rand);
++ZEND_FUNCTION(mt_rand);
++ZEND_FUNCTION(mt_getrandmax);
++ZEND_FUNCTION(random_bytes);
++ZEND_FUNCTION(random_int);
+ ZEND_FUNCTION(soundex);
+ ZEND_FUNCTION(stream_select);
+ ZEND_FUNCTION(stream_context_create);
+@@ -2733,7 +2757,7 @@ ZEND_FUNCTION(stream_socket_enable_crypto);
+ #if defined(HAVE_SHUTDOWN)
+ ZEND_FUNCTION(stream_socket_shutdown);
+ #endif
+-#if defined(HAVE_SOCKETPAIR)
++#if HAVE_SOCKETPAIR
+ ZEND_FUNCTION(stream_socket_pair);
+ #endif
+ ZEND_FUNCTION(stream_copy_to_stream);
+@@ -2753,7 +2777,7 @@ ZEND_FUNCTION(stream_isatty);
+ ZEND_FUNCTION(sapi_windows_vt100_support);
+ #endif
+ ZEND_FUNCTION(stream_set_chunk_size);
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ ZEND_FUNCTION(stream_set_timeout);
+ #endif
+ ZEND_FUNCTION(gettype);
+@@ -2800,7 +2824,6 @@ ZEND_FUNCTION(serialize);
+ ZEND_FUNCTION(unserialize);
+ ZEND_FUNCTION(memory_get_usage);
+ ZEND_FUNCTION(memory_get_peak_usage);
+-ZEND_FUNCTION(memory_reset_peak_usage);
+ ZEND_FUNCTION(version_compare);
+ #if defined(PHP_WIN32)
+ ZEND_FUNCTION(sapi_windows_cp_set);
+@@ -2847,7 +2870,7 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(array_push, arginfo_array_push)
+ 	ZEND_FE(krsort, arginfo_krsort)
+ 	ZEND_FE(ksort, arginfo_ksort)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(count, arginfo_count)
++	ZEND_FE(count, arginfo_count)
+ 	ZEND_FALIAS(sizeof, count, arginfo_sizeof)
+ 	ZEND_FE(natsort, arginfo_natsort)
+ 	ZEND_FE(natcasesort, arginfo_natcasesort)
+@@ -2865,12 +2888,12 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(current, arginfo_current)
+ 	ZEND_FALIAS(pos, current, arginfo_pos)
+ 	ZEND_FE(key, arginfo_key)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(min, arginfo_min)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(max, arginfo_max)
++	ZEND_FE(min, arginfo_min)
++	ZEND_FE(max, arginfo_max)
+ 	ZEND_FE(array_walk, arginfo_array_walk)
+ 	ZEND_FE(array_walk_recursive, arginfo_array_walk_recursive)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(in_array, arginfo_in_array)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_search, arginfo_array_search)
++	ZEND_FE(in_array, arginfo_in_array)
++	ZEND_FE(array_search, arginfo_array_search)
+ 	ZEND_FE(extract, arginfo_extract)
+ 	ZEND_FE(compact, arginfo_compact)
+ 	ZEND_FE(array_fill, arginfo_array_fill)
+@@ -2882,21 +2905,21 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(array_unshift, arginfo_array_unshift)
+ 	ZEND_FE(array_splice, arginfo_array_splice)
+ 	ZEND_FE(array_slice, arginfo_array_slice)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_merge, arginfo_array_merge)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_merge_recursive, arginfo_array_merge_recursive)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_replace, arginfo_array_replace)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_replace_recursive, arginfo_array_replace_recursive)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_keys, arginfo_array_keys)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_key_first, arginfo_array_key_first)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_key_last, arginfo_array_key_last)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_values, arginfo_array_values)
++	ZEND_FE(array_merge, arginfo_array_merge)
++	ZEND_FE(array_merge_recursive, arginfo_array_merge_recursive)
++	ZEND_FE(array_replace, arginfo_array_replace)
++	ZEND_FE(array_replace_recursive, arginfo_array_replace_recursive)
++	ZEND_FE(array_keys, arginfo_array_keys)
++	ZEND_FE(array_key_first, arginfo_array_key_first)
++	ZEND_FE(array_key_last, arginfo_array_key_last)
++	ZEND_FE(array_values, arginfo_array_values)
+ 	ZEND_FE(array_count_values, arginfo_array_count_values)
+ 	ZEND_FE(array_column, arginfo_array_column)
+ 	ZEND_FE(array_reverse, arginfo_array_reverse)
+ 	ZEND_FE(array_pad, arginfo_array_pad)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_flip, arginfo_array_flip)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_change_key_case, arginfo_array_change_key_case)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_unique, arginfo_array_unique)
++	ZEND_FE(array_flip, arginfo_array_flip)
++	ZEND_FE(array_change_key_case, arginfo_array_change_key_case)
++	ZEND_FE(array_unique, arginfo_array_unique)
+ 	ZEND_FE(array_intersect_key, arginfo_array_intersect_key)
+ 	ZEND_FE(array_intersect_ukey, arginfo_array_intersect_ukey)
+ 	ZEND_FE(array_intersect, arginfo_array_intersect)
+@@ -2905,11 +2928,11 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(array_uintersect_assoc, arginfo_array_uintersect_assoc)
+ 	ZEND_FE(array_intersect_uassoc, arginfo_array_intersect_uassoc)
+ 	ZEND_FE(array_uintersect_uassoc, arginfo_array_uintersect_uassoc)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_diff_key, arginfo_array_diff_key)
++	ZEND_FE(array_diff_key, arginfo_array_diff_key)
+ 	ZEND_FE(array_diff_ukey, arginfo_array_diff_ukey)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_diff, arginfo_array_diff)
++	ZEND_FE(array_diff, arginfo_array_diff)
+ 	ZEND_FE(array_udiff, arginfo_array_udiff)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_diff_assoc, arginfo_array_diff_assoc)
++	ZEND_FE(array_diff_assoc, arginfo_array_diff_assoc)
+ 	ZEND_FE(array_diff_uassoc, arginfo_array_diff_uassoc)
+ 	ZEND_FE(array_udiff_assoc, arginfo_array_udiff_assoc)
+ 	ZEND_FE(array_udiff_uassoc, arginfo_array_udiff_uassoc)
+@@ -2920,13 +2943,13 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(array_reduce, arginfo_array_reduce)
+ 	ZEND_FE(array_filter, arginfo_array_filter)
+ 	ZEND_FE(array_map, arginfo_array_map)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_key_exists, arginfo_array_key_exists)
++	ZEND_FE(array_key_exists, arginfo_array_key_exists)
+ 	ZEND_FALIAS(key_exists, array_key_exists, arginfo_key_exists)
+ 	ZEND_FE(array_chunk, arginfo_array_chunk)
+ 	ZEND_FE(array_combine, arginfo_array_combine)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(array_is_list, arginfo_array_is_list)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(base64_encode, arginfo_base64_encode)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(base64_decode, arginfo_base64_decode)
++	ZEND_FE(array_is_list, arginfo_array_is_list)
++	ZEND_FE(base64_encode, arginfo_base64_encode)
++	ZEND_FE(base64_decode, arginfo_base64_decode)
+ 	ZEND_FE(constant, arginfo_constant)
+ 	ZEND_FE(ip2long, arginfo_ip2long)
+ 	ZEND_FE(long2ip, arginfo_long2ip)
+@@ -2938,10 +2961,10 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(flush, arginfo_flush)
+ 	ZEND_FE(sleep, arginfo_sleep)
+ 	ZEND_FE(usleep, arginfo_usleep)
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ 	ZEND_FE(time_nanosleep, arginfo_time_nanosleep)
+ #endif
+-#if defined(HAVE_NANOSLEEP)
++#if HAVE_NANOSLEEP
+ 	ZEND_FE(time_sleep_until, arginfo_time_sleep_until)
+ #endif
+ 	ZEND_FE(get_current_user, arginfo_get_current_user)
+@@ -2963,23 +2986,22 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(ini_set, arginfo_ini_set)
+ 	ZEND_FALIAS(ini_alter, ini_set, arginfo_ini_alter)
+ 	ZEND_FE(ini_restore, arginfo_ini_restore)
+-	ZEND_FE(ini_parse_quantity, arginfo_ini_parse_quantity)
+ 	ZEND_FE(set_include_path, arginfo_set_include_path)
+ 	ZEND_FE(get_include_path, arginfo_get_include_path)
+ 	ZEND_FE(print_r, arginfo_print_r)
+ 	ZEND_FE(connection_aborted, arginfo_connection_aborted)
+ 	ZEND_FE(connection_status, arginfo_connection_status)
+ 	ZEND_FE(ignore_user_abort, arginfo_ignore_user_abort)
+-#if defined(HAVE_GETSERVBYNAME)
++#if HAVE_GETSERVBYNAME
+ 	ZEND_FE(getservbyname, arginfo_getservbyname)
+ #endif
+-#if defined(HAVE_GETSERVBYPORT)
++#if HAVE_GETSERVBYPORT
+ 	ZEND_FE(getservbyport, arginfo_getservbyport)
+ #endif
+-#if defined(HAVE_GETPROTOBYNAME)
++#if HAVE_GETPROTOBYNAME
+ 	ZEND_FE(getprotobyname, arginfo_getprotobyname)
+ #endif
+-#if defined(HAVE_GETPROTOBYNUMBER)
++#if HAVE_GETPROTOBYNUMBER
+ 	ZEND_FE(getprotobynumber, arginfo_getprotobynumber)
+ #endif
+ 	ZEND_FE(register_tick_function, arginfo_register_tick_function)
+@@ -2995,9 +3017,9 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(sys_getloadavg, arginfo_sys_getloadavg)
+ #endif
+ 	ZEND_FE(get_browser, arginfo_get_browser)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(crc32, arginfo_crc32)
++	ZEND_FE(crc32, arginfo_crc32)
+ 	ZEND_FE(crypt, arginfo_crypt)
+-#if defined(HAVE_STRPTIME)
++#if HAVE_STRPTIME
+ 	ZEND_DEP_FE(strptime, arginfo_strptime)
+ #endif
+ #if defined(HAVE_GETHOSTNAME)
+@@ -3006,28 +3028,29 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(gethostbyaddr, arginfo_gethostbyaddr)
+ 	ZEND_FE(gethostbyname, arginfo_gethostbyname)
+ 	ZEND_FE(gethostbynamel, arginfo_gethostbynamel)
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ 	ZEND_FE(dns_check_record, arginfo_dns_check_record)
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ 	ZEND_FALIAS(checkdnsrr, dns_check_record, arginfo_checkdnsrr)
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ 	ZEND_FE(dns_get_record, arginfo_dns_get_record)
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ 	ZEND_FE(dns_get_mx, arginfo_dns_get_mx)
+ #endif
+-#if (defined(PHP_WIN32) || defined(HAVE_DNS_SEARCH_FUNC))
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
+ 	ZEND_FALIAS(getmxrr, dns_get_mx, arginfo_getmxrr)
+ #endif
+-#if (defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__))
++#if defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__)
+ 	ZEND_FE(net_get_interfaces, arginfo_net_get_interfaces)
+ #endif
+-#if defined(HAVE_FTOK)
++#if HAVE_FTOK
+ 	ZEND_FE(ftok, arginfo_ftok)
+ #endif
+ 	ZEND_FE(hrtime, arginfo_hrtime)
++	ZEND_FE(lcg_value, arginfo_lcg_value)
+ 	ZEND_FE(md5, arginfo_md5)
+ 	ZEND_FE(md5_file, arginfo_md5_file)
+ 	ZEND_FE(getmyuid, arginfo_getmyuid)
+@@ -3067,57 +3090,57 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(get_html_translation_table, arginfo_get_html_translation_table)
+ 	ZEND_FE(assert, arginfo_assert)
+ 	ZEND_FE(assert_options, arginfo_assert_options)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(bin2hex, arginfo_bin2hex)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(hex2bin, arginfo_hex2bin)
++	ZEND_FE(bin2hex, arginfo_bin2hex)
++	ZEND_FE(hex2bin, arginfo_hex2bin)
+ 	ZEND_FE(strspn, arginfo_strspn)
+ 	ZEND_FE(strcspn, arginfo_strcspn)
+-#if defined(HAVE_NL_LANGINFO)
++#if HAVE_NL_LANGINFO
+ 	ZEND_FE(nl_langinfo, arginfo_nl_langinfo)
+ #endif
+ 	ZEND_FE(strcoll, arginfo_strcoll)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(trim, arginfo_trim)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(rtrim, arginfo_rtrim)
++	ZEND_FE(trim, arginfo_trim)
++	ZEND_FE(rtrim, arginfo_rtrim)
+ 	ZEND_FALIAS(chop, rtrim, arginfo_chop)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(ltrim, arginfo_ltrim)
++	ZEND_FE(ltrim, arginfo_ltrim)
+ 	ZEND_FE(wordwrap, arginfo_wordwrap)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(explode, arginfo_explode)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(implode, arginfo_implode)
++	ZEND_FE(explode, arginfo_explode)
++	ZEND_FE(implode, arginfo_implode)
+ 	ZEND_FALIAS(join, implode, arginfo_join)
+ 	ZEND_FE(strtok, arginfo_strtok)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strtoupper, arginfo_strtoupper)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strtolower, arginfo_strtolower)
++	ZEND_FE(strtoupper, arginfo_strtoupper)
++	ZEND_FE(strtolower, arginfo_strtolower)
+ 	ZEND_FE(basename, arginfo_basename)
+ 	ZEND_FE(dirname, arginfo_dirname)
+ 	ZEND_FE(pathinfo, arginfo_pathinfo)
+ 	ZEND_FE(stristr, arginfo_stristr)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strstr, arginfo_strstr)
++	ZEND_FE(strstr, arginfo_strstr)
+ 	ZEND_FALIAS(strchr, strstr, arginfo_strchr)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strpos, arginfo_strpos)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(stripos, arginfo_stripos)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strrpos, arginfo_strrpos)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strripos, arginfo_strripos)
++	ZEND_FE(strpos, arginfo_strpos)
++	ZEND_FE(stripos, arginfo_stripos)
++	ZEND_FE(strrpos, arginfo_strrpos)
++	ZEND_FE(strripos, arginfo_strripos)
+ 	ZEND_FE(strrchr, arginfo_strrchr)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_contains, arginfo_str_contains)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_starts_with, arginfo_str_starts_with)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_ends_with, arginfo_str_ends_with)
++	ZEND_FE(str_contains, arginfo_str_contains)
++	ZEND_FE(str_starts_with, arginfo_str_starts_with)
++	ZEND_FE(str_ends_with, arginfo_str_ends_with)
+ 	ZEND_FE(chunk_split, arginfo_chunk_split)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(substr, arginfo_substr)
++	ZEND_FE(substr, arginfo_substr)
+ 	ZEND_FE(substr_replace, arginfo_substr_replace)
+ 	ZEND_FE(quotemeta, arginfo_quotemeta)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(ord, arginfo_ord)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(chr, arginfo_chr)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(ucfirst, arginfo_ucfirst)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(lcfirst, arginfo_lcfirst)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(ucwords, arginfo_ucwords)
++	ZEND_FE(ord, arginfo_ord)
++	ZEND_FE(chr, arginfo_chr)
++	ZEND_FE(ucfirst, arginfo_ucfirst)
++	ZEND_FE(lcfirst, arginfo_lcfirst)
++	ZEND_FE(ucwords, arginfo_ucwords)
+ 	ZEND_FE(strtr, arginfo_strtr)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(strrev, arginfo_strrev)
++	ZEND_FE(strrev, arginfo_strrev)
+ 	ZEND_FE(similar_text, arginfo_similar_text)
+ 	ZEND_FE(addcslashes, arginfo_addcslashes)
+ 	ZEND_FE(addslashes, arginfo_addslashes)
+ 	ZEND_FE(stripcslashes, arginfo_stripcslashes)
+ 	ZEND_FE(stripslashes, arginfo_stripslashes)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_replace, arginfo_str_replace)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_ireplace, arginfo_str_ireplace)
++	ZEND_FE(str_replace, arginfo_str_replace)
++	ZEND_FE(str_ireplace, arginfo_str_ireplace)
+ 	ZEND_FE(hebrev, arginfo_hebrev)
+ 	ZEND_FE(nl2br, arginfo_nl2br)
+ 	ZEND_FE(strip_tags, arginfo_strip_tags)
+@@ -3135,16 +3158,16 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(str_rot13, arginfo_str_rot13)
+ 	ZEND_FE(str_shuffle, arginfo_str_shuffle)
+ 	ZEND_FE(str_word_count, arginfo_str_word_count)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(str_split, arginfo_str_split)
++	ZEND_FE(str_split, arginfo_str_split)
+ 	ZEND_FE(strpbrk, arginfo_strpbrk)
+ 	ZEND_FE(substr_compare, arginfo_substr_compare)
+-	ZEND_DEP_FE(utf8_encode, arginfo_utf8_encode)
+-	ZEND_DEP_FE(utf8_decode, arginfo_utf8_decode)
++	ZEND_FE(utf8_encode, arginfo_utf8_encode)
++	ZEND_FE(utf8_decode, arginfo_utf8_decode)
+ 	ZEND_FE(opendir, arginfo_opendir)
+ 	ZEND_FE(dir, arginfo_dir)
+ 	ZEND_FE(closedir, arginfo_closedir)
+ 	ZEND_FE(chdir, arginfo_chdir)
+-#if (defined(HAVE_CHROOT) && !defined(ZTS) && defined(ENABLE_CHROOT_FUNC))
++#if defined(HAVE_CHROOT) && !defined(ZTS) && ENABLE_CHROOT_FUNC
+ 	ZEND_FE(chroot, arginfo_chroot)
+ #endif
+ 	ZEND_FE(getcwd, arginfo_getcwd)
+@@ -3225,14 +3248,14 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(lstat, arginfo_lstat)
+ 	ZEND_FE(chown, arginfo_chown)
+ 	ZEND_FE(chgrp, arginfo_chgrp)
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ 	ZEND_FE(lchown, arginfo_lchown)
+ #endif
+-#if defined(HAVE_LCHOWN)
++#if HAVE_LCHOWN
+ 	ZEND_FE(lchgrp, arginfo_lchgrp)
+ #endif
+ 	ZEND_FE(chmod, arginfo_chmod)
+-#if defined(HAVE_UTIME)
++#if HAVE_UTIME
+ 	ZEND_FE(touch, arginfo_touch)
+ #endif
+ 	ZEND_FE(clearstatcache, arginfo_clearstatcache)
+@@ -3255,25 +3278,25 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(getimagesize, arginfo_getimagesize)
+ 	ZEND_FE(getimagesizefromstring, arginfo_getimagesizefromstring)
+ 	ZEND_FE(phpinfo, arginfo_phpinfo)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(phpversion, arginfo_phpversion)
++	ZEND_FE(phpversion, arginfo_phpversion)
+ 	ZEND_FE(phpcredits, arginfo_phpcredits)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(php_sapi_name, arginfo_php_sapi_name)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(php_uname, arginfo_php_uname)
++	ZEND_FE(php_sapi_name, arginfo_php_sapi_name)
++	ZEND_FE(php_uname, arginfo_php_uname)
+ 	ZEND_FE(php_ini_scanned_files, arginfo_php_ini_scanned_files)
+ 	ZEND_FE(php_ini_loaded_file, arginfo_php_ini_loaded_file)
+ 	ZEND_FE(iptcembed, arginfo_iptcembed)
+ 	ZEND_FE(iptcparse, arginfo_iptcparse)
+ 	ZEND_FE(levenshtein, arginfo_levenshtein)
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ 	ZEND_FE(readlink, arginfo_readlink)
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ 	ZEND_FE(linkinfo, arginfo_linkinfo)
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ 	ZEND_FE(symlink, arginfo_symlink)
+ #endif
+-#if (defined(HAVE_SYMLINK) || defined(PHP_WIN32))
++#if defined(HAVE_SYMLINK) || defined(PHP_WIN32)
+ 	ZEND_FE(link, arginfo_link)
+ #endif
+ 	ZEND_FE(mail, arginfo_mail)
+@@ -3296,12 +3319,12 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(acosh, arginfo_acosh)
+ 	ZEND_FE(expm1, arginfo_expm1)
+ 	ZEND_FE(log1p, arginfo_log1p)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(pi, arginfo_pi)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(is_finite, arginfo_is_finite)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(is_nan, arginfo_is_nan)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(intdiv, arginfo_intdiv)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(is_infinite, arginfo_is_infinite)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(pow, arginfo_pow)
++	ZEND_FE(pi, arginfo_pi)
++	ZEND_FE(is_finite, arginfo_is_finite)
++	ZEND_FE(is_nan, arginfo_is_nan)
++	ZEND_FE(intdiv, arginfo_intdiv)
++	ZEND_FE(is_infinite, arginfo_is_infinite)
++	ZEND_FE(pow, arginfo_pow)
+ 	ZEND_FE(exp, arginfo_exp)
+ 	ZEND_FE(log, arginfo_log)
+ 	ZEND_FE(log10, arginfo_log10)
+@@ -3309,12 +3332,12 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(hypot, arginfo_hypot)
+ 	ZEND_FE(deg2rad, arginfo_deg2rad)
+ 	ZEND_FE(rad2deg, arginfo_rad2deg)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(bindec, arginfo_bindec)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(hexdec, arginfo_hexdec)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(octdec, arginfo_octdec)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(decbin, arginfo_decbin)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(decoct, arginfo_decoct)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(dechex, arginfo_dechex)
++	ZEND_FE(bindec, arginfo_bindec)
++	ZEND_FE(hexdec, arginfo_hexdec)
++	ZEND_FE(octdec, arginfo_octdec)
++	ZEND_FE(decbin, arginfo_decbin)
++	ZEND_FE(decoct, arginfo_decoct)
++	ZEND_FE(dechex, arginfo_dechex)
+ 	ZEND_FE(base_convert, arginfo_base_convert)
+ 	ZEND_FE(number_format, arginfo_number_format)
+ 	ZEND_FE(fmod, arginfo_fmod)
+@@ -3349,6 +3372,14 @@ static const zend_function_entry ext_functions[] = {
+ #endif
+ 	ZEND_FE(quoted_printable_decode, arginfo_quoted_printable_decode)
+ 	ZEND_FE(quoted_printable_encode, arginfo_quoted_printable_encode)
++	ZEND_FE(mt_srand, arginfo_mt_srand)
++	ZEND_FALIAS(srand, mt_srand, arginfo_srand)
++	ZEND_FE(rand, arginfo_rand)
++	ZEND_FE(mt_rand, arginfo_mt_rand)
++	ZEND_FE(mt_getrandmax, arginfo_mt_getrandmax)
++	ZEND_FALIAS(getrandmax, mt_getrandmax, arginfo_getrandmax)
++	ZEND_FE(random_bytes, arginfo_random_bytes)
++	ZEND_FE(random_int, arginfo_random_int)
+ 	ZEND_FE(soundex, arginfo_soundex)
+ 	ZEND_FE(stream_select, arginfo_stream_select)
+ 	ZEND_FE(stream_context_create, arginfo_stream_context_create)
+@@ -3371,7 +3402,7 @@ static const zend_function_entry ext_functions[] = {
+ #if defined(HAVE_SHUTDOWN)
+ 	ZEND_FE(stream_socket_shutdown, arginfo_stream_socket_shutdown)
+ #endif
+-#if defined(HAVE_SOCKETPAIR)
++#if HAVE_SOCKETPAIR
+ 	ZEND_FE(stream_socket_pair, arginfo_stream_socket_pair)
+ #endif
+ 	ZEND_FE(stream_copy_to_stream, arginfo_stream_copy_to_stream)
+@@ -3394,10 +3425,10 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(sapi_windows_vt100_support, arginfo_sapi_windows_vt100_support)
+ #endif
+ 	ZEND_FE(stream_set_chunk_size, arginfo_stream_set_chunk_size)
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ 	ZEND_FE(stream_set_timeout, arginfo_stream_set_timeout)
+ #endif
+-#if (defined(HAVE_SYS_TIME_H) || defined(PHP_WIN32))
++#if HAVE_SYS_TIME_H || defined(PHP_WIN32)
+ 	ZEND_FALIAS(socket_set_timeout, stream_set_timeout, arginfo_socket_set_timeout)
+ #endif
+ 	ZEND_FE(gettype, arginfo_gettype)
+@@ -3428,10 +3459,10 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(uniqid, arginfo_uniqid)
+ #endif
+ 	ZEND_FE(parse_url, arginfo_parse_url)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(urlencode, arginfo_urlencode)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(urldecode, arginfo_urldecode)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(rawurlencode, arginfo_rawurlencode)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(rawurldecode, arginfo_rawurldecode)
++	ZEND_FE(urlencode, arginfo_urlencode)
++	ZEND_FE(urldecode, arginfo_urldecode)
++	ZEND_FE(rawurlencode, arginfo_rawurlencode)
++	ZEND_FE(rawurldecode, arginfo_rawurldecode)
+ 	ZEND_FE(get_headers, arginfo_get_headers)
+ 	ZEND_FE(stream_bucket_make_writeable, arginfo_stream_bucket_make_writeable)
+ 	ZEND_FE(stream_bucket_prepend, arginfo_stream_bucket_prepend)
+@@ -3444,12 +3475,11 @@ static const zend_function_entry ext_functions[] = {
+ 	ZEND_FE(var_dump, arginfo_var_dump)
+ 	ZEND_FE(var_export, arginfo_var_export)
+ 	ZEND_FE(debug_zval_dump, arginfo_debug_zval_dump)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(serialize, arginfo_serialize)
++	ZEND_FE(serialize, arginfo_serialize)
+ 	ZEND_FE(unserialize, arginfo_unserialize)
+ 	ZEND_FE(memory_get_usage, arginfo_memory_get_usage)
+ 	ZEND_FE(memory_get_peak_usage, arginfo_memory_get_peak_usage)
+-	ZEND_FE(memory_reset_peak_usage, arginfo_memory_reset_peak_usage)
+-	ZEND_SUPPORTS_COMPILE_TIME_EVAL_FE(version_compare, arginfo_version_compare)
++	ZEND_FE(version_compare, arginfo_version_compare)
+ #if defined(PHP_WIN32)
+ 	ZEND_FE(sapi_windows_cp_set, arginfo_sapi_windows_cp_set)
+ #endif
+@@ -3481,258 +3511,13 @@ static const zend_function_entry class_AssertionError_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_basic_functions_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("EXTR_OVERWRITE", PHP_EXTR_OVERWRITE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_SKIP", PHP_EXTR_SKIP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_PREFIX_SAME", PHP_EXTR_PREFIX_SAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_PREFIX_ALL", PHP_EXTR_PREFIX_ALL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_PREFIX_INVALID", PHP_EXTR_PREFIX_INVALID, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_PREFIX_IF_EXISTS", PHP_EXTR_PREFIX_IF_EXISTS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_IF_EXISTS", PHP_EXTR_IF_EXISTS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("EXTR_REFS", PHP_EXTR_REFS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_ASC", PHP_SORT_ASC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_DESC", PHP_SORT_DESC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_REGULAR", PHP_SORT_REGULAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_NUMERIC", PHP_SORT_NUMERIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_STRING", PHP_SORT_STRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_LOCALE_STRING", PHP_SORT_LOCALE_STRING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_NATURAL", PHP_SORT_NATURAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SORT_FLAG_CASE", PHP_SORT_FLAG_CASE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CASE_LOWER", PHP_CASE_LOWER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CASE_UPPER", PHP_CASE_UPPER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("COUNT_NORMAL", PHP_COUNT_NORMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("COUNT_RECURSIVE", PHP_COUNT_RECURSIVE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("ARRAY_FILTER_USE_BOTH", ARRAY_FILTER_USE_BOTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("ARRAY_FILTER_USE_KEY", ARRAY_FILTER_USE_KEY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CONNECTION_ABORTED", PHP_CONNECTION_ABORTED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CONNECTION_NORMAL", PHP_CONNECTION_NORMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CONNECTION_TIMEOUT", PHP_CONNECTION_TIMEOUT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_USER", ZEND_INI_USER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_PERDIR", ZEND_INI_PERDIR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_SYSTEM", ZEND_INI_SYSTEM, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_ALL", ZEND_INI_ALL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_SCANNER_NORMAL", ZEND_INI_SCANNER_NORMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_SCANNER_RAW", ZEND_INI_SCANNER_RAW, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("INI_SCANNER_TYPED", ZEND_INI_SCANNER_TYPED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_SCHEME", PHP_URL_SCHEME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_HOST", PHP_URL_HOST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_PORT", PHP_URL_PORT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_USER", PHP_URL_USER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_PASS", PHP_URL_PASS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_PATH", PHP_URL_PATH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_QUERY", PHP_URL_QUERY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_URL_FRAGMENT", PHP_URL_FRAGMENT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_QUERY_RFC1738", PHP_QUERY_RFC1738, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_QUERY_RFC3986", PHP_QUERY_RFC3986, CONST_PERSISTENT);
+-	REGISTER_DOUBLE_CONSTANT("M_E", M_E, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_E == 2.718281828459045);
+-	REGISTER_DOUBLE_CONSTANT("M_LOG2E", M_LOG2E, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_LOG2E == 1.4426950408889634);
+-	REGISTER_DOUBLE_CONSTANT("M_LOG10E", M_LOG10E, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_LOG10E == 0.4342944819032518);
+-	REGISTER_DOUBLE_CONSTANT("M_LN2", M_LN2, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_LN2 == 0.6931471805599453);
+-	REGISTER_DOUBLE_CONSTANT("M_LN10", M_LN10, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_LN10 == 2.302585092994046);
+-	REGISTER_DOUBLE_CONSTANT("M_PI", M_PI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_PI == 3.141592653589793);
+-	REGISTER_DOUBLE_CONSTANT("M_PI_2", M_PI_2, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_PI_2 == 1.5707963267948966);
+-	REGISTER_DOUBLE_CONSTANT("M_PI_4", M_PI_4, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_PI_4 == 0.7853981633974483);
+-	REGISTER_DOUBLE_CONSTANT("M_1_PI", M_1_PI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_1_PI == 0.3183098861837907);
+-	REGISTER_DOUBLE_CONSTANT("M_2_PI", M_2_PI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_2_PI == 0.6366197723675814);
+-	REGISTER_DOUBLE_CONSTANT("M_SQRTPI", M_SQRTPI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_SQRTPI == 1.772453850905516);
+-	REGISTER_DOUBLE_CONSTANT("M_2_SQRTPI", M_2_SQRTPI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_2_SQRTPI == 1.1283791670955126);
+-	REGISTER_DOUBLE_CONSTANT("M_LNPI", M_LNPI, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_LNPI == 1.1447298858494002);
+-	REGISTER_DOUBLE_CONSTANT("M_EULER", M_EULER, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_EULER == 0.5772156649015329);
+-	REGISTER_DOUBLE_CONSTANT("M_SQRT2", M_SQRT2, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_SQRT2 == 1.4142135623730951);
+-	REGISTER_DOUBLE_CONSTANT("M_SQRT1_2", M_SQRT1_2, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_SQRT1_2 == 0.7071067811865476);
+-	REGISTER_DOUBLE_CONSTANT("M_SQRT3", M_SQRT3, CONST_PERSISTENT);
+-	ZEND_ASSERT(M_SQRT3 == 1.7320508075688772);
+-	REGISTER_DOUBLE_CONSTANT("INF", ZEND_INFINITY, CONST_PERSISTENT);
+-	REGISTER_DOUBLE_CONSTANT("NAN", ZEND_NAN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_UP", PHP_ROUND_HALF_UP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_DOWN", PHP_ROUND_HALF_DOWN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_EVEN", PHP_ROUND_HALF_EVEN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PHP_ROUND_HALF_ODD", PHP_ROUND_HALF_ODD, CONST_PERSISTENT);
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_A", PHP_DNS_A, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_NS", PHP_DNS_NS, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_CNAME", PHP_DNS_CNAME, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_SOA", PHP_DNS_SOA, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_PTR", PHP_DNS_PTR, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_HINFO", PHP_DNS_HINFO, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS))) && (!defined(PHP_WIN32))
+-	REGISTER_LONG_CONSTANT("DNS_CAA", PHP_DNS_CAA, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_MX", PHP_DNS_MX, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_TXT", PHP_DNS_TXT, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_SRV", PHP_DNS_SRV, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_NAPTR", PHP_DNS_NAPTR, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_AAAA", PHP_DNS_AAAA, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_A6", PHP_DNS_A6, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_ANY", PHP_DNS_ANY, CONST_PERSISTENT);
+-#endif
+-#if (defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS)))
+-	REGISTER_LONG_CONSTANT("DNS_ALL", PHP_DNS_ALL, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_GIF", IMAGE_FILETYPE_GIF, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JPEG", IMAGE_FILETYPE_JPEG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_PNG", IMAGE_FILETYPE_PNG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_SWF", IMAGE_FILETYPE_SWF, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_PSD", IMAGE_FILETYPE_PSD, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_BMP", IMAGE_FILETYPE_BMP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_TIFF_II", IMAGE_FILETYPE_TIFF_II, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_TIFF_MM", IMAGE_FILETYPE_TIFF_MM, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JPC", IMAGE_FILETYPE_JPC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JP2", IMAGE_FILETYPE_JP2, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JPX", IMAGE_FILETYPE_JPX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JB2", IMAGE_FILETYPE_JB2, CONST_PERSISTENT);
+-#if (defined(HAVE_ZLIB) && !defined(COMPILE_DL_ZLIB))
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_SWC", IMAGE_FILETYPE_SWC, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_IFF", IMAGE_FILETYPE_IFF, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_WBMP", IMAGE_FILETYPE_WBMP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_JPEG2000", IMAGE_FILETYPE_JPC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_XBM", IMAGE_FILETYPE_XBM, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_ICO", IMAGE_FILETYPE_ICO, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_WEBP", IMAGE_FILETYPE_WEBP, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_AVIF", IMAGE_FILETYPE_AVIF, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_UNKNOWN", IMAGE_FILETYPE_UNKNOWN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("IMAGETYPE_COUNT", IMAGE_FILETYPE_COUNT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_EMERG", LOG_EMERG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_ALERT", LOG_ALERT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_CRIT", LOG_CRIT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_ERR", LOG_ERR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_WARNING", LOG_WARNING, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_NOTICE", LOG_NOTICE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_INFO", LOG_INFO, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_DEBUG", LOG_DEBUG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_KERN", LOG_KERN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_USER", LOG_USER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_MAIL", LOG_MAIL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_DAEMON", LOG_DAEMON, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_AUTH", LOG_AUTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_SYSLOG", LOG_SYSLOG, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_LPR", LOG_LPR, CONST_PERSISTENT);
+-#if defined(LOG_NEWS)
+-	REGISTER_LONG_CONSTANT("LOG_NEWS", LOG_NEWS, CONST_PERSISTENT);
+-#endif
+-#if defined(LOG_UUCP)
+-	REGISTER_LONG_CONSTANT("LOG_UUCP", LOG_UUCP, CONST_PERSISTENT);
+-#endif
+-#if defined(LOG_CRON)
+-	REGISTER_LONG_CONSTANT("LOG_CRON", LOG_CRON, CONST_PERSISTENT);
+-#endif
+-#if defined(LOG_AUTHPRIV)
+-	REGISTER_LONG_CONSTANT("LOG_AUTHPRIV", LOG_AUTHPRIV, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL0", LOG_LOCAL0, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL1", LOG_LOCAL1, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL2", LOG_LOCAL2, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL3", LOG_LOCAL3, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL4", LOG_LOCAL4, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL5", LOG_LOCAL5, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL6", LOG_LOCAL6, CONST_PERSISTENT);
+-#endif
+-#if !defined(PHP_WIN32)
+-	REGISTER_LONG_CONSTANT("LOG_LOCAL7", LOG_LOCAL7, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("LOG_PID", LOG_PID, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_CONS", LOG_CONS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_ODELAY", LOG_ODELAY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LOG_NDELAY", LOG_NDELAY, CONST_PERSISTENT);
+-#if defined(LOG_NOWAIT)
+-	REGISTER_LONG_CONSTANT("LOG_NOWAIT", LOG_NOWAIT, CONST_PERSISTENT);
+-#endif
+-#if defined(LOG_PERROR)
+-	REGISTER_LONG_CONSTANT("LOG_PERROR", LOG_PERROR, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("STR_PAD_LEFT", PHP_STR_PAD_LEFT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("STR_PAD_RIGHT", PHP_STR_PAD_RIGHT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("STR_PAD_BOTH", PHP_STR_PAD_BOTH, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PATHINFO_DIRNAME", PHP_PATHINFO_DIRNAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PATHINFO_BASENAME", PHP_PATHINFO_BASENAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PATHINFO_EXTENSION", PHP_PATHINFO_EXTENSION, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PATHINFO_FILENAME", PHP_PATHINFO_FILENAME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("PATHINFO_ALL", PHP_PATHINFO_ALL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("CHAR_MAX", CHAR_MAX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_CTYPE", LC_CTYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_NUMERIC", LC_NUMERIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_TIME", LC_TIME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_COLLATE", LC_COLLATE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_MONETARY", LC_MONETARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("LC_ALL", LC_ALL, CONST_PERSISTENT);
+-#if defined(LC_MESSAGES)
+-	REGISTER_LONG_CONSTANT("LC_MESSAGES", LC_MESSAGES, CONST_PERSISTENT);
+-#endif
+-
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "crypt", sizeof("crypt") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "password_hash", sizeof("password_hash") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "password_verify", sizeof("password_verify") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-}
+-
+ static zend_class_entry *register_class___PHP_Incomplete_Class(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+ 
+ 	INIT_CLASS_ENTRY(ce, "__PHP_Incomplete_Class", class___PHP_Incomplete_Class_methods);
+ 	class_entry = zend_register_internal_class_ex(&ce, NULL);
+-	class_entry->ce_flags |= ZEND_ACC_FINAL|ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
+-
+-	zend_string *attribute_name_AllowDynamicProperties_class___PHP_Incomplete_Class = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
+-	zend_add_class_attribute(class_entry, attribute_name_AllowDynamicProperties_class___PHP_Incomplete_Class, 0);
+-	zend_string_release(attribute_name_AllowDynamicProperties_class___PHP_Incomplete_Class);
++	class_entry->ce_flags |= ZEND_ACC_FINAL;
+ 
+ 	return class_entry;
+ }
+diff --git a/ext/standard/browscap.c b/ext/standard/browscap.c
+index 4fa766e3..53504098 100644
+--- a/ext/standard/browscap.c
++++ b/ext/standard/browscap.c
+@@ -329,7 +329,7 @@ static void php_browscap_parser_cb(zval *arg1, zval *arg2, zval *arg3, int callb
+ 				}
+ 
+ 				if (zend_string_equals_literal_ci(Z_STR_P(arg1), "parent")) {
+-					/* parent entry cannot be same as current section -> causes infinite loop! */
++					/* parent entry can not be same as current section -> causes infinite loop! */
+ 					if (ctx->current_section_name != NULL &&
+ 						zend_string_equals_ci(ctx->current_section_name, Z_STR_P(arg2))
+ 					) {
+diff --git a/ext/standard/config.m4 b/ext/standard/config.m4
+index 8e77e751..97a74d22 100644
+--- a/ext/standard/config.m4
++++ b/ext/standard/config.m4
+@@ -51,23 +51,14 @@ if test "$ac_cv_flush_io" = "yes"; then
+   AC_DEFINE(HAVE_FLUSHIO, 1, [Define if flush should be called explicitly after a buffered io.])
+ fi
+ 
+-PHP_ARG_WITH([external-libcrypt],
+-  [for external libcrypt or libxcrypt],
+-  [AS_HELP_STRING([--with-external-libcrypt],
+-    [Use external libcrypt or libxcrypt])],
+-  [no],
+-  [no])
+-
+-if test "$PHP_EXTERNAL_LIBCRYPT" != "no"; then
+-  PHP_CHECK_FUNC(crypt, crypt)
+-  PHP_CHECK_FUNC(crypt_r, crypt)
+-  AC_CHECK_HEADERS(crypt.h)
+-  if test "$ac_cv_func_crypt_r" = "yes"; then
+-    PHP_CRYPT_R_STYLE
+-  fi
++PHP_CHECK_FUNC(crypt, crypt)
++PHP_CHECK_FUNC(crypt_r, crypt)
++if test "$ac_cv_func_crypt_r" = "yes"; then
++  PHP_CRYPT_R_STYLE
++fi
+ 
+-  AC_CACHE_CHECK(for standard DES crypt, ac_cv_crypt_des,[
+-    AC_RUN_IFELSE([AC_LANG_SOURCE([[
++AC_CACHE_CHECK(for standard DES crypt, ac_cv_crypt_des,[
++  AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -96,8 +87,8 @@ int main() {
+   ac_cv_crypt_des=yes
+ ])])
+ 
+-  AC_CACHE_CHECK(for extended DES crypt, ac_cv_crypt_ext_des,[
+-    AC_RUN_IFELSE([AC_LANG_SOURCE([[
++AC_CACHE_CHECK(for extended DES crypt, ac_cv_crypt_ext_des,[
++  AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -119,15 +110,15 @@ int main() {
+ 	return 1;
+ #endif
+ }]])],[
+-    ac_cv_crypt_ext_des=yes
+-  ],[
+-    ac_cv_crypt_ext_des=no
+-  ],[
+-    ac_cv_crypt_ext_des=no
+-  ])])
+-
+-  AC_CACHE_CHECK(for MD5 crypt, ac_cv_crypt_md5,[
+-  AC_RUN_IFELSE([AC_LANG_SOURCE([[
++  ac_cv_crypt_ext_des=yes
++],[
++  ac_cv_crypt_ext_des=no
++],[
++  ac_cv_crypt_ext_des=no
++])])
++
++AC_CACHE_CHECK(for MD5 crypt, ac_cv_crypt_md5,[
++AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -159,15 +150,15 @@ int main() {
+ 	return 1;
+ #endif
+ }]])],[
+-    ac_cv_crypt_md5=yes
+-  ],[
+-    ac_cv_crypt_md5=no
+-  ],[
+-    ac_cv_crypt_md5=no
+-  ])])
+-
+-  AC_CACHE_CHECK(for Blowfish crypt, ac_cv_crypt_blowfish,[
+-  AC_RUN_IFELSE([AC_LANG_SOURCE([[
++  ac_cv_crypt_md5=yes
++],[
++  ac_cv_crypt_md5=no
++],[
++  ac_cv_crypt_md5=no
++])])
++
++AC_CACHE_CHECK(for Blowfish crypt, ac_cv_crypt_blowfish,[
++AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -196,15 +187,15 @@ int main() {
+ 	return 1;
+ #endif
+ }]])],[
+-    ac_cv_crypt_blowfish=yes
+-  ],[
+-    ac_cv_crypt_blowfish=no
+-  ],[
+-    ac_cv_crypt_blowfish=no
+-  ])])
+-
+-  AC_CACHE_CHECK(for SHA512 crypt, ac_cv_crypt_sha512,[
+-  AC_RUN_IFELSE([AC_LANG_SOURCE([[
++  ac_cv_crypt_blowfish=yes
++],[
++  ac_cv_crypt_blowfish=no
++],[
++  ac_cv_crypt_blowfish=no
++])])
++
++AC_CACHE_CHECK(for SHA512 crypt, ac_cv_crypt_sha512,[
++AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -231,16 +222,16 @@ int main() {
+ #else
+ 	return 1;
+ #endif
+-  }]])],[
+-    ac_cv_crypt_sha512=yes
+-  ],[
+-    ac_cv_crypt_sha512=no
+-  ],[
+-    ac_cv_crypt_sha512=no
+-  ])])
+-
+-  AC_CACHE_CHECK(for SHA256 crypt, ac_cv_crypt_sha256,[
+-  AC_RUN_IFELSE([AC_LANG_SOURCE([[
++}]])],[
++  ac_cv_crypt_sha512=yes
++],[
++  ac_cv_crypt_sha512=no
++],[
++  ac_cv_crypt_sha512=no
++])])
++
++AC_CACHE_CHECK(for SHA256 crypt, ac_cv_crypt_sha256,[
++AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <string.h>
+ 
+ #if HAVE_UNISTD_H
+@@ -268,23 +259,35 @@ int main() {
+ 	return 1;
+ #endif
+ }]])],[
+-    ac_cv_crypt_sha256=yes
+-  ],[
+-    ac_cv_crypt_sha256=no
+-  ],[
+-    ac_cv_crypt_sha256=no
+-  ])])
++  ac_cv_crypt_sha256=yes
++],[
++  ac_cv_crypt_sha256=no
++],[
++  ac_cv_crypt_sha256=no
++])])
+ 
+ 
+-  if test "$ac_cv_crypt_blowfish" = "no" || test "$ac_cv_crypt_des" = "no" || test "$ac_cv_crypt_ext_des" = "no" || test "$ac_cv_crypt_md5" = "no" || test "$ac_cv_crypt_sha512" = "no" || test "$ac_cv_crypt_sha256" = "no" || test "$ac_cv_func_crypt_r" != "yes"; then
+-    AC_MSG_ERROR([Cannot use external libcrypt as some algo are missing])
+-  fi
++PHP_ARG_WITH([external-libcrypt],
++  [for external libcrypt or libxcrypt],
++  [AS_HELP_STRING([--with-external-libcrypt],
++    [Use external libcrypt or libxcrypt])],
++  [no],
++  [no])
+ 
+-  AC_DEFINE_UNQUOTED(PHP_USE_PHP_CRYPT_R, 0, [Whether PHP has to use its own crypt_r])
+-else
+-  AC_DEFINE_UNQUOTED(PHP_USE_PHP_CRYPT_R, 1, [Whether PHP has to use its own crypt_r])
++dnl
++dnl If one of them is missing, use our own implementation, portable code is then possible
++dnl
++dnl This is currently enabled by default
++if test "$ac_cv_crypt_blowfish" = "no" || test "$ac_cv_crypt_des" = "no" || test "$ac_cv_crypt_ext_des" = "no" || test "$ac_cv_crypt_md5" = "no" || test "$ac_cv_crypt_sha512" = "no" || test "$ac_cv_crypt_sha256" = "no" || test "$ac_cv_func_crypt_r" != "yes" || test "$PHP_EXTERNAL_LIBCRYPT" = "no"; then
++  if test "$PHP_EXTERNAL_LIBCRYPT" = "no"; then
++    AC_DEFINE_UNQUOTED(PHP_USE_PHP_CRYPT_R, 1, [Whether PHP has to use its own crypt_r])
+ 
+-  PHP_ADD_SOURCES(PHP_EXT_DIR(standard), crypt_freesec.c crypt_blowfish.c crypt_sha512.c crypt_sha256.c php_crypt_r.c)
++    PHP_ADD_SOURCES(PHP_EXT_DIR(standard), crypt_freesec.c crypt_blowfish.c crypt_sha512.c crypt_sha256.c php_crypt_r.c)
++   else
++    AC_MSG_ERROR([Cannot use external libcrypt as some algo are missing])
++   fi
++else
++  AC_DEFINE_UNQUOTED(PHP_USE_PHP_CRYPT_R, 0, [Whether PHP has to use its own crypt_r])
+ fi
+ 
+ dnl
+@@ -407,12 +410,7 @@ dnl
+ dnl Check for CCRandomGenerateBytes
+ dnl header absent in previous macOs releases
+ dnl
+-AC_CHECK_HEADERS([CommonCrypto/CommonRandom.h], [], [],
+-[
+-	#include <sys/types.h>
+-	#include <Availability.h>
+-	#include <CommonCrypto/CommonCryptoError.h>
+-])
++AC_CHECK_HEADERS([CommonCrypto/CommonRandom.h])
+ 
+ dnl
+ dnl Check for argon2
+@@ -463,18 +461,16 @@ dnl
+ PHP_NEW_EXTENSION(standard, array.c base64.c basic_functions.c browscap.c crc32.c crypt.c \
+                             datetime.c dir.c dl.c dns.c exec.c file.c filestat.c \
+                             flock_compat.c formatted_print.c fsock.c head.c html.c image.c \
+-                            info.c iptc.c link.c mail.c math.c md5.c metaphone.c \
+-                            microtime.c pack.c pageinfo.c quot_print.c \
++                            info.c iptc.c lcg.c link.c mail.c math.c md5.c metaphone.c \
++                            microtime.c pack.c pageinfo.c quot_print.c rand.c mt_rand.c \
+                             soundex.c string.c scanf.c syslog.c type.c uniqid.c url.c \
+                             var.c versioning.c assert.c strnatcmp.c levenshtein.c \
+                             incomplete_class.c url_scanner_ex.c ftp_fopen_wrapper.c \
+                             http_fopen_wrapper.c php_fopen_wrapper.c credits.c css.c \
+                             var_unserializer.c ftok.c sha1.c user_filters.c uuencode.c \
+                             filters.c proc_open.c streamsfuncs.c http.c password.c \
+-                            net.c hrtime.c crc32_x86.c libavifinfo/avifinfo.c,,,
++                            random.c net.c hrtime.c crc32_x86.c,,,
+ 			    -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
+ 
+-PHP_ADD_BUILD_DIR($ext_builddir/libavifinfo)
+-
+ PHP_ADD_MAKEFILE_FRAGMENT
+ PHP_INSTALL_HEADERS([ext/standard/])

@@ -1,0 +1,541 @@
+diff --git a/Zend/zend_operators.h b/Zend/zend_operators.h
+index 0fc503f2..aa2bdafe 100644
+--- a/Zend/zend_operators.h
++++ b/Zend/zend_operators.h
+@@ -161,17 +161,19 @@ static zend_always_inline const char *
+ zend_memnstr(const char *haystack, const char *needle, size_t needle_len, const char *end)
+ {
+ 	const char *p = haystack;
++	ptrdiff_t off_p;
+ 	size_t off_s;
+ 
+-	ZEND_ASSERT(end >= p);
++	if (needle_len == 0) {
++		return p;
++	}
+ 
+ 	if (needle_len == 1) {
+ 		return (const char *)memchr(p, *needle, (end-p));
+-	} else if (UNEXPECTED(needle_len == 0)) {
+-		return p;
+ 	}
+ 
+-	off_s = (size_t)(end - p);
++	off_p = end - haystack;
++	off_s = (off_p > 0) ? (size_t)off_p : 0;
+ 
+ 	if (needle_len > off_s) {
+ 		return NULL;
+@@ -182,13 +184,16 @@ zend_memnstr(const char *haystack, const char *needle, size_t needle_len, const
+ 		end -= needle_len;
+ 
+ 		while (p <= end) {
+-			if ((p = (const char *)memchr(p, *needle, (end-p+1)))) {
+-				if (ne == p[needle_len-1] && !memcmp(needle+1, p+1, needle_len-2)) {
++			if ((p = (const char *)memchr(p, *needle, (end-p+1))) && ne == p[needle_len-1]) {
++				if (!memcmp(needle+1, p+1, needle_len-2)) {
+ 					return p;
+ 				}
+-			} else {
++			}
++
++			if (p == NULL) {
+ 				return NULL;
+ 			}
++
+ 			p++;
+ 		}
+ 
+@@ -200,10 +205,6 @@ zend_memnstr(const char *haystack, const char *needle, size_t needle_len, const
+ 
+ static zend_always_inline const void *zend_memrchr(const void *s, int c, size_t n)
+ {
+-#if defined(HAVE_MEMRCHR) && !defined(i386)
+-	/* On x86 memrchr() doesn't use SSE/AVX, so inlined version is faster */
+-	return (const void*)memrchr(s, c, n);
+-#else
+ 	const unsigned char *e;
+ 	if (0 == n) {
+ 		return NULL;
+@@ -215,7 +216,6 @@ static zend_always_inline const void *zend_memrchr(const void *s, int c, size_t
+ 		}
+ 	}
+ 	return NULL;
+-#endif
+ }
+ 
+ 
+@@ -422,32 +422,18 @@ ZEND_API int ZEND_FASTCALL string_compare_function(zval *op1, zval *op2);
+ ZEND_API int ZEND_FASTCALL string_case_compare_function(zval *op1, zval *op2);
+ ZEND_API int ZEND_FASTCALL string_locale_compare_function(zval *op1, zval *op2);
+ 
+-ZEND_API extern const unsigned char zend_tolower_map[256];
+-ZEND_API extern const unsigned char zend_toupper_map[256];
+-
+-#define zend_tolower_ascii(c) (zend_tolower_map[(unsigned char)(c)])
+-#define zend_toupper_ascii(c) (zend_toupper_map[(unsigned char)(c)])
+-
+ ZEND_API void         ZEND_FASTCALL zend_str_tolower(char *str, size_t length);
+-ZEND_API void         ZEND_FASTCALL zend_str_toupper(char *str, size_t length);
+ ZEND_API char*        ZEND_FASTCALL zend_str_tolower_copy(char *dest, const char *source, size_t length);
+-ZEND_API char*        ZEND_FASTCALL zend_str_toupper_copy(char *dest, const char *source, size_t length);
+ ZEND_API char*        ZEND_FASTCALL zend_str_tolower_dup(const char *source, size_t length);
+-ZEND_API char*        ZEND_FASTCALL zend_str_toupper_dup(const char *source, size_t length);
+ ZEND_API char*        ZEND_FASTCALL zend_str_tolower_dup_ex(const char *source, size_t length);
+-ZEND_API char*        ZEND_FASTCALL zend_str_toupper_dup_ex(const char *source, size_t length);
+ ZEND_API zend_string* ZEND_FASTCALL zend_string_tolower_ex(zend_string *str, bool persistent);
+-ZEND_API zend_string* ZEND_FASTCALL zend_string_toupper_ex(zend_string *str, bool persistent);
+ 
+-static zend_always_inline zend_string* zend_string_tolower(zend_string *str) {
+-	return zend_string_tolower_ex(str, false);
+-}
+-static zend_always_inline zend_string* zend_string_toupper(zend_string *str) {
+-	return zend_string_toupper_ex(str, false);
+-}
++#define zend_string_tolower(str) zend_string_tolower_ex(str, 0)
+ 
+ ZEND_API int ZEND_FASTCALL zend_binary_zval_strcmp(zval *s1, zval *s2);
+ ZEND_API int ZEND_FASTCALL zend_binary_zval_strncmp(zval *s1, zval *s2, zval *s3);
++ZEND_API int ZEND_FASTCALL zend_binary_zval_strcasecmp(zval *s1, zval *s2);
++ZEND_API int ZEND_FASTCALL zend_binary_zval_strncasecmp(zval *s1, zval *s2, zval *s3);
+ ZEND_API int ZEND_FASTCALL zend_binary_strcmp(const char *s1, size_t len1, const char *s2, size_t len2);
+ ZEND_API int ZEND_FASTCALL zend_binary_strncmp(const char *s1, size_t len1, const char *s2, size_t len2, size_t length);
+ ZEND_API int ZEND_FASTCALL zend_binary_strcasecmp(const char *s1, size_t len1, const char *s2, size_t len2);
+@@ -461,11 +447,8 @@ ZEND_API int ZEND_FASTCALL zend_compare_symbol_tables(HashTable *ht1, HashTable
+ ZEND_API int ZEND_FASTCALL zend_compare_arrays(zval *a1, zval *a2);
+ ZEND_API int ZEND_FASTCALL zend_compare_objects(zval *o1, zval *o2);
+ 
+-/** Deprecatd in favor of ZEND_STRTOL() */
+-ZEND_ATTRIBUTE_DEPRECATED ZEND_API int ZEND_FASTCALL zend_atoi(const char *str, size_t str_len);
+-
+-/** Deprecatd in favor of ZEND_STRTOL() */
+-ZEND_ATTRIBUTE_DEPRECATED ZEND_API zend_long ZEND_FASTCALL zend_atol(const char *str, size_t str_len);
++ZEND_API int ZEND_FASTCALL zend_atoi(const char *str, size_t str_len);
++ZEND_API zend_long ZEND_FASTCALL zend_atol(const char *str, size_t str_len);
+ 
+ #define convert_to_null_ex(zv) convert_to_null(zv)
+ #define convert_to_boolean_ex(zv) convert_to_boolean(zv)
+@@ -915,67 +898,6 @@ static zend_always_inline void zend_unwrap_reference(zval *op) /* {{{ */
+ }
+ /* }}} */
+ 
+-static zend_always_inline bool zend_strnieq(const char *ptr1, const char *ptr2, size_t num)
+-{
+-	const char *end = ptr1 + num;
+-	while (ptr1 < end) {
+-		if (zend_tolower_ascii(*ptr1++) != zend_tolower_ascii(*ptr2++)) {
+-			return 0;
+-		}
+-	}
+-	return 1;
+-}
+-
+-static zend_always_inline const char *
+-zend_memnistr(const char *haystack, const char *needle, size_t needle_len, const char *end)
+-{
+-	ZEND_ASSERT(end >= haystack);
+-
+-	if (UNEXPECTED(needle_len == 0)) {
+-		return haystack;
+-	}
+-
+-	if (UNEXPECTED(needle_len > (size_t)(end - haystack))) {
+-		return NULL;
+-	}
+-
+-	const char first_lower = zend_tolower_ascii(*needle);
+-	const char first_upper = zend_toupper_ascii(*needle);
+-	const char *p_lower = (const char *)memchr(haystack, first_lower, end - haystack);
+-	const char *p_upper = NULL;
+-	if (first_lower != first_upper) {
+-		// If the needle length is 1 we don't need to look beyond p_lower as it is a guaranteed match
+-		size_t upper_search_length = end - (needle_len == 1 && p_lower != NULL ? p_lower : haystack);
+-		p_upper = (const char *)memchr(haystack, first_upper, upper_search_length);
+-	}
+-	const char *p = !p_upper || (p_lower && p_lower < p_upper) ? p_lower : p_upper;
+-
+-	if (needle_len == 1) {
+-		return p;
+-	}
+-
+-	const char needle_end_lower = zend_tolower_ascii(needle[needle_len - 1]);
+-	const char needle_end_upper = zend_toupper_ascii(needle[needle_len - 1]);
+-	end -= needle_len;
+-
+-	while (p && p <= end) {
+-		if (needle_end_lower == p[needle_len - 1] || needle_end_upper == p[needle_len - 1]) {
+-			if (zend_strnieq(needle + 1, p + 1, needle_len - 2)) {
+-				return p;
+-			}
+-		}
+-		if (p_lower == p) {
+-			p_lower = (const char *)memchr(p_lower + 1, first_lower, end - p_lower);
+-		}
+-		if (p_upper == p) {
+-			p_upper = (const char *)memchr(p_upper + 1, first_upper, end - p_upper);
+-		}
+-		p = !p_upper || (p_lower && p_lower < p_upper) ? p_lower : p_upper;
+-	}
+-
+-	return NULL;
+-}
+-
+ 
+ END_EXTERN_C()
+ 
+diff --git a/Zend/zend_portability.h b/Zend/zend_portability.h
+index d59fc6d0..8f545ecb 100644
+--- a/Zend/zend_portability.h
++++ b/Zend/zend_portability.h
+@@ -63,6 +63,10 @@
+ 
+ #include <limits.h>
+ 
++#if HAVE_ALLOCA_H && !defined(_ALLOCA_H)
++# include <alloca.h>
++#endif
++
+ #if defined(ZEND_WIN32) && !defined(__clang__)
+ #include <intrin.h>
+ #endif
+@@ -177,9 +181,6 @@
+ # define ZEND_EXTENSIONS_SUPPORT	0
+ #endif
+ 
+-#if defined(HAVE_ALLOCA_H) && !defined(_ALLOCA_H)
+-# include <alloca.h>
+-#endif
+ /* AIX requires this to be the first thing in the file.  */
+ #ifndef __GNUC__
+ # ifndef HAVE_ALLOCA_H
+@@ -193,29 +194,8 @@ char *alloca();
+ # endif
+ #endif
+ 
+-#if !ZEND_DEBUG && (defined(HAVE_ALLOCA) || (defined (__GNUC__) && __GNUC__ >= 2)) && !(defined(ZTS) && defined(HPUX)) && !defined(DARWIN)
+-# define ZEND_ALLOCA_MAX_SIZE (32 * 1024)
+-# define ALLOCA_FLAG(name) \
+-	bool name;
+-# define SET_ALLOCA_FLAG(name) \
+-	name = true
+-# define do_alloca_ex(size, limit, use_heap) \
+-	((use_heap = (UNEXPECTED((size) > (limit)))) ? emalloc(size) : alloca(size))
+-# define do_alloca(size, use_heap) \
+-	do_alloca_ex(size, ZEND_ALLOCA_MAX_SIZE, use_heap)
+-# define free_alloca(p, use_heap) \
+-	do { if (UNEXPECTED(use_heap)) efree(p); } while (0)
+-#else
+-# define ALLOCA_FLAG(name)
+-# define SET_ALLOCA_FLAG(name)
+-# define do_alloca(p, use_heap)		emalloc(p)
+-# define free_alloca(p, use_heap)	efree(p)
+-#endif
+-
+ #if ZEND_GCC_VERSION >= 2096 || __has_attribute(__malloc__)
+ # define ZEND_ATTRIBUTE_MALLOC __attribute__ ((__malloc__))
+-#elif defined(ZEND_WIN32)
+-# define ZEND_ATTRIBUTE_MALLOC __declspec(allocator) __declspec(restrict)
+ #else
+ # define ZEND_ATTRIBUTE_MALLOC
+ #endif
+@@ -228,12 +208,6 @@ char *alloca();
+ # define ZEND_ATTRIBUTE_ALLOC_SIZE2(X,Y)
+ #endif
+ 
+-#if ZEND_GCC_VERSION >= 3000
+-# define ZEND_ATTRIBUTE_CONST __attribute__((const))
+-#else
+-# define ZEND_ATTRIBUTE_CONST
+-#endif
+-
+ #if ZEND_GCC_VERSION >= 2007 || __has_attribute(format)
+ # define ZEND_ATTRIBUTE_FORMAT(type, idx, first) __attribute__ ((format(type, idx, first)))
+ #else
+@@ -371,6 +345,25 @@ char *alloca();
+ # define XtOffsetOf(s_type, field) offsetof(s_type, field)
+ #endif
+ 
++#if (defined(HAVE_ALLOCA) || (defined (__GNUC__) && __GNUC__ >= 2)) && !(defined(ZTS) && defined(HPUX)) && !defined(DARWIN)
++# define ZEND_ALLOCA_MAX_SIZE (32 * 1024)
++# define ALLOCA_FLAG(name) \
++	bool name;
++# define SET_ALLOCA_FLAG(name) \
++	name = 1
++# define do_alloca_ex(size, limit, use_heap) \
++	((use_heap = (UNEXPECTED((size) > (limit)))) ? emalloc(size) : alloca(size))
++# define do_alloca(size, use_heap) \
++	do_alloca_ex(size, ZEND_ALLOCA_MAX_SIZE, use_heap)
++# define free_alloca(p, use_heap) \
++	do { if (UNEXPECTED(use_heap)) efree(p); } while (0)
++#else
++# define ALLOCA_FLAG(name)
++# define SET_ALLOCA_FLAG(name)
++# define do_alloca(p, use_heap)		emalloc(p)
++# define free_alloca(p, use_heap)	efree(p)
++#endif
++
+ #ifdef HAVE_SIGSETJMP
+ # define SETJMP(a) sigsetjmp(a, 0)
+ # define LONGJMP(a,b) siglongjmp(a, b)
+@@ -464,12 +457,6 @@ extern "C++" {
+ #define ZEND_TRUTH(x)		((x) ? 1 : 0)
+ #define ZEND_LOG_XOR(a, b)		(ZEND_TRUTH(a) ^ ZEND_TRUTH(b))
+ 
+-/**
+- * Do a three-way comparison of two integers and returns -1, 0 or 1
+- * depending on whether #a is smaller, equal or larger than #b.
+- */
+-#define ZEND_THREEWAY_COMPARE(a, b) ((a) == (b) ? 0 : ((a) < (b) ? -1 : 1))
+-
+ #define ZEND_MAX_RESERVED_RESOURCES	6
+ 
+ /* excpt.h on Digital Unix 4.0 defines function_table */
+@@ -530,7 +517,7 @@ extern "C++" {
+ #ifdef __SSSE3__
+ /* Instructions compiled directly. */
+ # define ZEND_INTRIN_SSSE3_NATIVE 1
+-#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSSE3)) || (defined(ZEND_WIN32) && (!defined(_M_ARM64)))
++#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSSE3)) || defined(ZEND_WIN32)
+ /* Function resolved by ifunc or MINIT. */
+ # define ZEND_INTRIN_SSSE3_RESOLVER 1
+ #endif
+@@ -555,7 +542,7 @@ extern "C++" {
+ #ifdef __SSE4_2__
+ /* Instructions compiled directly. */
+ # define ZEND_INTRIN_SSE4_2_NATIVE 1
+-#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSE4_2)) || (defined(ZEND_WIN32) && (!defined(_M_ARM64)))
++#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSE4_2)) || defined(ZEND_WIN32)
+ /* Function resolved by ifunc or MINIT. */
+ # define ZEND_INTRIN_SSE4_2_RESOLVER 1
+ #endif
+@@ -580,7 +567,7 @@ extern "C++" {
+ #ifdef __PCLMUL__
+ /* Instructions compiled directly. */
+ # define ZEND_INTRIN_PCLMUL_NATIVE 1
+-#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_PCLMUL)) || (defined(ZEND_WIN32) && (!defined(_M_ARM64)))
++#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_PCLMUL)) || defined(ZEND_WIN32)
+ /* Function resolved by ifunc or MINIT. */
+ # define ZEND_INTRIN_PCLMUL_RESOLVER 1
+ #endif
+@@ -606,7 +593,7 @@ extern "C++" {
+ #if defined(ZEND_INTRIN_SSE4_2_NATIVE) && defined(ZEND_INTRIN_PCLMUL_NATIVE)
+ /* Instructions compiled directly. */
+ # define ZEND_INTRIN_SSE4_2_PCLMUL_NATIVE 1
+-#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSE4_2) && defined(PHP_HAVE_PCLMUL)) || (defined(ZEND_WIN32) && (!defined(_M_ARM64)))
++#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_SSE4_2) && defined(PHP_HAVE_PCLMUL)) || defined(ZEND_WIN32)
+ /* Function resolved by ifunc or MINIT. */
+ # define ZEND_INTRIN_SSE4_2_PCLMUL_RESOLVER 1
+ #endif
+@@ -631,7 +618,7 @@ extern "C++" {
+ 
+ #ifdef __AVX2__
+ # define ZEND_INTRIN_AVX2_NATIVE 1
+-#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_AVX2)) || (defined(ZEND_WIN32) && (!defined(_M_ARM64)))
++#elif (defined(HAVE_FUNC_ATTRIBUTE_TARGET) && defined(PHP_HAVE_AVX2)) || defined(ZEND_WIN32)
+ # define ZEND_INTRIN_AVX2_RESOLVER 1
+ #endif
+ 
+diff --git a/Zend/zend_ptr_stack.h b/Zend/zend_ptr_stack.h
+index 1126da58..fd4b59d1 100644
+--- a/Zend/zend_ptr_stack.h
++++ b/Zend/zend_ptr_stack.h
+@@ -48,7 +48,7 @@ END_EXTERN_C()
+ 		do {												\
+ 			stack->max += PTR_STACK_BLOCK_SIZE;				\
+ 		} while (stack->top+count > stack->max);			\
+-		stack->elements = (void **) safe_perealloc(stack->elements, sizeof(void *), (stack->max), 0, stack->persistent);	\
++		stack->elements = (void **) perealloc(stack->elements, (sizeof(void *) * (stack->max)), stack->persistent);	\
+ 		stack->top_element = stack->elements+stack->top;	\
+ 	}
+ 
+diff --git a/Zend/zend_signal.c b/Zend/zend_signal.c
+index 0990999e..3b9dd514 100644
+--- a/Zend/zend_signal.c
++++ b/Zend/zend_signal.c
+@@ -25,9 +25,7 @@
+    All other licensing and usage conditions are those of the PHP Group.
+ */
+ 
+-#ifndef _GNU_SOURCE
+-# define _GNU_SOURCE
+-#endif
++#define _GNU_SOURCE
+ #include <string.h>
+ 
+ #include "zend.h"
+diff --git a/Zend/zend_smart_str.h b/Zend/zend_smart_str.h
+index d8b72905..80fe2861 100644
+--- a/Zend/zend_smart_str.h
++++ b/Zend/zend_smart_str.h
+@@ -21,6 +21,29 @@
+ #include "zend_globals.h"
+ #include "zend_smart_str_public.h"
+ 
++#define smart_str_appends_ex(dest, src, what) \
++	smart_str_appendl_ex((dest), (src), strlen(src), (what))
++#define smart_str_appends(dest, src) \
++	smart_str_appendl((dest), (src), strlen(src))
++#define smart_str_extend(dest, len) \
++	smart_str_extend_ex((dest), (len), 0)
++#define smart_str_appendc(dest, c) \
++	smart_str_appendc_ex((dest), (c), 0)
++#define smart_str_appendl(dest, src, len) \
++	smart_str_appendl_ex((dest), (src), (len), 0)
++#define smart_str_append(dest, src) \
++	smart_str_append_ex((dest), (src), 0)
++#define smart_str_append_smart_str(dest, src) \
++	smart_str_append_smart_str_ex((dest), (src), 0)
++#define smart_str_sets(dest, src) \
++	smart_str_setl((dest), (src), strlen(src));
++#define smart_str_append_long(dest, val) \
++	smart_str_append_long_ex((dest), (val), 0)
++#define smart_str_append_unsigned(dest, val) \
++	smart_str_append_unsigned_ex((dest), (val), 0)
++#define smart_str_free(dest) \
++	smart_str_free_ex((dest), 0)
++
+ BEGIN_EXTERN_C()
+ 
+ ZEND_API void ZEND_FASTCALL smart_str_erealloc(smart_str *str, size_t len);
+@@ -60,11 +83,6 @@ static zend_always_inline char* smart_str_extend_ex(smart_str *dest, size_t len,
+ 	return ret;
+ }
+ 
+-static zend_always_inline char* smart_str_extend(smart_str *dest, size_t length)
+-{
+-	return smart_str_extend_ex(dest, length, false);
+-}
+-
+ static zend_always_inline void smart_str_free_ex(smart_str *str, bool persistent) {
+ 	if (str->s) {
+ 		zend_string_release_ex(str->s, persistent);
+@@ -73,11 +91,6 @@ static zend_always_inline void smart_str_free_ex(smart_str *str, bool persistent
+ 	str->a = 0;
+ }
+ 
+-static zend_always_inline void smart_str_free(smart_str *str)
+-{
+-	smart_str_free_ex(str, false);
+-}
+-
+ static zend_always_inline void smart_str_0(smart_str *str) {
+ 	if (str->s) {
+ 		ZSTR_VAL(str->s)[ZSTR_LEN(str->s)] = '\0';
+@@ -88,24 +101,10 @@ static zend_always_inline size_t smart_str_get_len(smart_str *str) {
+ 	return str->s ? ZSTR_LEN(str->s) : 0;
+ }
+ 
+-static zend_always_inline void smart_str_trim_to_size_ex(smart_str *str, bool persistent)
+-{
+-	if (str->s && str->a > ZSTR_LEN(str->s)) {
+-		str->s = zend_string_realloc(str->s, ZSTR_LEN(str->s), persistent);
+-		str->a = ZSTR_LEN(str->s);
+-	}
+-}
+-
+-static zend_always_inline void smart_str_trim_to_size(smart_str *dest)
+-{
+-	smart_str_trim_to_size_ex(dest, false);
+-}
+-
+-static zend_always_inline zend_string *smart_str_extract_ex(smart_str *str, bool persistent) {
++static zend_always_inline zend_string *smart_str_extract(smart_str *str) {
+ 	if (str->s) {
+ 		zend_string *res;
+ 		smart_str_0(str);
+-		smart_str_trim_to_size_ex(str, persistent);
+ 		res = str->s;
+ 		str->s = NULL;
+ 		return res;
+@@ -114,11 +113,6 @@ static zend_always_inline zend_string *smart_str_extract_ex(smart_str *str, bool
+ 	}
+ }
+ 
+-static zend_always_inline zend_string *smart_str_extract(smart_str *dest)
+-{
+-	return smart_str_extract_ex(dest, false);
+-}
+-
+ static zend_always_inline void smart_str_appendc_ex(smart_str *dest, char ch, bool persistent) {
+ 	size_t new_len = smart_str_alloc(dest, 1, persistent);
+ 	ZSTR_VAL(dest->s)[new_len - 1] = ch;
+@@ -147,54 +141,15 @@ static zend_always_inline void smart_str_append_long_ex(smart_str *dest, zend_lo
+ 	smart_str_appendl_ex(dest, result, buf + sizeof(buf) - 1 - result, persistent);
+ }
+ 
+-static zend_always_inline void smart_str_append_long(smart_str *dest, zend_long num)
+-{
+-	smart_str_append_long_ex(dest, num, false);
+-}
+-
+ static zend_always_inline void smart_str_append_unsigned_ex(smart_str *dest, zend_ulong num, bool persistent) {
+ 	char buf[32];
+ 	char *result = zend_print_ulong_to_buf(buf + sizeof(buf) - 1, num);
+ 	smart_str_appendl_ex(dest, result, buf + sizeof(buf) - 1 - result, persistent);
+ }
+ 
+-static zend_always_inline void smart_str_append_unsigned(smart_str *dest, zend_ulong num)
+-{
+-	smart_str_append_unsigned_ex(dest, num, false);
+-}
+-
+-static zend_always_inline void smart_str_appendl(smart_str *dest, const char *src, size_t length)
+-{
+-	smart_str_appendl_ex(dest, src, length, false);
+-}
+-static zend_always_inline void smart_str_appends_ex(smart_str *dest, const char *src, bool persistent)
+-{
+-	smart_str_appendl_ex(dest, src, strlen(src), persistent);
+-}
+-static zend_always_inline void smart_str_appends(smart_str *dest, const char *src)
+-{
+-	smart_str_appendl_ex(dest, src, strlen(src), false);
+-}
+-static zend_always_inline void smart_str_append(smart_str *dest, const zend_string *src)
+-{
+-	smart_str_append_ex(dest, src, false);
+-}
+-static zend_always_inline void smart_str_appendc(smart_str *dest, char ch)
+-{
+-	smart_str_appendc_ex(dest, ch, false);
+-}
+-static zend_always_inline void smart_str_append_smart_str(smart_str *dest, const smart_str *src)
+-{
+-	smart_str_append_smart_str_ex(dest, src, false);
+-}
+-
+ static zend_always_inline void smart_str_setl(smart_str *dest, const char *src, size_t len) {
+ 	smart_str_free(dest);
+ 	smart_str_appendl(dest, src, len);
+ }
+ 
+-static zend_always_inline void smart_str_sets(smart_str *dest, const char *src)
+-{
+-	smart_str_setl(dest, src, strlen(src));
+-}
+ #endif
+diff --git a/Zend/zend_smart_str_public.h b/Zend/zend_smart_str_public.h
+index e81a6839..8b37db5b 100644
+--- a/Zend/zend_smart_str_public.h
++++ b/Zend/zend_smart_str_public.h
+@@ -18,7 +18,6 @@
+ #define ZEND_SMART_STR_PUBLIC_H
+ 
+ typedef struct {
+-	/** See smart_str_extract() */
+ 	zend_string *s;
+ 	size_t a;
+ } smart_str;
+diff --git a/Zend/zend_stream.c b/Zend/zend_stream.c
+index 8e11841a..ae2c734b 100644
+--- a/Zend/zend_stream.c
++++ b/Zend/zend_stream.c
+@@ -39,7 +39,7 @@ static void zend_stream_stdio_closer(void *handle) /* {{{ */
+ 
+ static size_t zend_stream_stdio_fsizer(void *handle) /* {{{ */
+ {
+-	zend_stat_t buf = {0};
++	zend_stat_t buf;
+ 	if (handle && zend_fstat(fileno((FILE*)handle), &buf) == 0) {
+ #ifdef S_ISREG
+ 		if (!S_ISREG(buf.st_mode)) {

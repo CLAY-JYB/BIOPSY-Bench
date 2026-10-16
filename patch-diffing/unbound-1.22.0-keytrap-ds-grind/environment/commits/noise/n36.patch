@@ -1,0 +1,78 @@
+diff --git a/testcode/readzone.c b/testcode/readzone.c
+index 94511e577..f50eea31f 100644
+--- a/testcode/readzone.c
++++ b/testcode/readzone.c
+@@ -45,7 +45,6 @@
+ #include <string.h>
+ #include <unistd.h>
+ 
+-#include <stdint.h>
+ #include "sldns/str2wire.h"
+ #include "sldns/wire2str.h"
+ 
+diff --git a/testcode/replay.c b/testcode/replay.c
+index f896a5512..95dde405f 100644
+--- a/testcode/replay.c
++++ b/testcode/replay.c
+@@ -348,6 +348,20 @@ replay_moment_read(char* remain, FILE* in, const char* name,
+ 		mom->string = strdup(m);
+ 		if(!mom->string) fatal_exit("out of memory");
+ 		if(!mom->variable) fatal_exit("out of memory");
++	} else if(parse_keyword(&remain, "FLUSH_MESSAGE")) {
++		mom->evt_type = repevt_flush_message;
++		while(isspace((unsigned char)*remain))
++			remain++;
++		strip_end_white(remain);
++		mom->string = strdup(remain);
++		if(!mom->string) fatal_exit("out of memory");
++	} else if(parse_keyword(&remain, "EXPIRE_MESSAGE")) {
++		mom->evt_type = repevt_expire_message;
++		while(isspace((unsigned char)*remain))
++			remain++;
++		strip_end_white(remain);
++		mom->string = strdup(remain);
++		if(!mom->string) fatal_exit("out of memory");
+ 	} else {
+ 		log_err("%d: unknown event type %s", pstate->lineno, remain);
+ 		free(mom);
+diff --git a/testcode/replay.h b/testcode/replay.h
+index 0271dff03..809e8ee39 100644
+--- a/testcode/replay.h
++++ b/testcode/replay.h
+@@ -85,6 +85,8 @@
+  *		The file contents is macro expanded before match.
+  *	o CHECK_TEMPFILE [fname] - followed by FILE_BEGIN [to match] FILE_END
+  *	o INFRA_RTT [ip] [dp] [rtt] - update infra cache entry with rtt.
++ *	o FLUSH_MESSAGE name type class - flushes entry in message cache.
++ *	o EXPIRE_MESSAGE name type class - expires entry in message cache.
+  *	o ERROR
+  * ; following entry starts on the next line, ENTRY_BEGIN.
+  * ; more STEP items
+@@ -148,6 +150,7 @@ struct fake_timer;
+ struct replay_var;
+ struct infra_cache;
+ struct sldns_buffer;
++struct daemon;
+ 
+ /**
+  * A replay scenario.
+@@ -212,6 +215,10 @@ struct replay_moment {
+ 		repevt_assign,
+ 		/** store infra rtt cache entry: addr and string (int) */
+ 		repevt_infra_rtt,
++		/** flush message cache entry */
++		repevt_flush_message,
++		/** expire message cache entry */
++		repevt_expire_message,
+ 		/** cause traffic to flow */
+ 		repevt_traffic
+ 	}
+@@ -297,6 +304,8 @@ struct replay_runtime {
+ 
+ 	/** ref the infra cache (was passed to outside_network_create) */
+ 	struct infra_cache* infra;
++	/** the daemon structure passed in worker call to remote accept open */
++	struct daemon* daemon;
+ 
+ 	/** the current time in seconds */
+ 	time_t now_secs;

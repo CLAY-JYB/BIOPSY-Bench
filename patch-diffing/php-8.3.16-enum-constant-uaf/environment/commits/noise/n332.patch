@@ -1,0 +1,329 @@
+diff --git a/ext/standard/net.c b/ext/standard/net.c
+index b22f304c..c549bfbc 100644
+--- a/ext/standard/net.c
++++ b/ext/standard/net.c
+@@ -17,15 +17,15 @@
+ #include "php.h"
+ #include "php_network.h"
+ 
+-#ifdef HAVE_ARPA_INET_H
++#if HAVE_ARPA_INET_H
+ # include <arpa/inet.h>
+ #endif
+ 
+-#ifdef HAVE_NET_IF_H
++#if HAVE_NET_IF_H
+ # include <net/if.h>
+ #endif
+ 
+-#ifdef HAVE_GETIFADDRS
++#if HAVE_GETIFADDRS
+ # include <ifaddrs.h>
+ #elif defined(__PASE__)
+ /* IBM i implements getifaddrs, but under its own name */
+@@ -53,7 +53,7 @@ PHPAPI zend_string* php_inet_ntop(const struct sockaddr *addr) {
+ 	if (!addr) { return NULL; }
+ 
+ 	/* Prefer inet_ntop() as it's more task-specific and doesn't have to be demangled */
+-#ifdef HAVE_INET_NTOP
++#if HAVE_INET_NTOP
+ 	switch (addr->sa_family) {
+ #ifdef AF_INET6
+ 		case AF_INET6: {
+@@ -102,7 +102,7 @@ PHPAPI zend_string* php_inet_ntop(const struct sockaddr *addr) {
+ 	return NULL;
+ }
+ 
+-#if defined(PHP_WIN32) || defined(HAVE_GETIFADDRS) || defined(__PASE__)
++#if defined(PHP_WIN32) || HAVE_GETIFADDRS || defined(__PASE__)
+ static void iface_append_unicast(zval *unicast, zend_long flags,
+                                  struct sockaddr *addr, struct sockaddr *netmask,
+                                  struct sockaddr *broadcast, struct sockaddr *ptp) {
+@@ -190,7 +190,7 @@ PHP_FUNCTION(net_get_interfaces) {
+ 	for (p = pAddresses; p; p = p->Next) {
+ 		zval iface, unicast;
+ 
+-		if ((IF_TYPE_ETHERNET_CSMACD != p->IfType) && (IF_TYPE_IEEE80211 != p->IfType) && (IF_TYPE_SOFTWARE_LOOPBACK != p->IfType)) {
++		if ((IF_TYPE_ETHERNET_CSMACD != p->IfType) && (IF_TYPE_SOFTWARE_LOOPBACK != p->IfType)) {
+ 			continue;
+ 		}
+ 
+diff --git a/ext/standard/pack.c b/ext/standard/pack.c
+index d12cd280..60a4a112 100644
+--- a/ext/standard/pack.c
++++ b/ext/standard/pack.c
+@@ -31,7 +31,7 @@
+ #include "ext/standard/head.h"
+ #include "php_string.h"
+ #include "pack.h"
+-#ifdef HAVE_PWD_H
++#if HAVE_PWD_H
+ #ifdef PHP_WIN32
+ #include "win32/pwd.h"
+ #else
+@@ -39,7 +39,7 @@
+ #endif
+ #endif
+ #include "fsock.h"
+-#ifdef HAVE_NETINET_IN_H
++#if HAVE_NETINET_IN_H
+ #include <netinet/in.h>
+ #endif
+ 
+@@ -102,13 +102,13 @@ static void php_pack(zval *val, size_t size, int *map, char *output)
+ }
+ /* }}} */
+ 
+-ZEND_ATTRIBUTE_CONST static inline uint16_t php_pack_reverse_int16(uint16_t arg)
++static inline uint16_t php_pack_reverse_int16(uint16_t arg)
+ {
+ 	return ((arg & 0xFF) << 8) | ((arg >> 8) & 0xFF);
+ }
+ 
+ /* {{{ php_pack_reverse_int32 */
+-ZEND_ATTRIBUTE_CONST static inline uint32_t php_pack_reverse_int32(uint32_t arg)
++static inline uint32_t php_pack_reverse_int32(uint32_t arg)
+ {
+ 	uint32_t result;
+ 	result = ((arg & 0xFF) << 24) | ((arg & 0xFF00) << 8) | ((arg >> 8) & 0xFF00) | ((arg >> 24) & 0xFF);
+diff --git a/ext/standard/pageinfo.c b/ext/standard/pageinfo.c
+index f24659a9..06867fbd 100644
+--- a/ext/standard/pageinfo.c
++++ b/ext/standard/pageinfo.c
+@@ -20,7 +20,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+-#ifdef HAVE_PWD_H
++#if HAVE_PWD_H
+ #ifdef PHP_WIN32
+ #include "win32/pwd.h"
+ #else
+@@ -36,7 +36,7 @@
+ #define getgid() 1
+ #define getuid() 1
+ #endif
+-#ifdef HAVE_UNISTD_H
++#if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+ #include <sys/stat.h>
+@@ -50,7 +50,7 @@
+ /* {{{ php_statpage */
+ PHPAPI void php_statpage(void)
+ {
+-	zend_stat_t *pstat = NULL;
++	zend_stat_t *pstat;
+ 
+ 	pstat = sapi_get_stat();
+ 
+diff --git a/ext/standard/password.c b/ext/standard/password.c
+index 81117f17..651cffc9 100644
+--- a/ext/standard/password.c
++++ b/ext/standard/password.c
+@@ -21,12 +21,13 @@
+ 
+ #include "fcntl.h"
+ #include "php_password.h"
++#include "php_rand.h"
+ #include "php_crypt.h"
+ #include "base64.h"
+ #include "zend_interfaces.h"
+ #include "info.h"
+-#include "ext/random/php_random.h"
+-#ifdef HAVE_ARGON2LIB
++#include "php_random.h"
++#if HAVE_ARGON2LIB
+ #include "argon2.h"
+ #endif
+ 
+@@ -151,6 +152,7 @@ static bool php_password_bcrypt_needs_rehash(const zend_string *hash, zend_array
+ }
+ 
+ static bool php_password_bcrypt_verify(const zend_string *password, const zend_string *hash) {
++	size_t i;
+ 	int status = 0;
+ 	zend_string *ret = php_crypt(ZSTR_VAL(password), (int)ZSTR_LEN(password), ZSTR_VAL(hash), (int)ZSTR_LEN(hash), 1);
+ 
+@@ -158,7 +160,7 @@ static bool php_password_bcrypt_verify(const zend_string *password, const zend_s
+ 		return 0;
+ 	}
+ 
+-	if (ZSTR_LEN(hash) < 13) {
++	if (ZSTR_LEN(ret) != ZSTR_LEN(hash) || ZSTR_LEN(hash) < 13) {
+ 		zend_string_free(ret);
+ 		return 0;
+ 	}
+@@ -167,7 +169,9 @@ static bool php_password_bcrypt_verify(const zend_string *password, const zend_s
+ 	 * resistance towards timing attacks. This is a constant time
+ 	 * equality check that will always check every byte of both
+ 	 * values. */
+-	status = php_safe_bcmp(ret, hash);
++	for (i = 0; i < ZSTR_LEN(hash); i++) {
++		status |= (ZSTR_VAL(ret)[i] ^ ZSTR_VAL(hash)[i]);
++	}
+ 
+ 	zend_string_free(ret);
+ 	return status == 0;
+@@ -227,7 +231,7 @@ const php_password_algo php_password_algo_bcrypt = {
+ };
+ 
+ 
+-#ifdef HAVE_ARGON2LIB
++#if HAVE_ARGON2LIB
+ /* argon2i/argon2id shared implementation */
+ 
+ static int extract_argon2_parameters(const zend_string *hash,
+@@ -423,7 +427,7 @@ PHP_MINIT_FUNCTION(password) /* {{{ */
+ 	}
+ 	REGISTER_STRING_CONSTANT("PASSWORD_BCRYPT", "2y", CONST_CS | CONST_PERSISTENT);
+ 
+-#ifdef HAVE_ARGON2LIB
++#if HAVE_ARGON2LIB
+ 	if (FAILURE == php_password_algo_register("argon2i", &php_password_algo_argon2i)) {
+ 		return FAILURE;
+ 	}
+@@ -436,7 +440,7 @@ PHP_MINIT_FUNCTION(password) /* {{{ */
+ #endif
+ 
+ 	REGISTER_LONG_CONSTANT("PASSWORD_BCRYPT_DEFAULT_COST", PHP_PASSWORD_BCRYPT_COST, CONST_CS | CONST_PERSISTENT);
+-#ifdef HAVE_ARGON2LIB
++#if HAVE_ARGON2LIB
+ 	REGISTER_LONG_CONSTANT("PASSWORD_ARGON2_DEFAULT_MEMORY_COST", PHP_PASSWORD_ARGON2_MEMORY_COST, CONST_CS | CONST_PERSISTENT);
+ 	REGISTER_LONG_CONSTANT("PASSWORD_ARGON2_DEFAULT_TIME_COST", PHP_PASSWORD_ARGON2_TIME_COST, CONST_CS | CONST_PERSISTENT);
+ 	REGISTER_LONG_CONSTANT("PASSWORD_ARGON2_DEFAULT_THREADS", PHP_PASSWORD_ARGON2_THREADS, CONST_CS | CONST_PERSISTENT);
+@@ -491,7 +495,7 @@ static const php_password_algo* php_password_algo_find_zval(zend_string *arg_str
+ 	switch (arg_long) {
+ 		case 0: return php_password_algo_default();
+ 		case 1: return &php_password_algo_bcrypt;
+-#ifdef HAVE_ARGON2LIB
++#if HAVE_ARGON2LIB
+ 		case 2: return &php_password_algo_argon2i;
+ 		case 3: return &php_password_algo_argon2id;
+ #else
+@@ -674,7 +678,7 @@ PHP_FUNCTION(password_algos) {
+ 	ZEND_PARSE_PARAMETERS_NONE();
+ 
+ 	array_init(return_value);
+-	ZEND_HASH_MAP_FOREACH_STR_KEY(&php_password_algos, algo) {
++	ZEND_HASH_FOREACH_STR_KEY(&php_password_algos, algo) {
+ 		add_next_index_str(return_value, zend_string_copy(algo));
+ 	} ZEND_HASH_FOREACH_END();
+ }
+diff --git a/ext/standard/php_array.h b/ext/standard/php_array.h
+index 5d42a22f..c11f7692 100644
+--- a/ext/standard/php_array.h
++++ b/ext/standard/php_array.h
+@@ -20,8 +20,6 @@
+ #ifndef PHP_ARRAY_H
+ #define PHP_ARRAY_H
+ 
+-# include "ext/random/php_random.h"
+-
+ PHP_MINIT_FUNCTION(array);
+ PHP_MSHUTDOWN_FUNCTION(array);
+ 
+@@ -31,22 +29,6 @@ PHPAPI int php_array_replace_recursive(HashTable *dest, HashTable *src);
+ PHPAPI int php_multisort_compare(const void *a, const void *b);
+ PHPAPI zend_long php_count_recursive(HashTable *ht);
+ 
+-PHPAPI bool php_array_data_shuffle(const php_random_algo *algo, php_random_status *status, zval *array);
+-PHPAPI bool php_array_pick_keys(const php_random_algo *algo, php_random_status *status, zval *input, zend_long num_req, zval *retval, bool silent);
+-
+-#define PHP_EXTR_OVERWRITE			0
+-#define PHP_EXTR_SKIP				1
+-#define PHP_EXTR_PREFIX_SAME		2
+-#define PHP_EXTR_PREFIX_ALL			3
+-#define PHP_EXTR_PREFIX_INVALID		4
+-#define PHP_EXTR_PREFIX_IF_EXISTS	5
+-#define PHP_EXTR_IF_EXISTS			6
+-
+-#define PHP_EXTR_REFS				0x100
+-
+-#define PHP_CASE_LOWER				0
+-#define PHP_CASE_UPPER				1
+-
+ #define PHP_SORT_REGULAR            0
+ #define PHP_SORT_NUMERIC            1
+ #define PHP_SORT_STRING             2
+@@ -56,8 +38,8 @@ PHPAPI bool php_array_pick_keys(const php_random_algo *algo, php_random_status *
+ #define PHP_SORT_NATURAL            6
+ #define PHP_SORT_FLAG_CASE          8
+ 
+-#define PHP_COUNT_NORMAL      0
+-#define PHP_COUNT_RECURSIVE   1
++#define COUNT_NORMAL      0
++#define COUNT_RECURSIVE   1
+ 
+ #define ARRAY_FILTER_USE_BOTH	1
+ #define ARRAY_FILTER_USE_KEY	2
+diff --git a/ext/standard/php_dir.h b/ext/standard/php_dir.h
+index 1307d1ec..dd9c039e 100644
+--- a/ext/standard/php_dir.h
++++ b/ext/standard/php_dir.h
+@@ -20,6 +20,9 @@
+ /* directory functions */
+ PHP_MINIT_FUNCTION(dir);
+ PHP_RINIT_FUNCTION(dir);
++PHP_FUNCTION(closedir);
++PHP_FUNCTION(rewinddir);
++PHP_FUNCTION(readdir);
+ 
+ #define PHP_SCANDIR_SORT_ASCENDING 0
+ #define PHP_SCANDIR_SORT_DESCENDING 1
+diff --git a/ext/standard/php_dns.h b/ext/standard/php_dns.h
+index 4e04799c..0d566335 100644
+--- a/ext/standard/php_dns.h
++++ b/ext/standard/php_dns.h
+@@ -29,7 +29,7 @@
+ #elif defined(HAVE_RES_NSEARCH)
+ #define php_dns_search(res, dname, class, type, answer, anslen) \
+ 			res_nsearch(res, dname, class, type, answer, anslen);
+-#ifdef HAVE_RES_NDESTROY
++#if HAVE_RES_NDESTROY
+ #define php_dns_free_handle(res) \
+ 			res_ndestroy(res); \
+ 			php_dns_free_res(res)
+@@ -52,36 +52,15 @@
+ #define HAVE_DNS_SEARCH_FUNC 1
+ #endif
+ 
+-#if defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_DN_EXPAND) && defined(HAVE_DN_SKIPNAME)
++#if HAVE_DNS_SEARCH_FUNC && HAVE_DN_EXPAND && HAVE_DN_SKIPNAME
+ #define HAVE_FULL_DNS_FUNCS 1
+ #endif
+ 
+-#if defined(PHP_WIN32) || (defined(HAVE_DNS_SEARCH_FUNC) && defined(HAVE_FULL_DNS_FUNCS))
+-#define PHP_DNS_A      0x00000001
+-#define PHP_DNS_NS     0x00000002
+-#define PHP_DNS_CNAME  0x00000010
+-#define PHP_DNS_SOA    0x00000020
+-#define PHP_DNS_PTR    0x00000800
+-#define PHP_DNS_HINFO  0x00001000
+-#if !defined(PHP_WIN32)
+-# define PHP_DNS_CAA    0x00002000
+-#endif
+-#define PHP_DNS_MX     0x00004000
+-#define PHP_DNS_TXT    0x00008000
+-#define PHP_DNS_A6     0x01000000
+-#define PHP_DNS_SRV    0x02000000
+-#define PHP_DNS_NAPTR  0x04000000
+-#define PHP_DNS_AAAA   0x08000000
+-#define PHP_DNS_ANY    0x10000000
+-
+-#if defined(PHP_WIN32)
+-# define PHP_DNS_NUM_TYPES	12	/* Number of DNS Types Supported by PHP currently */
+-# define PHP_DNS_ALL    (PHP_DNS_A|PHP_DNS_NS|PHP_DNS_CNAME|PHP_DNS_SOA|PHP_DNS_PTR|PHP_DNS_HINFO|PHP_DNS_MX|PHP_DNS_TXT|PHP_DNS_A6|PHP_DNS_SRV|PHP_DNS_NAPTR|PHP_DNS_AAAA)
+-#else
+-# define PHP_DNS_NUM_TYPES	13	/* Number of DNS Types Supported by PHP currently */
+-# define PHP_DNS_ALL   (PHP_DNS_A|PHP_DNS_NS|PHP_DNS_CNAME|PHP_DNS_SOA|PHP_DNS_PTR|PHP_DNS_HINFO|PHP_DNS_CAA|PHP_DNS_MX|PHP_DNS_TXT|PHP_DNS_A6|PHP_DNS_SRV|PHP_DNS_NAPTR|PHP_DNS_AAAA)
+-#endif
+-#endif
++#if defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC
++# if defined(PHP_WIN32) || HAVE_FULL_DNS_FUNCS
++PHP_MINIT_FUNCTION(dns);
++# endif
++#endif /* defined(PHP_WIN32) || HAVE_DNS_SEARCH_FUNC */
+ 
+ #ifndef INT16SZ
+ #define INT16SZ		2

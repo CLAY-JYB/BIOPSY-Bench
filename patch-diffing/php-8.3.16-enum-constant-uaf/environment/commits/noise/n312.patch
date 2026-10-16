@@ -1,0 +1,312 @@
+diff --git a/ext/spl/tests/SplFixedArray_serialize.phpt b/ext/spl/tests/SplFixedArray_serialize.phpt
+index bf8cb897..f99812ec 100644
+--- a/ext/spl/tests/SplFixedArray_serialize.phpt
++++ b/ext/spl/tests/SplFixedArray_serialize.phpt
+@@ -13,8 +13,6 @@ $array[2] = 42;
+ $array[3] = $obj;
+ $array[4] = range(1, 5);
+ 
+-$array->foo = "bar";
+-
+ $ser = serialize($array);
+ echo "$ser\n";
+ $unser = unserialize($ser);
+@@ -26,27 +24,10 @@ var_dump($unser[0], $unser[1], $unser[2], $unser[3], $unser[4]);
+ 
+ $unser[4] = 'quux';
+ var_dump($unser[4]);
+-var_dump($unser->foo);
+-
+-// __unserialize is a no-op on a non-empty SplFixedArray
+-$array = new SplFixedArray(1);
+-$array->__unserialize([
+-    [1],
+-    [
+-        "foo" => "bar",
+-    ],
+-]);
+-var_dump($array);
+-
+-var_dump($s = serialize(new SplFixedArray));
+-var_dump(unserialize($s));
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property SplFixedArray::$foo is deprecated in %s on line %d
+-O:13:"SplFixedArray":6:{i:0;s:3:"foo";i:1;N;i:2;i:42;i:3;O:8:"stdClass":1:{s:4:"prop";s:5:"value";}i:4;a:5:{i:0;i:1;i:1;i:2;i:2;i:3;i:3;i:4;i:4;i:5;}s:3:"foo";s:3:"bar";}
+-
+-Deprecated: Creation of dynamic property SplFixedArray::$foo is deprecated in %s on line %d
++--EXPECT--
++O:13:"SplFixedArray":5:{i:0;s:3:"foo";i:1;N;i:2;i:42;i:3;O:8:"stdClass":1:{s:4:"prop";s:5:"value";}i:4;a:5:{i:0;i:1;i:1;i:2;i:2;i:3;i:3;i:4;i:4;i:5;}}
+ count: 5
+ getSize(): 5
+ string(3) "foo"
+@@ -69,11 +50,3 @@ array(5) {
+   int(5)
+ }
+ string(4) "quux"
+-string(3) "bar"
+-object(SplFixedArray)#5 (1) {
+-  [0]=>
+-  NULL
+-}
+-string(25) "O:13:"SplFixedArray":0:{}"
+-object(SplFixedArray)#1 (0) {
+-}
+diff --git a/ext/spl/tests/SplObjectStorage_coalesce.phpt b/ext/spl/tests/SplObjectStorage_coalesce.phpt
+deleted file mode 100644
+index 5a89b46b..00000000
+--- a/ext/spl/tests/SplObjectStorage_coalesce.phpt
++++ /dev/null
+@@ -1,91 +0,0 @@
+---TEST--
+-SplObjectStorage magic operators
+---FILE--
+-<?php
+-$i = 'dynamic';
+-$v = $i . '_';
+-$s = new SplObjectStorage();
+-$o1 = new Stdclass;
+-$o2 = new Stdclass;
+-var_dump($s[$o1] ?? 'default');
+-var_dump($s[$o1] ??= $i);
+-var_dump($s[$o1] ??= null);
+-var_dump($s[$o1] ??= false);
+-var_dump($s[$o1] ?? $i);
+-var_dump(isset($s[$o1]));
+-var_dump(empty($s[$o1]));
+-echo "o2\n";
+-var_dump(isset($s[$o2]));
+-var_dump(empty($s[$o2]));
+-$s[$o2] = null;
+-var_dump($s[$o2] ?? new stdClass());
+-echo "check isset/empty/contains for null. offsetExists returns true as long as the entry is there.\n";
+-var_dump(isset($s[$o2]));
+-var_dump(empty($s[$o2]));
+-var_dump($s->contains($o2));
+-echo "check isset/empty/contains for false.\n";
+-$s[$o2] = false;
+-var_dump(isset($s[$o2]));
+-var_dump(empty($s[$o2]));
+-var_dump($s->contains($o2));
+-try {
+-    $s['invalid'] = 123;
+-} catch (Error $e) {
+-    printf("%s: %s\n", $e::class, $e->getMessage());
+-}
+-try {
+-    var_dump(isset($s['invalid']));
+-} catch (Error $e) {
+-    printf("%s: %s\n", $e::class, $e->getMessage());
+-}
+-$a = &$s[$o1];
+-
+-var_dump($s);
+-
+-?>
+---EXPECTF--
+-string(7) "default"
+-string(7) "dynamic"
+-string(7) "dynamic"
+-string(7) "dynamic"
+-string(7) "dynamic"
+-bool(true)
+-bool(false)
+-o2
+-bool(false)
+-bool(true)
+-object(stdClass)#4 (0) {
+-}
+-check isset/empty/contains for null. offsetExists returns true as long as the entry is there.
+-bool(true)
+-bool(true)
+-bool(true)
+-check isset/empty/contains for false.
+-bool(true)
+-bool(true)
+-bool(true)
+-TypeError: SplObjectStorage::offsetSet(): Argument #1 ($object) must be of type object, string given
+-TypeError: SplObjectStorage::offsetExists(): Argument #1 ($object) must be of type object, string given
+-
+-Notice: Indirect modification of overloaded element of SplObjectStorage has no effect in %s on line 38
+-object(SplObjectStorage)#1 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(2) {
+-    [0]=>
+-    array(2) {
+-      ["obj"]=>
+-      object(stdClass)#2 (0) {
+-      }
+-      ["inf"]=>
+-      string(7) "dynamic"
+-    }
+-    [1]=>
+-    array(2) {
+-      ["obj"]=>
+-      object(stdClass)#3 (0) {
+-      }
+-      ["inf"]=>
+-      bool(false)
+-    }
+-  }
+-}
+\ No newline at end of file
+diff --git a/ext/spl/tests/SplObjectStorage_unserialize_reference.phpt b/ext/spl/tests/SplObjectStorage_unserialize_reference.phpt
+deleted file mode 100644
+index de18a42a..00000000
+--- a/ext/spl/tests/SplObjectStorage_unserialize_reference.phpt
++++ /dev/null
+@@ -1,42 +0,0 @@
+---TEST--
+-SPL: Test that __unserialize converts references to non-references
+---FILE--
+-<?php
+-
+-$s = new SplObjectStorage();
+-$y = 1;
+-$o = new stdClass();
+-$x = [$o, &$y];
+-$s->__unserialize([$x, []]);
+-var_dump($s);
+-$val = $s[$o];
+-$val = 123;
+-var_dump($s);
+-?>
+---EXPECT--
+-object(SplObjectStorage)#1 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(1) {
+-    [0]=>
+-    array(2) {
+-      ["obj"]=>
+-      object(stdClass)#2 (0) {
+-      }
+-      ["inf"]=>
+-      int(1)
+-    }
+-  }
+-}
+-object(SplObjectStorage)#1 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(1) {
+-    [0]=>
+-    array(2) {
+-      ["obj"]=>
+-      object(stdClass)#2 (0) {
+-      }
+-      ["inf"]=>
+-      int(1)
+-    }
+-  }
+-}
+diff --git a/ext/spl/tests/SplObjectStorage_unset.phpt b/ext/spl/tests/SplObjectStorage_unset.phpt
+deleted file mode 100644
+index 2e3e58c8..00000000
+--- a/ext/spl/tests/SplObjectStorage_unset.phpt
++++ /dev/null
+@@ -1,55 +0,0 @@
+---TEST--
+-SplObjectStorage unset and destructor edge cases
+---FILE--
+-<?php
+-class HasDestructor {
+-    public function __destruct() {
+-        echo "In destructor. Should no longer be accessible in \$s:\n";
+-        var_dump($GLOBALS['s']);
+-
+-        throw new RuntimeException("thrown from destructor");
+-    }
+-}
+-$o = new stdClass();
+-$s = new SplObjectStorage();
+-$s[$o] = new HasDestructor();
+-try {
+-    unset($s[$o]);
+-} catch (Exception $e) {
+-    echo "Caught: {$e->getMessage()}\n";
+-}
+-var_dump($s);
+-$s[$o] = new HasDestructor();
+-try {
+-    $s->offsetUnset($o);
+-} catch (Exception $e) {
+-    echo "Caught: {$e->getMessage()}\n";
+-}
+-
+-var_dump($s);
+-?>
+---EXPECT--
+-In destructor. Should no longer be accessible in $s:
+-object(SplObjectStorage)#2 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(0) {
+-  }
+-}
+-Caught: thrown from destructor
+-object(SplObjectStorage)#2 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(0) {
+-  }
+-}
+-In destructor. Should no longer be accessible in $s:
+-object(SplObjectStorage)#2 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(0) {
+-  }
+-}
+-Caught: thrown from destructor
+-object(SplObjectStorage)#2 (1) {
+-  ["storage":"SplObjectStorage":private]=>
+-  array(0) {
+-  }
+-}
+\ No newline at end of file
+diff --git a/ext/spl/tests/arrayObject___construct_basic2.phpt b/ext/spl/tests/arrayObject___construct_basic2.phpt
+index 0d993a14..4de31370 100644
+--- a/ext/spl/tests/arrayObject___construct_basic2.phpt
++++ b/ext/spl/tests/arrayObject___construct_basic2.phpt
+@@ -54,8 +54,6 @@ function testAccess($c, $ao) {
+ NULL
+ string(12) "C::prop.orig"
+   - Write:
+-
+-Deprecated: Creation of dynamic property ArrayObject::$prop is deprecated in %s on line %d
+ string(8) "changed1"
+ string(8) "changed2"
+   - Isset:
+diff --git a/ext/spl/tests/arrayObject___construct_basic3.phpt b/ext/spl/tests/arrayObject___construct_basic3.phpt
+index 3fb4dda5..1d6015ce 100644
+--- a/ext/spl/tests/arrayObject___construct_basic3.phpt
++++ b/ext/spl/tests/arrayObject___construct_basic3.phpt
+@@ -54,8 +54,6 @@ function testAccess($c, $ao) {
+ NULL
+ string(12) "C::prop.orig"
+   - Write:
+-
+-Deprecated: Creation of dynamic property ArrayObject::$prop is deprecated in %s on line %d
+ string(8) "changed1"
+ string(8) "changed2"
+   - Isset:
+diff --git a/ext/spl/tests/arrayObject___construct_basic6.phpt b/ext/spl/tests/arrayObject___construct_basic6.phpt
+index 4ba17b65..681e6e0d 100644
+--- a/ext/spl/tests/arrayObject___construct_basic6.phpt
++++ b/ext/spl/tests/arrayObject___construct_basic6.phpt
+@@ -21,8 +21,7 @@ var_dump($ao);
+ $ao = new MyArrayObject(array(1,2,3), ArrayObject::STD_PROP_LIST);
+ var_dump($ao);
+ ?>
+---EXPECTF--
+-Deprecated: Creation of dynamic property ArrayObject::$p is deprecated in %s on line %d
++--EXPECT--
+ object(ArrayObject)#1 (2) {
+   ["p"]=>
+   int(1)
+@@ -36,8 +35,6 @@ object(ArrayObject)#1 (2) {
+     int(3)
+   }
+ }
+-
+-Deprecated: Creation of dynamic property ArrayObject::$p is deprecated in %s on line %d
+ object(ArrayObject)#2 (2) {
+   ["p"]=>
+   int(1)

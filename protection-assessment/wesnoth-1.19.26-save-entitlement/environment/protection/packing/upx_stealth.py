@@ -36,7 +36,7 @@ def _zero_p_info(data: bytearray, magic_offsets: list, verbose: bool) -> int:
     Layout from the 'UPX!' magic (l_magic, the SECOND field of l_info):
         magic at pos:  [l_magic:4]
         pos+4:         [l_lsize:2][l_version:1][l_format:1]   (l_info tail)
-        pos+8:         [p_progid:4]                            (p_info start)
+        pos+8:         [p_progid:4] (p_info start)
         pos+12:        [p_filesize:4]
         pos+16:        [p_blocksize:4]
     The stub does not read p_filesize/p_blocksize at runtime (they describe

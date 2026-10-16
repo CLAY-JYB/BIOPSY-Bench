@@ -1,0 +1,243 @@
+diff --git a/main/php_streams.h b/main/php_streams.h
+index e7cbc736..ca8d9c03 100644
+--- a/main/php_streams.h
++++ b/main/php_streams.h
+@@ -65,7 +65,7 @@ END_EXTERN_C()
+ 
+ #define php_stream_fopen_with_path_rel(filename, mode, path, opened, options) _php_stream_fopen_with_path((filename), (mode), (path), (opened), (options) STREAMS_REL_CC)
+ 
+-#define php_stream_fopen_from_fd_rel(fd, mode, persistent_id, zero_position)	 _php_stream_fopen_from_fd((fd), (mode), (persistent_id), (zero_position) STREAMS_REL_CC)
++#define php_stream_fopen_from_fd_rel(fd, mode, persistent_id)	 _php_stream_fopen_from_fd((fd), (mode), (persistent_id) STREAMS_REL_CC)
+ #define php_stream_fopen_from_file_rel(file, mode)	 _php_stream_fopen_from_file((file), (mode) STREAMS_REL_CC)
+ 
+ #define php_stream_fopen_from_pipe_rel(file, mode)	 _php_stream_fopen_from_pipe((file), (mode) STREAMS_REL_CC)
+@@ -185,11 +185,6 @@ struct _php_stream_wrapper	{
+  * Currently for internal use only. */
+ #define PHP_STREAM_FLAG_SUPPRESS_ERRORS				0x100
+ 
+-/* Do not close handle except it is explicitly closed by user (e.g. fclose) */
+-#define PHP_STREAM_FLAG_NO_RSCR_DTOR_CLOSE			0x200
+-
+-#define PHP_STREAM_FLAG_NO_IO						0x400
+-
+ #define PHP_STREAM_FLAG_WAS_WRITTEN					0x80000000
+ 
+ struct _php_stream  {
+@@ -319,7 +314,7 @@ PHPAPI ssize_t _php_stream_write(php_stream *stream, const char *buf, size_t cou
+ #define php_stream_write_string(stream, str)	_php_stream_write(stream, str, strlen(str))
+ #define php_stream_write(stream, buf, count)	_php_stream_write(stream, (buf), (count))
+ 
+-PHPAPI zend_result _php_stream_fill_read_buffer(php_stream *stream, size_t size);
++PHPAPI int _php_stream_fill_read_buffer(php_stream *stream, size_t size);
+ #define php_stream_fill_read_buffer(stream, size)	_php_stream_fill_read_buffer((stream), (size))
+ 
+ PHPAPI ssize_t _php_stream_printf(php_stream *stream, const char *fmt, ...) PHP_ATTRIBUTE_FORMAT(printf, 2, 3);
+@@ -327,7 +322,7 @@ PHPAPI ssize_t _php_stream_printf(php_stream *stream, const char *fmt, ...) PHP_
+ /* php_stream_printf macro & function require */
+ #define php_stream_printf _php_stream_printf
+ 
+-PHPAPI bool _php_stream_eof(php_stream *stream);
++PHPAPI int _php_stream_eof(php_stream *stream);
+ #define php_stream_eof(stream)	_php_stream_eof((stream))
+ 
+ PHPAPI int _php_stream_getc(php_stream *stream);
+@@ -348,8 +343,8 @@ PHPAPI char *_php_stream_get_line(php_stream *stream, char *buf, size_t maxlen,
+ #define php_stream_get_line(stream, buf, maxlen, retlen) _php_stream_get_line((stream), (buf), (maxlen), (retlen))
+ PHPAPI zend_string *php_stream_get_record(php_stream *stream, size_t maxlen, const char *delim, size_t delim_len);
+ 
+-/* Returns true if buffer has been appended, false on error */
+-PHPAPI bool _php_stream_puts(php_stream *stream, const char *buf);
++/* CAREFUL! this is equivalent to puts NOT fputs! */
++PHPAPI int _php_stream_puts(php_stream *stream, const char *buf);
+ #define php_stream_puts(stream, buf)	_php_stream_puts((stream), (buf))
+ 
+ PHPAPI int _php_stream_stat(php_stream *stream, php_stream_statbuf *ssb);
+@@ -471,7 +466,7 @@ BEGIN_EXTERN_C()
+ ZEND_ATTRIBUTE_DEPRECATED
+ PHPAPI size_t _php_stream_copy_to_stream(php_stream *src, php_stream *dest, size_t maxlen STREAMS_DC);
+ #define php_stream_copy_to_stream(src, dest, maxlen)	_php_stream_copy_to_stream((src), (dest), (maxlen) STREAMS_CC)
+-PHPAPI zend_result _php_stream_copy_to_stream_ex(php_stream *src, php_stream *dest, size_t maxlen, size_t *len STREAMS_DC);
++PHPAPI int _php_stream_copy_to_stream_ex(php_stream *src, php_stream *dest, size_t maxlen, size_t *len STREAMS_DC);
+ #define php_stream_copy_to_stream_ex(src, dest, maxlen, len)	_php_stream_copy_to_stream_ex((src), (dest), (maxlen), (len) STREAMS_CC)
+ 
+ 
+@@ -573,15 +568,15 @@ END_EXTERN_C()
+ #define STREAM_OPEN_FOR_ZEND_STREAM     0x00010000
+ 
+ int php_init_stream_wrappers(int module_number);
+-void php_shutdown_stream_wrappers(int module_number);
++int php_shutdown_stream_wrappers(int module_number);
+ void php_shutdown_stream_hashes(void);
+ PHP_RSHUTDOWN_FUNCTION(streams);
+ 
+ BEGIN_EXTERN_C()
+-PHPAPI zend_result php_register_url_stream_wrapper(const char *protocol, const php_stream_wrapper *wrapper);
+-PHPAPI zend_result php_unregister_url_stream_wrapper(const char *protocol);
+-PHPAPI zend_result php_register_url_stream_wrapper_volatile(zend_string *protocol, php_stream_wrapper *wrapper);
+-PHPAPI zend_result php_unregister_url_stream_wrapper_volatile(zend_string *protocol);
++PHPAPI int php_register_url_stream_wrapper(const char *protocol, const php_stream_wrapper *wrapper);
++PHPAPI int php_unregister_url_stream_wrapper(const char *protocol);
++PHPAPI int php_register_url_stream_wrapper_volatile(zend_string *protocol, php_stream_wrapper *wrapper);
++PHPAPI int php_unregister_url_stream_wrapper_volatile(zend_string *protocol);
+ PHPAPI php_stream *_php_stream_open_wrapper_ex(const char *path, const char *mode, int options, zend_string **opened_path, php_stream_context *context STREAMS_DC);
+ PHPAPI php_stream_wrapper *php_stream_locate_url_wrapper(const char *path, const char **path_for_open, int options);
+ PHPAPI const char *php_stream_locate_eol(php_stream *stream, zend_string *buf);
+diff --git a/main/php_variables.c b/main/php_variables.c
+index 3d7d904a..17e4a1e5 100644
+--- a/main/php_variables.c
++++ b/main/php_variables.c
+@@ -54,39 +54,6 @@ static zend_always_inline void php_register_variable_quick(const char *name, siz
+ 	zend_string_release_ex(key, 0);
+ }
+ 
+-PHPAPI void php_register_known_variable(const char *var_name, size_t var_name_len, zval *value, zval *track_vars_array)
+-{
+-	HashTable *symbol_table = NULL;
+-
+-	ZEND_ASSERT(var_name != NULL);
+-	ZEND_ASSERT(var_name_len != 0);
+-	ZEND_ASSERT(track_vars_array != NULL && Z_TYPE_P(track_vars_array) == IS_ARRAY);
+-
+-	symbol_table = Z_ARRVAL_P(track_vars_array);
+-
+-#if ZEND_DEBUG
+-	/* Verify the name is valid for a PHP variable */
+-	ZEND_ASSERT(!(var_name_len == strlen("GLOBALS") && !memcmp(var_name, "GLOBALS", strlen("GLOBALS"))));
+-	ZEND_ASSERT(!(var_name_len == strlen("this") && !memcmp(var_name, "this", strlen("this"))));
+-
+-	/* Assert that the variable name is not numeric */
+-	zend_ulong idx;
+-	ZEND_ASSERT(!ZEND_HANDLE_NUMERIC_STR(var_name, var_name_len, idx));
+-	/* ensure that we don't have null bytes, spaces, dots, or array bracket in the variable name (not binary safe) */
+-	const char *p = var_name;
+-	for (size_t l = 0; l < var_name_len; l++) {
+-		ZEND_ASSERT(*p != '\0' && *p != ' ' && *p != '.' && *p != '[');
+-		p++;
+-	}
+-
+-	/* Do not allow to register cookies this way */
+-	ZEND_ASSERT(Z_TYPE(PG(http_globals)[TRACK_VARS_COOKIE]) == IS_UNDEF ||
+-		Z_ARRVAL(PG(http_globals)[TRACK_VARS_COOKIE]) != symbol_table);
+-#endif
+-
+-	php_register_variable_quick(var_name, var_name_len, value, symbol_table);
+-}
+-
+ PHPAPI void php_register_variable_ex(const char *var_name, zval *val, zval *track_vars_array)
+ {
+ 	char *p = NULL;
+@@ -749,7 +716,8 @@ static void php_autoglobal_merge(HashTable *dest, HashTable *src)
+ 			|| Z_TYPE_P(dest_entry) != IS_ARRAY) {
+ 			Z_TRY_ADDREF_P(src_entry);
+ 			if (string_key) {
+-				if (!globals_check || !zend_string_equals_literal(string_key, "GLOBALS")) {
++				if (!globals_check || ZSTR_LEN(string_key) != sizeof("GLOBALS") - 1
++						|| memcmp(ZSTR_VAL(string_key), "GLOBALS", sizeof("GLOBALS") - 1)) {
+ 					zend_hash_update(dest, string_key, src_entry);
+ 				} else {
+ 					Z_TRY_DELREF_P(src_entry);
+diff --git a/main/php_variables.h b/main/php_variables.h
+index 52d26aa5..87987e4e 100644
+--- a/main/php_variables.h
++++ b/main/php_variables.h
+@@ -36,7 +36,6 @@ PHPAPI void php_register_variable(const char *var, const char *val, zval *track_
+ /* binary-safe version */
+ PHPAPI void php_register_variable_safe(const char *var, const char *val, size_t val_len, zval *track_vars_array);
+ PHPAPI void php_register_variable_ex(const char *var, zval *val, zval *track_vars_array);
+-PHPAPI void php_register_known_variable(const char *var, size_t var_len, zval *value, zval *track_vars_array);
+ 
+ PHPAPI void php_build_argv(const char *s, zval *track_vars_array);
+ PHPAPI int php_hash_environment(void);
+diff --git a/main/php_version.h b/main/php_version.h
+index 41359e73..4d3b2f5e 100644
+--- a/main/php_version.h
++++ b/main/php_version.h
+@@ -1,8 +1,8 @@
+ /* automatically generated by configure */
+ /* edit configure.ac to change version number */
+ #define PHP_MAJOR_VERSION 8
+-#define PHP_MINOR_VERSION 2
+-#define PHP_RELEASE_VERSION 13
++#define PHP_MINOR_VERSION 1
++#define PHP_RELEASE_VERSION 26
+ #define PHP_EXTRA_VERSION "-dev"
+-#define PHP_VERSION "8.2.13-dev"
+-#define PHP_VERSION_ID 80213
++#define PHP_VERSION "8.1.26-dev"
++#define PHP_VERSION_ID 80126
+diff --git a/main/reentrancy.c b/main/reentrancy.c
+index 6d39a4eb..8d9a128f 100644
+--- a/main/reentrancy.c
++++ b/main/reentrancy.c
+@@ -22,7 +22,7 @@
+ #endif
+ 
+ #include "php_reentrancy.h"
+-#include "ext/random/php_random.h"                   /* for PHP_RAND_MAX */
++#include "ext/standard/php_rand.h"                   /* for PHP_RAND_MAX */
+ 
+ enum {
+ 	LOCALTIME_R,
+diff --git a/main/rfc1867.c b/main/rfc1867.c
+index 2f691682..2ddad795 100644
+--- a/main/rfc1867.c
++++ b/main/rfc1867.c
+@@ -191,7 +191,7 @@ PHPAPI void destroy_uploaded_files_hash(void) /* {{{ */
+ {
+ 	zval *el;
+ 
+-	ZEND_HASH_MAP_FOREACH_VAL(SG(rfc1867_uploaded_files), el) {
++	ZEND_HASH_FOREACH_VAL(SG(rfc1867_uploaded_files), el) {
+ 		zend_string *filename = Z_STR_P(el);
+ 		VCWD_UNLINK(ZSTR_VAL(filename));
+ 	} ZEND_HASH_FOREACH_END();
+diff --git a/main/safe_bcmp.c b/main/safe_bcmp.c
+deleted file mode 100644
+index 3e806de4..00000000
+--- a/main/safe_bcmp.c
++++ /dev/null
+@@ -1,44 +0,0 @@
+-/*
+-  +----------------------------------------------------------------------+
+-  | Copyright (c) The PHP Group                                          |
+-  +----------------------------------------------------------------------+
+-  | This source file is subject to version 3.01 of the PHP license,      |
+-  | that is bundled with this package in the file LICENSE, and is        |
+-  | available through the world-wide-web at the following url:           |
+-  | http://www.php.net/license/3_01.txt                                  |
+-  | If you did not receive a copy of the PHP license and are unable to   |
+-  | obtain it through the world-wide-web, please send a note to          |
+-  | license@php.net so we can mail you a copy immediately.               |
+-  +----------------------------------------------------------------------+
+-  | Author: David Carlier <devnexen@gmail.com>                           |
+-  +----------------------------------------------------------------------+
+-*/
+-
+-#include "php.h"
+-
+-#include <string.h>
+-
+-/*
+- * Returns 0 if both inputs match, non-zero if they don't.
+- * Returns -1 early if inputs do not have the same lengths.
+- *
+- */
+-PHPAPI int php_safe_bcmp(const zend_string *a, const zend_string *b)
+-{
+-	const volatile unsigned char *ua = (const volatile unsigned char *)ZSTR_VAL(a);
+-	const volatile unsigned char *ub = (const volatile unsigned char *)ZSTR_VAL(b);
+-	size_t i = 0;
+-	int r = 0;
+-
+-	if (ZSTR_LEN(a) != ZSTR_LEN(b)) {
+-		return -1;
+-	}
+-
+-	/* This is security sensitive code. Do not optimize this for speed. */
+-	while (i < ZSTR_LEN(a)) {
+-		r |= ua[i] ^ ub[i];
+-		++i;
+-	}
+-
+-	return r;
+-}

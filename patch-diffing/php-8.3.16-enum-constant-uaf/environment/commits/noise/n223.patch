@@ -1,0 +1,187 @@
+diff --git a/ext/pcre/tests/bug73392.phpt b/ext/pcre/tests/bug73392.phpt
+index a1cb3ac8..7546f5d9 100644
+--- a/ext/pcre/tests/bug73392.phpt
++++ b/ext/pcre/tests/bug73392.phpt
+@@ -21,5 +21,5 @@ var_dump(preg_replace_callback_array(
+     ), 'a'));
+ ?>
+ --EXPECTF--
+-Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric, backslash, or NUL in %sbug73392.php on line %d
++Warning: preg_replace_callback_array(): Delimiter must not be alphanumeric or backslash in %sbug73392.php on line %d
+ NULL
+diff --git a/ext/pcre/tests/ctype_back_to_c.phpt b/ext/pcre/tests/ctype_back_to_c.phpt
+index 9dc97a76..b3290916 100644
+--- a/ext/pcre/tests/ctype_back_to_c.phpt
++++ b/ext/pcre/tests/ctype_back_to_c.phpt
+@@ -2,7 +2,6 @@
+ Changing LC_CTYPE back to C
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
+ if (!setlocale(LC_CTYPE, "de_DE", "de-DE")) die("skip requires de_DE locale");
+ ?>
+ --FILE--
+diff --git a/ext/pcre/tests/delimiters.phpt b/ext/pcre/tests/delimiters.phpt
+index beeebc8c..1826f873 100644
+--- a/ext/pcre/tests/delimiters.phpt
++++ b/ext/pcre/tests/delimiters.phpt
+@@ -12,7 +12,6 @@ var_dump(preg_match('~a', ''));
+ var_dump(preg_match('@\@\@@', '@@'));
+ var_dump(preg_match('//z', '@@'));
+ var_dump(preg_match('{', ''));
+-var_dump(preg_match("\0\0", ''));
+ 
+ ?>
+ --EXPECTF--
+@@ -23,7 +22,7 @@ Warning: preg_match(): Empty regular expression in %sdelimiters.php on line 4
+ bool(false)
+ int(1)
+ 
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %sdelimiters.php on line 6
++Warning: preg_match(): Delimiter must not be alphanumeric or backslash in %sdelimiters.php on line 6
+ bool(false)
+ int(1)
+ 
+@@ -36,6 +35,3 @@ bool(false)
+ 
+ Warning: preg_match(): No ending matching delimiter '}' found in %sdelimiters.php on line 11
+ bool(false)
+-
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %sdelimiters.php on line 12
+-bool(false)
+diff --git a/ext/pcre/tests/locales.phpt b/ext/pcre/tests/locales.phpt
+index ea2c2106..dcca8927 100644
+--- a/ext/pcre/tests/locales.phpt
++++ b/ext/pcre/tests/locales.phpt
+@@ -2,8 +2,9 @@
+ Localized match
+ --SKIPIF--
+ <?php
+-if (setlocale(LC_ALL, 'invalid') === 'invalid') { die('skip setlocale() is broken /w musl'); }
++
+ if (!@setlocale(LC_ALL, 'pt_PT', 'pt', 'pt_PT.ISO8859-1', 'portuguese')) die('skip pt locale not available');
++
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/pcre/tests/null_bytes.phpt b/ext/pcre/tests/null_bytes.phpt
+index e9db61da..9a3f433f 100644
+--- a/ext/pcre/tests/null_bytes.phpt
++++ b/ext/pcre/tests/null_bytes.phpt
+@@ -3,64 +3,40 @@ Zero byte test
+ --FILE--
+ <?php
+ 
+-var_dump(preg_match("\0//i", ""));
+-var_dump(preg_match("/\0/i", ""));
+-var_dump(preg_match("/\0/i", "\0"));
+-var_dump(preg_match("//\0i", ""));
+-var_dump(preg_match("//i\0", ""));
+-var_dump(preg_match("/\\\0/i", ""));
+-var_dump(preg_match("/\\\0/i", "\\\0"));
+-
+-var_dump(preg_match("\0[]i", ""));
+-var_dump(preg_match("[\0]i", ""));
+-var_dump(preg_match("[\0]i", "\0"));
+-var_dump(preg_match("[]\0i", ""));
+-var_dump(preg_match("[]i\0", ""));
+-var_dump(preg_match("[\\\0]i", ""));
+-var_dump(preg_match("[\\\0]i", "\\\0"));
+-
+-var_dump(preg_match("/abc\0def/", "abc"));
+-var_dump(preg_match("/abc\0def/", "abc\0def"));
+-var_dump(preg_match("/abc\0def/", "abc\0fed"));
+-
+-var_dump(preg_match("[abc\0def]", "abc"));
+-var_dump(preg_match("[abc\0def]", "abc\0def"));
+-var_dump(preg_match("[abc\0def]", "abc\0fed"));
++preg_match("\0//i", "");
++preg_match("/\0/i", "");
++preg_match("//\0i", "");
++preg_match("//i\0", "");
++preg_match("/\\\0/i", "");
++
++preg_match("\0[]i", "");
++preg_match("[\0]i", "");
++preg_match("[]\0i", "");
++preg_match("[]i\0", "");
++preg_match("[\\\0]i", "");
+ 
+ preg_replace("/foo/e\0/i", "echo('Eek');", "");
+ 
+ ?>
+ --EXPECTF--
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %snull_bytes.php on line 3
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 3
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 4
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 5
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 6
++
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 7
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 6
+-bool(false)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 9
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 7
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 10
+ 
+-Warning: preg_match(): Delimiter must not be alphanumeric, backslash, or NUL in %snull_bytes.php on line 11
+-bool(false)
+-int(0)
+-int(1)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 11
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 14
+-bool(false)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 12
+ 
+-Warning: preg_match(): NUL is not a valid modifier in %snull_bytes.php on line 15
+-bool(false)
+-int(0)
+-int(1)
+-int(0)
+-int(1)
+-int(0)
+-int(0)
+-int(1)
+-int(0)
++Warning: preg_match(): Null byte in regex in %snull_bytes.php on line 13
+ 
+-Warning: preg_replace(): NUL is not a valid modifier in %snull_bytes.php on line 27
++Warning: preg_replace(): Null byte in regex in %snull_bytes.php on line 15
+diff --git a/ext/pcre/tests/preg_grep_error1.phpt b/ext/pcre/tests/preg_grep_error1.phpt
+index 00425364..3079c0b4 100644
+--- a/ext/pcre/tests/preg_grep_error1.phpt
++++ b/ext/pcre/tests/preg_grep_error1.phpt
+@@ -37,7 +37,7 @@ echo "Done"
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_grep(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_grep_error1.php on line %d
++Warning: preg_grep(): Delimiter must not be alphanumeric or backslash in %spreg_grep_error1.php on line %d
+ bool(false)
+ 
+ Arg value is /[a-zA-Z]
+diff --git a/ext/pcre/tests/preg_match_all_error1.phpt b/ext/pcre/tests/preg_match_all_error1.phpt
+index 01e0615a..d25bfe99 100644
+--- a/ext/pcre/tests/preg_match_all_error1.phpt
++++ b/ext/pcre/tests/preg_match_all_error1.phpt
+@@ -38,7 +38,7 @@ var_dump($matches);
+ 
+ Arg value is abcdef
+ 
+-Warning: preg_match_all(): Delimiter must not be alphanumeric, backslash, or NUL in %spreg_match_all_error1.php on line %d
++Warning: preg_match_all(): Delimiter must not be alphanumeric or backslash in %spreg_match_all_error1.php on line %d
+ bool(false)
+ NULL
+ 

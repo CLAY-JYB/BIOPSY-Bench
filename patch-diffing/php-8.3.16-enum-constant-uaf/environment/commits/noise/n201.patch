@@ -1,0 +1,937 @@
+diff --git a/ext/odbc/config.w32 b/ext/odbc/config.w32
+index 29d8a767..a782c57a 100644
+--- a/ext/odbc/config.w32
++++ b/ext/odbc/config.w32
+@@ -7,7 +7,7 @@ if (PHP_ODBC == "yes") {
+ 	if (CHECK_LIB("odbc32.lib", "odbc") && CHECK_LIB("odbccp32.lib", "odbc")
+ 	&& CHECK_HEADER_ADD_INCLUDE("sql.h", "CFLAGS_ODBC")
+ 	&& CHECK_HEADER_ADD_INCLUDE("sqlext.h", "CFLAGS_ODBC")) {
+-		EXTENSION("odbc", "php_odbc.c odbc_utils.c", PHP_ODBC_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
++		EXTENSION("odbc", "php_odbc.c", PHP_ODBC_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
+ 		AC_DEFINE("HAVE_UODBC", 1, "ODBC support");
+ 		if ("no" == PHP_ODBCVER) {
+ 			AC_DEFINE("ODBCVER", "0x0350", "The highest supported ODBC version", false);
+diff --git a/ext/odbc/odbc.stub.php b/ext/odbc/odbc.stub.php
+index 44497883..8f4c637d 100644
+--- a/ext/odbc/odbc.stub.php
++++ b/ext/odbc/odbc.stub.php
+@@ -2,316 +2,6 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var string
+- * @cvalue PHP_ODBC_TYPE
+- */
+-const ODBC_TYPE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ODBC_BINMODE_PASSTHRU
+- */
+-const ODBC_BINMODE_PASSTHRU = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ODBC_BINMODE_RETURN
+- */
+-const ODBC_BINMODE_RETURN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue PHP_ODBC_BINMODE_CONVERT
+- */
+-const ODBC_BINMODE_CONVERT = UNKNOWN;
+-
+-/* Define Constants for options. These Constants are defined in <sqlext.h> */
+-
+-/**
+- * @var int
+- * @cvalue SQL_ODBC_CURSORS
+- */
+-const SQL_ODBC_CURSORS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CUR_USE_DRIVER
+- */
+-const SQL_CUR_USE_DRIVER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CUR_USE_IF_NEEDED
+- */
+-const SQL_CUR_USE_IF_NEEDED = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CUR_USE_ODBC
+- */
+-const SQL_CUR_USE_ODBC = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SQL_CONCURRENCY
+- */
+-const SQL_CONCURRENCY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CONCUR_READ_ONLY
+- */
+-const SQL_CONCUR_READ_ONLY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CONCUR_LOCK
+- */
+-const SQL_CONCUR_LOCK = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CONCUR_ROWVER
+- */
+-const SQL_CONCUR_ROWVER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CONCUR_VALUES
+- */
+-const SQL_CONCUR_VALUES = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SQL_CURSOR_TYPE
+- */
+-const SQL_CURSOR_TYPE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CURSOR_FORWARD_ONLY
+- */
+-const SQL_CURSOR_FORWARD_ONLY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CURSOR_KEYSET_DRIVEN
+- */
+-const SQL_CURSOR_KEYSET_DRIVEN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CURSOR_DYNAMIC
+- */
+-const SQL_CURSOR_DYNAMIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_CURSOR_STATIC
+- */
+-const SQL_CURSOR_STATIC = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue SQL_KEYSET_SIZE
+- */
+-const SQL_KEYSET_SIZE = UNKNOWN;
+-
+-/* these are for the Data Source type */
+-
+-/**
+- * @var int
+- * @cvalue SQL_FETCH_FIRST
+- */
+-const SQL_FETCH_FIRST = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_FETCH_NEXT
+- */
+-const SQL_FETCH_NEXT = UNKNOWN;
+-
+-/* register the standard data types */
+-
+-/**
+- * @var int
+- * @cvalue SQL_CHAR
+- */
+-const SQL_CHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_VARCHAR
+- */
+-const SQL_VARCHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_LONGVARCHAR
+- */
+-const SQL_LONGVARCHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_DECIMAL
+- */
+-const SQL_DECIMAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_NUMERIC
+- */
+-const SQL_NUMERIC = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_BIT
+- */
+-const SQL_BIT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_TINYINT
+- */
+-const SQL_TINYINT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_SMALLINT
+- */
+-const SQL_SMALLINT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_INTEGER
+- */
+-const SQL_INTEGER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_BIGINT
+- */
+-const SQL_BIGINT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_REAL
+- */
+-const SQL_REAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_FLOAT
+- */
+-const SQL_FLOAT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_DOUBLE
+- */
+-const SQL_DOUBLE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_BINARY
+- */
+-const SQL_BINARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_VARBINARY
+- */
+-const SQL_VARBINARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_LONGVARBINARY
+- */
+-const SQL_LONGVARBINARY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_DATE
+- */
+-const SQL_DATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_TIME
+- */
+-const SQL_TIME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_TIMESTAMP
+- */
+-const SQL_TIMESTAMP = UNKNOWN;
+-
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-/**
+- * @var int
+- * @cvalue SQL_TYPE_DATE
+- */
+-const SQL_TYPE_DATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_TYPE_TIME
+- */
+-const SQL_TYPE_TIME = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_TYPE_TIMESTAMP
+- */
+-const SQL_TYPE_TIMESTAMP = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_WCHAR
+- */
+-const SQL_WCHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_WVARCHAR
+- */
+-const SQL_WVARCHAR = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_WLONGVARCHAR
+- */
+-const SQL_WLONGVARCHAR = UNKNOWN;
+-
+-/* SQLSpecialColumns values */
+-
+-/**
+- * @var int
+- * @cvalue SQL_BEST_ROWID
+- */
+-const SQL_BEST_ROWID = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_ROWVER
+- */
+-const SQL_ROWVER = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_SCOPE_CURROW
+- */
+-const SQL_SCOPE_CURROW = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_SCOPE_TRANSACTION
+- */
+-const SQL_SCOPE_TRANSACTION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_SCOPE_SESSION
+- */
+-const SQL_SCOPE_SESSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_NO_NULLS
+- */
+-const SQL_NO_NULLS = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_NULLABLE
+- */
+-const SQL_NULLABLE = UNKNOWN;
+-
+-/* SQLStatistics values */
+-
+-/**
+- * @var int
+- * @cvalue SQL_INDEX_UNIQUE
+- */
+-const SQL_INDEX_UNIQUE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_INDEX_ALL
+- */
+-const SQL_INDEX_ALL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_ENSURE
+- */
+-const SQL_ENSURE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SQL_QUICK
+- */
+-const SQL_QUICK = UNKNOWN;
+-
+-#endif
+-
+-
+-
+ function odbc_close_all(): void {}
+ 
+ /** @param resource $statement */
+@@ -379,15 +69,11 @@ function odbc_result_all($statement, string $format = ""): int|false {}
+ /** @param resource $statement */
+ function odbc_free_result($statement): bool {}
+ 
+-/**
+- * @return resource|false
+- */
+-function odbc_connect(string $dsn, string $user, #[\SensitiveParameter] string $password, int $cursor_option = SQL_CUR_USE_DRIVER) {}
++/** @return resource|false */
++function odbc_connect(string $dsn, string $user, string $password, int $cursor_option = SQL_CUR_USE_DRIVER) {}
+ 
+-/**
+- * @return resource|false
+- */
+-function odbc_pconnect(string $dsn, string $user, #[\SensitiveParameter] string $password, int $cursor_option = SQL_CUR_USE_DRIVER) {}
++/** @return resource|false */
++function odbc_pconnect(string $dsn, string $user, string $password, int $cursor_option = SQL_CUR_USE_DRIVER) {}
+ 
+ /** @param resource $odbc */
+ function odbc_close($odbc): void {}
+@@ -511,11 +197,3 @@ function odbc_tableprivileges($odbc, ?string $catalog, string $schema, string $t
+  */
+ function odbc_columnprivileges($odbc, ?string $catalog, string $schema, string $table, string $column) {}
+ #endif
+-
+-/* odbc_utils.c */
+-
+-function odbc_connection_string_is_quoted(string $str): bool {}
+-
+-function odbc_connection_string_should_quote(string $str): bool {}
+-
+-function odbc_connection_string_quote(string $str): string {}
+diff --git a/ext/odbc/odbc_arginfo.h b/ext/odbc/odbc_arginfo.h
+index a29e33cc..0431e818 100644
+--- a/ext/odbc/odbc_arginfo.h
++++ b/ext/odbc/odbc_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: c7d91d30503ac09c8610ce86846c36123b87f62a */
++ * Stub hash: 245f4e9679e4da2fe2890bca50f36cd48e8a496c */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_odbc_close_all, 0, 0, IS_VOID, 0)
+ ZEND_END_ARG_INFO()
+@@ -245,16 +245,6 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_odbc_columnprivileges, 0, 0, 5)
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_odbc_connection_string_is_quoted, 0, 1, _IS_BOOL, 0)
+-	ZEND_ARG_TYPE_INFO(0, str, IS_STRING, 0)
+-ZEND_END_ARG_INFO()
+-
+-#define arginfo_odbc_connection_string_should_quote arginfo_odbc_connection_string_is_quoted
+-
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_odbc_connection_string_quote, 0, 1, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, str, IS_STRING, 0)
+-ZEND_END_ARG_INFO()
+-
+ 
+ ZEND_FUNCTION(odbc_close_all);
+ ZEND_FUNCTION(odbc_binmode);
+@@ -317,9 +307,6 @@ ZEND_FUNCTION(odbc_tableprivileges);
+ #if !defined(HAVE_DBMAKER) && !defined(HAVE_SOLID) && !defined(HAVE_SOLID_30) &&!defined(HAVE_SOLID_35)
+ ZEND_FUNCTION(odbc_columnprivileges);
+ #endif
+-ZEND_FUNCTION(odbc_connection_string_is_quoted);
+-ZEND_FUNCTION(odbc_connection_string_should_quote);
+-ZEND_FUNCTION(odbc_connection_string_quote);
+ 
+ 
+ static const zend_function_entry ext_functions[] = {
+@@ -386,108 +373,5 @@ static const zend_function_entry ext_functions[] = {
+ #if !defined(HAVE_DBMAKER) && !defined(HAVE_SOLID) && !defined(HAVE_SOLID_30) &&!defined(HAVE_SOLID_35)
+ 	ZEND_FE(odbc_columnprivileges, arginfo_odbc_columnprivileges)
+ #endif
+-	ZEND_FE(odbc_connection_string_is_quoted, arginfo_odbc_connection_string_is_quoted)
+-	ZEND_FE(odbc_connection_string_should_quote, arginfo_odbc_connection_string_should_quote)
+-	ZEND_FE(odbc_connection_string_quote, arginfo_odbc_connection_string_quote)
+ 	ZEND_FE_END
+ };
+-
+-static void register_odbc_symbols(int module_number)
+-{
+-	REGISTER_STRING_CONSTANT("ODBC_TYPE", PHP_ODBC_TYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("ODBC_BINMODE_PASSTHRU", PHP_ODBC_BINMODE_PASSTHRU, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("ODBC_BINMODE_RETURN", PHP_ODBC_BINMODE_RETURN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("ODBC_BINMODE_CONVERT", PHP_ODBC_BINMODE_CONVERT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_ODBC_CURSORS", SQL_ODBC_CURSORS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CUR_USE_DRIVER", SQL_CUR_USE_DRIVER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CUR_USE_IF_NEEDED", SQL_CUR_USE_IF_NEEDED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CUR_USE_ODBC", SQL_CUR_USE_ODBC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CONCURRENCY", SQL_CONCURRENCY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CONCUR_READ_ONLY", SQL_CONCUR_READ_ONLY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CONCUR_LOCK", SQL_CONCUR_LOCK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CONCUR_ROWVER", SQL_CONCUR_ROWVER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CONCUR_VALUES", SQL_CONCUR_VALUES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CURSOR_TYPE", SQL_CURSOR_TYPE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CURSOR_FORWARD_ONLY", SQL_CURSOR_FORWARD_ONLY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CURSOR_KEYSET_DRIVEN", SQL_CURSOR_KEYSET_DRIVEN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CURSOR_DYNAMIC", SQL_CURSOR_DYNAMIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CURSOR_STATIC", SQL_CURSOR_STATIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_KEYSET_SIZE", SQL_KEYSET_SIZE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_FETCH_FIRST", SQL_FETCH_FIRST, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_FETCH_NEXT", SQL_FETCH_NEXT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_CHAR", SQL_CHAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_VARCHAR", SQL_VARCHAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_LONGVARCHAR", SQL_LONGVARCHAR, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_DECIMAL", SQL_DECIMAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_NUMERIC", SQL_NUMERIC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_BIT", SQL_BIT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_TINYINT", SQL_TINYINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_SMALLINT", SQL_SMALLINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_INTEGER", SQL_INTEGER, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_BIGINT", SQL_BIGINT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_REAL", SQL_REAL, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_FLOAT", SQL_FLOAT, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_DOUBLE", SQL_DOUBLE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_BINARY", SQL_BINARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_VARBINARY", SQL_VARBINARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_LONGVARBINARY", SQL_LONGVARBINARY, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_DATE", SQL_DATE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_TIME", SQL_TIME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SQL_TIMESTAMP", SQL_TIMESTAMP, CONST_PERSISTENT);
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_TYPE_DATE", SQL_TYPE_DATE, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_TYPE_TIME", SQL_TYPE_TIME, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_TYPE_TIMESTAMP", SQL_TYPE_TIMESTAMP, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_WCHAR", SQL_WCHAR, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_WVARCHAR", SQL_WVARCHAR, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_WLONGVARCHAR", SQL_WLONGVARCHAR, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_BEST_ROWID", SQL_BEST_ROWID, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_ROWVER", SQL_ROWVER, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_SCOPE_CURROW", SQL_SCOPE_CURROW, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_SCOPE_TRANSACTION", SQL_SCOPE_TRANSACTION, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_SCOPE_SESSION", SQL_SCOPE_SESSION, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_NO_NULLS", SQL_NO_NULLS, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_NULLABLE", SQL_NULLABLE, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_INDEX_UNIQUE", SQL_INDEX_UNIQUE, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_INDEX_ALL", SQL_INDEX_ALL, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_ENSURE", SQL_ENSURE, CONST_PERSISTENT);
+-#endif
+-#if (defined(ODBCVER) && (ODBCVER >= 0x0300))
+-	REGISTER_LONG_CONSTANT("SQL_QUICK", SQL_QUICK, CONST_PERSISTENT);
+-#endif
+-
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "odbc_connect", sizeof("odbc_connect") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "odbc_pconnect", sizeof("odbc_pconnect") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-}
+diff --git a/ext/odbc/odbc_utils.c b/ext/odbc/odbc_utils.c
+deleted file mode 100644
+index bc6674b9..00000000
+--- a/ext/odbc/odbc_utils.c
++++ /dev/null
+@@ -1,68 +0,0 @@
+-/*
+-   +----------------------------------------------------------------------+
+-   | Copyright (c) The PHP Group                                          |
+-   +----------------------------------------------------------------------+
+-   | This source file is subject to version 3.01 of the PHP license,      |
+-   | that is bundled with this package in the file LICENSE, and is        |
+-   | available through the world-wide-web at the following url:           |
+-   | https://www.php.net/license/3_01.txt                                 |
+-   | If you did not receive a copy of the PHP license and are unable to   |
+-   | obtain it through the world-wide-web, please send a note to          |
+-   | license@php.net so we can mail you a copy immediately.               |
+-   +----------------------------------------------------------------------+
+-   | Author: Calvin Buckley <calvin@cmpct.info>                           |
+-   +----------------------------------------------------------------------+
+-*/
+-
+-#include "php.h"
+-#include "php_odbc_utils.h"
+-
+-/*
+- * Utility functions for dealing with ODBC connection strings and other common
+- * functionality.
+- *
+- * While useful for PDO_ODBC too, this lives in ext/odbc because there isn't a
+- * better place for it.
+- */
+-
+-PHP_FUNCTION(odbc_connection_string_is_quoted)
+-{
+-	zend_string *str;
+-
+-	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_STR(str)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	bool is_quoted = php_odbc_connstr_is_quoted(ZSTR_VAL(str));
+-
+-	RETURN_BOOL(is_quoted);
+-}
+-
+-PHP_FUNCTION(odbc_connection_string_should_quote)
+-{
+-	zend_string *str;
+-
+-	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_STR(str)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	bool should_quote = php_odbc_connstr_should_quote(ZSTR_VAL(str));
+-
+-	RETURN_BOOL(should_quote);
+-}
+-
+-PHP_FUNCTION(odbc_connection_string_quote)
+-{
+-	zend_string *str;
+-
+-	ZEND_PARSE_PARAMETERS_START(1, 1)
+-		Z_PARAM_STR(str)
+-	ZEND_PARSE_PARAMETERS_END();
+-
+-	size_t new_size = php_odbc_connstr_estimate_quote_length(ZSTR_VAL(str));
+-	zend_string *new_string = zend_string_alloc(new_size, 0);
+-	php_odbc_connstr_quote(ZSTR_VAL(new_string), ZSTR_VAL(str), new_size);
+-	/* reset length */
+-	ZSTR_LEN(new_string) = strlen(ZSTR_VAL(new_string));
+-	RETURN_STR(new_string);
+-}
+diff --git a/ext/odbc/php_odbc.c b/ext/odbc/php_odbc.c
+index fa9d8330..b5e91da8 100644
+--- a/ext/odbc/php_odbc.c
++++ b/ext/odbc/php_odbc.c
+@@ -24,7 +24,6 @@
+ 
+ #include "php.h"
+ #include "php_globals.h"
+-#include "zend_attributes.h"
+ 
+ #include "ext/standard/info.h"
+ #include "ext/standard/php_string.h"
+@@ -33,9 +32,7 @@
+ #include "php_odbc.h"
+ #include "php_odbc_includes.h"
+ #include "php_globals.h"
+-
+-/* actually lives in main/ */
+-#include "php_odbc_utils.h"
++#include "odbc_arginfo.h"
+ 
+ #ifdef HAVE_UODBC
+ 
+@@ -43,11 +40,13 @@
+ #include "ext/standard/head.h"
+ #include "php_ini.h"
+ 
+-#define PHP_ODBC_BINMODE_PASSTHRU 0
+-#define PHP_ODBC_BINMODE_RETURN 1
+-#define PHP_ODBC_BINMODE_CONVERT 2
++#ifdef PHP_WIN32
++#include <winsock2.h>
+ 
+-#include "odbc_arginfo.h"
++#define ODBC_TYPE "Win32"
++#define PHP_ODBC_TYPE ODBC_TYPE
++
++#endif
+ 
+ /*
+  * not defined elsewhere
+@@ -349,7 +348,7 @@ static PHP_INI_DISP(display_cursortype)
+ 
+ /* {{{ PHP_INI_BEGIN */
+ PHP_INI_BEGIN()
+-	STD_PHP_INI_BOOLEAN("odbc.allow_persistent", "1", PHP_INI_SYSTEM, OnUpdateBool,
++	STD_PHP_INI_BOOLEAN("odbc.allow_persistent", "1", PHP_INI_SYSTEM, OnUpdateLong,
+ 			allow_persistent, zend_odbc_globals, odbc_globals)
+ 	STD_PHP_INI_ENTRY_EX("odbc.max_persistent",  "-1", PHP_INI_SYSTEM, OnUpdateLong,
+ 			max_persistent, zend_odbc_globals, odbc_globals, display_link_nums)
+@@ -365,7 +364,7 @@ PHP_INI_BEGIN()
+ 			defaultlrl, zend_odbc_globals, odbc_globals, display_lrl)
+ 	STD_PHP_INI_ENTRY_EX("odbc.defaultbinmode", "1", PHP_INI_ALL, OnUpdateLong,
+ 			defaultbinmode, zend_odbc_globals, odbc_globals, display_binmode)
+-	STD_PHP_INI_BOOLEAN("odbc.check_persistent", "1", PHP_INI_SYSTEM, OnUpdateBool,
++	STD_PHP_INI_BOOLEAN("odbc.check_persistent", "1", PHP_INI_SYSTEM, OnUpdateLong,
+ 			check_persistent, zend_odbc_globals, odbc_globals)
+ 	STD_PHP_INI_ENTRY_EX("odbc.default_cursortype", "3", PHP_INI_ALL, OnUpdateLong,
+ 			default_cursortype, zend_odbc_globals, odbc_globals, display_cursortype)
+@@ -394,14 +393,93 @@ PHP_MINIT_FUNCTION(odbc)
+ 	le_pconn = zend_register_list_destructors_ex(NULL, _close_odbc_pconn, "odbc link persistent", module_number);
+ 	odbc_module_entry.type = type;
+ 
++	REGISTER_STRING_CONSTANT("ODBC_TYPE", PHP_ODBC_TYPE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ODBC_BINMODE_PASSTHRU", 0, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ODBC_BINMODE_RETURN", 1, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("ODBC_BINMODE_CONVERT", 2, CONST_CS | CONST_PERSISTENT);
++	/* Define Constants for options
++	   these Constants are defined in <sqlext.h>
++	*/
++	REGISTER_LONG_CONSTANT("SQL_ODBC_CURSORS", SQL_ODBC_CURSORS, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CUR_USE_DRIVER", SQL_CUR_USE_DRIVER, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CUR_USE_IF_NEEDED", SQL_CUR_USE_IF_NEEDED, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CUR_USE_ODBC", SQL_CUR_USE_ODBC, CONST_PERSISTENT | CONST_CS);
++
++
++	REGISTER_LONG_CONSTANT("SQL_CONCURRENCY", SQL_CONCURRENCY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CONCUR_READ_ONLY", SQL_CONCUR_READ_ONLY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CONCUR_LOCK", SQL_CONCUR_LOCK, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CONCUR_ROWVER", SQL_CONCUR_ROWVER, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CONCUR_VALUES", SQL_CONCUR_VALUES, CONST_PERSISTENT | CONST_CS);
++
++	REGISTER_LONG_CONSTANT("SQL_CURSOR_TYPE", SQL_CURSOR_TYPE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CURSOR_FORWARD_ONLY", SQL_CURSOR_FORWARD_ONLY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CURSOR_KEYSET_DRIVEN", SQL_CURSOR_KEYSET_DRIVEN, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CURSOR_DYNAMIC", SQL_CURSOR_DYNAMIC, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_CURSOR_STATIC", SQL_CURSOR_STATIC, CONST_PERSISTENT | CONST_CS);
++
++	REGISTER_LONG_CONSTANT("SQL_KEYSET_SIZE", SQL_KEYSET_SIZE, CONST_PERSISTENT | CONST_CS);
++
++	/* these are for the Data Source type */
++	REGISTER_LONG_CONSTANT("SQL_FETCH_FIRST", SQL_FETCH_FIRST, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_FETCH_NEXT", SQL_FETCH_NEXT, CONST_PERSISTENT | CONST_CS);
++
++	/*
++	 * register the standard data types
++	 */
++	REGISTER_LONG_CONSTANT("SQL_CHAR", SQL_CHAR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_VARCHAR", SQL_VARCHAR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_LONGVARCHAR", SQL_LONGVARCHAR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_DECIMAL", SQL_DECIMAL, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_NUMERIC", SQL_NUMERIC, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_BIT", SQL_BIT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_TINYINT", SQL_TINYINT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_SMALLINT", SQL_SMALLINT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_INTEGER", SQL_INTEGER, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_BIGINT", SQL_BIGINT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_REAL", SQL_REAL, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_FLOAT", SQL_FLOAT, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_DOUBLE", SQL_DOUBLE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_BINARY", SQL_BINARY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_VARBINARY", SQL_VARBINARY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_LONGVARBINARY", SQL_LONGVARBINARY, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_DATE", SQL_DATE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_TIME", SQL_TIME, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_TIMESTAMP", SQL_TIMESTAMP, CONST_PERSISTENT | CONST_CS);
++#if defined(ODBCVER) && (ODBCVER >= 0x0300)
++	REGISTER_LONG_CONSTANT("SQL_TYPE_DATE", SQL_TYPE_DATE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_TYPE_TIME", SQL_TYPE_TIME, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_TYPE_TIMESTAMP", SQL_TYPE_TIMESTAMP, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_WCHAR", SQL_WCHAR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_WVARCHAR", SQL_WVARCHAR, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_WLONGVARCHAR", SQL_WLONGVARCHAR, CONST_PERSISTENT | CONST_CS);
++
++	/*
++	 * SQLSpecialColumns values
++	 */
++	REGISTER_LONG_CONSTANT("SQL_BEST_ROWID", SQL_BEST_ROWID, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_ROWVER", SQL_ROWVER, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_SCOPE_CURROW", SQL_SCOPE_CURROW, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_SCOPE_TRANSACTION", SQL_SCOPE_TRANSACTION, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_SCOPE_SESSION", SQL_SCOPE_SESSION, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_NO_NULLS", SQL_NO_NULLS, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_NULLABLE", SQL_NULLABLE, CONST_PERSISTENT | CONST_CS);
++
++	/*
++	 * SQLStatistics values
++	 */
++	REGISTER_LONG_CONSTANT("SQL_INDEX_UNIQUE", SQL_INDEX_UNIQUE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_INDEX_ALL", SQL_INDEX_ALL, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_ENSURE", SQL_ENSURE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("SQL_QUICK", SQL_QUICK, CONST_PERSISTENT | CONST_CS);
++#endif
++
+ #if defined(HAVE_IBMDB2) && defined(_AIX)
+ 	/* atexit() handler in the DB2/AIX library segfaults in PHP CLI */
+ 	/* DB2NOEXITLIST env variable prevents DB2 from invoking atexit() */
+ 	putenv("DB2NOEXITLIST=TRUE");
+ #endif
+ 
+-	register_odbc_symbols(module_number);
+-
+ 	return SUCCESS;
+ }
+ /* }}} */
+@@ -1684,7 +1762,7 @@ PHP_FUNCTION(odbc_result)
+ 		RETURN_THROWS();
+ 	}
+ 
+-	if (result->numcols == 0) {
++	if ((result->numcols == 0)) {
+ 		php_error_docref(NULL, E_WARNING, "No tuples available at this result index");
+ 		RETURN_FALSE;
+ 	}
+@@ -2095,38 +2173,8 @@ int odbc_sqlconnect(odbc_connection **conn, char *db, char *uid, char *pwd, int
+ 		/* a connection string may have = but not ; - i.e. "DSN=PHP" */
+ 		if (strstr((char*)db, "=")) {
+ 			direct = 1;
+-			/* Force UID and PWD to be set in the DSN */
+-			bool is_uid_set = uid && *uid
+-				&& !strstr(db, "uid=")
+-				&& !strstr(db, "UID=");
+-			bool is_pwd_set = pwd && *pwd
+-				&& !strstr(db, "pwd=")
+-				&& !strstr(db, "PWD=");
+-			if (is_uid_set && is_pwd_set) {
+-				char *uid_quoted = NULL, *pwd_quoted = NULL;
+-				bool should_quote_uid = !php_odbc_connstr_is_quoted(uid) && php_odbc_connstr_should_quote(uid);
+-				bool should_quote_pwd = !php_odbc_connstr_is_quoted(pwd) && php_odbc_connstr_should_quote(pwd);
+-				if (should_quote_uid) {
+-					size_t estimated_length = php_odbc_connstr_estimate_quote_length(uid);
+-					uid_quoted = emalloc(estimated_length);
+-					php_odbc_connstr_quote(uid_quoted, uid, estimated_length);
+-				} else {
+-					uid_quoted = uid;
+-				}
+-				if (should_quote_pwd) {
+-					size_t estimated_length = php_odbc_connstr_estimate_quote_length(pwd);
+-					pwd_quoted = emalloc(estimated_length);
+-					php_odbc_connstr_quote(pwd_quoted, pwd, estimated_length);
+-				} else {
+-					pwd_quoted = pwd;
+-				}
+-				spprintf(&ldb, 0, "%s;UID=%s;PWD=%s", db, uid_quoted, pwd_quoted);
+-				if (uid_quoted && should_quote_uid) {
+-					efree(uid_quoted);
+-				}
+-				if (pwd_quoted && should_quote_pwd) {
+-					efree(pwd_quoted);
+-				}
++			if (uid && !strstr ((char*)db, "uid") && !strstr((char*)db, "UID")) {
++				spprintf(&ldb, 0, "%s;UID=%s;PWD=%s", db, uid, pwd);
+ 			} else {
+ 				ldb_len = strlen(db)+1;
+ 				ldb = (char*) emalloc(ldb_len);
+@@ -2249,20 +2297,7 @@ try_and_get_another_connection:
+ 				RETCODE ret;
+ 				UCHAR d_name[32];
+ 				SQLSMALLINT len;
+-				SQLUINTEGER dead = SQL_CD_FALSE;
+ 
+-				ret = SQLGetConnectAttr(db_conn->hdbc,
+-					SQL_ATTR_CONNECTION_DEAD,
+-					&dead, 0, NULL);
+-				if (ret == SQL_SUCCESS && dead == SQL_CD_TRUE) {
+-					/* Bail early here, since we know it's gone */
+-					zend_hash_str_del(&EG(persistent_list), hashed_details, hashed_len);
+-					goto try_and_get_another_connection;
+-				}
+-				/* If the driver doesn't support it, or returns
+-				 * false (could be a false positive), fall back
+-				 * to the old heuristic.
+-				 */
+ 				ret = SQLGetInfo(db_conn->hdbc,
+ 					SQL_DATA_SOURCE_READ_ONLY,
+ 					d_name, sizeof(d_name), &len);
+diff --git a/ext/odbc/php_odbc_includes.h b/ext/odbc/php_odbc_includes.h
+index 21c74d31..f3e93a1c 100644
+--- a/ext/odbc/php_odbc_includes.h
++++ b/ext/odbc/php_odbc_includes.h
+@@ -42,6 +42,7 @@
+ # include <sql.h>
+ #endif	/* end: #if defined(HAVE_SOLID) */
+ #undef HAVE_SQL_EXTENDED_FETCH
++PHP_FUNCTION(solid_fetch_prev);
+ #define SQLSMALLINT SWORD
+ #define SQLUSMALLINT UWORD
+ #ifndef SQL_SUCCEEDED
+@@ -162,13 +163,6 @@
+ #include <sqlext.h>
+ #endif
+ 
+-#ifdef PHP_WIN32
+-#include <winsock2.h>
+-
+-#define ODBC_TYPE "Win32"
+-#define PHP_ODBC_TYPE ODBC_TYPE
+-
+-#endif
+ 
+ /* Common defines */
+ 
+@@ -228,8 +222,8 @@ ZEND_BEGIN_MODULE_GLOBALS(odbc)
+ 	char *defDB;
+ 	char *defUser;
+ 	char *defPW;
+-	bool allow_persistent;
+-	bool check_persistent;
++	zend_long allow_persistent;
++	zend_long check_persistent;
+ 	zend_long max_persistent;
+ 	zend_long max_links;
+ 	zend_long num_persistent;
+diff --git a/ext/odbc/tests/odbc_utils.phpt b/ext/odbc/tests/odbc_utils.phpt
+deleted file mode 100644
+index 05d23e78..00000000
+--- a/ext/odbc/tests/odbc_utils.phpt
++++ /dev/null
+@@ -1,81 +0,0 @@
+---TEST--
+-Test common ODBC string functionality
+---EXTENSIONS--
+-odbc
+---FILE--
+-<?php
+-
+-// 1. No, it's not quoted.
+-// 2. Yes, it should be quoted because of the special character in the middle.
+-$with_end_curly1 = "foo}bar";
+-// 1. No, the unescaped special character in the middle breaks what would be quoted.
+-// 2. Yes, it should be quoted because of the special character in the middle.
+-//    Note that should_quote doesn't care about if the string is already quoted.
+-//    That's why you should check if it is quoted first.
+-$with_end_curly2 = "{foo}bar}";
+-// 1. Yes, the special characters are escaped, so it's quoted.
+-// 2. See $with_end_curly2; should_quote doesn't care about if the string is already quoted.
+-$with_end_curly3 = "{foo}}bar}";
+-// 1. No, it's not quoted.
+-// 2. It doesn't need to be quoted because of no s
+-$with_no_end_curly1 = "foobar";
+-// 1. Yes, it is quoted and any characters are properly escaped.
+-// 2. See $with_end_curly2.
+-$with_no_end_curly2 = "{foobar}";
+-
+-echo "# Is quoted?\n";
+-echo "With end curly brace 1: ";
+-var_dump(odbc_connection_string_is_quoted($with_end_curly1));
+-echo "With end curly brace 2: ";
+-var_dump(odbc_connection_string_is_quoted($with_end_curly2));
+-echo "With end curly brace 3: ";
+-var_dump(odbc_connection_string_is_quoted($with_end_curly3));
+-echo "Without end curly brace 1: ";
+-var_dump(odbc_connection_string_is_quoted($with_no_end_curly1));
+-echo "Without end curly brace 2: ";
+-var_dump(odbc_connection_string_is_quoted($with_no_end_curly2));
+-
+-echo "# Should quote?\n";
+-echo "With end curly brace 1: ";
+-var_dump(odbc_connection_string_should_quote($with_end_curly1));
+-echo "With end curly brace 2: ";
+-var_dump(odbc_connection_string_should_quote($with_end_curly2));
+-echo "With end curly brace 3: ";
+-var_dump(odbc_connection_string_should_quote($with_end_curly3));
+-echo "Without end curly brace 1: ";
+-var_dump(odbc_connection_string_should_quote($with_no_end_curly1));
+-echo "Without end curly brace 2: ";
+-var_dump(odbc_connection_string_should_quote($with_no_end_curly2));
+-
+-echo "# Quote?\n";
+-echo "With end curly brace 1: ";
+-var_dump(odbc_connection_string_quote($with_end_curly1));
+-echo "With end curly brace 2: ";
+-var_dump(odbc_connection_string_quote($with_end_curly2));
+-echo "With end curly brace 3: ";
+-var_dump(odbc_connection_string_quote($with_end_curly3));
+-echo "Without end curly brace 1: ";
+-var_dump(odbc_connection_string_quote($with_no_end_curly1));
+-echo "Without end curly brace 2: ";
+-var_dump(odbc_connection_string_quote($with_no_end_curly2));
+-
+-?>
+---EXPECTF--
+-# Is quoted?
+-With end curly brace 1: bool(false)
+-With end curly brace 2: bool(false)
+-With end curly brace 3: bool(true)
+-Without end curly brace 1: bool(false)
+-Without end curly brace 2: bool(true)
+-# Should quote?
+-With end curly brace 1: bool(true)
+-With end curly brace 2: bool(true)
+-With end curly brace 3: bool(true)
+-Without end curly brace 1: bool(false)
+-Without end curly brace 2: bool(true)
+-# Quote?
+-With end curly brace 1: string(10) "{foo}}bar}"
+-With end curly brace 2: string(13) "{{foo}}bar}}}"
+-With end curly brace 3: string(15) "{{foo}}}}bar}}}"
+-Without end curly brace 1: string(8) "{foobar}"
+-Without end curly brace 2: string(11) "{{foobar}}}"

@@ -1,0 +1,230 @@
+diff --git a/ext/dba/tests/CONFLICTS b/ext/dba/tests/CONFLICTS
+new file mode 100644
+index 00000000..7c5f9807
+--- /dev/null
++++ b/ext/dba/tests/CONFLICTS
+@@ -0,0 +1,2 @@
++# Many of these tests work on the same database file
++dba
+diff --git a/ext/dba/tests/bug36436.phpt b/ext/dba/tests/bug36436.phpt
+index 9e7603f5..d101c442 100644
+--- a/ext/dba/tests/bug36436.phpt
++++ b/ext/dba/tests/bug36436.phpt
+@@ -4,17 +4,21 @@ Bug #36436 (DBA problem with Berkeley DB4)
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip('db4');
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug36436.db';
+ 
+-$db = set_up_db_ex('db4', $db_name, LockFlag::DbLock, persistent: true);
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
+ 
+-var_dump($db, dba_fetch('key1', $db));
++$db = dba_popen($db_filename, 'c', 'db4');
++
++dba_insert('X', 'XYZ', $db);
++dba_insert('Y', '123', $db);
++
++var_dump($db, dba_fetch('X', $db));
+ 
+ var_dump(dba_firstkey($db));
+ var_dump(dba_nextkey($db));
+@@ -24,12 +28,10 @@ dba_close($db);
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug36436.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+ --EXPECTF--
+ resource(%d) of type (dba persistent)
+-string(16) "Content String 1"
+-string(13) "[key10]name10"
+-string(13) "[key30]name30"
++string(3) "XYZ"
++string(1) "X"
++string(1) "Y"
+diff --git a/ext/dba/tests/bug48240.phpt b/ext/dba/tests/bug48240.phpt
+new file mode 100644
+index 00000000..1c8a9b3c
+--- /dev/null
++++ b/ext/dba/tests/bug48240.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++Bug #48240 (DBA Segmentation fault dba_nextkey)
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_open($db_filename, 'c', 'db4');
++
++var_dump(dba_nextkey($db));
++
++dba_close($db);
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++bool(false)
+diff --git a/ext/dba/tests/bug49125.phpt b/ext/dba/tests/bug49125.phpt
+new file mode 100644
+index 00000000..3228da5b
+--- /dev/null
++++ b/ext/dba/tests/bug49125.phpt
+@@ -0,0 +1,32 @@
++--TEST--
++Bug #49125 (Error in dba_exists C code)
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++    $handler = 'db4';
++    require_once(__DIR__ .'/skipif.inc');
++?>
++--FILE--
++<?php
++
++error_reporting(E_ALL);
++
++$handler = 'db4';
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_popen($db_filename, 'c', 'db4');
++
++dba_insert('foo', 'foo', $db);
++
++var_dump(dba_exists('foo', $db));
++
++dba_close($db);
++
++?>
++--CLEAN--
++<?php
++    require(__DIR__ .'/clean.inc');
++?>
++--EXPECT--
++bool(true)
+diff --git a/ext/dba/tests/bug62490.phpt b/ext/dba/tests/bug62490.phpt
+new file mode 100644
+index 00000000..6646b27f
+--- /dev/null
++++ b/ext/dba/tests/bug62490.phpt
+@@ -0,0 +1,43 @@
++--TEST--
++Bug #62490 (dba_delete returns true on missing item (inifile))
++--EXTENSIONS--
++dba
++--SKIPIF--
++<?php
++$handler = "inifile";
++include "skipif.inc";
++?>
++--FILE--
++<?php
++$handler = "inifile";
++include "test.inc";
++
++$dba = dba_open($db_filename, "n", $handler)
++    or die;
++for ($i = 0; $i < 3; ++$i) {
++    echo "insert $i:";
++    var_dump(dba_insert("a", $i, $dba));
++}
++
++echo "exists:";
++var_dump(dba_exists("a", $dba));
++echo "delete:";
++var_dump(dba_delete("a", $dba));
++echo "exists:";
++var_dump(dba_exists("a", $dba));
++echo "delete:";
++var_dump(dba_delete("a", $dba));
++
++?>
++--CLEAN--
++<?php
++include "clean.inc";
++?>
++--EXPECT--
++insert 0:bool(true)
++insert 1:bool(true)
++insert 2:bool(true)
++exists:bool(true)
++delete:bool(true)
++exists:bool(false)
++delete:bool(false)
+diff --git a/ext/dba/tests/bug65708.phpt b/ext/dba/tests/bug65708.phpt
+index 1a5203e9..b821d2b8 100644
+--- a/ext/dba/tests/bug65708.phpt
++++ b/ext/dba/tests/bug65708.phpt
+@@ -4,15 +4,16 @@ Bug #65708 (dba functions cast $key param to string in-place, bypassing copy on
+ dba
+ --SKIPIF--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-check_skip_any();
++    require_once(__DIR__ .'/skipif.inc');
+ ?>
+ --FILE--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$name = 'bug65708.db';
+ 
+-$db = get_any_db($name);
++error_reporting(E_ALL);
++
++require_once(__DIR__ .'/test.inc');
++
++$db = dba_popen($db_filename, 'c');
+ 
+ $key = 1;
+ $copy = $key;
+@@ -30,12 +31,9 @@ dba_close($db);
+ ?>
+ --CLEAN--
+ <?php
+-require_once __DIR__ . '/setup/setup_dba_tests.inc';
+-$db_name = 'bug65708.db';
+-cleanup_standard_db($db_name);
++    require(__DIR__ .'/clean.inc');
+ ?>
+---EXPECTF--
+-Using handler: "%s"
++--EXPECT--
+ integer
+ integer
+ integer
+diff --git a/ext/dba/tests/bug70825.phpt b/ext/dba/tests/bug70825.phpt
+index d2e85420..c9ac20b6 100644
+--- a/ext/dba/tests/bug70825.phpt
++++ b/ext/dba/tests/bug70825.phpt
+@@ -66,5 +66,5 @@ string(4) "1337"
+ --CLEAN--
+ <?php
+ $filename = __DIR__ . DIRECTORY_SEPARATOR . 'bug70825.ini';
+-@unlink($filename);
++unlink($filename);
+ ?>

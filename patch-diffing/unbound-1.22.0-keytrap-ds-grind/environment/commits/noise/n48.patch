@@ -1,0 +1,92 @@
+diff --git a/testdata/auth_tls.tdir/auth_tls.test b/testdata/auth_tls.tdir/auth_tls.test
+new file mode 100644
+index 000000000..030212f52
+--- /dev/null
++++ b/testdata/auth_tls.tdir/auth_tls.test
+@@ -0,0 +1,48 @@
++# #-- auth_tls.test --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++PRE="../.."
++# do the test
++echo "> dig www.example.com."
++dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	sleep 1
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	sleep 1
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	sleep 1
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	sleep 10
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++if grep SERVFAIL outfile; then
++	echo "> try again"
++	sleep 10
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
++fi
++echo "> check answer"
++if grep "1.2.3.4" outfile; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++
++exit 0
+diff --git a/testdata/auth_tls.tdir/auth_tls.ub.conf b/testdata/auth_tls.tdir/auth_tls.ub.conf
+new file mode 100644
+index 000000000..0220c60af
+--- /dev/null
++++ b/testdata/auth_tls.tdir/auth_tls.ub.conf
+@@ -0,0 +1,22 @@
++server:
++	verbosity: 7
++	# num-threads: 1
++	interface: 127.0.0.1
++	port: @UNBOUND_PORT@
++	use-syslog: no
++	directory: ""
++	pidfile: "unbound.pid"
++	chroot: ""
++	username: ""
++	do-not-query-localhost: no
++	tls-service-key: "unbound_server.key"
++	tls-service-pem: "unbound_server.pem"
++	tls-cert-bundle: "nsd_server.pem"
++
++auth-zone:
++	name: "example.com"
++	for-upstream: yes
++	for-downstream: yes
++	primary: "127.0.0.1@@NSD_PORT@#nsd"
++	allow-notify: "127.0.0.2@@NSD_PORT@"
++	allow-notify: 127.0.0.1
+diff --git a/testdata/auth_tls.tdir/example.com.zone b/testdata/auth_tls.tdir/example.com.zone
+new file mode 100644
+index 000000000..18b5b407e
+--- /dev/null
++++ b/testdata/auth_tls.tdir/example.com.zone
+@@ -0,0 +1,4 @@
++example.com.		240	IN	SOA	ns.nlnetlabs.nl. hostmaster.nlnetlabs.nl. 2024082400 28800 7200 604800 240
++example.com. NS ns.example.com.
++ns.example.com. IN A 192.0.2.1
++www.example.com. A 1.2.3.4

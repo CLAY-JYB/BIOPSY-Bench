@@ -1,0 +1,273 @@
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute_bind.phpt b/ext/mysqli/tests/mysqli_stmt_execute_bind.phpt
+index 7921e51f..deb95c9f 100644
+--- a/ext/mysqli/tests/mysqli_stmt_execute_bind.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_execute_bind.phpt
+@@ -5,6 +5,9 @@ mysqli
+ --SKIPIF--
+ <?php
+ require_once 'skipifconnectfailure.inc';
++if (!$IS_MYSQLND) {
++    die("skip only available in mysqlnd");
++}
+ ?>
+ --FILE--
+ <?php
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute_bind_libmysql.phpt b/ext/mysqli/tests/mysqli_stmt_execute_bind_libmysql.phpt
+new file mode 100644
+index 00000000..d06fc75c
+--- /dev/null
++++ b/ext/mysqli/tests/mysqli_stmt_execute_bind_libmysql.phpt
+@@ -0,0 +1,47 @@
++--TEST--
++mysqli_stmt_execute() - bind in execute - not supported with libmysql
++--EXTENSIONS--
++mysqli
++--SKIPIF--
++<?php
++require_once 'skipifconnectfailure.inc';
++if ($IS_MYSQLND) {
++    die("skip only applicable for libmysqlclient");
++}
++?>
++--FILE--
++<?php
++require_once "connect.inc";
++
++require 'table.inc';
++
++mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
++
++// first, control case
++$id = 1;
++$abc = 'abc';
++$stmt = $link->prepare('SELECT label, ? AS anon, ? AS num FROM test WHERE id=?');
++$stmt->bind_param('sss', ...[&$abc, 42, $id]);
++$stmt->execute();
++$stmt->bind_result($v1, $v2, $v3);
++$stmt->fetch();
++assert(['label'=>$v1, 'anon'=>$v2, 'num'=>$v3] === ['label'=>'a', 'anon'=>'abc', 'num'=>'42']);
++$stmt = null;
++
++// 1. same as the control case, but skipping the middle-man (bind_param)
++$stmt = $link->prepare('SELECT label, ? AS anon, ? AS num FROM test WHERE id=?');
++try {
++    $stmt->execute([&$abc, 42, $id]);
++} catch (ArgumentCountError $e) {
++    echo '[001] '.$e->getMessage()."\n";
++}
++$stmt = null;
++
++mysqli_close($link);
++?>
++--CLEAN--
++<?php
++require_once "clean_table.inc";
++?>
++--EXPECT--
++[001] Binding parameters in execute is not supported with libmysqlclient
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc.phpt b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc.phpt
+index 3af364df..c7269e8c 100644
+--- a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc.phpt
+@@ -4,9 +4,10 @@ mysqli_stmt_execute() - Stored Procedures
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 50000) {
+     die(sprintf('skip Needs MySQL 5.0+, found version %d.', mysqli_get_server_version($link)));
+@@ -14,12 +15,8 @@ if (mysqli_get_server_version($link) <= 50000) {
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
+-
+-    if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-        printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+-          $host, $user, $db, $port, $socket);
+-    }
++    require_once('connect.inc');
++    require_once('table.inc');
+ 
+     if (!mysqli_query($link, 'DROP PROCEDURE IF EXISTS p'))
+         printf("[009] [%d] %s.\n", mysqli_errno($link), mysqli_error($link));
+@@ -187,7 +184,7 @@ if (mysqli_get_server_version($link) <= 50000) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_next_result.phpt b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_next_result.phpt
+index 3f0da071..b8a3ac1f 100644
+--- a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_next_result.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_next_result.phpt
+@@ -4,9 +4,10 @@ mysqli_stmt_execute() - SP, next result
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) < 50503) {
+     die(sprintf('skip Needs MySQL 5.5.3+, found version %d.', mysqli_get_server_version($link)));
+@@ -14,7 +15,7 @@ if (mysqli_get_server_version($link) < 50503) {
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require_once('connect.inc');
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -115,7 +116,7 @@ if (mysqli_get_server_version($link) < 50503) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_out.phpt b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_out.phpt
+index 49ce4545..40318005 100644
+--- a/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_out.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_execute_stored_proc_out.phpt
+@@ -4,17 +4,23 @@ mysqli_stmt_execute() - OUT
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) < 50503) {
+     die(sprintf('skip Needs MySQL 5.5.3+, found version %d.', mysqli_get_server_version($link)));
+ }
++/*
++if ($IS_MYSQLND) {
++    die(sprintf("skip WHY ?!"));
++}
++*/
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require_once('connect.inc');
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -64,7 +70,7 @@ if (mysqli_get_server_version($link) < 50503) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "connect.inc";
++require_once("connect.inc");
+ if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+    printf("[c001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
+ 
+diff --git a/ext/mysqli/tests/mysqli_stmt_fetch_bit.phpt b/ext/mysqli/tests/mysqli_stmt_fetch_bit.phpt
+index 1c49f2a1..d6616061 100644
+--- a/ext/mysqli/tests/mysqli_stmt_fetch_bit.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_fetch_bit.phpt
+@@ -4,18 +4,16 @@ Fetching BIT column values using the PS API
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
+-if (mysqli_get_server_version($link) < 50003) {
+-    // b'001' syntax not supported before 5.0.3
+-    die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+-}
++    require_once('skipifconnectfailure.inc');
++    require_once('connect.inc');
++    require_once('table.inc');
++    if (mysqli_get_server_version($link) < 50003)
++        // b'001' syntax not supported before 5.0.3
++        die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+ ?>
+ --FILE--
+ <?php
+-    require 'connect.inc';
++    require('connect.inc');
+ 
+     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
+@@ -69,7 +67,7 @@ if (mysqli_get_server_version($link) < 50003) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!
+diff --git a/ext/mysqli/tests/mysqli_stmt_get_result_bit.phpt b/ext/mysqli/tests/mysqli_stmt_get_result_bit.phpt
+index c3a68db0..64a1b863 100644
+--- a/ext/mysqli/tests/mysqli_stmt_get_result_bit.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_get_result_bit.phpt
+@@ -4,23 +4,20 @@ Fetching BIT column values using the PS API
+ mysqli
+ --SKIPIF--
+ <?php
+-if (!function_exists('mysqli_stmt_get_result')) {
+-    die("skip mysqli_stmt_get_result() not available");
+-}
+-
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+-}
+-
+-if (mysqli_get_server_version($link) < 50003) {
+-    // b'001' syntax not supported before 5.0.3
+-    die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+-}
++    require_once('skipifconnectfailure.inc');
++
++    if (!function_exists('mysqli_stmt_get_result'))
++        die("skip mysqli_stmt_get_result() not available");
++
++    require_once('connect.inc');
++    require_once('table.inc');
++    if (mysqli_get_server_version($link) < 50003)
++        // b'001' syntax not supported before 5.0.3
++        die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+ ?>
+ --FILE--
+ <?php
+-    require_once 'connect.inc';
++    require('connect.inc');
+ 
+     function dec32bin($dec, $bits) {
+ 
+@@ -127,7 +124,7 @@ if (mysqli_get_server_version($link) < 50003) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ done!

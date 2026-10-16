@@ -1,0 +1,212 @@
+diff --git a/ext/standard/flock_compat.h b/ext/standard/flock_compat.h
+index a55c3af9..983b36a8 100644
+--- a/ext/standard/flock_compat.h
++++ b/ext/standard/flock_compat.h
+@@ -17,7 +17,7 @@
+ #ifndef FLOCK_COMPAT_H
+ #define FLOCK_COMPAT_H
+ 
+-#ifdef HAVE_STRUCT_FLOCK
++#if HAVE_STRUCT_FLOCK
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sys/file.h>
+@@ -57,16 +57,17 @@ PHPAPI int flock(int fd, int operation);
+ # define ftruncate(a, b) chsize(a, b)
+ #endif /* defined(PHP_WIN32) */
+ 
+-#ifndef HAVE_INET_ATON
+-# ifdef HAVE_NETINET_IN_H
+-#  include <netinet/in.h>
+-# endif
+-# ifdef HAVE_ARPA_INET_H
+-#  include <arpa/inet.h>
+-# endif
+-# ifndef PHP_WIN32
++#if !HAVE_INET_ATON
++#if HAVE_NETINET_IN_H
++#include <netinet/in.h>
++#endif
++#if HAVE_ARPA_INET_H
++#include <arpa/inet.h>
++#endif
++
++#ifndef PHP_WIN32
+ extern int inet_aton(const char *, struct in_addr *);
+-# endif
++#endif
+ #endif
+ 
+ #endif	/* FLOCK_COMPAT_H */
+diff --git a/ext/standard/ftok.c b/ext/standard/ftok.c
+index 1a046b3d..171e54f4 100644
+--- a/ext/standard/ftok.c
++++ b/ext/standard/ftok.c
+@@ -26,7 +26,7 @@
+ #include "win32/ipc.h"
+ #endif
+ 
+-#ifdef HAVE_FTOK
++#if HAVE_FTOK
+ /* {{{ Convert a pathname and a project identifier to a System V IPC key */
+ PHP_FUNCTION(ftok)
+ {
+diff --git a/ext/standard/ftp_fopen_wrapper.c b/ext/standard/ftp_fopen_wrapper.c
+index db135ec0..d19113f7 100644
+--- a/ext/standard/ftp_fopen_wrapper.c
++++ b/ext/standard/ftp_fopen_wrapper.c
+@@ -40,7 +40,7 @@
+ #include "php_standard.h"
+ 
+ #include <sys/types.h>
+-#ifdef HAVE_SYS_SOCKET_H
++#if HAVE_SYS_SOCKET_H
+ #include <sys/socket.h>
+ #endif
+ 
+@@ -49,7 +49,7 @@
+ #else
+ #include <netinet/in.h>
+ #include <netdb.h>
+-#ifdef HAVE_ARPA_INET_H
++#if HAVE_ARPA_INET_H
+ #include <arpa/inet.h>
+ #endif
+ #endif
+diff --git a/ext/standard/head.c b/ext/standard/head.c
+index 5bdae98d..ab64fecf 100644
+--- a/ext/standard/head.c
++++ b/ext/standard/head.c
+@@ -110,14 +110,6 @@ PHPAPI zend_result php_setcookie(zend_string *name, zend_string *value, time_t e
+ 			get_active_function_name());
+ 		return FAILURE;
+ 	}
+-#ifdef ZEND_ENABLE_ZVAL_LONG64
+-	if (expires >= 253402300800) {
+-		zend_value_error("%s(): \"expires\" option cannot have a year greater than 9999",
+-			get_active_function_name());
+-		return FAILURE;
+-	}
+-#endif
+-
+ 	/* Should check value of SameSite? */
+ 
+ 	if (value == NULL || ZSTR_LEN(value) == 0) {
+@@ -126,7 +118,7 @@ PHPAPI zend_result php_setcookie(zend_string *name, zend_string *value, time_t e
+ 		 * so in order to force cookies to be deleted, even on MSIE, we
+ 		 * pick an expiry date in the past
+ 		 */
+-		dt = php_format_date("D, d M Y H:i:s \\G\\M\\T", sizeof("D, d M Y H:i:s \\G\\M\\T")-1, 1, 0);
++		dt = php_format_date("D, d-M-Y H:i:s T", sizeof("D, d-M-Y H:i:s T")-1, 1, 0);
+ 		smart_str_appends(&buf, "Set-Cookie: ");
+ 		smart_str_append(&buf, name);
+ 		smart_str_appends(&buf, "=deleted; expires=");
+@@ -144,12 +136,21 @@ PHPAPI zend_result php_setcookie(zend_string *name, zend_string *value, time_t e
+ 		} else {
+ 			smart_str_append(&buf, value);
+ 		}
+-
+ 		if (expires > 0) {
++			const char *p;
+ 			double diff;
+ 
+ 			smart_str_appends(&buf, COOKIE_EXPIRES);
+-			dt = php_format_date("D, d M Y H:i:s \\G\\M\\T", sizeof("D, d M Y H:i:s \\G\\M\\T")-1, expires, 0);
++			dt = php_format_date("D, d-M-Y H:i:s T", sizeof("D, d-M-Y H:i:s T")-1, expires, 0);
++			/* check to make sure that the year does not exceed 4 digits in length */
++			p = zend_memrchr(ZSTR_VAL(dt), '-', ZSTR_LEN(dt));
++			if (!p || *(p + 5) != ' ') {
++				zend_string_free(dt);
++				smart_str_free(&buf);
++				zend_value_error("%s(): \"expires\" option cannot have a year greater than 9999",
++					get_active_function_name());
++				return FAILURE;
++			}
+ 
+ 			smart_str_append(&buf, dt);
+ 			zend_string_free(dt);
+diff --git a/ext/standard/hrtime.c b/ext/standard/hrtime.c
+index 7dca135c..b033b256 100644
+--- a/ext/standard/hrtime.c
++++ b/ext/standard/hrtime.c
+@@ -134,7 +134,7 @@ static zend_always_inline php_hrtime_t _timer_current(void)
+ #endif
+ }/*}}}*/
+ 
+-#ifdef ZEND_ENABLE_ZVAL_LONG64
++#if ZEND_ENABLE_ZVAL_LONG64
+ #define PHP_RETURN_HRTIME(t) RETURN_LONG((zend_long)t)
+ #else
+ #ifdef _WIN32
+@@ -159,7 +159,7 @@ static zend_always_inline php_hrtime_t _timer_current(void)
+ 	from an arbitrary point in time. If an optional boolean argument is
+ 	passed, returns an integer on 64-bit platforms or float on 32-bit
+ 	containing the current high-resolution time in nanoseconds. The
+-	delivered timestamp is monotonic and cannot be adjusted. */
++	delivered timestamp is monotonic and can not be adjusted. */
+ PHP_FUNCTION(hrtime)
+ {
+ #if HRTIME_AVAILABLE
+diff --git a/ext/standard/html.c b/ext/standard/html.c
+index d76ba5b0..14ccd71a 100644
+--- a/ext/standard/html.c
++++ b/ext/standard/html.c
+@@ -44,7 +44,7 @@
+ #include "php_string.h"
+ #include "SAPI.h"
+ #include <locale.h>
+-#ifdef HAVE_LANGINFO_H
++#if HAVE_LANGINFO_H
+ #include <langinfo.h>
+ #endif
+ 
+@@ -95,7 +95,7 @@ static inline unsigned int get_next_char(
+ 		const unsigned char *str,
+ 		size_t str_len,
+ 		size_t *cursor,
+-		zend_result *status)
++		int *status)
+ {
+ 	size_t pos = *cursor;
+ 	unsigned int this_char = 0;
+@@ -356,7 +356,7 @@ PHPAPI unsigned int php_next_utf8_char(
+ 		const unsigned char *str,
+ 		size_t str_len,
+ 		size_t *cursor,
+-		zend_result *status)
++		int *status)
+ {
+ 	return get_next_char(cs_utf_8, str, str_len, cursor, status);
+ }
+@@ -1045,8 +1045,8 @@ static inline void find_entity_for_char(
+ 		*entity_len = c->data.ent.entity_len;
+ 	} else {
+ 		/* peek at next char */
+-		size_t cursor_before = *cursor;
+-		zend_result status = SUCCESS;
++		size_t	 cursor_before	= *cursor;
++		int		 status			= SUCCESS;
+ 		unsigned next_char;
+ 
+ 		if (!(*cursor < oldlen))
+@@ -1156,7 +1156,7 @@ PHPAPI zend_string *php_escape_html_entities_ex(const unsigned char *old, size_t
+ 		const unsigned char *mbsequence = NULL;
+ 		size_t mbseqlen					= 0,
+ 		       cursor_before			= cursor;
+-		zend_result status				= SUCCESS;
++		int status						= SUCCESS;
+ 		unsigned int this_char			= get_next_char(charset, old, oldlen, &cursor, &status);
+ 
+ 		/* guarantee we have at least 40 bytes to write.
+diff --git a/ext/standard/html.h b/ext/standard/html.h
+index e7e9486d..2a475706 100644
+--- a/ext/standard/html.h
++++ b/ext/standard/html.h
+@@ -47,6 +47,6 @@ void register_html_constants(INIT_FUNC_ARGS);
+ PHPAPI zend_string *php_escape_html_entities(const unsigned char *old, size_t oldlen, int all, int flags, const char *hint_charset);
+ PHPAPI zend_string *php_escape_html_entities_ex(const unsigned char *old, size_t oldlen, int all, int flags, const char *hint_charset, bool double_encode, bool quiet);
+ PHPAPI zend_string *php_unescape_html_entities(zend_string *str, int all, int flags, const char *hint_charset);
+-PHPAPI unsigned int php_next_utf8_char(const unsigned char *str, size_t str_len, size_t *cursor, zend_result *status);
++PHPAPI unsigned int php_next_utf8_char(const unsigned char *str, size_t str_len, size_t *cursor, int *status);
+ 
+ #endif /* HTML_H */

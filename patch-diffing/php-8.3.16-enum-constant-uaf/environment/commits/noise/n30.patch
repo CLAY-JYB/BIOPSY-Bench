@@ -1,0 +1,156 @@
+diff --git a/Zend/tests/enum/var_export.phpt b/Zend/tests/enum/var_export.phpt
+index d45b6d32..7a5a01fc 100644
+--- a/Zend/tests/enum/var_export.phpt
++++ b/Zend/tests/enum/var_export.phpt
+@@ -14,8 +14,8 @@ echo str_replace(" \n", "\n", var_export([Foo::Bar], true));
+ 
+ ?>
+ --EXPECT--
+-\Foo::Bar
++Foo::Bar
+ array (
+   0 =>
+-  \Foo::Bar,
++  Foo::Bar,
+ )
+diff --git a/Zend/tests/exception_during_include_stat.phpt b/Zend/tests/exception_during_include_stat.phpt
+index 62747384..1927e7e2 100644
+--- a/Zend/tests/exception_during_include_stat.phpt
++++ b/Zend/tests/exception_during_include_stat.phpt
+@@ -4,7 +4,6 @@ Make sure exceptions during include/require stating are properly propagated
+ <?php
+ 
+ class StreamWrapper {
+-    public $context;
+     public function url_stat($path, $flags) {
+         throw new Exception('stat failed');
+     }
+diff --git a/Zend/tests/exception_in_nested_rope.phpt b/Zend/tests/exception_in_nested_rope.phpt
+index 7afd1412..df0d6fbf 100644
+--- a/Zend/tests/exception_in_nested_rope.phpt
++++ b/Zend/tests/exception_in_nested_rope.phpt
+@@ -13,6 +13,5 @@ try {
+ }
+ 
+ ?>
+---EXPECTF--
+-Deprecated: Using ${expr} (variable variables) in strings is deprecated, use {${expr}} instead in %s on line %d
++--EXPECT--
+ Exception
+diff --git a/Zend/tests/exception_stream_wrapper.phpt b/Zend/tests/exception_stream_wrapper.phpt
+deleted file mode 100644
+index 4de8274f..00000000
+--- a/Zend/tests/exception_stream_wrapper.phpt
++++ /dev/null
+@@ -1,32 +0,0 @@
+---TEST--
+-Exception in stream wrapper + __call
+---FILE--
+-<?php
+-
+-class Loader {
+-    public $context;
+-    function stream_open() {
+-        return true;
+-    }
+-    function stream_read() {
+-        echo "stream_read\n";
+-        throw new Exception("Message");
+-    }
+-    function __call($m, $a) {
+-        echo "$m\n";
+-    }
+-}
+-
+-stream_wrapper_register('abc', 'Loader');
+-try {
+-    require 'abc://';
+-} catch (Exception $e) {
+-    echo $e->getMessage(), "\n";
+-}
+-
+-?>
+---EXPECT--
+-stream_set_option
+-stream_stat
+-stream_read
+-Message
+diff --git a/Zend/tests/fake_closure_in_internal_func_leaks.phpt b/Zend/tests/fake_closure_in_internal_func_leaks.phpt
+deleted file mode 100644
+index e12b4b62..00000000
+--- a/Zend/tests/fake_closure_in_internal_func_leaks.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Fake closure called from internal function leaks
+---FILE--
+-<?php
+-
+-$c = \is_array(...);
+-var_dump(array_filter([[]], $c));
+-
+-?>
+---EXPECT--
+-array(1) {
+-  [0]=>
+-  array(0) {
+-  }
+-}
+diff --git a/Zend/tests/fibers/call-to-ctor-of-terminated-fiber.phpt b/Zend/tests/fibers/call-to-ctor-of-terminated-fiber.phpt
+deleted file mode 100644
+index 183932ca..00000000
+--- a/Zend/tests/fibers/call-to-ctor-of-terminated-fiber.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Multiple calls to constructor are prevented after fiber terminated
+---FILE--
+-<?php
+-
+-$fiber = new Fiber(function () {
+-    return 123;
+-});
+-
+-var_dump($fiber->start());
+-var_dump($fiber->getReturn());
+-
+-$fiber->__construct(function () {
+-    return 321;
+-});
+-
+-?>
+---EXPECTF--
+-NULL
+-int(123)
+-
+-Fatal error: Uncaught FiberError: Cannot call constructor twice in %scall-to-ctor-of-terminated-fiber.php:%d
+-Stack trace:
+-#0 %scall-to-ctor-of-terminated-fiber.php(%d): Fiber->__construct(Object(Closure))
+-#1 {main}
+-  thrown in %scall-to-ctor-of-terminated-fiber.php on line %d
+diff --git a/Zend/tests/fibers/multiple-calls-to-ctor.phpt b/Zend/tests/fibers/multiple-calls-to-ctor.phpt
+deleted file mode 100644
+index 28df1440..00000000
+--- a/Zend/tests/fibers/multiple-calls-to-ctor.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Multiple calls to constructor are prevented
+---FILE--
+-<?php
+-
+-$fiber = new Fiber(function () {
+-    return 123;
+-});
+-
+-$fiber->__construct(function () {
+-    return 321;
+-});
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught FiberError: Cannot call constructor twice in %smultiple-calls-to-ctor.php:%d
+-Stack trace:
+-#0 %smultiple-calls-to-ctor.php(%d): Fiber->__construct(Object(Closure))
+-#1 {main}
+-  thrown in %smultiple-calls-to-ctor.php on line %d

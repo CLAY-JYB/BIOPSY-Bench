@@ -1,0 +1,97 @@
+diff --git a/ext/pdo_pgsql/tests/bug72294.phpt b/ext/pdo_pgsql/tests/bug72294.phpt
+index 8b55b033..6528c121 100644
+--- a/ext/pdo_pgsql/tests/bug72294.phpt
++++ b/ext/pdo_pgsql/tests/bug72294.phpt
+@@ -70,8 +70,6 @@ class PHPUnit_Framework_TestFailure
+ 
+ class PHPUnit_Framework_TestResult
+ {
+-    private $errors;
+-
+     public function run( $test)
+     {
+         $error      = false;
+diff --git a/ext/pdo_sqlite/sqlite_driver.c b/ext/pdo_sqlite/sqlite_driver.c
+index de5170a3..6d5015e0 100644
+--- a/ext/pdo_sqlite/sqlite_driver.c
++++ b/ext/pdo_sqlite/sqlite_driver.c
+@@ -772,6 +772,15 @@ static int authorizer(void *autharg, int access_type, const char *arg3, const ch
+ {
+ 	char *filename;
+ 	switch (access_type) {
++		case SQLITE_COPY: {
++			filename = make_filename_safe(arg4);
++			if (!filename) {
++				return SQLITE_DENY;
++			}
++			efree(filename);
++			return SQLITE_OK;
++		}
++
+ 		case SQLITE_ATTACH: {
+ 			filename = make_filename_safe(arg3);
+ 			if (!filename) {
+diff --git a/ext/pdo_sqlite/sqlite_driver.stub.php b/ext/pdo_sqlite/sqlite_driver.stub.php
+index add395f2..58fb41c9 100644
+--- a/ext/pdo_sqlite/sqlite_driver.stub.php
++++ b/ext/pdo_sqlite/sqlite_driver.stub.php
+@@ -2,10 +2,7 @@
+ 
+ /** @generate-function-entries */
+ 
+-/**
+- * These are extension methods for PDO. This is not a real class.
+- * @undocumentable
+- */
++// These are extension methods for PDO. This is not a real class.
+ class PDO_SQLite_Ext {
+     /** @tentative-return-type */
+     public function sqliteCreateFunction(string $name, callable $callback, int $numArgs = -1, int $flags = 0): bool {}
+diff --git a/ext/pdo_sqlite/sqlite_driver_arginfo.h b/ext/pdo_sqlite/sqlite_driver_arginfo.h
+index 5ba745e5..2b9b1aea 100644
+--- a/ext/pdo_sqlite/sqlite_driver_arginfo.h
++++ b/ext/pdo_sqlite/sqlite_driver_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: dc901bd60d17c1a2cdb40a118e2c6cd6eb0396e3 */
++ * Stub hash: 8cc3c173f5a442ab80f240a568489b023aabd7ef */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_PDO_SQLite_Ext_sqliteCreateFunction, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+diff --git a/ext/pdo_sqlite/tests/bug46139.phpt b/ext/pdo_sqlite/tests/bug46139.phpt
+index 7ec94aff..fabc3126 100644
+--- a/ext/pdo_sqlite/tests/bug46139.phpt
++++ b/ext/pdo_sqlite/tests/bug46139.phpt
+@@ -8,7 +8,6 @@ pdo_sqlite
+ require __DIR__ . '/../../../ext/pdo/tests/pdo_test.inc';
+ $db = PDOTest::test_factory(__DIR__ . '/common.phpt');
+ 
+-#[AllowDynamicProperties]
+ class Person {
+     public $test = NULL;
+     public function __construct() {
+diff --git a/ext/pdo_sqlite/tests/bug70862.phpt b/ext/pdo_sqlite/tests/bug70862.phpt
+index 5becca7c..eff0f8fb 100644
+--- a/ext/pdo_sqlite/tests/bug70862.phpt
++++ b/ext/pdo_sqlite/tests/bug70862.phpt
+@@ -14,7 +14,6 @@ $db->setAttribute(PDO::ATTR_EMULATE_PREPARES, 0);
+ $db->setAttribute(PDO::ATTR_STRINGIFY_FETCHES, true);
+ 
+ class HelloWrapper {
+-    public $context;
+     public function stream_open() { return true; }
+     public function stream_eof() { return true; }
+     public function stream_read() { return NULL; }
+diff --git a/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt b/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
+index 5a5b728a..e16ac67c 100644
+--- a/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
++++ b/ext/pdo_sqlite/tests/pdo_fetch_func_001.phpt
+@@ -126,8 +126,6 @@ function "" not found or invalid function name
+ PDOStatement::fetchAll(): Argument #2 must be a callable, null given
+ no array or string given
+ cannot access "self" when no class scope is active
+-
+-Deprecated: Callables of the form ["bar", "parent::method"] are deprecated in %s on line %d
+ array(2) {
+   [0]=>
+   string(9) "--- 1 ---"

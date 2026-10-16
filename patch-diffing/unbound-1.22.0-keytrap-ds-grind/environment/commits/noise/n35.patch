@@ -1,0 +1,66 @@
+diff --git a/testcode/mini_tdir.sh b/testcode/mini_tdir.sh
+index 624ecdf7f..d1f7bfce9 100755
+--- a/testcode/mini_tdir.sh
++++ b/testcode/mini_tdir.sh
+@@ -127,6 +127,7 @@ dir=$name.$$
+ result=result.$name
+ done=.done-$name
+ skip=.skip-$name
++asan_text="SUMMARY: AddressSanitizer"
+ success="no"
+ if test -x "`which bash`"; then
+ 	shell="bash"
+@@ -200,6 +201,16 @@ if test -f $name.post -a ! -f ../$skip; then
+ 		echo "Warning: $name.post did not exit successfully"
+ 	fi
+ fi
++# Check if there were any AddressSanitizer errors
++# if compiled with -fsanitize=address
++if grep "$asan_text" $result >/dev/null 2>&1; then
++	if test -f ../$done; then
++		rm ../$done
++	fi
++	echo "$name: FAILED (AddressSanitizer)" >> $result
++	echo "$name: FAILED (AddressSanitizer)"
++	success="no"
++fi
+ echo "DateRunEnd: "`date "+%s" 2>/dev/null` >> $result
+ 
+ mv $result ..
+diff --git a/testcode/perf.c b/testcode/perf.c
+index 2be86c4bf..0a4ff1726 100644
+--- a/testcode/perf.c
++++ b/testcode/perf.c
+@@ -220,7 +220,7 @@ perfsetup(struct perfinfo* info)
+ #endif
+ 		signal(SIGTERM, perf_sigh) == SIG_ERR)
+ 		fatal_exit("could not bind to signal");
+-	info->io = (struct perfio*)calloc(sizeof(struct perfio), info->io_num);
++	info->io = (struct perfio*)calloc(info->io_num, sizeof(struct perfio));
+ 	if(!info->io) fatal_exit("out of memory");
+ #ifndef S_SPLINT_S
+ 	FD_ZERO(&info->rset);
+@@ -501,8 +501,8 @@ qlist_grow_capacity(struct perfinfo* info)
+ {
+ 	size_t newcap = (size_t)((info->qlist_capacity==0)?16:
+ 		info->qlist_capacity*2);
+-	uint8_t** d = (uint8_t**)calloc(sizeof(uint8_t*), newcap);
+-	size_t* l = (size_t*)calloc(sizeof(size_t), newcap);
++	uint8_t** d = (uint8_t**)calloc(newcap, sizeof(uint8_t*));
++	size_t* l = (size_t*)calloc(newcap, sizeof(size_t));
+ 	if(!d || !l) fatal_exit("out of memory");
+ 	if(info->qlist_data && info->qlist_capacity)
+ 		memcpy(d, info->qlist_data, sizeof(uint8_t*)*
+diff --git a/testcode/petal.c b/testcode/petal.c
+index 63d3d452e..6d825f1e0 100644
+--- a/testcode/petal.c
++++ b/testcode/petal.c
+@@ -256,7 +256,7 @@ setup_ctx(char* key, char* cert)
+ #if HAVE_DECL_SSL_CTX_SET_ECDH_AUTO
+ 	if (!SSL_CTX_set_ecdh_auto(ctx,1))
+ 		if(verb>=1) printf("failed to set_ecdh_auto, not enabling ECDHE\n");
+-#elif defined(USE_ECDSA)
++#elif defined(USE_ECDSA) && defined(HAVE_SSL_CTX_SET_TMP_ECDH)
+ 	if(1) {
+ 		EC_KEY *ecdh = EC_KEY_new_by_curve_name (NID_X9_62_prime256v1);
+ 		if (!ecdh) {

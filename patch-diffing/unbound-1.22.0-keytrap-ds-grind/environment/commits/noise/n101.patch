@@ -1,0 +1,251 @@
+diff --git a/testdata/tcp_sigpipe.tdir/tcp_sigpipe.conf b/testdata/tcp_sigpipe.tdir/tcp_sigpipe.conf
+index 384f16b07..4f1ff9b08 100644
+--- a/testdata/tcp_sigpipe.tdir/tcp_sigpipe.conf
++++ b/testdata/tcp_sigpipe.tdir/tcp_sigpipe.conf
+@@ -1,5 +1,5 @@
+ server:
+-	verbosity: 2
++	verbosity: 4
+ 	# num-threads: 1
+ 	interface: 127.0.0.1
+ 	port: @PORT@
+@@ -9,6 +9,7 @@ server:
+ 	chroot: ""
+ 	username: ""
+ 	do-not-query-localhost: no
++	discard-timeout: 3000  # testns uses sleep=2
+ 
+ forward-zone:
+ 	name: "."
+diff --git a/testdata/tls_reuse.tdir/tls_reuse.post b/testdata/tls_reuse.tdir/tls_reuse.post
+index 2eef0da96..6162086e8 100644
+--- a/testdata/tls_reuse.tdir/tls_reuse.post
++++ b/testdata/tls_reuse.tdir/tls_reuse.post
+@@ -6,13 +6,13 @@
+ #
+ # do your teardown here
+ . ../common.sh
+-kill_pid `cat unbound2.pid`
++kill_from_pidfile "unbound2.pid"
+ if test -f unbound2.log; then
+ 	echo ">>> upstream log"
+ 	cat unbound2.log
+ fi
+ #kill_pid $UNBOUND_PID
+-kill_pid `cat unbound.pid`
++kill_from_pidfile "unbound.pid"
+ if test -f unbound.log; then
+ 	echo ">>> unbound log"
+ 	cat unbound.log
+diff --git a/testdata/ttl_max_negative.rpl b/testdata/ttl_max_negative.rpl
+new file mode 100644
+index 000000000..243b66fe3
+--- /dev/null
++++ b/testdata/ttl_max_negative.rpl
+@@ -0,0 +1,206 @@
++; config options
++server:
++	access-control: 127.0.0.1 allow_snoop
++	cache-max-ttl: 15  # This will be overriden
++	cache-max-negative-ttl: 10
++	qname-minimisation: "no"
++	minimal-responses: no
++
++stub-zone:
++	name: "."
++	stub-addr: 193.0.14.129 	# K.ROOT-SERVERS.NET.
++CONFIG_END
++
++SCENARIO_BEGIN Test TTL max option for messages in the cache
++
++; K.ROOT-SERVERS.NET.
++RANGE_BEGIN 0 100
++	ADDRESS 193.0.14.129
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++. IN NS
++SECTION ANSWER
++. IN NS	K.ROOT-SERVERS.NET.
++SECTION ADDITIONAL
++K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN A
++SECTION AUTHORITY
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++a.gtld-servers.net.	IN A
++SECTION ANSWER
++a.gtld-servers.net.	IN A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++K.ROOT-SERVERS.NET.	IN	A
++SECTION ANSWER
++K.ROOT-SERVERS.NET.	IN	A	193.0.14.129
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++a.gtld-servers.net.	IN AAAA
++SECTION AUTHORITY
++. 86400 IN SOA . . 20070304 28800 7200 604800 86400
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++K.ROOT-SERVERS.NET.	IN	AAAA
++SECTION AUTHORITY
++. 86400 IN SOA . . 20070304 28800 7200 604800 86400
++ENTRY_END
++
++RANGE_END
++
++; a.gtld-servers.net.
++RANGE_BEGIN 0 100
++	ADDRESS 192.5.6.30
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++com. IN NS
++SECTION ANSWER
++com.	IN NS	a.gtld-servers.net.
++SECTION ADDITIONAL
++a.gtld-servers.net.	IN 	A	192.5.6.30
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode subdomain
++ADJUST copy_id copy_query
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN A
++SECTION AUTHORITY
++example.com.	IN NS	ns.example.com.
++SECTION ADDITIONAL
++ns.example.com.		IN 	A	1.2.3.4
++ENTRY_END
++RANGE_END
++
++; ns.example.com.
++RANGE_BEGIN 0 100
++	ADDRESS 1.2.3.4
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NOERROR
++SECTION QUESTION
++example.com. IN NS
++SECTION ANSWER
++example.com.	IN NS	ns.example.com.
++SECTION ADDITIONAL
++ns.example.com.		IN 	A	1.2.3.4
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++ns.example.com. IN A
++SECTION ANSWER
++ns.example.com.		IN 	A	1.2.3.4
++SECTION AUTHORITY
++example.com.	IN NS	ns.example.com.
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR NXDOMAIN
++SECTION QUESTION
++www.example.com. IN A
++SECTION AUTHORITY
++example.com. 3600 IN SOA . . 15 28800 7200 604800 3600
++ENTRY_END
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++ADJUST copy_id
++REPLY QR AA NOERROR
++SECTION QUESTION
++ns.example.com. IN AAAA
++SECTION AUTHORITY
++example.com. 3600 IN SOA . . 15 28800 7200 604800 3600
++ENTRY_END
++
++RANGE_END
++
++; start by passing time ; so we are not at 0
++STEP 1 TIME_PASSES ELAPSE 10
++
++; query for the record
++STEP 8 QUERY
++ENTRY_BEGIN
++REPLY RD CD
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 10 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RD RA CD NXDOMAIN
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++SECTION AUTHORITY
++example.com. 10 IN SOA . . 15 28800 7200 604800 3600
++ENTRY_END
++
++; wait
++STEP 20 TIME_PASSES ELAPSE 5
++
++; do a lookup to check TTLs.
++STEP 25 QUERY
++ENTRY_BEGIN
++REPLY
++SECTION QUESTION
++www.example.com. IN A
++ENTRY_END
++
++STEP 26 CHECK_ANSWER
++ENTRY_BEGIN
++MATCH all ttl
++REPLY QR RA NXDOMAIN
++SECTION QUESTION
++www.example.com. IN A
++SECTION ANSWER
++SECTION AUTHORITY
++example.com. 5 IN SOA . . 15 28800 7200 604800 3600
++ENTRY_END
++
++SCENARIO_END

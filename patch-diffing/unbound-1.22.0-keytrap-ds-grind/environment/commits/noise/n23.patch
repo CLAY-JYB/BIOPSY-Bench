@@ -1,0 +1,87 @@
+diff --git a/pythonmod/interface.i b/pythonmod/interface.i
+index d9839fc38..810b1449d 100644
+--- a/pythonmod/interface.i
++++ b/pythonmod/interface.i
+@@ -1009,6 +1009,7 @@ struct config_file {
+    int harden_short_bufsize;
+    int harden_large_queries;
+    int harden_glue;
++   int harden_unverified_glue;
+    int harden_dnssec_stripped;
+    int harden_referral_path;
+    int use_caps_bits_for_id;
+@@ -1416,7 +1417,7 @@ struct delegpt* dns_cache_find_delegation(struct module_env* env,
+ int iter_dp_is_useless(struct query_info* qinfo, uint16_t qflags,
+         struct delegpt* dp, int supports_ipv4, int supports_ipv6, int use_nat64);
+ struct iter_hints_stub* hints_lookup_stub(struct iter_hints* hints,
+-        uint8_t* qname, uint16_t qclass, struct delegpt* dp);
++        uint8_t* qname, uint16_t qclass, struct delegpt* dp, int nolock);
+ 
+ /* Custom function to perform logic similar to the one in daemon/cachedump.c */
+ struct delegpt* find_delegation(struct module_qstate* qstate, char *nm, size_t nmlen);
+@@ -1433,6 +1434,7 @@ struct delegpt* find_delegation(struct module_qstate* qstate, char *nm, size_t n
+     struct query_info qinfo;
+     struct iter_hints_stub* stub;
+     uint32_t timenow = *qstate->env->now;
++    int nolock = 0;
+ 
+     regional_free_all(region);
+     qinfo.qname = (uint8_t*)nm;
+@@ -1455,9 +1457,12 @@ struct delegpt* find_delegation(struct module_qstate* qstate, char *nm, size_t n
+             dname_str((uint8_t*)nm, b);
+             continue;
+         }
+-        stub = hints_lookup_stub(qstate->env->hints, qinfo.qname, qinfo.qclass, dp);
++        stub = hints_lookup_stub(qstate->env->hints, qinfo.qname,
++            qinfo.qclass, dp, nolock);
+         if (stub) {
+-            return stub->dp;
++            struct delegpt* stubdp = delegpt_copy(stub->dp, region);
++            lock_rw_unlock(&qstate->env->hints->lock);
++            return stubdp;
+         } else {
+             return dp;
+         }
+diff --git a/pythonmod/pythonmod.c b/pythonmod/pythonmod.c
+index c6294a1d5..e231ad079 100644
+--- a/pythonmod/pythonmod.c
++++ b/pythonmod/pythonmod.c
+@@ -356,11 +356,11 @@ int pythonmod_init(struct module_env* env, int id)
+ 	return 0;
+       }
+ #endif
+-      Py_NoSiteFlag = 1;
+ #if PY_MAJOR_VERSION >= 3
+       PyImport_AppendInittab(SWIG_name, (void*)SWIG_init);
+ #endif
+ #if PY_VERSION_HEX < 0x03080000
++      Py_NoSiteFlag = 1;
+       Py_Initialize();
+ #else
+       PyConfig_InitPythonConfig(&config);
+@@ -777,8 +777,8 @@ size_t pythonmod_get_mem(struct module_env* env, int id)
+  */
+ static struct module_func_block pythonmod_block = {
+    "python",
+-   &pythonmod_init, &pythonmod_deinit, &pythonmod_operate, &pythonmod_inform_super,
+-   &pythonmod_clear, &pythonmod_get_mem
++   NULL, NULL, &pythonmod_init, &pythonmod_deinit, &pythonmod_operate,
++   &pythonmod_inform_super, &pythonmod_clear, &pythonmod_get_mem
+ };
+ 
+ struct module_func_block* pythonmod_get_funcblock(void)
+diff --git a/respip/respip.c b/respip/respip.c
+index 942e082b9..db48f176e 100644
+--- a/respip/respip.c
++++ b/respip/respip.c
+@@ -1259,8 +1259,8 @@ respip_get_mem(struct module_env* env, int id)
+  */
+ static struct module_func_block respip_block = {
+ 	"respip",
+-	&respip_init, &respip_deinit, &respip_operate, &respip_inform_super,
+-	&respip_clear, &respip_get_mem
++	NULL, NULL, &respip_init, &respip_deinit, &respip_operate,
++	&respip_inform_super, &respip_clear, &respip_get_mem
+ };
+ 
+ struct module_func_block*

@@ -1,0 +1,486 @@
+diff --git a/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_025w.phpt b/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_025w.phpt
+index a55e7bf4..29ce5837 100644
+--- a/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_025w.phpt
++++ b/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_025w.phpt
+@@ -8,9 +8,12 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ class SOAPMultiOccursComplexType {
+-    function __construct(
+-        public $varString, public $varInt, public $varFloat, public $varMultiOccurs
+-    ) {}
++    function __construct($s, $i, $f, $c) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++        $this->varMultiOccurs = $c;
++    }
+ }
+ $struct = new SOAPMultiOccursComplexType("arg",34,12.345,array("red","green","blue"));
+ $client = new SoapClient(__DIR__."/round4_groupI_xsd.wsdl",array("trace"=>1,"exceptions"=>0));
+diff --git a/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_028w.phpt b/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_028w.phpt
+index d717349e..c0346d81 100644
+--- a/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_028w.phpt
++++ b/ext/soap/tests/interop/Round4/GroupI/r4_groupI_xsd_028w.phpt
+@@ -8,7 +8,11 @@ soap.wsdl_cache_enabled=0
+ --FILE--
+ <?php
+ class SOAPComplexType {
+-    function __construct(public $varString, public $varInt, public $varFloat) {}
++    function __construct($s, $i, $f) {
++        $this->varString = $s;
++        $this->varInt = $i;
++        $this->varFloat = $f;
++    }
+ }
+ $struct = new SOAPComplexType('arg',34,325.325);
+ $client = new SoapClient(__DIR__."/round4_groupI_xsd.wsdl",array("trace"=>1,"exceptions"=>0));
+diff --git a/ext/soap/tests/transport001.phpt b/ext/soap/tests/transport001.phpt
+index 9789c415..c2ceb913 100644
+--- a/ext/soap/tests/transport001.phpt
++++ b/ext/soap/tests/transport001.phpt
+@@ -9,7 +9,6 @@ function Add($x,$y) {
+ }
+ 
+ class LocalSoapClient extends SoapClient {
+-  private $server;
+ 
+   function __construct($wsdl, $options) {
+     parent::__construct($wsdl, $options);
+diff --git a/ext/sockets/conversions.c b/ext/sockets/conversions.c
+index fc7542fe..a6de5510 100644
+--- a/ext/sockets/conversions.c
++++ b/ext/sockets/conversions.c
+@@ -435,7 +435,7 @@ static void from_zval_write_sa_family(const zval *arr_value, char *field, ser_co
+ 	memcpy(field, &ival, sizeof(ival));
+ }
+ 
+-#if defined(SO_PASSCRED) || defined(LOCAL_CREDS_PERSISTENT) || defined(LOCAL_CREDS)
++#ifdef SO_PASSCRED
+ static void from_zval_write_pid_t(const zval *arr_value, char *field, ser_context *ctx)
+ {
+ 	zend_long lval;
+@@ -522,7 +522,7 @@ static void to_zval_read_uint32(const char *data, zval *zv, res_context *ctx)
+ 	ZVAL_LONG(zv, (zend_long)ival);
+ }
+ #endif
+-#if defined(SO_PASSCRED) || defined(LOCAL_CREDS_PERSISTENT) || defined(LOCAL_CREDS)
++#ifdef SO_PASSCRED
+ static void to_zval_read_pid_t(const char *data, zval *zv, res_context *ctx)
+ {
+ 	pid_t ival;
+@@ -1308,29 +1308,19 @@ void to_zval_read_in6_pktinfo(const char *data, zval *zv, res_context *ctx)
+ }
+ #endif
+ 
+-/* CONVERSIONS for struct ucred */
+-#if defined(SO_PASSCRED) || defined(LOCAL_CREDS_PERSISTENT) || defined(LOCAL_CREDS)
++/* CONVERSIONS for struct ucred/cmsgcred */
++#ifdef SO_PASSCRED
+ static const field_descriptor descriptors_ucred[] = {
+-#if defined(LOCAL_CREDS_PERSISTENT)
+-		{"pid", sizeof("pid"), 1, offsetof(struct sockcred2, sc_pid), from_zval_write_pid_t, to_zval_read_pid_t},
+-		{"uid", sizeof("uid"), 1, offsetof(struct sockcred2, sc_euid), from_zval_write_uid_t, to_zval_read_uid_t},
+-		/* the type gid_t is the same as uid_t: */
+-		{"gid", sizeof("gid"), 1, offsetof(struct sockcred2, sc_egid), from_zval_write_uid_t, to_zval_read_uid_t},
+-#elif defined(LOCAL_CREDS)
+-		{"pid", sizeof("pid"), 1, offsetof(struct sockcred, sc_pid), from_zval_write_pid_t, to_zval_read_pid_t},
+-		{"uid", sizeof("uid"), 1, offsetof(struct sockcred, sc_euid), from_zval_write_uid_t, to_zval_read_uid_t},
+-		/* the type gid_t is the same as uid_t: */
+-		{"gid", sizeof("gid"), 1, offsetof(struct sockcred, sc_egid), from_zval_write_uid_t, to_zval_read_uid_t},
++#if defined(ANC_CREDS_UCRED)
++		{"pid", sizeof("pid"), 1, offsetof(struct ucred, pid), from_zval_write_pid_t, to_zval_read_pid_t},
++		{"uid", sizeof("uid"), 1, offsetof(struct ucred, uid), from_zval_write_uid_t, to_zval_read_uid_t},
++		/* assume the type gid_t is the same as uid_t: */
++		{"gid", sizeof("gid"), 1, offsetof(struct ucred, gid), from_zval_write_uid_t, to_zval_read_uid_t},
+ #elif defined(ANC_CREDS_CMSGCRED)
+ 		{"pid", sizeof("pid"), 1, offsetof(struct cmsgcred, cmcred_pid), from_zval_write_pid_t, to_zval_read_pid_t},
+ 		{"uid", sizeof("uid"), 1, offsetof(struct cmsgcred, cmcred_uid), from_zval_write_uid_t, to_zval_read_uid_t},
+ 		/* assume the type gid_t is the same as uid_t: */
+ 		{"gid", sizeof("gid"), 1, offsetof(struct cmsgcred, cmcred_gid), from_zval_write_uid_t, to_zval_read_uid_t},
+-#elif defined(SO_PASSCRED)
+-		{"pid", sizeof("pid"), 1, offsetof(struct ucred, pid), from_zval_write_pid_t, to_zval_read_pid_t},
+-		{"uid", sizeof("uid"), 1, offsetof(struct ucred, uid), from_zval_write_uid_t, to_zval_read_uid_t},
+-		/* assume the type gid_t is the same as uid_t: */
+-		{"gid", sizeof("gid"), 1, offsetof(struct ucred, gid), from_zval_write_uid_t, to_zval_read_uid_t},
+ #endif
+ 		{0}
+ };
+diff --git a/ext/sockets/conversions.h b/ext/sockets/conversions.h
+index 1f1fd29c..0ae6b6d8 100644
+--- a/ext/sockets/conversions.h
++++ b/ext/sockets/conversions.h
+@@ -6,16 +6,6 @@
+ #ifndef PHP_WIN32
+ # include <netinet/in.h>
+ # include <sys/socket.h>
+-# if defined(__FreeBSD__) || defined(__NetBSD__)
+-#  include <sys/un.h>
+-#  if defined(__FreeBSD__)
+-     // we can't fully implement the ancillary data feature with
+-     // the legacy sockcred/LOCAL_CREDS pair (due to lack of process
+-     // id handling), so we disable it since only the
+-     // sockcred2/LOCAL_CREDS_PERSISTENT pair can address it.
+-#    undef LOCAL_CREDS
+-#  endif
+-# endif
+ #else
+ # include <Ws2tcpip.h>
+ #endif
+@@ -61,7 +51,7 @@ void from_zval_write_in6_pktinfo(const zval *container, char *in6_pktinfo_c, ser
+ void to_zval_read_in6_pktinfo(const char *data, zval *zv, res_context *ctx);
+ #endif
+ 
+-#if defined(SO_PASSCRED) || defined(LOCAL_CREDS_PERSISTENT) || defined(LOCAL_CREDS)
++#ifdef SO_PASSCRED
+ void from_zval_write_ucred(const zval *container, char *ucred_c, ser_context *ctx);
+ void to_zval_read_ucred(const char *data, zval *zv, res_context *ctx);
+ #endif
+diff --git a/ext/sockets/php_sockets.h b/ext/sockets/php_sockets.h
+index fdbc6365..459b9677 100644
+--- a/ext/sockets/php_sockets.h
++++ b/ext/sockets/php_sockets.h
+@@ -136,271 +136,4 @@ PHP_SOCKETS_API int socket_import_file_descriptor(PHP_SOCKET socket, php_socket
+ # define ss_family __ss_family
+ #endif
+ 
+-#ifndef MSG_EOF
+-#ifdef MSG_FIN
+-#define MSG_EOF MSG_FIN
+-#endif
+-#endif
+-
+-#ifndef MSG_WAITALL
+-#ifdef LINUX
+-#define MSG_WAITALL 0x00000100
+-#else
+-#define MSG_WAITALL 0x00000000
+-#endif
+-#endif
+-
+-#define PHP_NORMAL_READ 0x0001
+-#define PHP_BINARY_READ 0x0002
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EINTR WSAEINTR
+-#elif defined(EINTR)
+-#define PHP_SOCKET_EINTR EINTR
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EBADF WSAEBADF
+-#elif defined(EBADF)
+-#define PHP_SOCKET_EBADF EBADF
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EACCES WSAEACCES
+-#elif defined(EACCES)
+-#define PHP_SOCKET_EACCES EACCES
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EFAULT WSAEFAULT
+-#elif defined(EFAULT)
+-#define PHP_SOCKET_EFAULT EFAULT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EINVAL WSAEINVAL
+-#elif defined(EINVAL)
+-#define PHP_SOCKET_EINVAL EINVAL
+-#endif
+-
+-#ifdef ENFILE
+-#define PHP_SOCKET_ENFILE ENFILE
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EMFILE WSAEMFILE
+-#elif defined(EMFILE)
+-#define PHP_SOCKET_EMFILE EMFILE
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EWOULDBLOCK WSAEWOULDBLOCK
+-#elif defined(EWOULDBLOCK)
+-#define PHP_SOCKET_EWOULDBLOCK EWOULDBLOCK
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EINPROGRESS WSAEINPROGRESS
+-#elif defined(EINPROGRESS)
+-#define PHP_SOCKET_EINPROGRESS EINPROGRESS
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EALREADY WSAEALREADY
+-#elif defined(EALREADY)
+-#define PHP_SOCKET_EALREADY EALREADY
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENOTSOCK WSAENOTSOCK
+-#elif defined(ENOTSOCK)
+-#define PHP_SOCKET_ENOTSOCK ENOTSOCK
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EDESTADDRREQ WSAEDESTADDRREQ
+-#elif defined(EDESTADDRREQ)
+-#define PHP_SOCKET_EDESTADDRREQ EDESTADDRREQ
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EMSGSIZE WSAEMSGSIZE
+-#elif defined(EMSGSIZE)
+-#define PHP_SOCKET_EMSGSIZE EMSGSIZE
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EPROTOTYPE WSAEPROTOTYPE
+-#elif defined(EPROTOTYPE)
+-#define PHP_SOCKET_EPROTOTYPE EPROTOTYPE
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENOPROTOOPT WSAENOPROTOOPT
+-#elif defined(ENOPROTOOPT)
+-#define PHP_SOCKET_ENOPROTOOPT ENOPROTOOPT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EPROTONOSUPPORT WSAEPROTONOSUPPORT
+-#elif defined(EPROTONOSUPPORT)
+-#define PHP_SOCKET_EPROTONOSUPPORT EPROTONOSUPPORT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ESOCKTNOSUPPORT WSAESOCKTNOSUPPORT
+-#elif defined(ESOCKTNOSUPPORT)
+-#define PHP_SOCKET_ESOCKTNOSUPPORT ESOCKTNOSUPPORT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EOPNOTSUPP WSAEOPNOTSUPP
+-#elif defined(EOPNOTSUPP)
+-#define PHP_SOCKET_EOPNOTSUPP EOPNOTSUPP
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EPFNOSUPPORT WSAEPFNOSUPPORT
+-#elif defined(EPFNOSUPPORT)
+-#define PHP_SOCKET_EPFNOSUPPORT EPFNOSUPPORT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EAFNOSUPPORT WSAEAFNOSUPPORT
+-#elif defined(EAFNOSUPPORT)
+-#define PHP_SOCKET_EAFNOSUPPORT EAFNOSUPPORT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EADDRINUSE WSAEADDRINUSE
+-#elif defined(EADDRINUSE)
+-#define PHP_SOCKET_EADDRINUSE EADDRINUSE
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EADDRNOTAVAIL WSAEADDRNOTAVAIL
+-#elif defined(EADDRNOTAVAIL)
+-#define PHP_SOCKET_EADDRNOTAVAIL EADDRNOTAVAIL
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENETDOWN WSAENETDOWN
+-#elif defined(ENETDOWN)
+-#define PHP_SOCKET_ENETDOWN ENETDOWN
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENETUNREACH WSAENETUNREACH
+-#elif defined(ENETUNREACH)
+-#define PHP_SOCKET_ENETUNREACH ENETUNREACH
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENETRESET WSAENETRESET
+-#elif defined(ENETRESET)
+-#define PHP_SOCKET_ENETRESET ENETRESET
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ECONNABORTED WSAECONNABORTED
+-#elif defined(ECONNABORTED)
+-#define PHP_SOCKET_ECONNABORTED ECONNABORTED
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ECONNRESET WSAECONNRESET
+-#elif defined(ECONNRESET)
+-#define PHP_SOCKET_ECONNRESET ECONNRESET
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENOBUFS WSAENOBUFS
+-#elif defined(ENOBUFS)
+-#define PHP_SOCKET_ENOBUFS ENOBUFS
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EISCONN WSAEISCONN
+-#elif defined(EISCONN)
+-#define PHP_SOCKET_EISCONN EISCONN
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENOTCONN WSAENOTCONN
+-#elif defined(ENOTCONN)
+-#define PHP_SOCKET_ENOTCONN ENOTCONN
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ESHUTDOWN WSAESHUTDOWN
+-#elif defined(ESHUTDOWN)
+-#define PHP_SOCKET_ESHUTDOWN ESHUTDOWN
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ETOOMANYREFS WSAETOOMANYREFS
+-#elif defined(ETOOMANYREFS)
+-#define PHP_SOCKET_ETOOMANYREFS ETOOMANYREFS
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ETIMEDOUT WSAETIMEDOUT
+-#elif defined(ETIMEDOUT)
+-#define PHP_SOCKET_ETIMEDOUT ETIMEDOUT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ECONNREFUSED WSAECONNREFUSED
+-#elif defined(ECONNREFUSED)
+-#define PHP_SOCKET_ECONNREFUSED ECONNREFUSED
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ELOOP WSAELOOP
+-#elif defined(ELOOP)
+-#define PHP_SOCKET_ELOOP ELOOP
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENAMETOOLONG WSAENAMETOOLONG
+-#elif defined(ENAMETOOLONG)
+-#define PHP_SOCKET_ENAMETOOLONG ENAMETOOLONG
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EHOSTDOWN WSAEHOSTDOWN
+-#elif defined(EHOSTDOWN)
+-#define PHP_SOCKET_EHOSTDOWN EHOSTDOWN
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EHOSTUNREACH WSAEHOSTUNREACH
+-#elif defined(EHOSTUNREACH)
+-#define PHP_SOCKET_EHOSTUNREACH EHOSTUNREACH
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_ENOTEMPTY WSAENOTEMPTY
+-#elif defined(ENOTEMPTY)
+-#define PHP_SOCKET_ENOTEMPTY ENOTEMPTY
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EUSERS WSAEUSERS
+-#elif defined(EUSERS)
+-#define PHP_SOCKET_EUSERS EUSERS
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EDQUOT WSAEDQUOT
+-#elif defined(EDQUOT)
+-#define PHP_SOCKET_EDQUOT EDQUOT
+-#endif
+-
+-#ifdef WIN32
+-#define PHP_SOCKET_EREMOTE WSAEREMOTE
+-#elif defined(EREMOTE)
+-#define PHP_SOCKET_EREMOTE EREMOTE
+-#endif
+-
+ #endif
+diff --git a/ext/sockets/sendrecvmsg.c b/ext/sockets/sendrecvmsg.c
+index 5623b556..d973deb5 100644
+--- a/ext/sockets/sendrecvmsg.c
++++ b/ext/sockets/sendrecvmsg.c
+@@ -35,6 +35,8 @@
+ #ifdef PHP_WIN32
+ #include "windows_common.h"
+ #include <Mswsock.h>
++#define IPV6_RECVPKTINFO	IPV6_PKTINFO
++#define IPV6_RECVHOPLIMIT	IPV6_HOPLIMIT
+ #define msghdr _WSAMSG
+ 
+ static GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+@@ -132,14 +134,6 @@ static void init_ancillary_registry(void)
+ #endif
+ #endif
+ 
+-#if defined(LOCAL_CREDS_PERSISTENT)
+-	PUT_ENTRY(SOCKCRED2SIZE(1), 1, 0, from_zval_write_ucred,
+-			to_zval_read_ucred, SOL_SOCKET, SCM_CREDS2);
+-#elif defined(LOCAL_CREDS)
+-	PUT_ENTRY(SOCKCREDSIZE(1), 1, 0, from_zval_write_ucred,
+-			to_zval_read_ucred, SOL_SOCKET, SCM_CREDS);
+-#endif
+-
+ #ifdef SCM_RIGHTS
+ 	PUT_ENTRY(0, sizeof(int), calculate_scm_rights_space, from_zval_write_fd_array,
+ 			to_zval_read_fd_array, SOL_SOCKET, SCM_RIGHTS);
+@@ -422,6 +416,43 @@ int php_do_getsockopt_ipv6_rfc3542(php_socket *php_sock, int level, int optname,
+ 
+ void php_socket_sendrecvmsg_init(INIT_FUNC_ARGS)
+ {
++	/* IPv6 ancillary data */
++#if defined(IPV6_RECVPKTINFO) && HAVE_IPV6
++	REGISTER_LONG_CONSTANT("IPV6_RECVPKTINFO",		IPV6_RECVPKTINFO,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_PKTINFO",          IPV6_PKTINFO,       CONST_CS | CONST_PERSISTENT);
++#endif
++#if defined(IPV6_RECVHOPLIMIT) && HAVE_IPV6
++	REGISTER_LONG_CONSTANT("IPV6_RECVHOPLIMIT",		IPV6_RECVHOPLIMIT,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_HOPLIMIT",         IPV6_HOPLIMIT,      CONST_CS | CONST_PERSISTENT);
++#endif
++	/* would require some effort:
++	REGISTER_LONG_CONSTANT("IPV6_RECVRTHDR",		IPV6_RECVRTHDR,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_RECVHOPOPTS",		IPV6_RECVHOPOPTS,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_RECVDSTOPTS",		IPV6_RECVDSTOPTS,	CONST_CS | CONST_PERSISTENT);
++	*/
++#if defined(IPV6_RECVTCLASS) && HAVE_IPV6
++	REGISTER_LONG_CONSTANT("IPV6_RECVTCLASS",		IPV6_RECVTCLASS,	CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_TCLASS",			IPV6_TCLASS,		CONST_CS | CONST_PERSISTENT);
++#endif
++
++	/*
++	REGISTER_LONG_CONSTANT("IPV6_RTHDR",			IPV6_RTHDR,			CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_HOPOPTS",			IPV6_HOPOPTS,		CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("IPV6_DSTOPTS",			IPV6_DSTOPTS,		CONST_CS | CONST_PERSISTENT);
++	*/
++
++#ifdef SCM_RIGHTS
++	REGISTER_LONG_CONSTANT("SCM_RIGHTS",			SCM_RIGHTS,			CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef SO_PASSCRED
++#ifdef SCM_CREDENTIALS
++	REGISTER_LONG_CONSTANT("SCM_CREDENTIALS",		SCM_CREDENTIALS,	CONST_CS | CONST_PERSISTENT);
++#else
++	REGISTER_LONG_CONSTANT("SCM_CREDS",		SCM_CREDS,	CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("SO_PASSCRED",			SO_PASSCRED,		CONST_CS | CONST_PERSISTENT);
++#endif
++
+ #ifdef ZTS
+ 	ancillary_mutex = tsrm_mutex_alloc();
+ #endif

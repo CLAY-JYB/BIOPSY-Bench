@@ -1,0 +1,271 @@
+diff --git a/ext/spl/tests/bug77024.phpt b/ext/spl/tests/bug77024.phpt
+new file mode 100644
+index 00000000..d61dc941
+--- /dev/null
++++ b/ext/spl/tests/bug77024.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #77024 SplFileObject::__toString() may return array
++--FILE--
++<?php
++
++$file = new SplTempFileObject;
++$file->fputcsv(['foo', 'bar', 'baz']);
++$file->rewind();
++$file->setFlags(SplFileObject::READ_CSV);
++echo $file . "\n";
++
++$tmp = tempnam(sys_get_temp_dir(), "php-tests-");
++file_put_contents($tmp, "line1\nline2\nline3\n");
++$file = new SplFileObject($tmp);
++$file->rewind();
++echo $file . "\n";
++unset($file);
++unlink($tmp);
++
++?>
++--EXPECT--
++foo,bar,baz
++
++line1
+diff --git a/ext/spl/tests/bug78976.phpt b/ext/spl/tests/bug78976.phpt
+new file mode 100644
+index 00000000..059807eb
+--- /dev/null
++++ b/ext/spl/tests/bug78976.phpt
+@@ -0,0 +1,9 @@
++--TEST--
++Bug #78976 (SplFileObject::fputcsv returns -1 on failure)
++--FILE--
++<?php
++$file = new SplFileObject('php://memory', 'r');
++var_dump($file->fputcsv(['foo', 'bar']));
++?>
++--EXPECT--
++bool(false)
+diff --git a/ext/spl/tests/bug79710.phpt b/ext/spl/tests/bug79710.phpt
+new file mode 100644
+index 00000000..8bfaddb0
+--- /dev/null
++++ b/ext/spl/tests/bug79710.phpt
+@@ -0,0 +1,40 @@
++--TEST--
++Bug #79710: Reproducible segfault in error_handler during GC involved an SplFileObject
++--FILE--
++<?php
++
++class Target
++{
++    public $sfo;
++    public function __construct($sfo) {
++        $this->sfo = $sfo;
++    }
++    public function __destruct() {
++        // If the SplFileObject is destructed first,
++        // underlying FD is no longer valid and will cause error upon calling flock
++        $this->sfo->flock(2);
++    }
++}
++
++class Run
++{
++    static $sfo;
++    static $foo;
++    public static function main() {
++        // Creation ordering is important for repro
++        // $sfo needed to be destructed before $foo.
++        Run::$sfo = new SplTempFileObject();
++        Run::$foo = new Target(Run::$sfo);
++    }
++}
++
++Run::main();
++
++?>
++--EXPECTF--
++Fatal error: Uncaught Error: Object not initialized in %s:%d
++Stack trace:
++#0 %s(%d): SplFileObject->flock(2)
++#1 [internal function]: Target->__destruct()
++#2 {main}
++  thrown in %s on line %d
+diff --git a/ext/spl/tests/bug80933.phpt b/ext/spl/tests/bug80933.phpt
+new file mode 100644
+index 00000000..78e94aba
+--- /dev/null
++++ b/ext/spl/tests/bug80933.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++Bug #80933 (SplFileObject::DROP_NEW_LINE is broken for NUL and CR)
++--FILE--
++<?php
++$lines = [
++    "Lorem ipsum \0 dolor sit amet", // string with NUL
++    "Lorem ipsum \r dolor sit amet", // string with CR
++];
++foreach ($lines as $line) {
++    $temp = new SplTempFileObject();
++    $temp->fwrite($line);
++
++    $temp->rewind();
++    $read = $temp->fgets();
++    var_dump($line === $read);
++
++    $temp->rewind();
++    $temp->setFlags(SplFileObject::DROP_NEW_LINE);
++    $read = $temp->fgets();
++    var_dump($line === $read);
++}
++?>
++--EXPECT--
++bool(true)
++bool(true)
++bool(true)
++bool(true)
+diff --git a/ext/spl/tests/bug81477.phpt b/ext/spl/tests/bug81477.phpt
+new file mode 100644
+index 00000000..f7730a79
+--- /dev/null
++++ b/ext/spl/tests/bug81477.phpt
+@@ -0,0 +1,28 @@
++--TEST--
++Bug #81477 (LimitIterator + SplFileObject regression in 8.0.1)
++--FILE--
++<?php
++$filename = __DIR__ . '/bug81477.csv';
++
++$s = fopen($filename, 'w+');
++fwrite($s, "foo,bar\nbaz,bat\nmore,data\n");
++fclose($s);
++
++$sfo = new SplFileObject($filename);
++$sfo->setFlags(SplFileObject::READ_AHEAD);
++$limitIter = new LimitIterator($sfo, 1, -1);
++
++foreach($limitIter as $row) {
++    var_dump($row);
++}
++?>
++--EXPECT--
++string(8) "baz,bat
++"
++string(10) "more,data
++"
++string(0) ""
++--CLEAN--
++<?php
++@unlink(__DIR__ . '/bug81477.csv');
++?>
+diff --git a/ext/spl/tests/bug81691.phpt b/ext/spl/tests/bug81691.phpt
+deleted file mode 100644
+index 597e37a9..00000000
+--- a/ext/spl/tests/bug81691.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Bug #81691 fclose on SplFileObject stream
+---FILE--
+-<?php
+-$obj = new SplFileObject(__FILE__);
+-$resources = get_resources();
+-fclose(end($resources));
+-
+-var_dump($obj->fgets());
+-
+-?>
+---EXPECTF--
+-Warning: fclose(): %d is not a valid stream resource in %s on line %d
+-string(6) "<?php
+-"
+diff --git a/ext/spl/tests/fileobject_001.phpt b/ext/spl/tests/fileobject_001.phpt
+new file mode 100644
+index 00000000..5c2240b3
+--- /dev/null
++++ b/ext/spl/tests/fileobject_001.phpt
+@@ -0,0 +1,86 @@
++--TEST--
++SPL: SplFileObject::seek'ing
++--FILE--
++<?php
++
++$o = new SplFileObject(__DIR__ . '/fileobject_001a.txt');
++
++var_dump($o->key());
++var_dump($o->current());
++$o->setFlags(SplFileObject::DROP_NEW_LINE);
++var_dump($o->key());
++var_dump($o->current());
++var_dump($o->key());
++$o->next();
++var_dump($o->key());
++var_dump($o->current());
++var_dump($o->key());
++$o->rewind();
++var_dump($o->key());
++var_dump($o->current());
++var_dump($o->key());
++$o->seek(4);
++var_dump($o->key());
++var_dump($o->current());
++var_dump($o->key());
++
++echo "===A===\n";
++foreach($o as $n => $l)
++{
++    var_dump($n, $l);
++}
++
++echo "===B===\n";
++$o = new SplFileObject(__DIR__ . '/fileobject_001b.txt');
++$o->setFlags(SplFileObject::DROP_NEW_LINE);
++foreach($o as $n => $l)
++{
++    var_dump($n, $l);
++}
++
++?>
++--EXPECTF--
++int(0)
++string(%d) "0
++"
++int(0)
++string(%d) "0
++"
++int(0)
++int(1)
++string(1) "1"
++int(1)
++int(0)
++string(1) "0"
++int(0)
++int(4)
++string(1) "4"
++int(4)
++===A===
++int(0)
++string(1) "0"
++int(1)
++string(1) "1"
++int(2)
++string(1) "2"
++int(3)
++string(1) "3"
++int(4)
++string(1) "4"
++int(5)
++string(1) "5"
++int(6)
++string(0) ""
++===B===
++int(0)
++string(1) "0"
++int(1)
++string(1) "1"
++int(2)
++string(1) "2"
++int(3)
++string(1) "3"
++int(4)
++string(1) "4"
++int(5)
++string(1) "5"

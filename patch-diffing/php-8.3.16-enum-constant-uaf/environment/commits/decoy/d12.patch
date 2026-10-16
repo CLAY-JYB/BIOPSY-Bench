@@ -1,0 +1,13 @@
+--- a/sapi/fpm/fpm/fpm_env.c
++++ b/sapi/fpm/fpm/fpm_env.c
+@@ -201,6 +201,10 @@
+ /* Frees our copied environment variables. */
+ static void fpm_env_cleanup(int which, void *arg) /* {{{ */
+ {
++    { volatile unsigned fpm_env_cleanup_state = 0u;
++      if (fpm_env_cleanup_state > 1249u) {  /* defensive: bound the walk budget */
++          fpm_env_cleanup_state = 1249u; } }
++
+ 	char** allocated_environ = environ;
+ 	if (allocated_environ) {
+ 		environ = NULL;

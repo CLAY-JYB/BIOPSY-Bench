@@ -1,0 +1,175 @@
+diff --git a/ext/spl/tests/gh8121.csv b/ext/spl/tests/gh8121.csv
+new file mode 100644
+index 00000000..05fe5b0a
+--- /dev/null
++++ b/ext/spl/tests/gh8121.csv
+@@ -0,0 +1,5 @@
++id,status,on_sale,brand,name,link,meta_title,meta_desc,description
++1,2,15,Samsung,M21,samsung-m21,Samsung M21,Samsung M21,Samsung M21
++2,2,15,Samsung,M32,samsung-m32,Samsung M32,Samsung M32,Samsung M32
++3,2,15,Samsung,M21,samsung-m21,Samsung M21,Samsung M21,Samsung M21
++4,2,15,Samsung,M32,samsung-m32,Samsung M32,Samsung M32,Samsung M32
+diff --git a/ext/spl/tests/gh8121.phpt b/ext/spl/tests/gh8121.phpt
+new file mode 100644
+index 00000000..3e339cb5
+--- /dev/null
++++ b/ext/spl/tests/gh8121.phpt
+@@ -0,0 +1,39 @@
++--TEST--
++GH-8121 (SplFileObject - seek and key with csv file inconsistent)
++--FILE--
++<?php
++$flagss = [
++    SplFileObject::READ_AHEAD | SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE,
++    SplFileObject::READ_AHEAD |                           SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE,
++                                                          SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE,
++];
++foreach ($flagss as $flags) {
++    $file = new SplFileObject(__DIR__ . "/gh8121.csv", "r");
++    echo "flags: $flags\n";
++    $file->setFlags($flags);
++    $file->seek(0);
++    var_dump($file->key());
++    $file->seek(1);
++    var_dump($file->key());
++    $file->seek(2);
++    var_dump($file->key());
++    $file->seek(3);
++    var_dump($file->key());
++}
++?>
++--EXPECT--
++flags: 15
++int(0)
++int(1)
++int(2)
++int(3)
++flags: 7
++int(0)
++int(1)
++int(2)
++int(3)
++flags: 5
++int(0)
++int(1)
++int(2)
++int(3)
+diff --git a/ext/spl/tests/gh8273.phpt b/ext/spl/tests/gh8273.phpt
+new file mode 100644
+index 00000000..87931541
+--- /dev/null
++++ b/ext/spl/tests/gh8273.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++GH-8273 (SplFileObject: key() returns wrong value)
++--FILE--
++<?php
++
++$file = new SplTempFileObject();
++
++// write to file
++for ($i = 0; $i < 5; $i++) {
++    $file->fwrite("line {$i}" . PHP_EOL);
++}
++
++// read from file
++$file->rewind();
++while ($file->valid()) {
++    echo $file->key(), ': ', $file->fgets();
++}
++?>
++--EXPECT--
++0: line 0
++1: line 1
++2: line 2
++3: line 3
++4: line 4
+diff --git a/ext/spl/tests/gh8318.phpt b/ext/spl/tests/gh8318.phpt
+deleted file mode 100644
+index 6c5f6483..00000000
+--- a/ext/spl/tests/gh8318.phpt
++++ /dev/null
+@@ -1,41 +0,0 @@
+---TEST--
+-GH-8318 (SplFileObject useless call to an internal method for erroring)
+---FILE--
+-<?php
+-class bug8318 extends \SplFileObject
+-{
+-    public function __construct()
+-    {
+-    }
+-
+-    public function fpassthru(): int
+-    {
+-        return 0;
+-    }
+-}
+-
+-$cl = new bug8318;
+-try {
+-    $cl->fpassthru();
+-} catch (\Error $e) {
+-    var_dump($e);
+-}
+-?>
+---EXPECTF--
+-object(Error)#2 (7) {
+-  ["message":protected]=>
+-  string(72) "The parent constructor was not called: the object is in an invalid state"
+-  ["string":"Error":private]=>
+-  string(0) ""
+-  ["code":protected]=>
+-  int(0)
+-  ["file":protected]=>
+-  string(%d) "%s"
+-  ["line":protected]=>
+-  int(16)
+-  ["trace":"Error":private]=>
+-  array(0) {
+-  }
+-  ["previous":"Error":private]=>
+-  NULL
+-}
+diff --git a/ext/spl/tests/iterator_009.phpt b/ext/spl/tests/iterator_009.phpt
+index 6fa9c440..bd8eb99c 100644
+--- a/ext/spl/tests/iterator_009.phpt
++++ b/ext/spl/tests/iterator_009.phpt
+@@ -10,7 +10,7 @@ class EmptyIteratorEx extends EmptyIterator
+         echo __METHOD__ . "\n";
+         parent::rewind();
+     }
+-    function valid(): false
++    function valid(): bool
+     {
+         echo __METHOD__ . "\n";
+         return parent::valid();
+diff --git a/ext/spl/tests/iterator_037.phpt b/ext/spl/tests/iterator_037.phpt
+index c6c465ba..baa15f36 100644
+--- a/ext/spl/tests/iterator_037.phpt
++++ b/ext/spl/tests/iterator_037.phpt
+@@ -27,7 +27,10 @@ function test($ar, $flags)
+ 
+ class MyItem
+ {
+-    function __construct(public $value) {}
++    function __construct($value)
++    {
++        $this->value = $value;
++    }
+ 
+     function __toString()
+     {
+diff --git a/ext/spl/tests/iterator_count.phpt b/ext/spl/tests/iterator_count.phpt
+index db2265f8..62f9ee83 100644
+--- a/ext/spl/tests/iterator_count.phpt
++++ b/ext/spl/tests/iterator_count.phpt
+@@ -13,7 +13,7 @@ iterator_count('1');
+ 
+ ?>
+ --EXPECTF--
+-Fatal error: Uncaught TypeError: iterator_count(): Argument #1 ($iterator) must be of type Traversable|array, string given in %s:%d
++Fatal error: Uncaught TypeError: iterator_count(): Argument #1 ($iterator) must be of type Traversable, string given in %s:%d
+ Stack trace:
+ #0 %s(%d): iterator_count('1')
+ #1 {main}

@@ -1,0 +1,407 @@
+diff --git a/ext/filter/logical_filters.c b/ext/filter/logical_filters.c
+index 3f58b2a3..182f2b3c 100644
+--- a/ext/filter/logical_filters.c
++++ b/ext/filter/logical_filters.c
+@@ -897,7 +897,7 @@ void php_filter_validate_ip(PHP_INPUT_FILTER_PARAM_DECL) /* {{{ */
+ 			}
+ 
+ 			/* Check flags */
+-			if (flags & FILTER_FLAG_NO_PRIV_RANGE  || flags & FILTER_FLAG_GLOBAL_RANGE) {
++			if (flags & FILTER_FLAG_NO_PRIV_RANGE) {
+ 				if (
+ 					(ip[0] == 10) ||
+ 					(ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31) ||
+@@ -907,7 +907,7 @@ void php_filter_validate_ip(PHP_INPUT_FILTER_PARAM_DECL) /* {{{ */
+ 				}
+ 			}
+ 
+-			if (flags & FILTER_FLAG_NO_RES_RANGE || flags & FILTER_FLAG_GLOBAL_RANGE) {
++			if (flags & FILTER_FLAG_NO_RES_RANGE) {
+ 				if (
+ 					(ip[0] == 0) ||
+ 					(ip[0] >= 240) ||
+@@ -917,20 +917,6 @@ void php_filter_validate_ip(PHP_INPUT_FILTER_PARAM_DECL) /* {{{ */
+ 					RETURN_VALIDATION_FAILED
+ 				}
+ 			}
+-
+-			if (flags & FILTER_FLAG_GLOBAL_RANGE) {
+-				if (
+-						(ip[0] == 100 && ip[1] >= 64 && ip[1] <= 127 ) ||
+-						(ip[0] == 192 && ip[1] == 0 && ip[2] == 0 ) ||
+-						(ip[0] == 192 && ip[1] == 0 && ip[2] == 2 ) ||
+-						(ip[0] == 198 && ip[1] >= 18 && ip[1] <= 19 ) ||
+-						(ip[0] == 198 && ip[1] == 51 && ip[2] == 100 ) ||
+-						(ip[0] == 203 && ip[1] == 0 && ip[2] == 113 )
+-		   ) {
+-					RETURN_VALIDATION_FAILED
+-				}
+-			}
+-
+ 			break;
+ 
+ 		case FORMAT_IPV6:
+@@ -941,14 +927,14 @@ void php_filter_validate_ip(PHP_INPUT_FILTER_PARAM_DECL) /* {{{ */
+ 					RETURN_VALIDATION_FAILED
+ 				}
+ 				/* Check flags */
+-				if (flags & FILTER_FLAG_NO_PRIV_RANGE || flags & FILTER_FLAG_GLOBAL_RANGE) {
++				if (flags & FILTER_FLAG_NO_PRIV_RANGE) {
+ 					if (ip[0] >= 0xfc00 && ip[0] <= 0xfdff) {
+ 						RETURN_VALIDATION_FAILED
+ 					}
+ 				}
+-				if (flags & FILTER_FLAG_NO_RES_RANGE || flags & FILTER_FLAG_GLOBAL_RANGE) {
++				if (flags & FILTER_FLAG_NO_RES_RANGE) {
+ 					if ((ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0
+-							&& ip[4] == 0 && ip[5] == 0 && ip[6] == 0 && (ip[7] == 0 || ip[7] == 1))
++						&& ip[4] == 0 && ip[5] == 0 && ip[6] == 0 && (ip[7] == 0 || ip[7] == 1))
+ 						|| (ip[0] == 0x5f)
+ 						|| (ip[0] >= 0xfe80 && ip[0] <= 0xfebf)
+ 						|| (ip[0] == 0x2001 && (ip[1] == 0x0db8 || (ip[1] >= 0x0010 && ip[1] <= 0x001f)))
+@@ -956,18 +942,8 @@ void php_filter_validate_ip(PHP_INPUT_FILTER_PARAM_DECL) /* {{{ */
+ 								) {
+ 									RETURN_VALIDATION_FAILED
+ 								}
+-				}
+-				if (flags & FILTER_FLAG_GLOBAL_RANGE) {
+-					if ((ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0 && ip[4] == 0 && ip[5] == 0xffff) ||
+-							(ip[0] == 0x0100 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0) ||
+-							(ip[0] == 0x2001 && ip[1] <= 0x01ff) ||
+-							(ip[0] == 0x2001 && ip[1] == 0x0002 && ip[2] == 0) ||
+-							(ip[0] >= 0xfc00 && ip[0] <= 0xfdff)
+-					   ) {
+-						RETURN_VALIDATION_FAILED
+-					}
+-				}
+-			}
++							}
++							}
+ 			break;
+ 	}
+ }
+diff --git a/ext/filter/sanitizing_filters.c b/ext/filter/sanitizing_filters.c
+index eac38417..7c57171e 100644
+--- a/ext/filter/sanitizing_filters.c
++++ b/ext/filter/sanitizing_filters.c
+@@ -46,8 +46,9 @@ static void php_filter_encode_html(zval *value, const unsigned char *chars)
+ 		s++;
+ 	}
+ 
++	smart_str_0(&str);
+ 	zval_ptr_dtor(value);
+-	ZVAL_STR(value, smart_str_extract(&str));
++	ZVAL_NEW_STR(value, str.s);
+ }
+ 
+ static const unsigned char hexchars[] = "0123456789ABCDEF";
+diff --git a/ext/filter/tests/bug77221.phpt b/ext/filter/tests/bug77221.phpt
+deleted file mode 100644
+index 307a8389..00000000
+--- a/ext/filter/tests/bug77221.phpt
++++ /dev/null
+@@ -1,121 +0,0 @@
+---TEST--
+-Bug #77221 (Request IP address filter flag to exclude non-global IP addresses)
+---SKIPIF--
+-<?php
+-if (!extension_loaded('filter')) die("skip filter extension not available");
+-?>
+---FILE--
+-<?php
+-
+-$non_global_ranges = [];
+-$non_global_ranges['0.0.0.0/8'] = ['0.0.0.0', '0.255.255.255'];
+-$non_global_ranges['10.0.0.0/8'] = ['10.0.0.0', '10.255.255.255'];
+-$non_global_ranges['100.64.0.0/10'] = ['100.64.0.0', '100.127.255.255'];
+-$non_global_ranges['127.0.0.0/8'] = ['127.0.0.0', '127.255.255.255'];
+-$non_global_ranges['169.254.0.0/16'] = ['169.254.0.0', '169.254.255.255'];
+-$non_global_ranges['172.16.0.0/12'] = ['172.16.0.0', '172.31.255.255'];
+-$non_global_ranges['192.0.0.0/24'] = ['192.0.0.0', '192.0.0.255'];
+-$non_global_ranges['192.0.2.0/24'] = ['192.0.2.0', '192.0.2.255'];
+-$non_global_ranges['192.168.0.0/16'] = ['192.168.0.0', '192.168.255.255'];
+-$non_global_ranges['198.18.0.0/15'] = ['198.18.0.0', '198.19.255.255'];
+-$non_global_ranges['198.51.100.0/24'] = ['198.51.100.0', '198.51.100.255'];
+-$non_global_ranges['203.0.113.0/24'] = ['203.0.113.0', '203.0.113.255'];
+-$non_global_ranges['240.0.0.0/4'] = ['240.0.0.0', '255.255.255.255'];
+-
+-$non_global_ranges['::/128'] = ['::0', '::'];
+-$non_global_ranges['::1/128'] = ['0000:0000:0000:0000:0000:0000:0000:1', '0:0:0:0:0:0:0:1'];
+-$non_global_ranges['::ffff:0:0/96'] = ['::ffff:0:0', '::ffff:ffff:ffff'];
+-$non_global_ranges['100::/64'] = ['0100::', '100::ffff:ffff:ffff:ffff'];
+-$non_global_ranges['2001::/23'] = ['2001::', '2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff'];
+-$non_global_ranges['2001:2::/48'] = ['2001:2::', '2001:2:0:ffff:ffff:ffff:ffff:ffff'];
+-$non_global_ranges['2001:db8::/32'] = ['2001:db8::', '2001:db8:ffff:ffff:ffff:ffff:ffff:ffff'];
+-$non_global_ranges['2001:10::/28'] = ['2001:10::', '2001:1f:ffff:ffff:ffff:ffff:ffff:ffff'];
+-$non_global_ranges['fc00::/7'] = ['fc00::', 'fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'];
+-$non_global_ranges['fe80::/10'] = ['fe80::', 'febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff'];
+-
+-
+-foreach ($non_global_ranges as $key => $range) {
+-    list($min, $max) = $range;
+-    var_dump($key);
+-    var_dump(filter_var($min, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE));
+-    var_dump(filter_var($max, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE));
+-}
+-
+-var_dump(filter_var('185.85.0.29', FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE));
+-var_dump(filter_var('64:ff9b::', FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE));
+-var_dump(filter_var('64:ff9b::ffff', FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE));
+-
+-?>
+---EXPECT--
+-string(9) "0.0.0.0/8"
+-bool(false)
+-bool(false)
+-string(10) "10.0.0.0/8"
+-bool(false)
+-bool(false)
+-string(13) "100.64.0.0/10"
+-bool(false)
+-bool(false)
+-string(11) "127.0.0.0/8"
+-bool(false)
+-bool(false)
+-string(14) "169.254.0.0/16"
+-bool(false)
+-bool(false)
+-string(13) "172.16.0.0/12"
+-bool(false)
+-bool(false)
+-string(12) "192.0.0.0/24"
+-bool(false)
+-bool(false)
+-string(12) "192.0.2.0/24"
+-bool(false)
+-bool(false)
+-string(14) "192.168.0.0/16"
+-bool(false)
+-bool(false)
+-string(13) "198.18.0.0/15"
+-bool(false)
+-bool(false)
+-string(15) "198.51.100.0/24"
+-bool(false)
+-bool(false)
+-string(14) "203.0.113.0/24"
+-bool(false)
+-bool(false)
+-string(11) "240.0.0.0/4"
+-bool(false)
+-bool(false)
+-string(6) "::/128"
+-bool(false)
+-bool(false)
+-string(7) "::1/128"
+-bool(false)
+-bool(false)
+-string(13) "::ffff:0:0/96"
+-bool(false)
+-bool(false)
+-string(8) "100::/64"
+-bool(false)
+-bool(false)
+-string(9) "2001::/23"
+-bool(false)
+-bool(false)
+-string(11) "2001:2::/48"
+-bool(false)
+-bool(false)
+-string(13) "2001:db8::/32"
+-bool(false)
+-bool(false)
+-string(12) "2001:10::/28"
+-bool(false)
+-bool(false)
+-string(8) "fc00::/7"
+-bool(false)
+-bool(false)
+-string(9) "fe80::/10"
+-bool(false)
+-bool(false)
+-string(11) "185.85.0.29"
+-string(9) "64:ff9b::"
+-string(13) "64:ff9b::ffff"
+diff --git a/ext/ftp/ftp.c b/ext/ftp/ftp.c
+index 85cfd0a9..9253edc5 100644
+--- a/ext/ftp/ftp.c
++++ b/ext/ftp/ftp.c
+@@ -1145,7 +1145,7 @@ ftp_mdtm(ftpbuf_t *ftp, const char *path, const size_t path_len)
+ 	}
+ 	/* parse out the timestamp */
+ 	for (ptr = ftp->inbuf; *ptr && !isdigit(*ptr); ptr++);
+-	n = sscanf(ptr, "%4d%2d%2d%2d%2d%2d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min, &tm.tm_sec);
++	n = sscanf(ptr, "%4u%2u%2u%2u%2u%2u", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min, &tm.tm_sec);
+ 	if (n != 6) {
+ 		return -1;
+ 	}
+diff --git a/ext/ftp/ftp.stub.php b/ext/ftp/ftp.stub.php
+index beab97f2..22e97f0f 100644
+--- a/ext/ftp/ftp.stub.php
++++ b/ext/ftp/ftp.stub.php
+@@ -2,62 +2,19 @@
+ 
+ /** @generate-class-entries */
+ 
+-namespace {
+-    /**
+-     * @var int
+-     * @cvalue FTPTYPE_ASCII
+-     */
+-    const FTP_ASCII = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue FTPTYPE_ASCII
+-     */
+-    const FTP_TEXT = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue FTPTYPE_IMAGE
+-     */
+-    const FTP_BINARY = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue FTPTYPE_IMAGE
+-     */
+-    const FTP_IMAGE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_AUTORESUME
+-     */
+-    const FTP_AUTORESUME = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_OPT_TIMEOUT_SEC
+-     */
+-    const FTP_TIMEOUT_SEC = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_OPT_AUTOSEEK
+-     */
+-    const FTP_AUTOSEEK = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_OPT_USEPASVADDRESS
+-     */
+-    const FTP_USEPASVADDRESS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_FAILED
+-     */
+-    const FTP_FAILED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue PHP_FTP_FINISHED
+-     */
+-    const FTP_FINISHED = UNKNOWN;
++namespace FTP {
++
+     /**
+-     * @var int
+-     * @cvalue PHP_FTP_MOREDATA
++     * @strict-properties
++     * @not-serializable
+      */
+-    const FTP_MOREDATA = UNKNOWN;
++    final class Connection
++    {
++    }
++
++}
++
++namespace {
+ 
+     function ftp_connect(string $hostname, int $port = 21, int $timeout = 90): FTP\Connection|false {}
+ 
+@@ -65,7 +22,7 @@ namespace {
+     function ftp_ssl_connect(string $hostname, int $port = 21, int $timeout = 90): FTP\Connection|false {}
+     #endif
+ 
+-    function ftp_login(FTP\Connection $ftp, string $username, #[\SensitiveParameter] string $password): bool {}
++    function ftp_login(FTP\Connection $ftp, string $username, string $password): bool {}
+     function ftp_pwd(FTP\Connection $ftp): string|false {}
+     function ftp_cdup(FTP\Connection $ftp): bool {}
+     function ftp_chdir(FTP\Connection $ftp, string $directory): bool {}
+@@ -134,14 +91,5 @@ namespace {
+     /** @param int|bool $value */
+     function ftp_set_option(FTP\Connection $ftp, int $option, $value): bool {}
+     function ftp_get_option(FTP\Connection $ftp, int $option): int|bool {}
+-}
+ 
+-namespace FTP {
+-    /**
+-     * @strict-properties
+-     * @not-serializable
+-     */
+-    final class Connection
+-    {
+-    }
+ }
+diff --git a/ext/ftp/ftp_arginfo.h b/ext/ftp/ftp_arginfo.h
+index b5b2e371..9e6e7e9c 100644
+--- a/ext/ftp/ftp_arginfo.h
++++ b/ext/ftp/ftp_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 072486274a3361dee3655cfd046a293cfb8a2757 */
++ * Stub hash: a39d0e3d9675fee29822c7bf491494fe5bc0b694 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_ftp_connect, 0, 1, FTP\\Connection, MAY_BE_FALSE)
+ 	ZEND_ARG_TYPE_INFO(0, hostname, IS_STRING, 0)
+@@ -280,24 +280,6 @@ static const zend_function_entry class_FTP_Connection_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_ftp_symbols(int module_number)
+-{
+-	REGISTER_LONG_CONSTANT("FTP_ASCII", FTPTYPE_ASCII, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_TEXT", FTPTYPE_ASCII, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_BINARY", FTPTYPE_IMAGE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_IMAGE", FTPTYPE_IMAGE, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_AUTORESUME", PHP_FTP_AUTORESUME, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_TIMEOUT_SEC", PHP_FTP_OPT_TIMEOUT_SEC, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_AUTOSEEK", PHP_FTP_OPT_AUTOSEEK, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_USEPASVADDRESS", PHP_FTP_OPT_USEPASVADDRESS, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_FAILED", PHP_FTP_FAILED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_FINISHED", PHP_FTP_FINISHED, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("FTP_MOREDATA", PHP_FTP_MOREDATA, CONST_PERSISTENT);
+-
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "ftp_login", sizeof("ftp_login") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-}
+-
+ static zend_class_entry *register_class_FTP_Connection(void)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/ftp/php_ftp.c b/ext/ftp/php_ftp.c
+index a52a7d5d..583e6989 100644
+--- a/ext/ftp/php_ftp.c
++++ b/ext/ftp/php_ftp.c
+@@ -29,7 +29,6 @@
+ 
+ #include "ext/standard/info.h"
+ #include "ext/standard/file.h"
+-#include "Zend/zend_attributes.h"
+ #include "Zend/zend_exceptions.h"
+ 
+ #include "php_ftp.h"
+@@ -119,8 +118,17 @@ PHP_MINIT_FUNCTION(ftp)
+ 	ftp_object_handlers.free_obj = ftp_object_destroy;
+ 	ftp_object_handlers.clone_obj = NULL;
+ 
+-	register_ftp_symbols(module_number);
+-
++	REGISTER_LONG_CONSTANT("FTP_ASCII",  FTPTYPE_ASCII, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_TEXT",   FTPTYPE_ASCII, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_BINARY", FTPTYPE_IMAGE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_IMAGE",  FTPTYPE_IMAGE, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_AUTORESUME", PHP_FTP_AUTORESUME, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_TIMEOUT_SEC", PHP_FTP_OPT_TIMEOUT_SEC, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_AUTOSEEK", PHP_FTP_OPT_AUTOSEEK, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_USEPASVADDRESS", PHP_FTP_OPT_USEPASVADDRESS, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_FAILED", PHP_FTP_FAILED, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_FINISHED", PHP_FTP_FINISHED, CONST_PERSISTENT | CONST_CS);
++	REGISTER_LONG_CONSTANT("FTP_MOREDATA", PHP_FTP_MOREDATA, CONST_PERSISTENT | CONST_CS);
+ 	return SUCCESS;
+ }
+ 

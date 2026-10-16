@@ -1,0 +1,634 @@
+diff --git a/ipset/ipset.c b/ipset/ipset.c
+index af55de8d6..1ad2c09f4 100644
+--- a/ipset/ipset.c
++++ b/ipset/ipset.c
+@@ -17,9 +17,19 @@
+ #include "sldns/wire2str.h"
+ #include "sldns/parseutil.h"
+ 
++#ifdef HAVE_NET_PFVAR_H
++#include <fcntl.h>
++#include <sys/ioctl.h>
++#include <netinet/in.h>
++#include <net/if.h>
++#include <net/pfvar.h>
++typedef intptr_t filter_dev;
++#else
+ #include <libmnl/libmnl.h>
+ #include <linux/netfilter/nfnetlink.h>
+ #include <linux/netfilter/ipset/ip_set.h>
++typedef struct mnl_socket * filter_dev;
++#endif
+ 
+ #define BUFF_LEN 256
+ 
+@@ -41,24 +51,95 @@ static int error_response(struct module_qstate* qstate, int id, int rcode) {
+ 	return 0;
+ }
+ 
+-static struct mnl_socket * open_mnl_socket() {
+-	struct mnl_socket *mnl;
++#ifdef HAVE_NET_PFVAR_H
++static void * open_filter() {
++	filter_dev dev;
+ 
+-	mnl = mnl_socket_open(NETLINK_NETFILTER);
+-	if (!mnl) {
++	dev = open("/dev/pf", O_RDWR);
++	if (dev == -1) {
++		log_err("open(\"/dev/pf\") failed: %s", strerror(errno));
++		return NULL;
++	}
++	else
++		return (void *)dev;
++}
++#else
++static void * open_filter() {
++	filter_dev dev;
++
++	dev = mnl_socket_open(NETLINK_NETFILTER);
++	if (!dev) {
+ 		log_err("ipset: could not open netfilter.");
+ 		return NULL;
+ 	}
+ 
+-	if (mnl_socket_bind(mnl, 0, MNL_SOCKET_AUTOPID) < 0) {
+-		mnl_socket_close(mnl);
++	if (mnl_socket_bind(dev, 0, MNL_SOCKET_AUTOPID) < 0) {
++		mnl_socket_close(dev);
+ 		log_err("ipset: could not bind netfilter.");
+ 		return NULL;
+ 	}
+-	return mnl;
++	return (void *)dev;
+ }
++#endif
++
++#ifdef HAVE_NET_PFVAR_H
++static int add_to_ipset(filter_dev dev, const char *setname, const void *ipaddr, int af) {
++	struct pfioc_table io;
++	struct pfr_addr addr;
++	const char *p;
++	int i;
++
++	bzero(&io, sizeof(io));
++	bzero(&addr, sizeof(addr));
++
++	p = strrchr(setname, '/');
++	if (p) {
++		i = p - setname;
++		if (i >= PATH_MAX) {
++			errno = ENAMETOOLONG;
++			return -1;
++		}
++		memcpy(io.pfrio_table.pfrt_anchor, setname, i);
++		if (i < PATH_MAX)
++			io.pfrio_table.pfrt_anchor[i] = '\0';
++		p++;
++	}
++	else
++		p = setname;
+ 
+-static int add_to_ipset(struct mnl_socket *mnl, const char *setname, const void *ipaddr, int af) {
++	if (strlen(p) >= PF_TABLE_NAME_SIZE) {
++		errno = ENAMETOOLONG;
++		return -1;
++	}
++	strlcpy(io.pfrio_table.pfrt_name, p, PF_TABLE_NAME_SIZE);
++
++	io.pfrio_buffer = &addr;
++	io.pfrio_size = 1;
++	io.pfrio_esize = sizeof(addr);
++
++	switch (af) {
++		case AF_INET:
++			addr.pfra_ip4addr = *(struct in_addr *)ipaddr;
++			addr.pfra_net = 32;
++			break;
++		case AF_INET6:
++			addr.pfra_ip6addr = *(struct in6_addr *)ipaddr;
++			addr.pfra_net = 128;
++			break;
++		default:
++		errno = EAFNOSUPPORT;
++		return -1;
++	}
++	addr.pfra_af = af;
++
++	if (ioctl(dev, DIOCRADDADDRS, &io) == -1) {
++		log_err("ioctl failed: %s", strerror(errno));
++		return -1;
++	}
++	return 0;
++}
++#else
++static int add_to_ipset(filter_dev dev, const char *setname, const void *ipaddr, int af) {
+ 	struct nlmsghdr *nlh;
+ 	struct nfgenmsg *nfg;
+ 	struct nlattr *nested[2];
+@@ -91,14 +172,15 @@ static int add_to_ipset(struct mnl_socket *mnl, const char *setname, const void
+ 	mnl_attr_nest_end(nlh, nested[1]);
+ 	mnl_attr_nest_end(nlh, nested[0]);
+ 
+-	if (mnl_socket_sendto(mnl, nlh, nlh->nlmsg_len) < 0) {
++	if (mnl_socket_sendto(dev, nlh, nlh->nlmsg_len) < 0) {
+ 		return -1;
+ 	}
+ 	return 0;
+ }
++#endif
+ 
+ static void
+-ipset_add_rrset_data(struct ipset_env *ie, struct mnl_socket *mnl,
++ipset_add_rrset_data(struct ipset_env *ie,
+ 	struct packed_rrset_data *d, const char* setname, int af,
+ 	const char* dname)
+ {
+@@ -123,12 +205,16 @@ ipset_add_rrset_data(struct ipset_env *ie, struct mnl_socket *mnl,
+ 					snprintf(ip, sizeof(ip), "(inet_ntop_error)");
+ 				verbose(VERB_QUERY, "ipset: add %s to %s for %s", ip, setname, dname);
+ 			}
+-			ret = add_to_ipset(mnl, setname, rr_data + 2, af);
++			ret = add_to_ipset((filter_dev)ie->dev, setname, rr_data + 2, af);
+ 			if (ret < 0) {
+ 				log_err("ipset: could not add %s into %s", dname, setname);
+ 
+-				mnl_socket_close(mnl);
+-				ie->mnl = NULL;
++#if HAVE_NET_PFVAR_H
++				/* don't close as we might not be able to open again due to dropped privs */
++#else
++				mnl_socket_close((filter_dev)ie->dev);
++				ie->dev = NULL;
++#endif
+ 				break;
+ 			}
+ 		}
+@@ -137,8 +223,8 @@ ipset_add_rrset_data(struct ipset_env *ie, struct mnl_socket *mnl,
+ 
+ static int
+ ipset_check_zones_for_rrset(struct module_env *env, struct ipset_env *ie,
+-	struct mnl_socket *mnl, struct ub_packed_rrset_key *rrset,
+-	const char *qname, const int qlen, const char *setname, int af)
++	struct ub_packed_rrset_key *rrset, const char *qname, int qlen,
++	const char *setname, int af)
+ {
+ 	static char dname[BUFF_LEN];
+ 	const char *ds, *qs;
+@@ -152,11 +238,20 @@ ipset_check_zones_for_rrset(struct module_env *env, struct ipset_env *ie,
+ 		log_err("bad domain name");
+ 		return -1;
+ 	}
++	if (dname[dlen - 1] == '.') {
++		dlen--;
++	}
++	if (qname[qlen - 1] == '.') {
++		qlen--;
++	}
+ 
+ 	for (p = env->cfg->local_zones_ipset; p; p = p->next) {
+ 		ds = NULL;
+ 		qs = NULL;
+ 		plen = strlen(p->str);
++		if (p->str[plen - 1] == '.') {
++			plen--;
++		}
+ 
+ 		if (dlen == plen || (dlen > plen && dname[dlen - plen - 1] == '.' )) {
+ 			ds = dname + (dlen - plen);
+@@ -167,8 +262,7 @@ ipset_check_zones_for_rrset(struct module_env *env, struct ipset_env *ie,
+ 		if ((ds && strncasecmp(p->str, ds, plen) == 0)
+ 			|| (qs && strncasecmp(p->str, qs, plen) == 0)) {
+ 			d = (struct packed_rrset_data*)rrset->entry.data;
+-			ipset_add_rrset_data(ie, mnl, d, setname,
+-				af, dname);
++			ipset_add_rrset_data(ie, d, setname, af, dname);
+ 			break;
+ 		}
+ 	}
+@@ -178,7 +272,6 @@ ipset_check_zones_for_rrset(struct module_env *env, struct ipset_env *ie,
+ static int ipset_update(struct module_env *env, struct dns_msg *return_msg,
+ 	struct query_info qinfo, struct ipset_env *ie)
+ {
+-	struct mnl_socket *mnl;
+ 	size_t i;
+ 	const char *setname;
+ 	struct ub_packed_rrset_key *rrset;
+@@ -186,15 +279,17 @@ static int ipset_update(struct module_env *env, struct dns_msg *return_msg,
+ 	static char qname[BUFF_LEN];
+ 	int qlen;
+ 
+-	mnl = (struct mnl_socket *)ie->mnl;
+-	if (!mnl) {
++#ifdef HAVE_NET_PFVAR_H
++#else
++	if (!ie->dev) {
+ 		/* retry to create mnl socket */
+-		mnl = open_mnl_socket();
+-		if (!mnl) {
++		ie->dev = open_filter();
++		if (!ie->dev) {
++			log_warn("ipset open_filter failed");
+ 			return -1;
+ 		}
+-		ie->mnl = mnl;
+ 	}
++#endif
+ 
+ 	qlen = sldns_wire2str_dname_buf(qinfo.qname, qinfo.qname_len,
+ 		qname, BUFF_LEN);
+@@ -217,8 +312,8 @@ static int ipset_update(struct module_env *env, struct dns_msg *return_msg,
+ 		}
+ 
+ 		if (setname) {
+-			if(ipset_check_zones_for_rrset(env, ie, mnl, rrset,
+-				qname, qlen, setname, af) == -1)
++			if(ipset_check_zones_for_rrset(env, ie, rrset, qname,
++				qlen, setname, af) == -1)
+ 				return -1;
+ 		}
+ 	}
+@@ -226,7 +321,7 @@ static int ipset_update(struct module_env *env, struct dns_msg *return_msg,
+ 	return 0;
+ }
+ 
+-int ipset_init(struct module_env* env, int id) {
++int ipset_startup(struct module_env* env, int id) {
+ 	struct ipset_env *ipset_env;
+ 
+ 	ipset_env = (struct ipset_env *)calloc(1, sizeof(struct ipset_env));
+@@ -237,7 +332,43 @@ int ipset_init(struct module_env* env, int id) {
+ 
+ 	env->modinfo[id] = (void *)ipset_env;
+ 
+-	ipset_env->mnl = NULL;
++#ifdef HAVE_NET_PFVAR_H
++	ipset_env->dev = open_filter();
++	if (!ipset_env->dev) {
++		log_err("ipset open_filter failed");
++		return 0;
++	}
++#else
++	ipset_env->dev = NULL;
++#endif
++	return 1;
++}
++
++void ipset_destartup(struct module_env* env, int id) {
++	filter_dev dev;
++	struct ipset_env *ipset_env;
++
++	if (!env || !env->modinfo[id]) {
++		return;
++	}
++	ipset_env = (struct ipset_env*)env->modinfo[id];
++
++	dev = (filter_dev)ipset_env->dev;
++	if (dev) {
++#if HAVE_NET_PFVAR_H
++		close(dev);
++#else
++		mnl_socket_close(dev);
++#endif
++		ipset_env->dev = NULL;
++	}
++
++	free(ipset_env);
++	env->modinfo[id] = NULL;
++}
++
++int ipset_init(struct module_env* env, int id) {
++	struct ipset_env *ipset_env = env->modinfo[id];
+ 
+ 	ipset_env->name_v4 = env->cfg->ipset_name_v4;
+ 	ipset_env->name_v6 = env->cfg->ipset_name_v6;
+@@ -253,24 +384,8 @@ int ipset_init(struct module_env* env, int id) {
+ 	return 1;
+ }
+ 
+-void ipset_deinit(struct module_env *env, int id) {
+-	struct mnl_socket *mnl;
+-	struct ipset_env *ipset_env;
+-
+-	if (!env || !env->modinfo[id]) {
+-		return;
+-	}
+-
+-	ipset_env = (struct ipset_env *)env->modinfo[id];
+-
+-	mnl = (struct mnl_socket *)ipset_env->mnl;
+-	if (mnl) {
+-		mnl_socket_close(mnl);
+-		ipset_env->mnl = NULL;
+-	}
+-
+-	free(ipset_env);
+-	env->modinfo[id] = NULL;
++void ipset_deinit(struct module_env *ATTR_UNUSED(env), int ATTR_UNUSED(id)) {
++	/* nothing */
+ }
+ 
+ static int ipset_new(struct module_qstate* qstate, int id) {
+@@ -376,8 +491,8 @@ size_t ipset_get_mem(struct module_env *env, int id) {
+  */
+ static struct module_func_block ipset_block = {
+ 	"ipset",
+-	&ipset_init, &ipset_deinit, &ipset_operate,
+-	&ipset_inform_super, &ipset_clear, &ipset_get_mem
++	&ipset_startup, &ipset_destartup, &ipset_init, &ipset_deinit,
++	&ipset_operate, &ipset_inform_super, &ipset_clear, &ipset_get_mem
+ };
+ 
+ struct module_func_block * ipset_get_funcblock(void) {
+diff --git a/ipset/ipset.h b/ipset/ipset.h
+index f60a8be8c..195c7db93 100644
+--- a/ipset/ipset.h
++++ b/ipset/ipset.h
+@@ -37,7 +37,7 @@ extern "C" {
+ #endif
+ 
+ struct ipset_env {
+-    void* mnl;
++	void* dev;
+ 
+ 	int v4_enabled;
+ 	int v6_enabled;
+@@ -50,6 +50,10 @@ struct ipset_qstate {
+ 	int dummy;
+ };
+ 
++/** Startup the ipset module */
++int ipset_startup(struct module_env* env, int id);
++/** Destartup the ipset module */
++void ipset_destartup(struct module_env* env, int id);
+ /** Init the ipset module */
+ int ipset_init(struct module_env* env, int id);
+ /** Deinit the ipset module */
+diff --git a/iterator/iter_fwd.c b/iterator/iter_fwd.c
+index 151372912..b9d42553a 100644
+--- a/iterator/iter_fwd.c
++++ b/iterator/iter_fwd.c
+@@ -71,6 +71,7 @@ forwards_create(void)
+ 		sizeof(struct iter_forwards));
+ 	if(!fwd)
+ 		return NULL;
++	lock_rw_init(&fwd->lock);
+ 	return fwd;
+ }
+ 
+@@ -100,6 +101,7 @@ forwards_delete(struct iter_forwards* fwd)
+ {
+ 	if(!fwd) 
+ 		return;
++	lock_rw_destroy(&fwd->lock);
+ 	fwd_del_tree(fwd);
+ 	free(fwd);
+ }
+@@ -332,45 +334,64 @@ make_stub_holes(struct iter_forwards* fwd, struct config_file* cfg)
+ int 
+ forwards_apply_cfg(struct iter_forwards* fwd, struct config_file* cfg)
+ {
++	if(fwd->tree) {
++		lock_unprotect(&fwd->lock, fwd->tree);
++	}
+ 	fwd_del_tree(fwd);
+ 	fwd->tree = rbtree_create(fwd_cmp);
+ 	if(!fwd->tree)
+ 		return 0;
++	lock_protect(&fwd->lock, fwd->tree, sizeof(*fwd->tree));
+ 
++	lock_rw_wrlock(&fwd->lock);
+ 	/* read forward zones */
+-	if(!read_forwards(fwd, cfg))
++	if(!read_forwards(fwd, cfg)) {
++		lock_rw_unlock(&fwd->lock);
+ 		return 0;
+-	if(!make_stub_holes(fwd, cfg))
++	}
++	if(!make_stub_holes(fwd, cfg)) {
++		lock_rw_unlock(&fwd->lock);
+ 		return 0;
++	}
+ 	fwd_init_parents(fwd);
++	lock_rw_unlock(&fwd->lock);
+ 	return 1;
+ }
+ 
+ struct delegpt* 
+-forwards_find(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass)
++forwards_find(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass,
++	int nolock)
+ {
+-	rbnode_type* res = NULL;
++	struct iter_forward_zone* res;
+ 	struct iter_forward_zone key;
++	int has_dp;
+ 	key.node.key = &key;
+ 	key.dclass = qclass;
+ 	key.name = qname;
+ 	key.namelabs = dname_count_size_labels(qname, &key.namelen);
+-	res = rbtree_search(fwd->tree, &key);
+-	if(res) return ((struct iter_forward_zone*)res)->dp;
+-	return NULL;
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&fwd->lock); }
++	res = (struct iter_forward_zone*)rbtree_search(fwd->tree, &key);
++	has_dp = res && res->dp;
++	if(!has_dp && !nolock) { lock_rw_unlock(&fwd->lock); }
++	return has_dp?res->dp:NULL;
+ }
+ 
+ struct delegpt* 
+-forwards_lookup(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass)
++forwards_lookup(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass,
++	int nolock)
+ {
+ 	/* lookup the forward zone in the tree */
+ 	rbnode_type* res = NULL;
+ 	struct iter_forward_zone *result;
+ 	struct iter_forward_zone key;
++	int has_dp;
+ 	key.node.key = &key;
+ 	key.dclass = qclass;
+ 	key.name = qname;
+ 	key.namelabs = dname_count_size_labels(qname, &key.namelen);
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&fwd->lock); }
+ 	if(rbtree_find_less_equal(fwd->tree, &key, &res)) {
+ 		/* exact */
+ 		result = (struct iter_forward_zone*)res;
+@@ -378,8 +399,10 @@ forwards_lookup(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass)
+ 		/* smaller element (or no element) */
+ 		int m;
+ 		result = (struct iter_forward_zone*)res;
+-		if(!result || result->dclass != qclass)
++		if(!result || result->dclass != qclass) {
++			if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 			return NULL;
++		}
+ 		/* count number of labels matched */
+ 		(void)dname_lab_cmp(result->name, result->namelabs, key.name,
+ 			key.namelabs, &m);
+@@ -389,20 +412,22 @@ forwards_lookup(struct iter_forwards* fwd, uint8_t* qname, uint16_t qclass)
+ 			result = result->parent;
+ 		}
+ 	}
+-	if(result)
+-		return result->dp;
+-	return NULL;
++	has_dp = result && result->dp;
++	if(!has_dp && !nolock) { lock_rw_unlock(&fwd->lock); }
++	return has_dp?result->dp:NULL;
+ }
+ 
+ struct delegpt* 
+-forwards_lookup_root(struct iter_forwards* fwd, uint16_t qclass)
++forwards_lookup_root(struct iter_forwards* fwd, uint16_t qclass, int nolock)
+ {
+ 	uint8_t root = 0;
+-	return forwards_lookup(fwd, &root, qclass);
++	return forwards_lookup(fwd, &root, qclass, nolock);
+ }
+ 
+-int
+-forwards_next_root(struct iter_forwards* fwd, uint16_t* dclass)
++/* Finds next root item in forwards lookup tree.
++ * Caller needs to handle locking of the forwards structure. */
++static int
++next_root_locked(struct iter_forwards* fwd, uint16_t* dclass)
+ {
+ 	struct iter_forward_zone key;
+ 	rbnode_type* n;
+@@ -419,7 +444,7 @@ forwards_next_root(struct iter_forwards* fwd, uint16_t* dclass)
+ 		}
+ 		/* root not first item? search for higher items */
+ 		*dclass = p->dclass + 1;
+-		return forwards_next_root(fwd, dclass);
++		return next_root_locked(fwd, dclass);
+ 	}
+ 	/* find class n in tree, we may get a direct hit, or if we don't
+ 	 * this is the last item of the previous class so rbtree_next() takes
+@@ -447,10 +472,21 @@ forwards_next_root(struct iter_forwards* fwd, uint16_t* dclass)
+ 		}
+ 		/* not a root node, return next higher item */
+ 		*dclass = p->dclass+1;
+-		return forwards_next_root(fwd, dclass);
++		return next_root_locked(fwd, dclass);
+ 	}
+ }
+ 
++int
++forwards_next_root(struct iter_forwards* fwd, uint16_t* dclass, int nolock)
++{
++	int ret;
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_rdlock(&fwd->lock); }
++	ret = next_root_locked(fwd, dclass);
++	if(!nolock) { lock_rw_unlock(&fwd->lock); }
++	return ret;
++}
++
+ size_t 
+ forwards_get_mem(struct iter_forwards* fwd)
+ {
+@@ -458,10 +494,12 @@ forwards_get_mem(struct iter_forwards* fwd)
+ 	size_t s;
+ 	if(!fwd)
+ 		return 0;
++	lock_rw_rdlock(&fwd->lock);
+ 	s = sizeof(*fwd) + sizeof(*fwd->tree);
+ 	RBTREE_FOR(p, struct iter_forward_zone*, fwd->tree) {
+ 		s += sizeof(*p) + p->namelen + delegpt_get_mem(p->dp);
+ 	}
++	lock_rw_unlock(&fwd->lock);
+ 	return s;
+ }
+ 
+@@ -477,50 +515,78 @@ fwd_zone_find(struct iter_forwards* fwd, uint16_t c, uint8_t* nm)
+ }
+ 
+ int 
+-forwards_add_zone(struct iter_forwards* fwd, uint16_t c, struct delegpt* dp)
++forwards_add_zone(struct iter_forwards* fwd, uint16_t c, struct delegpt* dp,
++	int nolock)
+ {
+ 	struct iter_forward_zone *z;
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&fwd->lock); }
+ 	if((z=fwd_zone_find(fwd, c, dp->name)) != NULL) {
+ 		(void)rbtree_delete(fwd->tree, &z->node);
+ 		fwd_zone_free(z);
+ 	}
+-	if(!forwards_insert(fwd, c, dp))
++	if(!forwards_insert(fwd, c, dp)) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 		return 0;
++	}
+ 	fwd_init_parents(fwd);
++	if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 	return 1;
+ }
+ 
+ void 
+-forwards_delete_zone(struct iter_forwards* fwd, uint16_t c, uint8_t* nm)
++forwards_delete_zone(struct iter_forwards* fwd, uint16_t c, uint8_t* nm,
++	int nolock)
+ {
+ 	struct iter_forward_zone *z;
+-	if(!(z=fwd_zone_find(fwd, c, nm)))
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&fwd->lock); }
++	if(!(z=fwd_zone_find(fwd, c, nm))) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 		return; /* nothing to do */
++	}
+ 	(void)rbtree_delete(fwd->tree, &z->node);
+ 	fwd_zone_free(z);
+ 	fwd_init_parents(fwd);
++	if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ }
+ 
+ int
+-forwards_add_stub_hole(struct iter_forwards* fwd, uint16_t c, uint8_t* nm)
++forwards_add_stub_hole(struct iter_forwards* fwd, uint16_t c, uint8_t* nm,
++	int nolock)
+ {
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&fwd->lock); }
++	if(fwd_zone_find(fwd, c, nm) != NULL) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
++		return 1; /* already a stub zone there */
++	}
+ 	if(!fwd_add_stub_hole(fwd, c, nm)) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 		return 0;
+ 	}
+ 	fwd_init_parents(fwd);
++	if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 	return 1;
+ }
+ 
+ void
+-forwards_delete_stub_hole(struct iter_forwards* fwd, uint16_t c, uint8_t* nm)
++forwards_delete_stub_hole(struct iter_forwards* fwd, uint16_t c,
++	uint8_t* nm, int nolock)
+ {
+ 	struct iter_forward_zone *z;
+-	if(!(z=fwd_zone_find(fwd, c, nm)))
++	/* lock_() calls are macros that could be nothing, surround in {} */
++	if(!nolock) { lock_rw_wrlock(&fwd->lock); }
++	if(!(z=fwd_zone_find(fwd, c, nm))) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 		return; /* nothing to do */
+-	if(z->dp != NULL)
++	}
++	if(z->dp != NULL) {
++		if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ 		return; /* not a stub hole */
++	}
+ 	(void)rbtree_delete(fwd->tree, &z->node);
+ 	fwd_zone_free(z);
+ 	fwd_init_parents(fwd);
++	if(!nolock) { lock_rw_unlock(&fwd->lock); }
+ }
+-

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════ SOLUTION SCRIPT: stage the ground truth as the agent submission ═══════════════════════════════════════════════════════════════════════════
 #
-# The V2 submission contract is exactly ONE file:
+# The submission contract is exactly ONE file:
 #
 #   trigger.bin           the GT differential trigger input
 #

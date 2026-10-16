@@ -1,0 +1,480 @@
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_closure.phpt b/Zend/tests/function_arguments/sensitive_parameter_closure.phpt
+deleted file mode 100644
+index f2b038ce..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_closure.phpt
++++ /dev/null
+@@ -1,51 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument for closures.
+---FILE--
+-<?php
+-
+-$test = function (#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-};
+-
+-$test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_closure.php(10): {closure}(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_closure.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_closure.php"
+-    ["line"]=>
+-    int(10)
+-    ["function"]=>
+-    string(9) "{closure}"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt b/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt
+deleted file mode 100644
+index 1a6dc97d..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_correctly_captures_original.phpt
++++ /dev/null
+@@ -1,70 +0,0 @@
+---TEST--
+-The SensitiveParameterValue replacement value correctly captures the original value.
+---FILE--
+-<?php
+-
+-function test(
+-    $foo,
+-    #[SensitiveParameter] $bar,
+-    $baz
+-) {
+-    throw new Exception('Error');
+-}
+-
+-try {
+-    test('foo', 'bar', 'baz');
+-    echo 'Not reached';
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-    $testFrame = $e->getTrace()[0];
+-    var_dump($testFrame['function']);
+-    var_dump(count($testFrame['args']));
+-    var_dump($testFrame['args'][0]);
+-    assert($testFrame['args'][1] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][1]->getValue());
+-    var_dump($testFrame['args'][2]);
+-    echo "Success", PHP_EOL;
+-}
+-
+-function test2(
+-    $foo,
+-    #[SensitiveParameter] ...$variadic,
+-) {
+-    throw new Exception('Error 2');
+-}
+-
+-try {
+-    test2('foo', 'variadic1', 'variadic2', 'variadic3');
+-    echo 'Not reached';
+-} catch (Exception $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-    $testFrame = $e->getTrace()[0];
+-    var_dump($testFrame['function']);
+-    var_dump(count($testFrame['args']));
+-    var_dump($testFrame['args'][0]);
+-    assert($testFrame['args'][1] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][1]->getValue());
+-    assert($testFrame['args'][2] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][2]->getValue());
+-    assert($testFrame['args'][3] instanceof SensitiveParameterValue);
+-    var_dump($testFrame['args'][3]->getValue());
+-    echo "Success", PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-Error
+-string(4) "test"
+-int(3)
+-string(3) "foo"
+-string(3) "bar"
+-string(3) "baz"
+-Success
+-Error 2
+-string(5) "test2"
+-int(4)
+-string(3) "foo"
+-string(9) "variadic1"
+-string(9) "variadic2"
+-string(9) "variadic3"
+-Success
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt b/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt
+deleted file mode 100644
+index 8bb8bc73..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_eval_call.phpt
++++ /dev/null
+@@ -1,72 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument in a function called in eval().
+---FILE--
+-<?php
+-
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-eval(<<<'EOT'
+-test('sensitive');
+-EOT);
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_eval_call.php(11) : eval()'d code(1): test(Object(SensitiveParameterValue))
+-#1 %ssensitive_parameter_eval_call.php(11): eval()
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php(11) : eval()'d code"
+-    ["line"]=>
+-    int(1)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(3) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php"
+-    ["line"]=>
+-    int(11)
+-    ["function"]=>
+-    string(4) "eval"
+-  }
+-}
+-array(2) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php(11) : eval()'d code"
+-    ["line"]=>
+-    int(1)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-  [1]=>
+-  array(3) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_call.php"
+-    ["line"]=>
+-    int(11)
+-    ["function"]=>
+-    string(4) "eval"
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt b/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt
+deleted file mode 100644
+index 29fdbc95..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_eval_define.phpt
++++ /dev/null
+@@ -1,53 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the single sensitive argument in a function created in eval().
+---FILE--
+-<?php
+-
+-eval(<<<'EOT'
+-function test(#[SensitiveParameter] $sensitive)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-EOT);
+-
+-test('sensitive');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_eval_define.php(12): test(Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_define.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_eval_define.php"
+-    ["line"]=>
+-    int(12)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(1) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt
+deleted file mode 100644
+index 823e13f2..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_extra_arguments.phpt
++++ /dev/null
+@@ -1,62 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute does not suppress superfluous arguments if the last parameter is sensitive.
+---FILE--
+-<?php
+-
+-function test(
+-    $non_sensitive,
+-    #[SensitiveParameter] $sensitive,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('foo', 'bar', 'baz');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_extra_arguments.php(13): test('foo', Object(SensitiveParameterValue), 'baz')
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_extra_arguments.php"
+-    ["line"]=>
+-    int(13)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      string(3) "baz"
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_extra_arguments.php"
+-    ["line"]=>
+-    int(13)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      string(3) "foo"
+-      [1]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [2]=>
+-      string(3) "baz"
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt
+deleted file mode 100644
+index f0962d88..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_multiple_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute suppresses the correct sensitive arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test('sensitive1', 'non_sensitive', 'sensitive2');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_multiple_arguments.php(14): test(Object(SensitiveParameterValue), 'non_sensitive', Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_multiple_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_multiple_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+diff --git a/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt b/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt
+deleted file mode 100644
+index 24e2268e..00000000
+--- a/Zend/tests/function_arguments/sensitive_parameter_named_arguments.phpt
++++ /dev/null
+@@ -1,65 +0,0 @@
+---TEST--
+-The SensitiveParameter attribute handles named arguments.
+---FILE--
+-<?php
+-
+-function test(
+-    #[SensitiveParameter] $sensitive1 = null,
+-    $non_sensitive = null,
+-    #[SensitiveParameter] $sensitive2 = null,
+-)
+-{
+-    debug_print_backtrace();
+-    var_dump(debug_backtrace());
+-    var_dump((new Exception)->getTrace());
+-}
+-
+-test(non_sensitive: 'non_sensitive', sensitive2: 'sensitive2');
+-
+-?>
+---EXPECTF--
+-#0 %ssensitive_parameter_named_arguments.php(14): test(Object(SensitiveParameterValue), 'non_sensitive', Object(SensitiveParameterValue))
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_named_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}
+-array(1) {
+-  [0]=>
+-  array(4) {
+-    ["file"]=>
+-    string(%d) "%ssensitive_parameter_named_arguments.php"
+-    ["line"]=>
+-    int(14)
+-    ["function"]=>
+-    string(4) "test"
+-    ["args"]=>
+-    array(3) {
+-      [0]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-      [1]=>
+-      string(13) "non_sensitive"
+-      [2]=>
+-      object(SensitiveParameterValue)#%d (0) {
+-      }
+-    }
+-  }
+-}

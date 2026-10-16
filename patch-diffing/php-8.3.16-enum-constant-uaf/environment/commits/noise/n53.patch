@@ -1,0 +1,222 @@
+diff --git a/Zend/tests/traits/constant_018.phpt b/Zend/tests/traits/constant_018.phpt
+deleted file mode 100644
+index 9d040dd1..00000000
+--- a/Zend/tests/traits/constant_018.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Referencing trait constants directly on calling \constant() causes a fatal error
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-var_dump(\constant('TestTrait::Constant'));
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Cannot access trait constant TestTrait::Constant directly in %s:%d
+-Stack trace:
+-#0 %s: constant('TestTrait::Cons...')
+-#1 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/traits/constant_019.phpt b/Zend/tests/traits/constant_019.phpt
+deleted file mode 100644
+index abbe9d11..00000000
+--- a/Zend/tests/traits/constant_019.phpt
++++ /dev/null
+@@ -1,27 +0,0 @@
+---TEST--
+-Flattened trait constants are retrieved as members of the composing class via Reflection
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getConstant('Constant'));
+-var_dump($reflection->getReflectionConstant('Constant')->getDeclaringClass()->getName());
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getConstant('Constant'));
+-var_dump($reflection->getReflectionConstant('Constant')->getDeclaringClass()->getName());
+-
+-?>
+---EXPECTF--
+-int(42)
+-string(9) "TestTrait"
+-int(42)
+-string(9) "TestClass"
+diff --git a/Zend/tests/traits/constant_020.phpt b/Zend/tests/traits/constant_020.phpt
+deleted file mode 100644
+index 1194e2c8..00000000
+--- a/Zend/tests/traits/constant_020.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Attributes can be retrieved from trait constants
+---FILE--
+-<?php
+-
+-class TestAttribute {
+-    public function __construct(public string $value) {}
+-}
+-
+-trait TestTrait {
+-  #[TestAttribute(value: 123)]
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getAttributes('TestAttribute')[0]->getArguments()['value']);
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getAttributes('TestAttribute')[0]->getArguments()['value']);
+-
+-?>
+---EXPECTF--
+-int(123)
+-int(123)
+diff --git a/Zend/tests/traits/constant_021.phpt b/Zend/tests/traits/constant_021.phpt
+deleted file mode 100644
+index 713941a1..00000000
+--- a/Zend/tests/traits/constant_021.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Doc comments can be retrieved from trait constants
+---FILE--
+-<?php
+-
+-trait TestTrait {
+-  /** DocComments */
+-  public const Constant = 42;
+-}
+-
+-class TestClass {
+-  use TestTrait;
+-}
+-
+-$reflection = new \ReflectionClass(TestTrait::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getDocComment());
+-
+-$reflection = new \ReflectionClass(TestClass::class);
+-var_dump($reflection->getReflectionConstant('Constant')->getDocComment());
+-
+-?>
+---EXPECTF--
+-string(18) "/** DocComments */"
+-string(18) "/** DocComments */"
+diff --git a/Zend/tests/traits/error_016.phpt b/Zend/tests/traits/error_016.phpt
+new file mode 100644
+index 00000000..191225dd
+--- /dev/null
++++ b/Zend/tests/traits/error_016.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++Trying to create a constant on Trait
++--FILE--
++<?php
++
++trait foo {
++    const a = 1;
++}
++
++?>
++--EXPECTF--
++Fatal error: Traits cannot have constants in %s on line %d
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt b/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt
+deleted file mode 100644
+index 6375c60a..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_2_intersection.phpt
++++ /dev/null
+@@ -1,63 +0,0 @@
+---TEST--
+-Union of two intersection type
+---FILE--
+-<?php
+-
+-interface W {}
+-interface X {}
+-interface Y {}
+-interface Z {}
+-
+-class A implements X, Y {}
+-class B implements W, Z {}
+-class C {}
+-
+-function foo1((X&Y)|(W&Z) $v): (X&Y)|(W&Z) {
+-    return $v;
+-}
+-function foo2((W&Z)|(X&Y) $v): (W&Z)|(X&Y) {
+-    return $v;
+-}
+-
+-function bar1(): (X&Y)|(W&Z) {
+-    return new C();
+-}
+-function bar2(): (W&Z)|(X&Y) {
+-    return new C();
+-}
+-
+-$a = new A();
+-$b = new B();
+-
+-$o = foo1($a);
+-var_dump($o);
+-$o = foo2($a);
+-var_dump($o);
+-$o = foo1($b);
+-var_dump($o);
+-$o = foo2($b);
+-var_dump($o);
+-
+-try {
+-    bar1();
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-try {
+-    bar2();
+-} catch (\TypeError $e) {
+-    echo $e->getMessage(), \PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-object(A)#%d (0) {
+-}
+-object(A)#%d (0) {
+-}
+-object(B)#%d (0) {
+-}
+-object(B)#%d (0) {
+-}
+-bar1(): Return value must be of type (X&Y)|(W&Z), C returned
+-bar2(): Return value must be of type (W&Z)|(X&Y), C returned
+diff --git a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt b/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt
+deleted file mode 100644
+index 80f19207..00000000
+--- a/Zend/tests/type_declarations/dnf_types/dnf_intersection_and_eval.phpt
++++ /dev/null
+@@ -1,9 +0,0 @@
+---TEST--
+-Union and intersection type leaks
+---FILE--
+-<?php
+-eval('abstract class y {function y(): (y&yy)|t {}}');
+-?>
+-DONE
+---EXPECTF--
+-DONE

@@ -1,0 +1,238 @@
+diff --git a/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt b/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
+index 8ac1220e..3bc6faf3 100644
+--- a/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
++++ b/ext/pdo_mysql/tests/pdo_mysql_subclass.phpt
+@@ -78,8 +78,6 @@ $db->exec('DROP TABLE IF EXISTS test');
+ ?>
+ --EXPECTF--
+ __construct('%S', '%S', %s)
+-
+-Deprecated: Callables of the form ["MyPDO", "parent::__construct"] are deprecated in %s on line %d
+ exec('DROP TABLE IF EXISTS test')
+ exec('CREATE TABLE test(id INT)')
+ exec('INSERT INTO test(id) VALUES (1), (2)')
+diff --git a/ext/pdo_odbc/odbc_driver.c b/ext/pdo_odbc/odbc_driver.c
+index a9d5befd..b258d565 100644
+--- a/ext/pdo_odbc/odbc_driver.c
++++ b/ext/pdo_odbc/odbc_driver.c
+@@ -23,8 +23,6 @@
+ #include "ext/standard/info.h"
+ #include "pdo/php_pdo.h"
+ #include "pdo/php_pdo_driver.h"
+-/* this file actually lives in main/ */
+-#include "php_odbc_utils.h"
+ #include "php_pdo_odbc.h"
+ #include "php_pdo_odbc_int.h"
+ #include "zend_exceptions.h"
+@@ -396,19 +394,11 @@ static zend_result odbc_handle_check_liveness(pdo_dbh_t *dbh)
+ 	RETCODE ret;
+ 	UCHAR d_name[32];
+ 	SQLSMALLINT len;
+-	SQLUINTEGER dead = SQL_CD_FALSE;
+ 	pdo_odbc_db_handle *H = (pdo_odbc_db_handle *)dbh->driver_data;
+ 
+-	ret = SQLGetConnectAttr(H->dbc, SQL_ATTR_CONNECTION_DEAD, &dead, 0, NULL);
+-	if (ret == SQL_SUCCESS && dead == SQL_CD_TRUE) {
+-		/* Bail early here, since we know it's gone */
+-		return FAILURE;
+-	}
+ 	/*
+-	 * If the driver doesn't support SQL_ATTR_CONNECTION_DEAD, or if
+-	 * it returns false (which could be a false positive), fall back
+-	 * to using SQL_DATA_SOURCE_READ_ONLY, which isn't semantically
+-	 * correct, but works with many drivers.
++	 * SQL_ATTR_CONNECTION_DEAD is tempting, but only in ODBC 3.5,
++	 * and not all drivers implement it properly
+ 	 */
+ 	ret = SQLGetInfo(H->dbc, SQL_DATA_SOURCE_READ_ONLY, d_name,
+ 		sizeof(d_name), &len);
+@@ -501,43 +491,12 @@ static int pdo_odbc_handle_factory(pdo_dbh_t *dbh, zval *driver_options) /* {{{
+ 		use_direct = 1;
+ 
+ 		/* Force UID and PWD to be set in the DSN */
+-		bool is_uid_set = dbh->username && *dbh->username
+-			&& !strstr(dbh->data_source, "uid=")
+-			&& !strstr(dbh->data_source, "UID=");
+-		bool is_pwd_set = dbh->password && *dbh->password
+-			&& !strstr(dbh->data_source, "pwd=")
+-			&& !strstr(dbh->data_source, "PWD=");
+-		if (is_uid_set && is_pwd_set) {
+-			char *uid = NULL, *pwd = NULL;
+-			bool should_quote_uid = !php_odbc_connstr_is_quoted(dbh->username) && php_odbc_connstr_should_quote(dbh->username);
+-			bool should_quote_pwd = !php_odbc_connstr_is_quoted(dbh->password) && php_odbc_connstr_should_quote(dbh->password);
+-			if (should_quote_uid) {
+-				size_t estimated_length = php_odbc_connstr_estimate_quote_length(dbh->username);
+-				uid = emalloc(estimated_length);
+-				php_odbc_connstr_quote(uid, dbh->username, estimated_length);
+-			} else {
+-				uid = dbh->username;
+-			}
+-			if (should_quote_pwd) {
+-				size_t estimated_length = php_odbc_connstr_estimate_quote_length(dbh->password);
+-				pwd = emalloc(estimated_length);
+-				php_odbc_connstr_quote(pwd, dbh->password, estimated_length);
+-			} else {
+-				pwd = dbh->password;
+-			}
+-			size_t new_dsn_size = strlen(dbh->data_source)
+-				+ strlen(uid) + strlen(pwd)
+-				+ strlen(";UID=;PWD=") + 1;
+-			char *dsn = pemalloc(new_dsn_size, dbh->is_persistent);
+-			snprintf(dsn, new_dsn_size, "%s;UID=%s;PWD=%s", dbh->data_source, uid, pwd);
++		if (dbh->username && *dbh->username && !strstr(dbh->data_source, "uid")
++				&& !strstr(dbh->data_source, "UID")) {
++			char *dsn;
++			spprintf(&dsn, 0, "%s;UID=%s;PWD=%s", dbh->data_source, dbh->username, dbh->password);
+ 			pefree((char*)dbh->data_source, dbh->is_persistent);
+ 			dbh->data_source = dsn;
+-			if (uid && should_quote_uid) {
+-				efree(uid);
+-			}
+-			if (pwd && should_quote_pwd) {
+-				efree(pwd);
+-			}
+ 		}
+ 
+ 		rc = SQLDriverConnect(H->dbc, NULL, (SQLCHAR *) dbh->data_source, strlen(dbh->data_source),
+diff --git a/ext/pdo_odbc/odbc_stmt.c b/ext/pdo_odbc/odbc_stmt.c
+index ea0dd0e5..040962d5 100644
+--- a/ext/pdo_odbc/odbc_stmt.c
++++ b/ext/pdo_odbc/odbc_stmt.c
+@@ -155,7 +155,7 @@ static int odbc_stmt_dtor(pdo_stmt_t *stmt)
+ 
+ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ {
+-	RETCODE rc, rc1;
++	RETCODE rc;
+ 	pdo_odbc_stmt *S = (pdo_odbc_stmt*)stmt->driver_data;
+ 	char *buf = NULL;
+ 	SQLLEN row_count = -1;
+@@ -192,17 +192,11 @@ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ 							Z_STRLEN_P(parameter),
+ 							&ulen)) {
+ 					case PDO_ODBC_CONV_NOT_REQUIRED:
+-						rc1 = SQLPutData(S->stmt, Z_STRVAL_P(parameter),
++						SQLPutData(S->stmt, Z_STRVAL_P(parameter),
+ 							Z_STRLEN_P(parameter));
+-						if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-							rc = rc1;
+-						}
+ 						break;
+ 					case PDO_ODBC_CONV_OK:
+-						rc1 = SQLPutData(S->stmt, S->convbuf, ulen);
+-						if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-							rc = rc1;
+-						}
++						SQLPutData(S->stmt, S->convbuf, ulen);
+ 						break;
+ 					case PDO_ODBC_CONV_FAIL:
+ 						pdo_odbc_stmt_error("error converting input string");
+@@ -239,10 +233,7 @@ static int odbc_stmt_execute(pdo_stmt_t *stmt)
+ 				if (len == 0) {
+ 					break;
+ 				}
+-				rc1 = SQLPutData(S->stmt, buf, len);
+-				if (rc1 != SQL_SUCCESS && rc1 != SQL_SUCCESS_WITH_INFO) {
+-					rc = rc1;
+-				}
++				SQLPutData(S->stmt, buf, len);
+ 			} while (1);
+ 		}
+ 	}
+diff --git a/ext/pdo_odbc/tests/gh9372.phpt b/ext/pdo_odbc/tests/gh9372.phpt
+deleted file mode 100644
+index 9f9b8849..00000000
+--- a/ext/pdo_odbc/tests/gh9372.phpt
++++ /dev/null
+@@ -1,52 +0,0 @@
+---TEST--
+-Bug GH-9372 (HY010 when binding overlong parameter)
+---EXTENSIONS--
+-pdo_odbc
+---SKIPIF--
+-<?php
+-require 'ext/pdo/tests/pdo_test.inc';
+-PDOTest::skip();
+-?>
+---FILE--
+-<?php
+-// Executing the statements fails with some drivers, but not others.
+-// The test is written in a way to always pass, unless the execution
+-// fails with a different code than 22001 (String data, right truncation).
+-
+-require 'ext/pdo/tests/pdo_test.inc';
+-$db = PDOTest::test_factory(dirname(__FILE__) . '/common.phpt');
+-$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+-
+-$db->exec("CREATE TABLE gh9372 (col VARCHAR(10))");
+-$db->exec("INSERT INTO gh9372 VALUES ('something')");
+-
+-$stmt = $db->prepare("SELECT * FROM gh9372 WHERE col = ?");
+-$stmt->bindValue(1, 'something else');
+-try {
+-    $stmt->execute();
+-} catch (PDOException $ex) {
+-    if ($ex->getCode() !== "22001") {
+-        var_dump($ex->getMessage());
+-    }
+-}
+-
+-$stmt = $db->prepare("SELECT * FROM gh9372 WHERE col = ?");
+-$stream = fopen("php://memory", "w+");
+-fwrite($stream, 'something else');
+-rewind($stream);
+-$stmt->bindvalue(1, $stream, PDO::PARAM_LOB);
+-try {
+-    $stmt->execute();
+-} catch (PDOException $ex) {
+-    if ($ex->getCode() !== "22001") {
+-        var_dump($ex->getMessage());
+-    }
+-}
+-?>
+---CLEAN--
+-<?php
+-require 'ext/pdo/tests/pdo_test.inc';
+-$db = PDOTest::test_factory(dirname(__FILE__) . '/common.phpt');
+-$db->exec("DROP TABLE gh9372");
+-?>
+---EXPECT--
+diff --git a/ext/pdo_pgsql/pgsql_driver.c b/ext/pdo_pgsql/pgsql_driver.c
+index ec4d5ec6..f84bfba9 100644
+--- a/ext/pdo_pgsql/pgsql_driver.c
++++ b/ext/pdo_pgsql/pgsql_driver.c
+@@ -29,6 +29,7 @@
+ #include "pdo/php_pdo_driver.h"
+ #include "pdo/php_pdo_error.h"
+ #include "ext/standard/file.h"
++#undef SIZEOF_OFF_T
+ #include "php_pdo_pgsql.h"
+ #include "php_pdo_pgsql_int.h"
+ #include "zend_exceptions.h"
+diff --git a/ext/pdo_pgsql/pgsql_driver.stub.php b/ext/pdo_pgsql/pgsql_driver.stub.php
+index 4206dbea..6daa55c7 100644
+--- a/ext/pdo_pgsql/pgsql_driver.stub.php
++++ b/ext/pdo_pgsql/pgsql_driver.stub.php
+@@ -2,10 +2,7 @@
+ 
+ /** @generate-function-entries */
+ 
+-/**
+- * These are extension methods for PDO. This is not a real class.
+- * @undocumentable
+- */
++// These are extension methods for PDO. This is not a real class.
+ class PDO_PGSql_Ext {
+     /** @tentative-return-type */
+     public function pgsqlCopyFromArray(string $tableName, array $rows, string $separator = "\t", string $nullAs = "\\\\N", ?string $fields = null): bool {}
+diff --git a/ext/pdo_pgsql/pgsql_driver_arginfo.h b/ext/pdo_pgsql/pgsql_driver_arginfo.h
+index 3f84d4d8..a3ec5196 100644
+--- a/ext/pdo_pgsql/pgsql_driver_arginfo.h
++++ b/ext/pdo_pgsql/pgsql_driver_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: b30fa6327876dc1090ee5397253c935e4566a8fe */
++ * Stub hash: 5dfd421cf9ba9eb043c4b4f3c9b9c09c81cc3ccb */
+ 
+ ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_PDO_PGSql_Ext_pgsqlCopyFromArray, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(0, tableName, IS_STRING, 0)

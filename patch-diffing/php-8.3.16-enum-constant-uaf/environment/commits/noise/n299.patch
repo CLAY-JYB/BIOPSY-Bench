@@ -1,0 +1,179 @@
+diff --git a/ext/spl/tests/SplFileObject/bug62004.txt b/ext/spl/tests/SplFileObject/bug62004.txt
+deleted file mode 100644
+index e5791419..00000000
+--- a/ext/spl/tests/SplFileObject/bug62004.txt
++++ /dev/null
+@@ -1,4 +0,0 @@
+-Line 1
+-Line 2
+-Line 3
+-Line 4
+diff --git a/ext/spl/tests/SplFileObject/bug64782.phpt b/ext/spl/tests/SplFileObject/bug64782.phpt
+deleted file mode 100644
+index ffe8a30b..00000000
+--- a/ext/spl/tests/SplFileObject/bug64782.phpt
++++ /dev/null
+@@ -1,21 +0,0 @@
+---TEST--
+-Bug #64782: SplFileObject constructor make $context optional / give it a default value
+---FILE--
+-<?php
+-
+-var_dump(new SplFileObject(__FILE__, "r", false, null));
+-
+-?>
+---EXPECTF--
+-object(SplFileObject)#1 (%d) {
+-  ["pathName":"SplFileInfo":private]=>
+-  string(%d) "%sbug64782.php"
+-  ["fileName":"SplFileInfo":private]=>
+-  string(12) "bug64782.php"
+-  ["openMode":"SplFileObject":private]=>
+-  string(1) "r"
+-  ["delimiter":"SplFileObject":private]=>
+-  string(1) ","
+-  ["enclosure":"SplFileObject":private]=>
+-  string(1) """
+-}
+diff --git a/ext/spl/tests/SplFileObject/bug65545.phpt b/ext/spl/tests/SplFileObject/bug65545.phpt
+deleted file mode 100644
+index 8ebbf648..00000000
+--- a/ext/spl/tests/SplFileObject/bug65545.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-SplFileObject::fread function
+---FILE--
+-<?php
+-$obj = new SplFileObject(__FILE__, 'r');
+-$data = $obj->fread(5);
+-var_dump($data);
+-
+-try {
+-    $data = $obj->fread(0);
+-    var_dump($data);
+-} catch (\ValueError $e) {
+-    echo $e->getMessage() . \PHP_EOL;
+-}
+-
+-// read more data than is available
+-$data = $obj->fread(filesize(__FILE__) + 32);
+-var_dump(strlen($data) === filesize(__FILE__) - 5);
+-
+-?>
+---EXPECT--
+-string(5) "<?php"
+-SplFileObject::fread(): Argument #1 ($length) must be greater than 0
+-bool(true)
+diff --git a/ext/spl/tests/SplFileObject/bug67805.phpt b/ext/spl/tests/SplFileObject/bug67805.phpt
+deleted file mode 100644
+index 1f64f0fc..00000000
+--- a/ext/spl/tests/SplFileObject/bug67805.phpt
++++ /dev/null
+@@ -1,15 +0,0 @@
+---TEST--
+-Bug #67805 SplFileObject setMaxLineLength
+---CREDITS--
+-Willian Gustavo Veiga <contact@willianveiga.com>
+---FILE--
+-<?php
+-$splFileObject = new SplFileObject(__FILE__);
+-$splFileObject->setMaxLineLen(3);
+-$line = $splFileObject->getCurrentLine();
+-var_dump($line === '<?p');
+-var_dump(strlen($line) === 3);
+-?>
+---EXPECT--
+-bool(true)
+-bool(true)
+diff --git a/ext/spl/tests/SplFileObject/bug68479.phpt b/ext/spl/tests/SplFileObject/bug68479.phpt
+deleted file mode 100644
+index 85a573a3..00000000
+--- a/ext/spl/tests/SplFileObject/bug68479.phpt
++++ /dev/null
+@@ -1,38 +0,0 @@
+---TEST--
+-Bug #68479 (Escape parameter missing from SplFileObject::fputcsv)
+---FILE--
+-<?php
+-
+-$method = new ReflectionMethod('SplFileObject', 'fputcsv');
+-$params = $method->getParameters();
+-var_dump($params);
+-
+-?>
+---EXPECT--
+-array(5) {
+-  [0]=>
+-  object(ReflectionParameter)#2 (1) {
+-    ["name"]=>
+-    string(6) "fields"
+-  }
+-  [1]=>
+-  object(ReflectionParameter)#3 (1) {
+-    ["name"]=>
+-    string(9) "separator"
+-  }
+-  [2]=>
+-  object(ReflectionParameter)#4 (1) {
+-    ["name"]=>
+-    string(9) "enclosure"
+-  }
+-  [3]=>
+-  object(ReflectionParameter)#5 (1) {
+-    ["name"]=>
+-    string(6) "escape"
+-  }
+-  [4]=>
+-  object(ReflectionParameter)#6 (1) {
+-    ["name"]=>
+-    string(3) "eol"
+-  }
+-}
+diff --git a/ext/spl/tests/SplFileObject/bug72884.phpt b/ext/spl/tests/SplFileObject/bug72884.phpt
+deleted file mode 100644
+index 83a536fd..00000000
+--- a/ext/spl/tests/SplFileObject/bug72884.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-Bug #72884:  isCloneable() on SplFileObject should return false
+---FILE--
+-<?php
+-$x=new SplFileObject(__FILE__);
+-$r=new ReflectionObject($x);
+-var_dump($r->isCloneable());
+-
+-?>
+---EXPECT--
+-bool(false)
+diff --git a/ext/spl/tests/SplFileObject/bug75917.phpt b/ext/spl/tests/SplFileObject/bug75917.phpt
+deleted file mode 100644
+index c9bc0286..00000000
+--- a/ext/spl/tests/SplFileObject/bug75917.phpt
++++ /dev/null
+@@ -1,24 +0,0 @@
+---TEST--
+-Bug #75917 (SplFileObject::seek broken with CSV flags)
+---FILE--
+-<?php
+-$expected = [
+-    ['john', 'doe', 'john.doe@example.com', '0123456789'],
+-    ['jane', 'doe', 'jane.doe@example.com'],
+-];
+-
+-$tmp = new SplTempFileObject();
+-foreach ($expected as $row) {
+-    $tmp->fputcsv($row);
+-}
+-$tmp->setFlags(0);
+-$tmp->seek(23);
+-var_dump($tmp->current());
+-
+-$tmp->setFlags(SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY);
+-$tmp->seek(23);
+-var_dump($tmp->current());
+-?>
+---EXPECT--
+-bool(false)
+-bool(false)

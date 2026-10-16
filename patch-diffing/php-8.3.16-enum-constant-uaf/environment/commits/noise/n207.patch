@@ -1,0 +1,172 @@
+diff --git a/ext/opcache/tests/jit/fetch_obj_004.phpt b/ext/opcache/tests/jit/fetch_obj_004.phpt
+index 40187496..c999a940 100644
+--- a/ext/opcache/tests/jit/fetch_obj_004.phpt
++++ b/ext/opcache/tests/jit/fetch_obj_004.phpt
+@@ -9,7 +9,6 @@ opcache.jit_buffer_size=1M
+ opcache
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class C {
+     var $a = 0;
+ }
+diff --git a/ext/opcache/tests/jit/fetch_r_001.phpt b/ext/opcache/tests/jit/fetch_r_001.phpt
+index 53b49a98..db5b7ba4 100644
+--- a/ext/opcache/tests/jit/fetch_r_001.phpt
++++ b/ext/opcache/tests/jit/fetch_r_001.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-FETCH_R: 001 result reference counter may be decremented before use
++FETCH_R: 001 result reference counter may be decremented befor use
+ --INI--
+ opcache.enable=1
+ opcache.enable_cli=1
+diff --git a/ext/opcache/tests/jit/gh11917.phpt b/ext/opcache/tests/jit/gh11917.phpt
+new file mode 100644
+index 00000000..a66105d7
+--- /dev/null
++++ b/ext/opcache/tests/jit/gh11917.phpt
+@@ -0,0 +1,61 @@
++--TEST--
++GH-11917: primitives seem to be passed via reference instead of by value under some conditions when JIT is enabled on windows
++--INI--
++opcache.enable=1
++opcache.enable_cli=1
++--FILE--
++<?php
++$a = [2147483647,2147483647,2147483647,3,0,0,32,2147483584,127];
++echo crc32(json_encode(bitwise_small_split($a))) . "\n";
++echo crc32(json_encode(bitwise_small_split($a))) . "\n";
++echo crc32(json_encode(bitwise_small_split($a))) . "\n";
++echo crc32(json_encode(bitwise_small_split($a))) . "\n";
++
++function bitwise_small_split($val)
++{
++    $split = 8;
++    $vals = [];
++
++    $mask = (1 << $split) - 1;
++
++    $i = $overflow = 0;
++    $len = count($val);
++    $val[] = 0;
++    $remaining = 31;
++
++    while ($i != $len) {
++        $digit = $val[$i] & $mask;
++
++        $val[$i] >>= $split;
++        if (!$overflow) {
++            $remaining -= $split;
++            $overflow = $split <= $remaining ? 0 : $split - $remaining;
++
++            if (!$remaining) {
++                $i++;
++                $remaining = 31;
++                $overflow = 0;
++            }
++        } elseif (++$i != $len) {
++            $tempmask = (1 << $overflow) - 1;
++            $digit |= ($val[$i] & $tempmask) << $remaining;
++            $val[$i] >>= $overflow;
++            $remaining = 31 - $overflow;
++            $overflow = $split <= $remaining ? 0 : $split - $remaining;
++        }
++
++        $vals[] = $digit;
++    }
++
++    while ($vals[count($vals) - 1] == 0) {
++        unset($vals[count($vals) - 1]);
++    }
++
++    return array_reverse($vals);
++}
++?>
++--EXPECT--
++48207660
++48207660
++48207660
++48207660
+diff --git a/ext/opcache/tests/jit/gh12428.phpt b/ext/opcache/tests/jit/gh12428.phpt
+new file mode 100644
+index 00000000..48c6a30f
+--- /dev/null
++++ b/ext/opcache/tests/jit/gh12428.phpt
+@@ -0,0 +1,22 @@
++--TEST--
++GH-12428: Assertion with function/tracing JIT
++--INI--
++opcache.enable=1
++opcache.enable_cli=1
++--FILE--
++<?php
++function validate($value)
++{
++    foreach ([0] as $_) {
++        $a = &$value->a;
++        $value->a ?? null;
++    }
++}
++
++validate((object) []);
++validate((object) []);
++validate((object) ['b' => 0]);
++?>
++DONE
++--EXPECT--
++DONE
+diff --git a/ext/opcache/tests/jit/inc_obj_002.phpt b/ext/opcache/tests/jit/inc_obj_002.phpt
+index f4d71342..c4336a8d 100644
+--- a/ext/opcache/tests/jit/inc_obj_002.phpt
++++ b/ext/opcache/tests/jit/inc_obj_002.phpt
+@@ -8,7 +8,6 @@ opcache.jit_buffer_size=1M
+ opcache.protect_memory=1
+ --FILE--
+ <?php
+-#[AllowDynamicProperties]
+ class Test {
+     function foo() {
+         $this->prop = PHP_INT_MAX - 5;
+diff --git a/ext/opcache/tests/jit/preload_bug80634.inc b/ext/opcache/tests/jit/preload_bug80634.inc
+index 1fa32438..feee9ec9 100644
+--- a/ext/opcache/tests/jit/preload_bug80634.inc
++++ b/ext/opcache/tests/jit/preload_bug80634.inc
+@@ -1,10 +1,10 @@
+ <?php
+ class SomeClass extends \DatePeriod {
+-	public ?DateTimeInterface $current;
++	public $interval;
+ 
+ 	public function __construct(int $v) {
+ 		parent::__construct(new \DateTime('2020-12-31'), new \DateInterval("P1Y"), 1);
+-		$this->current = $v;
+-		var_dump($this->current);
++		$this->interval = $v;
++		var_dump($this->interval);
+ 	}
+-}
++}
+\ No newline at end of file
+diff --git a/ext/opcache/tests/jit_warning_with_zero_buffer.phpt b/ext/opcache/tests/jit_warning_with_zero_buffer.phpt
+new file mode 100644
+index 00000000..1b791e2f
+--- /dev/null
++++ b/ext/opcache/tests/jit_warning_with_zero_buffer.phpt
+@@ -0,0 +1,16 @@
++--TEST--
++JIT should not emit warning with opcache.jit_buffer_size=0
++--INI--
++opcache.enable=1
++opcache.enable_cli=1
++opcache.jit=tracing
++opcache.jit_buffer_size=0
++opcache.log_verbosity_level=2
++--EXTENSIONS--
++opcache
++--FILE--
++<?php
++var_dump(opcache_get_status()['jit']['enabled'] ?? false);
++?>
++--EXPECT--
++bool(false)

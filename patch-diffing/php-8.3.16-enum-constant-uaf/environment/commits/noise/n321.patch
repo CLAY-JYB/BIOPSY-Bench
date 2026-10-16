@@ -1,0 +1,328 @@
+diff --git a/ext/spl/tests/filesystemiterator_no_skip_dots.phpt b/ext/spl/tests/filesystemiterator_no_skip_dots.phpt
+deleted file mode 100644
+index f04bd592..00000000
+--- a/ext/spl/tests/filesystemiterator_no_skip_dots.phpt
++++ /dev/null
+@@ -1,33 +0,0 @@
+---TEST--
+-FileSystemIterator without SKIP_DOTS
+---FILE--
+-<?php
+-
+-$dir = __DIR__ . '/filesystemiterator_no_skip_dots';
+-mkdir($dir);
+-touch($dir . '/file');
+-
+-$it = new FileSystemIterator($dir, 0);
+-$files = [];
+-foreach ($it as $f) {
+-    $files[] = $f->getFileName();
+-}
+-sort($files);
+-var_dump($files);
+-
+-?>
+---CLEAN--
+-<?php
+-$dir = __DIR__ . '/filesystemiterator_no_skip_dots';
+-unlink($dir . '/file');
+-rmdir($dir);
+-?>
+---EXPECT--
+-array(3) {
+-  [0]=>
+-  string(1) "."
+-  [1]=>
+-  string(2) ".."
+-  [2]=>
+-  string(4) "file"
+-}
+diff --git a/ext/spl/tests/fixedarray_022.phpt b/ext/spl/tests/fixedarray_022.phpt
+index c45401bf..c1cff1a9 100644
+--- a/ext/spl/tests/fixedarray_022.phpt
++++ b/ext/spl/tests/fixedarray_022.phpt
+@@ -11,7 +11,7 @@ call_user_func(function () {
+ ?>
+ --EXPECTF--
+ Warning: var_export does not handle circular references in %s on line 5
+-\SplFixedArray::__set_state(array(
++SplFixedArray::__set_state(array(
+    0 => NULL,
+ ))
+ object(SplFixedArray)#2 (1) refcount(4){
+diff --git a/ext/spl/tests/fixedarray_023.phpt b/ext/spl/tests/fixedarray_023.phpt
+index 781685b7..1d60a2ce 100644
+--- a/ext/spl/tests/fixedarray_023.phpt
++++ b/ext/spl/tests/fixedarray_023.phpt
+@@ -18,7 +18,7 @@ call_user_func(function () {
+ Warning: var_export does not handle circular references in %s on line 8
+ 
+ Warning: var_export does not handle circular references in %s on line 8
+-\SplFixedArray::__set_state(array(
++SplFixedArray::__set_state(array(
+    0 => NAN,
+    1 => 0.0,
+    2 => NULL,
+diff --git a/ext/spl/tests/fixedarray_024.phpt b/ext/spl/tests/fixedarray_024.phpt
+deleted file mode 100644
+index e0e2606c..00000000
+--- a/ext/spl/tests/fixedarray_024.phpt
++++ /dev/null
+@@ -1,11 +0,0 @@
+---TEST--
+-SPL: FixedArray: Bug GH-8041 (php 8.2.0-dev crashes with assertion for cloning/get_object_vars on non-empty SplFixedArray)
+---FILE--
+-<?php
+-$x = new SplFixedArray(1);
+-$z = (array)$x;
+-$y = clone $x;
+-?>
+-DONE
+---EXPECT--
+-DONE
+diff --git a/ext/spl/tests/gh10907.phpt b/ext/spl/tests/gh10907.phpt
+deleted file mode 100644
+index 49d98ae5..00000000
+--- a/ext/spl/tests/gh10907.phpt
++++ /dev/null
+@@ -1,139 +0,0 @@
+---TEST--
+-GH-10907 (Unable to serialize processed SplFixedArrays in PHP 8.2.4)
+---FILE--
+-<?php
+-echo "Test without rebuilding properties\n";
+-$array = new SplFixedArray(2);
+-$array[0] = "test value 1";
+-$array[1] = "test value 2";
+-var_dump(serialize($array));
+-var_dump(unserialize(serialize($array)));
+-var_dump($array);
+-
+-echo "=================\n";
+-
+-echo "Test with rebuilding properties\n";
+-$array = new SplFixedArray(2);
+-$array[0] = "test value 1";
+-$array[1] = "test value 2";
+-var_dump($array); // Rebuilds properties
+-var_dump(serialize($array));
+-var_dump(unserialize(serialize($array)));
+-var_dump($array);
+-
+-echo "=================\n";
+-
+-echo "Test with partially rebuilding properties\n";
+-$array = new SplFixedArray(3);
+-$array[0] = "test value 1";
+-var_dump($array); // Rebuilds properties
+-$array[1] = "test value 2";
+-var_dump(serialize($array));
+-var_dump(unserialize(serialize($array)));
+-var_dump($array);
+-
+-echo "=================\n";
+-
+-echo "Test with adding members\n";
+-#[AllowDynamicProperties]
+-class MySplFixedArray extends SplFixedArray {
+-    public string $my_string = "my_string_value";
+-}
+-$array = new MySplFixedArray(3);
+-$array->my_dynamic_property = "my_dynamic_property_value";
+-$array[0] = "test value 1";
+-$array[1] = "test value 2";
+-var_dump(serialize($array));
+-var_dump(unserialize(serialize($array)));
+-var_dump($array);
+-?>
+---EXPECT--
+-Test without rebuilding properties
+-string(73) "O:13:"SplFixedArray":2:{i:0;s:12:"test value 1";i:1;s:12:"test value 2";}"
+-object(SplFixedArray)#2 (2) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-}
+-object(SplFixedArray)#1 (2) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-}
+-=================
+-Test with rebuilding properties
+-object(SplFixedArray)#2 (2) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-}
+-string(73) "O:13:"SplFixedArray":2:{i:0;s:12:"test value 1";i:1;s:12:"test value 2";}"
+-object(SplFixedArray)#1 (2) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-}
+-object(SplFixedArray)#2 (2) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-}
+-=================
+-Test with partially rebuilding properties
+-object(SplFixedArray)#1 (3) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  NULL
+-  [2]=>
+-  NULL
+-}
+-string(79) "O:13:"SplFixedArray":3:{i:0;s:12:"test value 1";i:1;s:12:"test value 2";i:2;N;}"
+-object(SplFixedArray)#2 (3) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-  [2]=>
+-  NULL
+-}
+-object(SplFixedArray)#1 (3) {
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-  [2]=>
+-  NULL
+-}
+-=================
+-Test with adding members
+-string(180) "O:15:"MySplFixedArray":5:{i:0;s:12:"test value 1";i:1;s:12:"test value 2";i:2;N;s:9:"my_string";s:15:"my_string_value";s:19:"my_dynamic_property";s:25:"my_dynamic_property_value";}"
+-object(MySplFixedArray)#1 (5) {
+-  ["my_string"]=>
+-  string(15) "my_string_value"
+-  ["my_dynamic_property"]=>
+-  string(25) "my_dynamic_property_value"
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-  [2]=>
+-  NULL
+-}
+-object(MySplFixedArray)#2 (5) {
+-  ["my_string"]=>
+-  string(15) "my_string_value"
+-  ["my_dynamic_property"]=>
+-  string(25) "my_dynamic_property_value"
+-  [0]=>
+-  string(12) "test value 1"
+-  [1]=>
+-  string(12) "test value 2"
+-  [2]=>
+-  NULL
+-}
+diff --git a/ext/spl/tests/gh10925.phpt b/ext/spl/tests/gh10925.phpt
+deleted file mode 100644
+index 5e6cc034..00000000
+--- a/ext/spl/tests/gh10925.phpt
++++ /dev/null
+@@ -1,69 +0,0 @@
+---TEST--
+-Properties serialization for SplFixedArray should have updated properties
+---FILE--
+-<?php
+-#[AllowDynamicProperties]
+-class MySplFixedArray extends SplFixedArray {
+-    public $x;
+-    public int $y = 3;
+-}
+-
+-$x = new MySplFixedArray(2);
+-var_dump($x->y);
+-$x->y = 2;
+-var_dump($x->y);
+-$serialized = serialize($x);
+-var_dump($serialized);
+-var_dump(unserialize($serialized));
+-
+-$x->dynamic_property = "dynamic_property_value";
+-$serialized = serialize($x);
+-var_dump($serialized);
+-var_dump(unserialize($serialized));
+-
+-$x->dynamic_property = "dynamic_property_value2";
+-$x->y = 4;
+-$serialized = serialize($x);
+-var_dump($serialized);
+-var_dump(unserialize($serialized));
+-?>
+---EXPECT--
+-int(3)
+-int(2)
+-string(61) "O:15:"MySplFixedArray":4:{i:0;N;i:1;N;s:1:"x";N;s:1:"y";i:2;}"
+-object(MySplFixedArray)#2 (4) {
+-  ["x"]=>
+-  NULL
+-  ["y"]=>
+-  int(2)
+-  [0]=>
+-  NULL
+-  [1]=>
+-  NULL
+-}
+-string(115) "O:15:"MySplFixedArray":5:{i:0;N;i:1;N;s:1:"x";N;s:1:"y";i:2;s:16:"dynamic_property";s:22:"dynamic_property_value";}"
+-object(MySplFixedArray)#2 (5) {
+-  ["x"]=>
+-  NULL
+-  ["y"]=>
+-  int(2)
+-  ["dynamic_property"]=>
+-  string(22) "dynamic_property_value"
+-  [0]=>
+-  NULL
+-  [1]=>
+-  NULL
+-}
+-string(116) "O:15:"MySplFixedArray":5:{i:0;N;i:1;N;s:1:"x";N;s:1:"y";i:4;s:16:"dynamic_property";s:23:"dynamic_property_value2";}"
+-object(MySplFixedArray)#2 (5) {
+-  ["x"]=>
+-  NULL
+-  ["y"]=>
+-  int(4)
+-  ["dynamic_property"]=>
+-  string(23) "dynamic_property_value2"
+-  [0]=>
+-  NULL
+-  [1]=>
+-  NULL
+-}
+diff --git a/ext/spl/tests/gh8044.phpt b/ext/spl/tests/gh8044.phpt
+deleted file mode 100644
+index 35676469..00000000
+--- a/ext/spl/tests/gh8044.phpt
++++ /dev/null
+@@ -1,20 +0,0 @@
+---TEST--
+-Bug GH-8044 (var_export/debug_zval_dump HT_ASSERT_RC1 debug failure for SplFixedArray)
+---FILE--
+-<?php
+-call_user_func(function () {
+-    $x = new SplFixedArray(1);
+-    $x[0] = $x;
+-    var_export($x); echo "\n";
+-    debug_zval_dump($x); echo "\n";
+-});
+-?>
+---EXPECTF--
+-Warning: var_export does not handle circular references in %s on line 5
+-\SplFixedArray::__set_state(array(
+-   0 => NULL,
+-))
+-object(SplFixedArray)#2 (1) refcount(4){
+-  [0]=>
+-  *RECURSION*
+-}

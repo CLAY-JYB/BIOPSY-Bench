@@ -1,0 +1,618 @@
+diff --git a/ext/intl/common/common_enum.h b/ext/intl/common/common_enum.h
+index ebe5cbfb..6a329bb4 100644
+--- a/ext/intl/common/common_enum.h
++++ b/ext/intl/common/common_enum.h
+@@ -77,6 +77,6 @@ using icu::StringEnumeration;
+ U_CFUNC void IntlIterator_from_StringEnumeration(StringEnumeration *se, zval *object);
+ #endif
+ 
+-U_CFUNC void intl_register_common_symbols(int module_number);
++U_CFUNC void intl_register_IntlIterator_class(void);
+ 
+ #endif // INTL_COMMON_ENUM_H
+diff --git a/ext/intl/common/common_error.c b/ext/intl/common/common_error.c
+index 1e2c3d95..a7281e86 100644
+--- a/ext/intl/common/common_error.c
++++ b/ext/intl/common/common_error.c
+@@ -19,6 +19,7 @@
+ 
+ #include "php_intl.h"
+ #include "intl_error.h"
++#include "common_error.h"
+ 
+ /* {{{ Get code of the last occurred error. */
+ PHP_FUNCTION( intl_get_error_code )
+@@ -78,3 +79,172 @@ PHP_FUNCTION( intl_error_name )
+ 	RETURN_STRING( (char*)u_errorName( err_code ) );
+ }
+ /* }}} */
++
++/* {{{ intl_expose_icu_error_codes
++ * Expose ICU error codes
++ */
++void intl_expose_icu_error_codes( INIT_FUNC_ARGS )
++{
++	#define INTL_EXPOSE_CONST(x) REGISTER_LONG_CONSTANT(#x, x, CONST_PERSISTENT | CONST_CS)
++
++	/* Warnings */
++	INTL_EXPOSE_CONST( U_USING_FALLBACK_WARNING );
++	INTL_EXPOSE_CONST( U_ERROR_WARNING_START );
++	INTL_EXPOSE_CONST( U_USING_DEFAULT_WARNING );
++	INTL_EXPOSE_CONST( U_SAFECLONE_ALLOCATED_WARNING );
++	INTL_EXPOSE_CONST( U_STATE_OLD_WARNING );
++	INTL_EXPOSE_CONST( U_STRING_NOT_TERMINATED_WARNING );
++	INTL_EXPOSE_CONST( U_SORT_KEY_TOO_SHORT_WARNING );
++	INTL_EXPOSE_CONST( U_AMBIGUOUS_ALIAS_WARNING );
++	INTL_EXPOSE_CONST( U_DIFFERENT_UCA_VERSION );
++	INTL_EXPOSE_CONST( U_ERROR_WARNING_LIMIT );
++
++	/* Standard errors */
++	INTL_EXPOSE_CONST( U_ZERO_ERROR );
++	INTL_EXPOSE_CONST( U_ILLEGAL_ARGUMENT_ERROR );
++	INTL_EXPOSE_CONST( U_MISSING_RESOURCE_ERROR );
++	INTL_EXPOSE_CONST( U_INVALID_FORMAT_ERROR );
++	INTL_EXPOSE_CONST( U_FILE_ACCESS_ERROR );
++	INTL_EXPOSE_CONST( U_INTERNAL_PROGRAM_ERROR );
++	INTL_EXPOSE_CONST( U_MESSAGE_PARSE_ERROR );
++	INTL_EXPOSE_CONST( U_MEMORY_ALLOCATION_ERROR );
++	INTL_EXPOSE_CONST( U_INDEX_OUTOFBOUNDS_ERROR );
++	INTL_EXPOSE_CONST( U_PARSE_ERROR );
++	INTL_EXPOSE_CONST( U_INVALID_CHAR_FOUND );
++	INTL_EXPOSE_CONST( U_TRUNCATED_CHAR_FOUND );
++	INTL_EXPOSE_CONST( U_ILLEGAL_CHAR_FOUND );
++	INTL_EXPOSE_CONST( U_INVALID_TABLE_FORMAT );
++	INTL_EXPOSE_CONST( U_INVALID_TABLE_FILE );
++	INTL_EXPOSE_CONST( U_BUFFER_OVERFLOW_ERROR );
++	INTL_EXPOSE_CONST( U_UNSUPPORTED_ERROR );
++	INTL_EXPOSE_CONST( U_RESOURCE_TYPE_MISMATCH );
++	INTL_EXPOSE_CONST( U_ILLEGAL_ESCAPE_SEQUENCE );
++	INTL_EXPOSE_CONST( U_UNSUPPORTED_ESCAPE_SEQUENCE );
++	INTL_EXPOSE_CONST( U_NO_SPACE_AVAILABLE );
++	INTL_EXPOSE_CONST( U_CE_NOT_FOUND_ERROR );
++	INTL_EXPOSE_CONST( U_PRIMARY_TOO_LONG_ERROR );
++	INTL_EXPOSE_CONST( U_STATE_TOO_OLD_ERROR );
++	INTL_EXPOSE_CONST( U_TOO_MANY_ALIASES_ERROR );
++	INTL_EXPOSE_CONST( U_ENUM_OUT_OF_SYNC_ERROR );
++	INTL_EXPOSE_CONST( U_INVARIANT_CONVERSION_ERROR );
++	INTL_EXPOSE_CONST( U_INVALID_STATE_ERROR );
++	INTL_EXPOSE_CONST( U_COLLATOR_VERSION_MISMATCH );
++	INTL_EXPOSE_CONST( U_USELESS_COLLATOR_ERROR );
++	INTL_EXPOSE_CONST( U_NO_WRITE_PERMISSION );
++	INTL_EXPOSE_CONST( U_STANDARD_ERROR_LIMIT );
++
++	/* The error code range 0x10000 0x10100 are reserved for Transliterator */
++	INTL_EXPOSE_CONST( U_BAD_VARIABLE_DEFINITION );
++	INTL_EXPOSE_CONST( U_PARSE_ERROR_START );
++	INTL_EXPOSE_CONST( U_MALFORMED_RULE );
++	INTL_EXPOSE_CONST( U_MALFORMED_SET );
++	INTL_EXPOSE_CONST( U_MALFORMED_SYMBOL_REFERENCE );
++	INTL_EXPOSE_CONST( U_MALFORMED_UNICODE_ESCAPE );
++	INTL_EXPOSE_CONST( U_MALFORMED_VARIABLE_DEFINITION );
++	INTL_EXPOSE_CONST( U_MALFORMED_VARIABLE_REFERENCE );
++	INTL_EXPOSE_CONST( U_MISMATCHED_SEGMENT_DELIMITERS );
++	INTL_EXPOSE_CONST( U_MISPLACED_ANCHOR_START );
++	INTL_EXPOSE_CONST( U_MISPLACED_CURSOR_OFFSET );
++	INTL_EXPOSE_CONST( U_MISPLACED_QUANTIFIER );
++	INTL_EXPOSE_CONST( U_MISSING_OPERATOR );
++	INTL_EXPOSE_CONST( U_MISSING_SEGMENT_CLOSE );
++	INTL_EXPOSE_CONST( U_MULTIPLE_ANTE_CONTEXTS );
++	INTL_EXPOSE_CONST( U_MULTIPLE_CURSORS );
++	INTL_EXPOSE_CONST( U_MULTIPLE_POST_CONTEXTS );
++	INTL_EXPOSE_CONST( U_TRAILING_BACKSLASH );
++	INTL_EXPOSE_CONST( U_UNDEFINED_SEGMENT_REFERENCE );
++	INTL_EXPOSE_CONST( U_UNDEFINED_VARIABLE );
++	INTL_EXPOSE_CONST( U_UNQUOTED_SPECIAL );
++	INTL_EXPOSE_CONST( U_UNTERMINATED_QUOTE );
++	INTL_EXPOSE_CONST( U_RULE_MASK_ERROR );
++	INTL_EXPOSE_CONST( U_MISPLACED_COMPOUND_FILTER );
++	INTL_EXPOSE_CONST( U_MULTIPLE_COMPOUND_FILTERS );
++	INTL_EXPOSE_CONST( U_INVALID_RBT_SYNTAX );
++	INTL_EXPOSE_CONST( U_INVALID_PROPERTY_PATTERN );
++	INTL_EXPOSE_CONST( U_MALFORMED_PRAGMA );
++	INTL_EXPOSE_CONST( U_UNCLOSED_SEGMENT );
++	INTL_EXPOSE_CONST( U_ILLEGAL_CHAR_IN_SEGMENT );
++	INTL_EXPOSE_CONST( U_VARIABLE_RANGE_EXHAUSTED );
++	INTL_EXPOSE_CONST( U_VARIABLE_RANGE_OVERLAP );
++	INTL_EXPOSE_CONST( U_ILLEGAL_CHARACTER );
++	INTL_EXPOSE_CONST( U_INTERNAL_TRANSLITERATOR_ERROR );
++	INTL_EXPOSE_CONST( U_INVALID_ID );
++	INTL_EXPOSE_CONST( U_INVALID_FUNCTION );
++	INTL_EXPOSE_CONST( U_PARSE_ERROR_LIMIT );
++
++	/* The error code range 0x10100 0x10200 are reserved for formatting API parsing error */
++	INTL_EXPOSE_CONST( U_UNEXPECTED_TOKEN );
++	INTL_EXPOSE_CONST( U_FMT_PARSE_ERROR_START );
++	INTL_EXPOSE_CONST( U_MULTIPLE_DECIMAL_SEPARATORS );
++	INTL_EXPOSE_CONST( U_MULTIPLE_DECIMAL_SEPERATORS );    /* Typo: kept for backward compatibility. Use U_MULTIPLE_DECIMAL_SEPARATORS */
++	INTL_EXPOSE_CONST( U_MULTIPLE_EXPONENTIAL_SYMBOLS );
++	INTL_EXPOSE_CONST( U_MALFORMED_EXPONENTIAL_PATTERN );
++	INTL_EXPOSE_CONST( U_MULTIPLE_PERCENT_SYMBOLS );
++	INTL_EXPOSE_CONST( U_MULTIPLE_PERMILL_SYMBOLS );
++	INTL_EXPOSE_CONST( U_MULTIPLE_PAD_SPECIFIERS );
++	INTL_EXPOSE_CONST( U_PATTERN_SYNTAX_ERROR );
++	INTL_EXPOSE_CONST( U_ILLEGAL_PAD_POSITION );
++	INTL_EXPOSE_CONST( U_UNMATCHED_BRACES );
++	INTL_EXPOSE_CONST( U_UNSUPPORTED_PROPERTY );
++	INTL_EXPOSE_CONST( U_UNSUPPORTED_ATTRIBUTE );
++	INTL_EXPOSE_CONST( U_FMT_PARSE_ERROR_LIMIT );
++
++	/* The error code range 0x10200 0x102ff are reserved for Break Iterator related error */
++	INTL_EXPOSE_CONST( U_BRK_INTERNAL_ERROR );
++	INTL_EXPOSE_CONST( U_BRK_ERROR_START );
++	INTL_EXPOSE_CONST( U_BRK_HEX_DIGITS_EXPECTED );
++	INTL_EXPOSE_CONST( U_BRK_SEMICOLON_EXPECTED );
++	INTL_EXPOSE_CONST( U_BRK_RULE_SYNTAX );
++	INTL_EXPOSE_CONST( U_BRK_UNCLOSED_SET );
++	INTL_EXPOSE_CONST( U_BRK_ASSIGN_ERROR );
++	INTL_EXPOSE_CONST( U_BRK_VARIABLE_REDFINITION );
++	INTL_EXPOSE_CONST( U_BRK_MISMATCHED_PAREN );
++	INTL_EXPOSE_CONST( U_BRK_NEW_LINE_IN_QUOTED_STRING );
++	INTL_EXPOSE_CONST( U_BRK_UNDEFINED_VARIABLE );
++	INTL_EXPOSE_CONST( U_BRK_INIT_ERROR );
++	INTL_EXPOSE_CONST( U_BRK_RULE_EMPTY_SET );
++	INTL_EXPOSE_CONST( U_BRK_UNRECOGNIZED_OPTION );
++	INTL_EXPOSE_CONST( U_BRK_MALFORMED_RULE_TAG );
++	INTL_EXPOSE_CONST( U_BRK_ERROR_LIMIT );
++
++	/* The error codes in the range 0x10300-0x103ff are reserved for regular expression related errrs */
++	INTL_EXPOSE_CONST( U_REGEX_INTERNAL_ERROR );
++	INTL_EXPOSE_CONST( U_REGEX_ERROR_START );
++	INTL_EXPOSE_CONST( U_REGEX_RULE_SYNTAX );
++	INTL_EXPOSE_CONST( U_REGEX_INVALID_STATE );
++	INTL_EXPOSE_CONST( U_REGEX_BAD_ESCAPE_SEQUENCE );
++	INTL_EXPOSE_CONST( U_REGEX_PROPERTY_SYNTAX );
++	INTL_EXPOSE_CONST( U_REGEX_UNIMPLEMENTED );
++	INTL_EXPOSE_CONST( U_REGEX_MISMATCHED_PAREN );
++	INTL_EXPOSE_CONST( U_REGEX_NUMBER_TOO_BIG );
++	INTL_EXPOSE_CONST( U_REGEX_BAD_INTERVAL );
++	INTL_EXPOSE_CONST( U_REGEX_MAX_LT_MIN );
++	INTL_EXPOSE_CONST( U_REGEX_INVALID_BACK_REF );
++	INTL_EXPOSE_CONST( U_REGEX_INVALID_FLAG );
++	INTL_EXPOSE_CONST( U_REGEX_LOOK_BEHIND_LIMIT );
++	INTL_EXPOSE_CONST( U_REGEX_SET_CONTAINS_STRING );
++	INTL_EXPOSE_CONST( U_REGEX_ERROR_LIMIT );
++
++	/* The error code in the range 0x10400-0x104ff are reserved for IDNA related error codes */
++	INTL_EXPOSE_CONST( U_IDNA_PROHIBITED_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_ERROR_START );
++	INTL_EXPOSE_CONST( U_IDNA_UNASSIGNED_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_CHECK_BIDI_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_STD3_ASCII_RULES_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_ACE_PREFIX_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_VERIFICATION_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_LABEL_TOO_LONG_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_ZERO_LENGTH_LABEL_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_DOMAIN_NAME_TOO_LONG_ERROR );
++	INTL_EXPOSE_CONST( U_IDNA_ERROR_LIMIT );
++
++	/* Aliases for StringPrep */
++	INTL_EXPOSE_CONST( U_STRINGPREP_PROHIBITED_ERROR );
++	INTL_EXPOSE_CONST( U_STRINGPREP_UNASSIGNED_ERROR );
++	INTL_EXPOSE_CONST( U_STRINGPREP_CHECK_BIDI_ERROR );
++
++	INTL_EXPOSE_CONST( U_ERROR_LIMIT );
++
++	#undef INTL_EXPOSE_CONST
++}
++/* }}} */
+diff --git a/ext/intl/common/common_error.h b/ext/intl/common/common_error.h
+new file mode 100644
+index 00000000..44caa076
+--- /dev/null
++++ b/ext/intl/common/common_error.h
+@@ -0,0 +1,23 @@
++/*
++   +----------------------------------------------------------------------+
++   | This source file is subject to version 3.01 of the PHP license,      |
++   | that is bundled with this package in the file LICENSE, and is        |
++   | available through the world-wide-web at the following url:           |
++   | https://www.php.net/license/3_01.txt                                 |
++   | If you did not receive a copy of the PHP license and are unable to   |
++   | obtain it through the world-wide-web, please send a note to          |
++   | license@php.net so we can mail you a copy immediately.               |
++   +----------------------------------------------------------------------+
++   | Authors: Vadim Savchuk <vsavchuk@productengine.com>                  |
++   |          Dmitry Lakhtyuk <dlakhtyuk@productengine.com>               |
++   +----------------------------------------------------------------------+
++ */
++
++#ifndef INTL_COMMON_ERROR_H
++#define INTL_COMMON_ERROR_H
++
++#include <php.h>
++
++void intl_expose_icu_error_codes( INIT_FUNC_ARGS );
++
++#endif // INTL_COMMON_ERROR_H
+diff --git a/ext/intl/config.m4 b/ext/intl/config.m4
+index dd687bcd..daadd3e7 100644
+--- a/ext/intl/config.m4
++++ b/ext/intl/config.m4
+@@ -10,6 +10,7 @@ if test "$PHP_INTL" != "no"; then
+   PHP_NEW_EXTENSION(intl, php_intl.c \
+     intl_error.c \
+     intl_convert.c \
++    collator/collator.c \
+     collator/collator_class.c \
+     collator/collator_sort.c \
+     collator/collator_convert.c \
+@@ -21,12 +22,14 @@ if test "$PHP_INTL" != "no"; then
+     collator/collator_error.c \
+     common/common_error.c \
+     converter/converter.c \
++    formatter/formatter.c \
+     formatter/formatter_main.c \
+     formatter/formatter_class.c \
+     formatter/formatter_attr.c \
+     formatter/formatter_data.c \
+     formatter/formatter_format.c \
+     formatter/formatter_parse.c \
++    normalizer/normalizer.c \
+     normalizer/normalizer_class.c \
+     normalizer/normalizer_normalize.c \
+     locale/locale.c \
+@@ -49,11 +52,13 @@ if test "$PHP_INTL" != "no"; then
+     resourcebundle/resourcebundle.c \
+     resourcebundle/resourcebundle_class.c \
+     resourcebundle/resourcebundle_iterator.c \
++    transliterator/transliterator.c \
+     transliterator/transliterator_class.c \
+     transliterator/transliterator_methods.c \
+     uchar/uchar.c \
+     idn/idn.c \
+     spoofchecker/spoofchecker_class.c \
++    spoofchecker/spoofchecker.c\
+     spoofchecker/spoofchecker_create.c\
+     spoofchecker/spoofchecker_main.c, $ext_shared,,$INTL_COMMON_FLAGS,cxx)
+ 
+diff --git a/ext/intl/config.w32 b/ext/intl/config.w32
+index ab7dc42b..d9cafc59 100644
+--- a/ext/intl/config.w32
++++ b/ext/intl/config.w32
+@@ -9,6 +9,7 @@ if (PHP_INTL != "no") {
+ 		EXTENSION("intl", "php_intl.c intl_convert.c intl_convertcpp.cpp intl_error.c ", true,
+ 								"/I \"" + configure_module_dirname + "\" /DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
+ 		ADD_SOURCES(configure_module_dirname + "/collator", "\
++				collator.c \
+ 				collator_attr.c \
+ 				collator_class.c \
+ 				collator_compare.c \
+@@ -28,6 +29,7 @@ if (PHP_INTL != "no") {
+ 				converter.c \
+ 				", "intl");
+ 		ADD_SOURCES(configure_module_dirname + "/formatter", "\
++				formatter.c \
+ 				formatter_attr.c \
+ 				formatter_class.c \
+ 				formatter_data.c \
+@@ -53,6 +55,7 @@ if (PHP_INTL != "no") {
+                                 grapheme_string.c grapheme_util.c  \
+                                 ", "intl");
+ 		ADD_SOURCES(configure_module_dirname + "/normalizer", "\
++				normalizer.c \
+ 				normalizer_class.c \
+ 				normalizer_normalize.c \
+ 				", "intl");
+@@ -84,6 +87,7 @@ if (PHP_INTL != "no") {
+ 
+ 		if (CHECK_HEADER_ADD_INCLUDE("unicode/uspoof.h", "CFLAGS_INTL")) {
+ 			ADD_SOURCES(configure_module_dirname + "/spoofchecker", "\
++					spoofchecker.c \
+ 					spoofchecker_class.c \
+ 					spoofchecker_create.c \
+ 					spoofchecker_main.c",
+@@ -91,6 +95,7 @@ if (PHP_INTL != "no") {
+ 		}
+ 
+ 		ADD_SOURCES(configure_module_dirname + "/transliterator", "\
++				transliterator.c \
+ 				transliterator_class.c \
+ 				transliterator_methods.c",
+ 				"intl");
+diff --git a/ext/intl/converter/converter.c b/ext/intl/converter/converter.c
+index 04a34e20..5358c8a0 100644
+--- a/ext/intl/converter/converter.c
++++ b/ext/intl/converter/converter.c
+@@ -13,6 +13,7 @@
+  */
+ 
+ #include "converter.h"
++#include "converter_arginfo.h"
+ #include "zend_exceptions.h"
+ 
+ #include <unicode/utypes.h>
+@@ -23,7 +24,6 @@
+ 
+ #include "../intl_error.h"
+ #include "../intl_common.h"
+-#include "converter_arginfo.h"
+ 
+ typedef struct _php_converter_object {
+ 	UConverter *src, *dest;
+@@ -969,6 +969,9 @@ static zend_object *php_converter_clone_object(zend_object *object) {
+ }
+ /* }}} */
+ 
++#define CONV_REASON_CONST(v) zend_declare_class_constant_long(php_converter_ce, "REASON_" #v, sizeof("REASON_" #v) - 1, UCNV_ ## v)
++#define CONV_TYPE_CONST(v)   zend_declare_class_constant_long(php_converter_ce, #v ,          sizeof(#v) - 1,           UCNV_ ## v)
++
+ /* {{{ php_converter_minit */
+ int php_converter_minit(INIT_FUNC_ARGS) {
+ 	php_converter_ce = register_class_UConverter();
+@@ -978,6 +981,51 @@ int php_converter_minit(INIT_FUNC_ARGS) {
+ 	php_converter_object_handlers.clone_obj = php_converter_clone_object;
+ 	php_converter_object_handlers.free_obj = php_converter_free_object;
+ 
++	/* enum UConverterCallbackReason */
++	CONV_REASON_CONST(UNASSIGNED);
++	CONV_REASON_CONST(ILLEGAL);
++	CONV_REASON_CONST(IRREGULAR);
++	CONV_REASON_CONST(RESET);
++	CONV_REASON_CONST(CLOSE);
++	CONV_REASON_CONST(CLONE);
++
++	/* enum UConverterType */
++	CONV_TYPE_CONST(UNSUPPORTED_CONVERTER);
++	CONV_TYPE_CONST(SBCS);
++	CONV_TYPE_CONST(DBCS);
++	CONV_TYPE_CONST(MBCS);
++	CONV_TYPE_CONST(LATIN_1);
++	CONV_TYPE_CONST(UTF8);
++	CONV_TYPE_CONST(UTF16_BigEndian);
++	CONV_TYPE_CONST(UTF16_LittleEndian);
++	CONV_TYPE_CONST(UTF32_BigEndian);
++	CONV_TYPE_CONST(UTF32_LittleEndian);
++	CONV_TYPE_CONST(EBCDIC_STATEFUL);
++	CONV_TYPE_CONST(ISO_2022);
++	CONV_TYPE_CONST(LMBCS_1);
++	CONV_TYPE_CONST(LMBCS_2);
++	CONV_TYPE_CONST(LMBCS_3);
++	CONV_TYPE_CONST(LMBCS_4);
++	CONV_TYPE_CONST(LMBCS_5);
++	CONV_TYPE_CONST(LMBCS_6);
++	CONV_TYPE_CONST(LMBCS_8);
++	CONV_TYPE_CONST(LMBCS_11);
++	CONV_TYPE_CONST(LMBCS_16);
++	CONV_TYPE_CONST(LMBCS_17);
++	CONV_TYPE_CONST(LMBCS_18);
++	CONV_TYPE_CONST(LMBCS_19);
++	CONV_TYPE_CONST(LMBCS_LAST);
++	CONV_TYPE_CONST(HZ);
++	CONV_TYPE_CONST(SCSU);
++	CONV_TYPE_CONST(ISCII);
++	CONV_TYPE_CONST(US_ASCII);
++	CONV_TYPE_CONST(UTF7);
++	CONV_TYPE_CONST(BOCU1);
++	CONV_TYPE_CONST(UTF16);
++	CONV_TYPE_CONST(UTF32);
++	CONV_TYPE_CONST(CESU8);
++	CONV_TYPE_CONST(IMAP_MAILBOX);
++
+ 	return SUCCESS;
+ }
+ /* }}} */
+diff --git a/ext/intl/converter/converter.stub.php b/ext/intl/converter/converter.stub.php
+index 169d6499..9e073417 100644
+--- a/ext/intl/converter/converter.stub.php
++++ b/ext/intl/converter/converter.stub.php
+@@ -2,220 +2,8 @@
+ 
+ /** @generate-class-entries */
+ 
+-/** @not-serializable */
+ class UConverter
+ {
+-    /* enum UConverterCallbackReason */
+-
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UNASSIGNED
+-     */
+-    public const REASON_UNASSIGNED = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_ILLEGAL
+-     */
+-    public const REASON_ILLEGAL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_IRREGULAR
+-     */
+-    public const REASON_IRREGULAR = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_RESET
+-     */
+-    public const REASON_RESET = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_CLOSE
+-     */
+-    public const REASON_CLOSE = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_CLONE
+-     */
+-    public const REASON_CLONE = UNKNOWN;
+-
+-    /* enum UConverterType */
+-
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UNSUPPORTED_CONVERTER
+-     */
+-    public const UNSUPPORTED_CONVERTER = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_SBCS
+-     */
+-    public const SBCS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_DBCS
+-     */
+-    public const DBCS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_MBCS
+-     */
+-    public const MBCS = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LATIN_1
+-     */
+-    public const LATIN_1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF8
+-     */
+-    public const UTF8 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF16_BigEndian
+-     */
+-    public const UTF16_BigEndian = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF16_LittleEndian
+-     */
+-    public const UTF16_LittleEndian = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF32_BigEndian
+-     */
+-    public const UTF32_BigEndian = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF32_LittleEndian
+-     */
+-    public const UTF32_LittleEndian = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_EBCDIC_STATEFUL
+-     */
+-    public const EBCDIC_STATEFUL = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_ISO_2022
+-     */
+-    public const ISO_2022 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_1
+-     */
+-    public const LMBCS_1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_2
+-     */
+-    public const LMBCS_2 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_3
+-     */
+-    public const LMBCS_3 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_4
+-     */
+-    public const LMBCS_4 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_5
+-     */
+-    public const LMBCS_5 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_6
+-     */
+-    public const LMBCS_6 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_8
+-     */
+-    public const LMBCS_8 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_11
+-     */
+-    public const LMBCS_11 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_16
+-     */
+-    public const LMBCS_16 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_17
+-     */
+-    public const LMBCS_17 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_18
+-     */
+-    public const LMBCS_18 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_19
+-     */
+-    public const LMBCS_19 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_LMBCS_LAST
+-     */
+-    public const LMBCS_LAST = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_HZ
+-     */
+-    public const HZ = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_SCSU
+-     */
+-    public const SCSU = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_ISCII
+-     */
+-    public const ISCII = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_US_ASCII
+-     */
+-    public const US_ASCII = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF7
+-     */
+-    public const UTF7 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_BOCU1
+-     */
+-    public const BOCU1 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF16
+-     */
+-    public const UTF16 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_UTF32
+-     */
+-    public const UTF32 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_CESU8
+-     */
+-    public const CESU8 = UNKNOWN;
+-    /**
+-     * @var int
+-     * @cvalue UCNV_IMAP_MAILBOX
+-     */
+-    public const IMAP_MAILBOX = UNKNOWN;
+-
+     public function __construct(?string $destination_encoding = null, ?string $source_encoding = null) {}
+ 
+     /** @tentative-return-type */

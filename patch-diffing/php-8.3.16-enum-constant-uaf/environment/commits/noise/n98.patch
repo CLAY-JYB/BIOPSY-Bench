@@ -1,0 +1,225 @@
+diff --git a/ext/date/tests/bug74524.phpt b/ext/date/tests/bug74524.phpt
+index 825fb0be..f49a5340 100644
+--- a/ext/date/tests/bug74524.phpt
++++ b/ext/date/tests/bug74524.phpt
+@@ -20,7 +20,13 @@ DateInterval Object
+     [i] => 36
+     [s] => 10
+     [f] => 0.920541
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 1
+     [days] => 227
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug75035.phpt b/ext/date/tests/bug75035.phpt
+deleted file mode 100644
+index 9e37dc90..00000000
+--- a/ext/date/tests/bug75035.phpt
++++ /dev/null
+@@ -1,29 +0,0 @@
+---TEST--
+-Bug #75035 (Datetime fails to unserialize "extreme" dates)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-var_dump('PHP version', PHP_VERSION);
+-
+-foreach ([PHP_INT_MIN, PHP_INT_MAX] as $extreme) {
+-    $i = 64;
+-    while ($i-- > 1) {
+-        $d = new DateTime('@' . ($extreme >> $i));
+-        $s = serialize($d);
+-        try {
+-            $u = unserialize($s);
+-        } catch (Error $e) {
+-            $u = "failed unserialization: " . $e->getMessage() . ' : ' . $s;
+-        }
+-        $original = $d->format('Y-m-d H:i:s');
+-        $serializedUnserialized = is_string($u) ? $u : $u->format('Y-m-d H:i:s');
+-        if ($original !== $serializedUnserialized) {
+-            var_dump('[' . ($extreme >> $i) . '] ' . $original . ' => ' . $serializedUnserialized);
+-        }
+-    }
+-}
+-?>
+---EXPECTF--
+-string(11) "PHP version"
+-string(%d) "%s"
+diff --git a/ext/date/tests/bug77571.phpt b/ext/date/tests/bug77571.phpt
+index 84790e0c..f6a5b55d 100644
+--- a/ext/date/tests/bug77571.phpt
++++ b/ext/date/tests/bug77571.phpt
+@@ -1,5 +1,5 @@
+ --TEST--
+-Bug #77571 (DateTime's diff DateInterval incorrect in timezones from UTC+01:00 to UTC+12:00)
++Bug #77571 (DateTime's diff DateInterval incorrect in timezones from UTC+01:00 to UTC+12:00
+ --FILE--
+ <?php
+ 
+@@ -21,7 +21,13 @@ DateInterval Object
+     [i] => 0
+     [s] => 0
+     [f] => 0
++    [weekday] => 0
++    [weekday_behavior] => 0
++    [first_last_day_of] => 0
+     [invert] => 0
+     [days] => 35
+-    [from_string] => 
++    [special_type] => 0
++    [special_amount] => 0
++    [have_weekday_relative] => 0
++    [have_special_relative] => 0
+ )
+diff --git a/ext/date/tests/bug78055.phpt b/ext/date/tests/bug78055.phpt
+index 0ad25279..743cea8d 100644
+--- a/ext/date/tests/bug78055.phpt
++++ b/ext/date/tests/bug78055.phpt
+@@ -13,9 +13,6 @@ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ $period = new DatePeriod($start, $interval, $recurrences);
+ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ 
+-$period = new DatePeriod($start, $interval, $recurrences, DatePeriod::INCLUDE_END_DATE);
+-echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+-
+ $period = new DatePeriod($start, $interval, $end);
+ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ 
+@@ -25,6 +22,5 @@ echo $period->getRecurrences(), " ", $period->recurrences, "\n";
+ --EXPECT--
+ 5 5
+ 5 6
+-5 7
+  1
+  0
+diff --git a/ext/date/tests/bug78452.phpt b/ext/date/tests/bug78452.phpt
+index ba693655..a4b095de 100644
+--- a/ext/date/tests/bug78452.phpt
++++ b/ext/date/tests/bug78452.phpt
+@@ -7,8 +7,8 @@ $date1 = new \DateTime('2019-09-24 11:47:24');
+ $date2 = new \DateTime('2019-08-21 12:47:24');
+ var_dump($date1->diff($date2));
+ ?>
+---EXPECTF--
+-object(DateInterval)#3 (%d) {
++--EXPECT--
++object(DateInterval)#3 (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -23,10 +23,22 @@ object(DateInterval)#3 (%d) {
+   int(0)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(1)
+   ["days"]=>
+   int(33)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug79015.phpt b/ext/date/tests/bug79015.phpt
+index 99cb03f7..9d752dee 100644
+--- a/ext/date/tests/bug79015.phpt
++++ b/ext/date/tests/bug79015.phpt
+@@ -2,11 +2,11 @@
+ Bug #79015 (undefined-behavior in php_date.c)
+ --FILE--
+ <?php
+-$payload = 'O:12:"DateInterval":9:{s:1:"y";i:1;s:1:"m";i:0;s:1:"d";i:4;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";i:9999999999990;s:6:"invert";i:0;s:4:"days";b:0;}';
++$payload = 'O:12:"DateInterval":16:{s:1:"y";i:1;s:1:"m";i:0;s:1:"d";i:4;s:1:"h";i:0;s:1:"i";i:0;s:1:"s";i:0;s:1:"f";i:9999999999990;s:7:"weekday";i:0;s:16:"weekday_behavior";i:0;s:17:"first_last_day_of";i:0;s:6:"invert";i:0;s:4:"days";b:0;s:12:"special_type";i:0;s:14:"special_amount";i:0;s:21:"have_weekday_relative";i:0;s:21:"have_special_relative";i:0;}';
+ var_dump(unserialize($payload));
+ ?>
+ --EXPECTF--
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(1)
+   ["m"]=>
+@@ -21,10 +21,22 @@ object(DateInterval)#%d (%d) {
+   int(0)
+   ["f"]=>
+   float(%f)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   bool(false)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/bug80483.phpt b/ext/date/tests/bug80483.phpt
+deleted file mode 100644
+index 17dbcc10..00000000
+--- a/ext/date/tests/bug80483.phpt
++++ /dev/null
+@@ -1,35 +0,0 @@
+---TEST--
+-Bug #80483 (DateTime Object with 5-digit year can't unserialized)
+---INI--
+-date.timezone=UTC
+---FILE--
+-<?php
+-
+-$the_date = new DateTime();
+-$the_date->SetTime(0, 0, 0);
+-$the_date->SetDate(20201, 01, 01);
+-
+-var_dump($the_date);
+-
+-$serialized = serialize($the_date);
+-var_dump($serialized);
+-var_dump(unserialize($serialized));
+-?>
+---EXPECTF--
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(28) "+20201-01-01 00:00:00.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}
+-string(116) "O:8:"DateTime":3:{s:4:"date";s:28:"+20201-01-01 00:00:00.000000";s:13:"timezone_type";i:3;s:8:"timezone";s:3:"UTC";}"
+-object(DateTime)#%d (%d) {
+-  ["date"]=>
+-  string(28) "+20201-01-01 00:00:00.000000"
+-  ["timezone_type"]=>
+-  int(3)
+-  ["timezone"]=>
+-  string(3) "UTC"
+-}

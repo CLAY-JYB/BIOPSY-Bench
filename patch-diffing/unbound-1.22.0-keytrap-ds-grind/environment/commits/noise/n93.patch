@@ -1,0 +1,165 @@
+diff --git a/testdata/rpz_reload.tdir/rpz_reload.post b/testdata/rpz_reload.tdir/rpz_reload.post
+new file mode 100644
+index 000000000..ef93cd46b
+--- /dev/null
++++ b/testdata/rpz_reload.tdir/rpz_reload.post
+@@ -0,0 +1,12 @@
++# #-- rpz_reload.post --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# source the test var file when it's there
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++#
++# do your teardown here
++. ../common.sh
++echo "> cat logfiles"
++cat unbound.log
++kill_pid $UNBOUND_PID
++rm -f $CONTROL_PATH/controlpipe.$CONTROL_PID
+diff --git a/testdata/rpz_reload.tdir/rpz_reload.pre b/testdata/rpz_reload.tdir/rpz_reload.pre
+new file mode 100644
+index 000000000..8f88b6094
+--- /dev/null
++++ b/testdata/rpz_reload.tdir/rpz_reload.pre
+@@ -0,0 +1,26 @@
++# #-- rpz_reload.pre--#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++. ../common.sh
++
++get_random_port 1
++UNBOUND_PORT=$RND_PORT
++echo "UNBOUND_PORT=$UNBOUND_PORT" >> .tpkg.var.test
++
++# make config file
++CONTROL_PATH=/tmp
++CONTROL_PID=$$
++sed -e 's/@PORT\@/'$UNBOUND_PORT'/' -e 's?@CONTROL_PATH\@?'$CONTROL_PATH'?' -e 's/@CONTROL_PID@/'$CONTROL_PID'/' < rpz_reload.conf > ub.conf
++# start unbound in the background
++PRE="../.."
++$PRE/unbound -d -c ub.conf >unbound.log 2>&1 &
++UNBOUND_PID=$!
++echo "UNBOUND_PID=$UNBOUND_PID" >> .tpkg.var.test
++echo "CONTROL_PATH=$CONTROL_PATH" >> .tpkg.var.test
++echo "CONTROL_PID=$CONTROL_PID" >> .tpkg.var.test
++
++cat .tpkg.var.test
++wait_unbound_up unbound.log
+diff --git a/testdata/rpz_reload.tdir/rpz_reload.test b/testdata/rpz_reload.tdir/rpz_reload.test
+new file mode 100644
+index 000000000..f3cf9b29e
+--- /dev/null
++++ b/testdata/rpz_reload.tdir/rpz_reload.test
+@@ -0,0 +1,109 @@
++# #-- rpz_reload.test --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++PRE="../.."
++. ../common.sh
++# do the test
++echo "> dig . SOA"
++dig @127.0.0.1 -p $UNBOUND_PORT localhost. A | tee outfile
++echo "> check answer"
++if grep localhost outfile | grep "127.0.0.1"; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++
++echo ""
++echo "> unbound-control status"
++$PRE/unbound-control -c ub.conf status
++if test $? -ne 0; then
++	echo "wrong exit value."
++	exit 1
++else
++	echo "exit value: OK"
++fi
++
++# Have the RPZ block some things.
++dig @127.0.0.1 -p $UNBOUND_PORT foo.example.net. A | tee outfile
++echo "> check answer"
++if grep "www.example.org" outfile | grep "1.2.3.5"; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++if grep "rpz: applied .example policy." unbound.log | grep "foo.example.net. A"; then
++	echo "log line OK"
++else
++	echo "log line not OK"
++	exit 1
++fi
++
++dig @127.0.0.1 -p $UNBOUND_PORT www.example.net. A | tee outfile
++if grep "www.example.org" outfile | grep "1.2.3.5"; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++if grep "rpz: applied .example policy." unbound.log | grep "www.example.net. A"; then
++	echo "log line OK"
++else
++	echo "log line not OK"
++	exit 1
++fi
++
++# Modify the config
++cp ub.conf ub2.conf
++sed -e 's/rpz-action-override: cname/#rpz-action-override: ""/' \
++    -e 's/rpz-cname-override: "www.example.org"/rpz-cname-override: ""/' \
++    -e 's/rpz-log-name: "example policy"/rpz-log-name: "exrpz"/' \
++    < ub2.conf > ub.conf
++echo ""
++echo "> Modified config"
++grep "rpz" ub.conf
++echo ""
++
++echo "> unbound-control reload"
++$PRE/unbound-control -c ub.conf reload 2>&1 | tee outfile
++if test $? -ne 0; then
++	echo "wrong exit value."
++	exit 1
++fi
++wait_logfile unbound.log "Restart of unbound" 60
++
++# Check the output after reload
++dig @127.0.0.1 -p $UNBOUND_PORT foo.example.net. A | tee outfile
++echo "> check answer"
++if grep "NXDOMAIN" outfile; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++if grep "rpz: applied .exrpz." unbound.log | grep "foo.example.net. A"; then
++	echo "log line OK"
++else
++	echo "log line not OK"
++	exit 1
++fi
++
++dig @127.0.0.1 -p $UNBOUND_PORT www.example.net. A | tee outfile
++if grep "1.2.3.4" outfile; then
++	echo "OK"
++else
++	echo "Not OK"
++	exit 1
++fi
++if grep "rpz: applied .exrpz." unbound.log | grep "www.example.net. A"; then
++	echo "log line OK"
++else
++	echo "log line not OK"
++	exit 1
++fi
++
++exit 0

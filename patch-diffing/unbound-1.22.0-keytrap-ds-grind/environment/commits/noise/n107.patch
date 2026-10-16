@@ -1,0 +1,110 @@
+diff --git a/testdata/zonemd.example_a5.zone b/testdata/zonemd.example_a5.zone
+index 246f5e237..114862aab 100644
+--- a/testdata/zonemd.example_a5.zone
++++ b/testdata/zonemd.example_a5.zone
+@@ -16,8 +16,8 @@ root-servers.net.     3600000 IN  NS      m.root-servers.net.
+ a.root-servers.net.   3600000 IN  AAAA    2001:503:ba3e::2:30
+ a.root-servers.net.   3600000 IN  A       198.41.0.4
+ b.root-servers.net.   3600000 IN  MX      20 mail.isi.edu.
+-b.root-servers.net.   3600000 IN  AAAA    2001:500:200::b
+-b.root-servers.net.   3600000 IN  A       199.9.14.201
++b.root-servers.net.   3600000 IN  AAAA    2801:1b8:10::b
++b.root-servers.net.   3600000 IN  A       170.247.170.2
+ c.root-servers.net.   3600000 IN  AAAA    2001:500:2::c
+ c.root-servers.net.   3600000 IN  A       192.33.4.12
+ d.root-servers.net.   3600000 IN  AAAA    2001:500:2d::d
+diff --git a/testdata/zonemd_reload.tdir/zonemd_reload.test b/testdata/zonemd_reload.tdir/zonemd_reload.test
+index fbdf07511..aac23d6b8 100644
+--- a/testdata/zonemd_reload.tdir/zonemd_reload.test
++++ b/testdata/zonemd_reload.tdir/zonemd_reload.test
+@@ -7,35 +7,35 @@
+ PRE="../.."
+ # do the test
+ echo "> dig www.example.com."
+-dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+ 	sleep 1
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+ 	sleep 1
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+ 	sleep 1
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+ 	sleep 10
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ if grep SERVFAIL outfile; then
+ 	echo "> try again"
+ 	sleep 10
+-	dig @localhost -p $UNBOUND_PORT www.example.com. | tee outfile
++	dig @127.0.0.1 -p $UNBOUND_PORT www.example.com. | tee outfile
+ fi
+ echo "> cat logfiles"
+ cat fwd.log 
+diff --git a/util/alloc.c b/util/alloc.c
+index 7e9618931..9a99246f5 100644
+--- a/util/alloc.c
++++ b/util/alloc.c
+@@ -466,6 +466,18 @@ void *unbound_stat_realloc(void *ptr, size_t size)
+ 	memcpy(res+8, &mem_special, sizeof(mem_special));
+ 	return res+16;
+ }
++/** strdup with stats */
++char *unbound_stat_strdup(const char* s)
++{
++	size_t len;
++	char* res;
++	if(!s) return NULL;
++	len = strlen(s);
++	res = unbound_stat_malloc(len+1);
++	if(!res) return NULL;
++	memmove(res, s, len+1);
++	return res;
++}
+ 
+ /** log to file where alloc was done */
+ void *unbound_stat_malloc_log(size_t size, const char* file, int line,
+@@ -507,6 +519,24 @@ void *unbound_stat_realloc_log(void *ptr, size_t size, const char* file,
+ 	return unbound_stat_realloc(ptr, size);
+ }
+ 
++/** log to file where alloc was done */
++void *unbound_stat_reallocarray_log(void *ptr, size_t nmemb, size_t size,
++	const char* file, int line, const char* func)
++{
++	log_info("%s:%d %s reallocarray(%p, %u, %u)", file, line, func,
++		ptr, (unsigned)nmemb, (unsigned)size);
++	return unbound_stat_realloc(ptr, nmemb*size);
++}
++
++/** log to file where strdup was done */
++char *unbound_stat_strdup_log(const char *s, const char* file, int line,
++	const char* func)
++{
++	log_info("%s:%d %s strdup size %u", file, line, func,
++		(s?(unsigned)strlen(s)+1:0));
++	return unbound_stat_strdup(s);
++}
++
+ #endif /* UNBOUND_ALLOC_STATS */
+ #ifdef UNBOUND_ALLOC_LITE
+ #undef malloc

@@ -1,0 +1,313 @@
+diff --git a/ext/random/tests/03_randomizer/engine_unsafe_biased.phpt b/ext/random/tests/03_randomizer/engine_unsafe_biased.phpt
+deleted file mode 100644
+index 09fbd85b..00000000
+--- a/ext/random/tests/03_randomizer/engine_unsafe_biased.phpt
++++ /dev/null
+@@ -1,58 +0,0 @@
+---TEST--
+-Random: Randomizer: Heavily biased engines are detected and rejected
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class HeavilyBiasedEngine implements Engine
+-{
+-    public function generate(): string
+-    {
+-        return str_repeat("\xff", PHP_INT_SIZE);
+-    }
+-}
+-
+-function randomizer(): Randomizer
+-{
+-    return new Randomizer(new HeavilyBiasedEngine());
+-}
+-
+-try {
+-    var_dump(randomizer()->getInt(0, 1234));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->nextInt());
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(bin2hex(randomizer()->getBytes(1)));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->shuffleArray(range(1, 1234)));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->shuffleBytes('foobar'));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECTF--
+-Failed to generate an acceptable random number in 50 attempts
+-int(%d)
+-string(2) "ff"
+-Failed to generate an acceptable random number in 50 attempts
+-Failed to generate an acceptable random number in 50 attempts
+diff --git a/ext/random/tests/03_randomizer/engine_unsafe_empty_string.phpt b/ext/random/tests/03_randomizer/engine_unsafe_empty_string.phpt
+deleted file mode 100644
+index 01bd293b..00000000
+--- a/ext/random/tests/03_randomizer/engine_unsafe_empty_string.phpt
++++ /dev/null
+@@ -1,58 +0,0 @@
+---TEST--
+-Random: Randomizer: Engines returning an empty string are detected and rejected
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class EmptyStringEngine implements Engine
+-{
+-    public function generate(): string
+-    {
+-        return '';
+-    }
+-}
+-
+-function randomizer(): Randomizer
+-{
+-    return new Randomizer(new EmptyStringEngine());
+-}
+-
+-try {
+-    var_dump(randomizer()->getInt(0, 1234));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->nextInt());
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(bin2hex(randomizer()->getBytes(1)));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->shuffleArray(range(1, 1234)));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-try {
+-    var_dump(randomizer()->shuffleBytes('foobar'));
+-} catch (Random\BrokenRandomEngineError $e) {
+-    echo $e->getMessage(), PHP_EOL;
+-}
+-
+-?>
+---EXPECT--
+-A random engine must return a non-empty string
+-A random engine must return a non-empty string
+-A random engine must return a non-empty string
+-A random engine must return a non-empty string
+-A random engine must return a non-empty string
+diff --git a/ext/random/tests/03_randomizer/engine_unsafe_exits.phpt b/ext/random/tests/03_randomizer/engine_unsafe_exits.phpt
+deleted file mode 100644
+index cb598872..00000000
+--- a/ext/random/tests/03_randomizer/engine_unsafe_exits.phpt
++++ /dev/null
+@@ -1,23 +0,0 @@
+---TEST--
+-Random: Randomizer: Engines calling exit() are gracefully handled
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class ExitingEngine implements Engine
+-{
+-    public function generate(): string
+-    {
+-        exit("Exit\n");
+-    }
+-}
+-
+-$randomizer = new Randomizer(new ExitingEngine());
+-
+-var_dump($randomizer->getBytes(1));
+-
+-?>
+---EXPECT--
+-Exit
+diff --git a/ext/random/tests/03_randomizer/engine_unsafe_throws.phpt b/ext/random/tests/03_randomizer/engine_unsafe_throws.phpt
+deleted file mode 100644
+index bfb679f8..00000000
+--- a/ext/random/tests/03_randomizer/engine_unsafe_throws.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Random: Randomizer: Engines throwing an exception are gracefully handled
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class ThrowingEngine implements Engine
+-{
+-    public function generate(): string
+-    {
+-        throw new Exception('Error');
+-    }
+-} 
+-
+-$randomizer = new Randomizer(new ThrowingEngine());
+-
+-var_dump($randomizer->getBytes(1));
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Exception: Error in %s:%d
+-Stack trace:
+-#0 [internal function]: ThrowingEngine->generate()
+-#1 %s(%d): Random\Randomizer->getBytes(1)
+-#2 {main}
+-  thrown in %s on line %d
+diff --git a/ext/random/tests/03_randomizer/gh_9186_unserialize.phpt b/ext/random/tests/03_randomizer/gh_9186_unserialize.phpt
+deleted file mode 100644
+index fe1acb2f..00000000
+--- a/ext/random/tests/03_randomizer/gh_9186_unserialize.phpt
++++ /dev/null
+@@ -1,14 +0,0 @@
+---TEST--
+-Fix GH-9186 @strict-properties can be bypassed using unserialization
+---FILE--
+-<?php
+-
+-try {
+-    unserialize('O:17:"Random\Randomizer":1:{i:0;a:2:{s:3:"foo";N;s:6:"engine";O:32:"Random\Engine\Xoshiro256StarStar":2:{i:0;a:0:{}i:1;a:4:{i:0;s:16:"7520fbc2d6f8de46";i:1;s:16:"84d2d2b9d7ba0a34";i:2;s:16:"d975f36db6490b32";i:3;s:16:"c19991ee16785b94";}}}}');
+-} catch (Exception $error) {
+-    echo $error->getMessage() . "\n";
+-}
+-
+-?>
+---EXPECT--
+-Invalid serialization data for Random\Randomizer object
+diff --git a/ext/random/tests/03_randomizer/methods/getBytes.phpt b/ext/random/tests/03_randomizer/methods/getBytes.phpt
+deleted file mode 100644
+index a236e974..00000000
+--- a/ext/random/tests/03_randomizer/methods/getBytes.phpt
++++ /dev/null
+@@ -1,47 +0,0 @@
+---TEST--
+-Random: Randomizer: getBytes(): Basic functionality
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Engine\Mt19937;
+-use Random\Engine\PcgOneseq128XslRr64;
+-use Random\Engine\Secure;
+-use Random\Engine\Test\TestShaEngine;
+-use Random\Engine\Xoshiro256StarStar;
+-use Random\Randomizer;
+-
+-require __DIR__ . "/../../engines.inc";
+-
+-$engines = [];
+-$engines[] = new Mt19937(null, MT_RAND_MT19937);
+-$engines[] = new Mt19937(null, MT_RAND_PHP);
+-$engines[] = new PcgOneseq128XslRr64();
+-$engines[] = new Xoshiro256StarStar();
+-$engines[] = new Secure();
+-$engines[] = new TestShaEngine();
+-
+-foreach ($engines as $engine) {
+-    echo $engine::class, PHP_EOL;
+-
+-    $randomizer = new Randomizer($engine);
+-
+-    // Using 10_000 is very slow.
+-    for ($i = 1; $i < 1_000; $i++) {
+-        if (\strlen($randomizer->getBytes($i)) !== $i) {
+-            die("failure: incorrect string length at {$i}");
+-        }
+-    }
+-}
+-
+-die('success');
+-
+-?>
+---EXPECT--
+-Random\Engine\Mt19937
+-Random\Engine\Mt19937
+-Random\Engine\PcgOneseq128XslRr64
+-Random\Engine\Xoshiro256StarStar
+-Random\Engine\Secure
+-Random\Engine\Test\TestShaEngine
+-success
+diff --git a/ext/random/tests/03_randomizer/methods/getBytes_expansion.phpt b/ext/random/tests/03_randomizer/methods/getBytes_expansion.phpt
+deleted file mode 100644
+index 750b7870..00000000
+--- a/ext/random/tests/03_randomizer/methods/getBytes_expansion.phpt
++++ /dev/null
+@@ -1,43 +0,0 @@
+---TEST--
+-Random: Randomizer: getBytes(): Returned bytes are consistently expanded
+---FILE--
+-<?php
+-
+-use Random\Engine;
+-use Random\Randomizer;
+-
+-final class TestEngine implements Engine
+-{
+-    private int $count = 0;
+-
+-    public function generate(): string
+-    {
+-        return match ($this->count++) {
+-            0 => 'H',
+-            1 => 'e',
+-            2 => 'll',
+-            3 => 'o',
+-            4 => 'abcdefghijklmnopqrstuvwxyz',
+-            5 => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+-            6 => 'success',
+-            default => throw new \Exception('Unhandled'),
+-        };
+-    }
+-}
+-
+-$randomizer = new Randomizer(new TestEngine());
+-
+-// 0-3: "Hello" - Insufficient bytes are concatenated.
+-var_dump($randomizer->getBytes(5));
+-
+-// 4-5: "abcdefghABC" - Returned values are truncated to 64-bits for technical reasons, thus dropping i-z.
+-var_dump($randomizer->getBytes(11));
+-
+-// 6: "success"
+-var_dump($randomizer->getBytes(7));
+-
+-?>
+---EXPECT--
+-string(5) "Hello"
+-string(11) "abcdefghABC"
+-string(7) "success"

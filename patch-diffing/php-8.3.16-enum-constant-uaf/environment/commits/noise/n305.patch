@@ -1,0 +1,3002 @@
+diff --git a/ext/spl/tests/SplFileObject_fpassthru_basic.phpt b/ext/spl/tests/SplFileObject_fpassthru_basic.phpt
+new file mode 100644
+index 00000000..a7904783
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fpassthru_basic.phpt
+@@ -0,0 +1,13 @@
++--TEST--
++SplFileObject::fpassthru function - basic functionality test
++--FILE--
++<?php
++$obj = New SplFileObject(__DIR__.'/SplFileObject_testinput.csv');
++$obj->fpassthru();
++?>
++--EXPECT--
++first,second,third
++1,2,3
++4,5,6
++7,8,9
++0,0,0
+diff --git a/ext/spl/tests/SplFileObject_fputcsv.phpt b/ext/spl/tests/SplFileObject_fputcsv.phpt
+new file mode 100644
+index 00000000..ec32ae68
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv.phpt
+@@ -0,0 +1,103 @@
++--TEST--
++SplFileObject::fputcsv(): functionality tests
++--FILE--
++<?php
++$file = __DIR__ . '/SplFileObject_fputcsv.csv';
++$fo = new SplFileObject($file, 'w');
++
++$list = array (
++  0 => 'aaa,bbb',
++  1 => 'aaa,"bbb"',
++  2 => '"aaa","bbb"',
++  3 => 'aaa,bbb',
++  4 => '"aaa",bbb',
++  5 => '"aaa",   "bbb"',
++  6 => ',',
++  7 => 'aaa,',
++  8 => ',"aaa"',
++  9 => '"",""',
++  10 => '"""""",',
++  11 => '""""",aaa',
++  12 => 'aaa,bbb   ',
++  13 => 'aaa,"bbb   "',
++  14 => 'aaa"aaa","bbb"bbb',
++  15 => 'aaa"aaa""",bbb',
++  16 => 'aaa,"\\"bbb,ccc',
++  17 => 'aaa"\\"a","bbb"',
++  18 => '"\\"","aaa"',
++  19 => '"\\""",aaa',
++);
++
++foreach ($list as $v) {
++    $fo->fputcsv(explode(',', $v));
++}
++unset($fo);
++
++$res = file($file);
++foreach($res as &$val)
++{
++    $val = substr($val, 0, -1);
++}
++echo '$list = ';var_export($res);echo ";\n";
++
++$fp = fopen($file, "r");
++$res = array();
++while($l=fgetcsv($fp))
++{
++    $res[] = join(',',$l);
++}
++fclose($fp);
++
++echo '$list = ';var_export($res);echo ";\n";
++
++?>
++--CLEAN--
++<?php
++$file = __DIR__ . '/SplFileObject_fputcsv.csv';
++unlink($file);
++?>
++--EXPECT--
++$list = array (
++  0 => 'aaa,bbb',
++  1 => 'aaa,"""bbb"""',
++  2 => '"""aaa""","""bbb"""',
++  3 => 'aaa,bbb',
++  4 => '"""aaa""",bbb',
++  5 => '"""aaa""","   ""bbb"""',
++  6 => ',',
++  7 => 'aaa,',
++  8 => ',"""aaa"""',
++  9 => '"""""",""""""',
++  10 => '"""""""""""""",',
++  11 => '"""""""""""",aaa',
++  12 => 'aaa,"bbb   "',
++  13 => 'aaa,"""bbb   """',
++  14 => '"aaa""aaa""","""bbb""bbb"',
++  15 => '"aaa""aaa""""""",bbb',
++  16 => 'aaa,"""\\"bbb",ccc',
++  17 => '"aaa""\\"a""","""bbb"""',
++  18 => '"""\\"""","""aaa"""',
++  19 => '"""\\"""""",aaa',
++);
++$list = array (
++  0 => 'aaa,bbb',
++  1 => 'aaa,"bbb"',
++  2 => '"aaa","bbb"',
++  3 => 'aaa,bbb',
++  4 => '"aaa",bbb',
++  5 => '"aaa",   "bbb"',
++  6 => ',',
++  7 => 'aaa,',
++  8 => ',"aaa"',
++  9 => '"",""',
++  10 => '"""""",',
++  11 => '""""",aaa',
++  12 => 'aaa,bbb   ',
++  13 => 'aaa,"bbb   "',
++  14 => 'aaa"aaa","bbb"bbb',
++  15 => 'aaa"aaa""",bbb',
++  16 => 'aaa,"\\"bbb,ccc',
++  17 => 'aaa"\\"a","bbb"',
++  18 => '"\\"","aaa"',
++  19 => '"\\""",aaa',
++);
+diff --git a/ext/spl/tests/SplFileObject_fputcsv_002.phpt b/ext/spl/tests/SplFileObject_fputcsv_002.phpt
+new file mode 100644
+index 00000000..77f6d76b
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv_002.phpt
+@@ -0,0 +1,42 @@
++--TEST--
++SplFileObject::fputcsv(): Checking data after calling the function
++--FILE--
++<?php
++$fo = new SplFileObject(__DIR__ . '/SplFileObject_fputcsv1.csv', 'w');
++
++$data = array(1, 2, 'foo', 'haha', array(4, 5, 6), 1.3, null);
++
++$fo->fputcsv($data);
++
++var_dump($data);
++?>
++--CLEAN--
++<?php
++$file = __DIR__ . '/SplFileObject_fputcsv1.csv';
++unlink($file);
++?>
++--EXPECTF--
++Warning: Array to string conversion in %s on line %d
++array(7) {
++  [0]=>
++  int(1)
++  [1]=>
++  int(2)
++  [2]=>
++  string(3) "foo"
++  [3]=>
++  string(4) "haha"
++  [4]=>
++  array(3) {
++    [0]=>
++    int(4)
++    [1]=>
++    int(5)
++    [2]=>
++    int(6)
++  }
++  [5]=>
++  float(1.3)
++  [6]=>
++  NULL
++}
+diff --git a/ext/spl/tests/SplFileObject_fputcsv_variation1.phpt b/ext/spl/tests/SplFileObject_fputcsv_variation1.phpt
+new file mode 100644
+index 00000000..47f8c609
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv_variation1.phpt
+@@ -0,0 +1,825 @@
++--TEST--
++Test fputcsv() : usage variations - with all parameters specified
++--FILE--
++<?php
++
++/* Testing fputcsv() to write to a file when all its parameters are provided */
++
++echo "*** Testing fputcsv() : with all parameters specified ***\n";
++
++/* the array is with three elements in it. Each element should be read as
++   1st element is delimiter, 2nd element is enclosure
++   and 3rd element is csv fields
++*/
++$csv_lists = array (
++  array(',', '"', array('water','fruit') ),
++  array(',', '"', array('"water","fruit') ),
++  array(',', '"', array('"water","fruit"') ),
++  array(' ', '^', array('^water^ ^fruit^')),
++  array(':', '&', array('&water&:&fruit&')),
++  array('=', '=', array('=water===fruit=')),
++  array('-', '-', array('-water--fruit-air')),
++  array('-', '-', array('-water---fruit---air-')),
++  array(':', '&', array('&""""&:&"&:,:":&,&:,,,,'))
++
++);
++$file_path = __DIR__;
++$file = "$file_path/fputcsv_variation1.tmp";
++
++$file_modes = array ("r+", "r+b", "r+t",
++                     "a+", "a+b", "a+t",
++                     "w+", "w+b", "w+t",
++                     "x+", "x+b", "x+t");
++
++$loop_counter = 1;
++foreach ($csv_lists as $csv_list) {
++  for($mode_counter = 0; $mode_counter < count($file_modes); $mode_counter++) {
++
++    echo "\n-- file opened in $file_modes[$mode_counter] --\n";
++    // create the file and add the content with has csv fields
++    if ( strstr($file_modes[$mode_counter], "r") ) {
++      $fo = new SplFileObject($file, 'w');
++    } else {
++      $fo = new SplFileObject($file, $file_modes[$mode_counter]);
++    }
++    $delimiter = $csv_list[0];
++    $enclosure = $csv_list[1];
++    $csv_field = $csv_list[2];
++
++
++    var_dump( $fo->fputcsv($csv_field, $delimiter, $enclosure) );
++    // check the file pointer position and eof
++    var_dump( $fo->ftell() );
++    var_dump( $fo->eof() );
++    //close the file
++    unset($fo);
++
++    // print the file contents
++    var_dump( file_get_contents($file) );
++
++    //delete file
++    unlink($file);
++  } //end of mode loop
++} // end of foreach
++
++echo "Done\n";
++?>
++--EXPECTF--
++*** Testing fputcsv() : with all parameters specified ***
++
++-- file opened in r+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in r+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in r+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in a+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in a+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in a+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in w+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in w+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in w+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in x+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in x+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in x+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in r+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in a+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in w+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in x+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "^^^water^^ ^^fruit^^^
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "&&&water&&:&&fruit&&&
++"
++
++-- file opened in r+ --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in r+b --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in r+t --
++int(23)
++int(23)
++bool(false)
++string(%d) "===water======fruit===
++"
++
++-- file opened in a+ --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in a+b --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in a+t --
++int(23)
++int(23)
++bool(false)
++string(%d) "===water======fruit===
++"
++
++-- file opened in w+ --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in w+b --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in w+t --
++int(23)
++int(23)
++bool(false)
++string(%d) "===water======fruit===
++"
++
++-- file opened in x+ --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in x+b --
++int(23)
++int(23)
++bool(false)
++string(23) "===water======fruit===
++"
++
++-- file opened in x+t --
++int(23)
++int(23)
++bool(false)
++string(%d) "===water======fruit===
++"
++
++-- file opened in r+ --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in r+b --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in r+t --
++int(24)
++int(24)
++bool(false)
++string(%d) "---water----fruit--air-
++"
++
++-- file opened in a+ --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in a+b --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in a+t --
++int(24)
++int(24)
++bool(false)
++string(%d) "---water----fruit--air-
++"
++
++-- file opened in w+ --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in w+b --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in w+t --
++int(24)
++int(24)
++bool(false)
++string(%d) "---water----fruit--air-
++"
++
++-- file opened in x+ --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in x+b --
++int(24)
++int(24)
++bool(false)
++string(24) "---water----fruit--air-
++"
++
++-- file opened in x+t --
++int(24)
++int(24)
++bool(false)
++string(%d) "---water----fruit--air-
++"
++
++-- file opened in r+ --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in r+b --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in r+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "---water------fruit------air---
++"
++
++-- file opened in a+ --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in a+b --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in a+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "---water------fruit------air---
++"
++
++-- file opened in w+ --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in w+b --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in w+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "---water------fruit------air---
++"
++
++-- file opened in x+ --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in x+b --
++int(32)
++int(32)
++bool(false)
++string(32) "---water------fruit------air---
++"
++
++-- file opened in x+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "---water------fruit------air---
++"
++
++-- file opened in r+ --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in r+b --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in r+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in a+ --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in a+b --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in a+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in w+ --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in w+b --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in w+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in x+ --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in x+b --
++int(32)
++int(32)
++bool(false)
++string(32) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++
++-- file opened in x+t --
++int(32)
++int(32)
++bool(false)
++string(%d) "&&&""""&&:&&"&&:,:":&&,&&:,,,,&
++"
++Done
+diff --git a/ext/spl/tests/SplFileObject_fputcsv_variation10.phpt b/ext/spl/tests/SplFileObject_fputcsv_variation10.phpt
+new file mode 100644
+index 00000000..49f77d41
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv_variation10.phpt
+@@ -0,0 +1,326 @@
++--TEST--
++SplFileObject::fputcsv(): Usage variations -- with line without any CSV fields
++--FILE--
++<?php
++
++/* Testing fputcsv() to write to a file when the field has no CSV format */
++
++echo "*** Testing fputcsv() : with no CSV format in the field ***\n";
++
++/* the array is with three elements in it. Each element should be read as
++   1st element is delimiter, 2nd element is enclosure
++   and 3rd element is csv fields
++*/
++
++$fields = array( array('water_fruit\n'),
++                array("water_fruit\n"),
++                array("")
++         );
++
++$file_path = __DIR__;
++$file = "$file_path/fputcsv_variation10.tmp";
++
++$file_modes = array ("r+", "r+b", "r+t",
++                     "a+", "a+b", "a+t",
++                     "w+", "w+b", "w+t",
++                     "x+", "x+b", "x+t");
++
++$loop_counter = 1;
++foreach ($fields as $field) {
++  for($mode_counter = 0; $mode_counter < count($file_modes); $mode_counter++) {
++
++    echo "\n-- file opened in $file_modes[$mode_counter] --\n";
++    // create the file and add the content with has csv fields
++    if ( strstr($file_modes[$mode_counter], "r") ) {
++      $fo = new SplFileObject($file, 'w');
++    } else {
++      $fo = new SplFileObject($file, $file_modes[$mode_counter]);
++    }
++    $csv_field = $field;
++
++    // write to a file in csv format
++    var_dump( $fo->fputcsv($csv_field) );
++
++    // check the file pointer position and eof
++    var_dump( $fo->ftell() );
++    var_dump( $fo->eof() );
++    //close the file
++    unset($fo);
++
++    // print the file contents
++    var_dump( file_get_contents($file) );
++
++    //delete file
++    unlink($file);
++  } //end of mode loop
++} // end of foreach
++
++echo "Done\n";
++?>
++--EXPECTF--
++*** Testing fputcsv() : with no CSV format in the field ***
++
++-- file opened in r+ --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in r+b --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in r+t --
++int(16)
++int(16)
++bool(false)
++string(%d) ""water_fruit\n"
++"
++
++-- file opened in a+ --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in a+b --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in a+t --
++int(16)
++int(16)
++bool(false)
++string(%d) ""water_fruit\n"
++"
++
++-- file opened in w+ --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in w+b --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in w+t --
++int(16)
++int(16)
++bool(false)
++string(%d) ""water_fruit\n"
++"
++
++-- file opened in x+ --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in x+b --
++int(16)
++int(16)
++bool(false)
++string(16) ""water_fruit\n"
++"
++
++-- file opened in x+t --
++int(16)
++int(16)
++bool(false)
++string(%d) ""water_fruit\n"
++"
++
++-- file opened in r+ --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in r+b --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in r+t --
++int(15)
++int(15)
++bool(false)
++string(%d) ""water_fruit
++"
++"
++
++-- file opened in a+ --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in a+b --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in a+t --
++int(15)
++int(15)
++bool(false)
++string(%d) ""water_fruit
++"
++"
++
++-- file opened in w+ --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in w+b --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in w+t --
++int(15)
++int(15)
++bool(false)
++string(%d) ""water_fruit
++"
++"
++
++-- file opened in x+ --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in x+b --
++int(15)
++int(15)
++bool(false)
++string(15) ""water_fruit
++"
++"
++
++-- file opened in x+t --
++int(15)
++int(15)
++bool(false)
++string(%d) ""water_fruit
++"
++"
++
++-- file opened in r+ --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in r+b --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in r+t --
++int(1)
++int(1)
++bool(false)
++string(%d) "
++"
++
++-- file opened in a+ --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in a+b --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in a+t --
++int(1)
++int(1)
++bool(false)
++string(%d) "
++"
++
++-- file opened in w+ --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in w+b --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in w+t --
++int(1)
++int(1)
++bool(false)
++string(%d) "
++"
++
++-- file opened in x+ --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in x+b --
++int(1)
++int(1)
++bool(false)
++string(1) "
++"
++
++-- file opened in x+t --
++int(1)
++int(1)
++bool(false)
++string(%d) "
++"
++Done
+diff --git a/ext/spl/tests/SplFileObject_fputcsv_variation11.phpt b/ext/spl/tests/SplFileObject_fputcsv_variation11.phpt
+new file mode 100644
+index 00000000..77d04168
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv_variation11.phpt
+@@ -0,0 +1,825 @@
++--TEST--
++SplFileObject::fputcsv(): Usage variations -- with default enclosure value
++--FILE--
++<?php
++
++/* Testing fputcsv() to write to a file when default enclosure value is provided */
++
++echo "*** Testing fputcsv() : with default enclosure value ***\n";
++
++/* the array is with three elements in it. Each element should be read as
++   1st element is delimiter, 2nd element is enclosure
++   and 3rd element is csv fields
++*/
++$csv_lists = array (
++  array(',', '"', array('water,fruit') ),
++  array(',', '"', array('"water","fruit') ),
++  array(',', '"', array('"water","fruit"') ),
++  array(' ', '^', array('^water^ ^fruit^')),
++  array(':', '&', array('&water&:&fruit&')),
++  array('=', '=', array('=water===fruit=')),
++  array('-', '-', array('-water--fruit-air')),
++  array('-', '-', array('-water---fruit---air-')),
++  array(':', '&', array('&""""&:&"&:,:":&,&:,,,,'))
++
++);
++$file_path = __DIR__;
++$file = "$file_path/fputcsv_variation11.tmp";
++
++$file_modes = array ("r+", "r+b", "r+t",
++                     "a+", "a+b", "a+t",
++                     "w+", "w+b", "w+t",
++                     "x+", "x+b", "x+t");
++
++$loop_counter = 1;
++foreach ($csv_lists as $csv_list) {
++  for($mode_counter = 0; $mode_counter < count($file_modes); $mode_counter++) {
++
++    echo "\n-- file opened in $file_modes[$mode_counter] --\n";
++    // create the file and add the content with has csv fields
++    if ( strstr($file_modes[$mode_counter], "r") ) {
++      $fo = new SplFileObject($file, 'w');
++    } else {
++      $fo = new SplFileObject($file, $file_modes[$mode_counter]);
++    }
++    $delimiter = $csv_list[0];
++    $enclosure = $csv_list[1];
++    $csv_field = $csv_list[2];
++
++    // write to a file in csv format
++    var_dump( $fo->fputcsv($csv_field, $delimiter) );
++    // check the file pointer position and eof
++    var_dump( $fo->ftell() );
++    var_dump( $fo->eof() );
++    //close the file
++    unset($fo);
++
++    // print the file contents
++    var_dump( file_get_contents($file) );
++
++    //delete file
++    unlink($file);
++  } //end of mode loop
++} // end of foreach
++
++echo "Done\n";
++?>
++--EXPECTF--
++*** Testing fputcsv() : with default enclosure value ***
++
++-- file opened in r+ --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in r+b --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in r+t --
++int(14)
++int(14)
++bool(false)
++string(%d) ""water,fruit"
++"
++
++-- file opened in a+ --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in a+b --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in a+t --
++int(14)
++int(14)
++bool(false)
++string(%d) ""water,fruit"
++"
++
++-- file opened in w+ --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in w+b --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in w+t --
++int(14)
++int(14)
++bool(false)
++string(%d) ""water,fruit"
++"
++
++-- file opened in x+ --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in x+b --
++int(14)
++int(14)
++bool(false)
++string(14) ""water,fruit"
++"
++
++-- file opened in x+t --
++int(14)
++int(14)
++bool(false)
++string(%d) ""water,fruit"
++"
++
++-- file opened in r+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in a+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in w+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in x+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in r+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in r+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in r+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in a+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in a+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in a+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in w+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in w+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in w+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in x+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in x+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in x+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in r+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in r+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in r+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""&water&:&fruit&"
++"
++
++-- file opened in a+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in a+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in a+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""&water&:&fruit&"
++"
++
++-- file opened in w+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in w+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in w+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""&water&:&fruit&"
++"
++
++-- file opened in x+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in x+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""&water&:&fruit&"
++"
++
++-- file opened in x+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""&water&:&fruit&"
++"
++
++-- file opened in r+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in r+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in r+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""=water===fruit="
++"
++
++-- file opened in a+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in a+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in a+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""=water===fruit="
++"
++
++-- file opened in w+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in w+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in w+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""=water===fruit="
++"
++
++-- file opened in x+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in x+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""=water===fruit="
++"
++
++-- file opened in x+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""=water===fruit="
++"
++
++-- file opened in r+ --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in r+b --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in r+t --
++int(20)
++int(20)
++bool(false)
++string(%d) ""-water--fruit-air"
++"
++
++-- file opened in a+ --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in a+b --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in a+t --
++int(20)
++int(20)
++bool(false)
++string(%d) ""-water--fruit-air"
++"
++
++-- file opened in w+ --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in w+b --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in w+t --
++int(20)
++int(20)
++bool(false)
++string(%d) ""-water--fruit-air"
++"
++
++-- file opened in x+ --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in x+b --
++int(20)
++int(20)
++bool(false)
++string(20) ""-water--fruit-air"
++"
++
++-- file opened in x+t --
++int(20)
++int(20)
++bool(false)
++string(%d) ""-water--fruit-air"
++"
++
++-- file opened in r+ --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in r+b --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in r+t --
++int(24)
++int(24)
++bool(false)
++string(%d) ""-water---fruit---air-"
++"
++
++-- file opened in a+ --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in a+b --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in a+t --
++int(24)
++int(24)
++bool(false)
++string(%d) ""-water---fruit---air-"
++"
++
++-- file opened in w+ --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in w+b --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in w+t --
++int(24)
++int(24)
++bool(false)
++string(%d) ""-water---fruit---air-"
++"
++
++-- file opened in x+ --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in x+b --
++int(24)
++int(24)
++bool(false)
++string(24) ""-water---fruit---air-"
++"
++
++-- file opened in x+t --
++int(24)
++int(24)
++bool(false)
++string(%d) ""-water---fruit---air-"
++"
++
++-- file opened in r+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in r+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in r+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++Done
+diff --git a/ext/spl/tests/SplFileObject_fputcsv_variation12.phpt b/ext/spl/tests/SplFileObject_fputcsv_variation12.phpt
+new file mode 100644
+index 00000000..947d89b7
+--- /dev/null
++++ b/ext/spl/tests/SplFileObject_fputcsv_variation12.phpt
+@@ -0,0 +1,826 @@
++--TEST--
++SplFileObject::fputcsv(): Usage variations -- with default enclosure and different delimiter
++--FILE--
++<?php
++
++/* Testing fputcsv() to write to a file when default enclosure value and delimiter value
++   other than that in the field is provided */
++
++echo "*** Testing fputcsv() : with default enclosure and different delimiter value ***\n";
++
++/* the array is with three elements in it. Each element should be read as
++   1st element is delimiter, 2nd element is enclosure
++   and 3rd element is csv fields
++*/
++$csv_lists = array (
++  array(',', '"', array('water,fruit') ),
++  array(',', '"', array('"water","fruit') ),
++  array(',', '"', array('"water","fruit"') ),
++  array(' ', '^', array('^water^ ^fruit^')),
++  array(':', '&', array('&water&:&fruit&')),
++  array('=', '=', array('=water===fruit=')),
++  array('-', '-', array('-water--fruit-air')),
++  array('-', '-', array('-water---fruit---air-')),
++  array(':', '&', array('&""""&:&"&:,:":&,&:,,,,'))
++
++);
++$file_path = __DIR__;
++$file = "$file_path/fputcsv_variation12.tmp";
++
++$file_modes = array ("r+", "r+b", "r+t",
++                     "a+", "a+b", "a+t",
++                     "w+", "w+b", "w+t",
++                     "x+", "x+b", "x+t");
++
++$loop_counter = 1;
++foreach ($csv_lists as $csv_list) {
++  for($mode_counter = 0; $mode_counter < count($file_modes); $mode_counter++) {
++
++    echo "\n-- file opened in $file_modes[$mode_counter] --\n";
++    // create the file and add the content with has csv fields
++    if ( strstr($file_modes[$mode_counter], "r") ) {
++      $fo = new SplFileObject($file, 'w');
++    } else {
++      $fo = new SplFileObject($file, $file_modes[$mode_counter]);
++    }
++    $delimiter = $csv_list[0];
++    $enclosure = $csv_list[1];
++    $csv_field = $csv_list[2];
++
++    // write to a file in csv format
++    var_dump( $fo->fputcsv($csv_field, '+') );
++    // check the file pointer position and eof
++    var_dump( $fo->ftell() );
++    var_dump( $fo->eof() );
++    //close the file
++    unset($fo);
++
++    // print the file contents
++    var_dump( file_get_contents($file) );
++
++    //delete file
++    unlink($file);
++  } //end of mode loop
++} // end of foreach
++
++echo "Done\n";
++?>
++--EXPECTF--
++*** Testing fputcsv() : with default enclosure and different delimiter value ***
++
++-- file opened in r+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in r+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in r+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in a+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in a+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in a+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in w+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in w+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in w+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in x+ --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in x+b --
++int(12)
++int(12)
++bool(false)
++string(12) "water,fruit
++"
++
++-- file opened in x+t --
++int(12)
++int(12)
++bool(false)
++string(%d) "water,fruit
++"
++
++-- file opened in r+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in r+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in a+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in a+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in w+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in w+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in x+ --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+b --
++int(20)
++int(20)
++bool(false)
++string(20) """"water"",""fruit"
++"
++
++-- file opened in x+t --
++int(20)
++int(20)
++bool(false)
++string(%d) """"water"",""fruit"
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) """"water"",""fruit"""
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) """"water"",""fruit"""
++"
++
++-- file opened in r+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in r+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in r+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in a+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in a+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in a+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in w+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in w+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in w+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in x+ --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in x+b --
++int(18)
++int(18)
++bool(false)
++string(18) ""^water^ ^fruit^"
++"
++
++-- file opened in x+t --
++int(18)
++int(18)
++bool(false)
++string(%d) ""^water^ ^fruit^"
++"
++
++-- file opened in r+ --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in r+b --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in r+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "&water&:&fruit&
++"
++
++-- file opened in a+ --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in a+b --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in a+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "&water&:&fruit&
++"
++
++-- file opened in w+ --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in w+b --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in w+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "&water&:&fruit&
++"
++
++-- file opened in x+ --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in x+b --
++int(16)
++int(16)
++bool(false)
++string(16) "&water&:&fruit&
++"
++
++-- file opened in x+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "&water&:&fruit&
++"
++
++-- file opened in r+ --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in r+b --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in r+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "=water===fruit=
++"
++
++-- file opened in a+ --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in a+b --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in a+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "=water===fruit=
++"
++
++-- file opened in w+ --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in w+b --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in w+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "=water===fruit=
++"
++
++-- file opened in x+ --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in x+b --
++int(16)
++int(16)
++bool(false)
++string(16) "=water===fruit=
++"
++
++-- file opened in x+t --
++int(16)
++int(16)
++bool(false)
++string(%d) "=water===fruit=
++"
++
++-- file opened in r+ --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in r+b --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in r+t --
++int(18)
++int(18)
++bool(false)
++string(%d) "-water--fruit-air
++"
++
++-- file opened in a+ --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in a+b --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in a+t --
++int(18)
++int(18)
++bool(false)
++string(%d) "-water--fruit-air
++"
++
++-- file opened in w+ --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in w+b --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in w+t --
++int(18)
++int(18)
++bool(false)
++string(%d) "-water--fruit-air
++"
++
++-- file opened in x+ --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in x+b --
++int(18)
++int(18)
++bool(false)
++string(18) "-water--fruit-air
++"
++
++-- file opened in x+t --
++int(18)
++int(18)
++bool(false)
++string(%d) "-water--fruit-air
++"
++
++-- file opened in r+ --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in r+b --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in r+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "-water---fruit---air-
++"
++
++-- file opened in a+ --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in a+b --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in a+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "-water---fruit---air-
++"
++
++-- file opened in w+ --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in w+b --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in w+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "-water---fruit---air-
++"
++
++-- file opened in x+ --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in x+b --
++int(22)
++int(22)
++bool(false)
++string(22) "-water---fruit---air-
++"
++
++-- file opened in x+t --
++int(22)
++int(22)
++bool(false)
++string(%d) "-water---fruit---air-
++"
++
++-- file opened in r+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in r+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in r+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in a+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in w+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+ --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+b --
++int(32)
++int(32)
++bool(false)
++string(32) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++
++-- file opened in x+t --
++int(32)
++int(32)
++bool(false)
++string(%d) ""&""""""""&:&""&:,:"":&,&:,,,,"
++"
++Done

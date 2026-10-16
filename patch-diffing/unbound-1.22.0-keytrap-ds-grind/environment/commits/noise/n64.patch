@@ -1,0 +1,155 @@
+diff --git a/testdata/doq_downstream.tdir/doq_downstream.test b/testdata/doq_downstream.tdir/doq_downstream.test
+new file mode 100644
+index 000000000..a302e8da6
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/doq_downstream.test
+@@ -0,0 +1,109 @@
++# #-- doq_downstream.test --#
++# source the master var file when it's there
++[ -f ../.tpkg.var.master ] && source ../.tpkg.var.master
++# use .tpkg.var.test for in test variable passing
++[ -f .tpkg.var.test ] && source .tpkg.var.test
++
++PRE="../.."
++. ../common.sh
++get_make
++(cd $PRE; $MAKE doqclient)
++
++# test query from local-data, immediate like from cache
++echo "> query www.example.net."
++$PRE/doqclient -s 127.0.0.1 -p $UNBOUND_PORT www.example.net. A IN >outfile 2>&1
++cat outfile
++if test "$?" -ne 0; then
++	echo "exit status not OK"
++	echo "> cat logfiles"
++	cat outfile
++	cat fwd.log
++	cat unbound.log
++	echo "Not OK"
++	exit 1
++fi
++if grep "www.example.net" outfile | grep "1.2.3.4"; then
++	echo "content OK"
++else
++	echo "result contents not OK"
++	echo "> cat logfiles"
++	cat outfile
++	cat fwd.log
++	cat unbound.log
++	echo "result contents not OK"
++	exit 1
++fi
++echo "OK"
++
++# test query that is resolved
++echo "> query www.example.com."
++$PRE/doqclient -s 127.0.0.1 -p $UNBOUND_PORT www.example.com. A IN >outfile 2>&1
++cat outfile
++if test "$?" -ne 0; then
++	echo "exit status not OK"
++	echo "> cat logfiles"
++	cat outfile
++	cat fwd.log
++	cat unbound.log
++	echo "Not OK"
++	exit 1
++fi
++if grep "www.example.com" outfile | grep "10.20.30.40"; then
++	echo "content OK"
++else
++	echo "result contents not OK"
++	echo "> cat logfiles"
++	cat outfile
++	cat fwd.log
++	cat unbound.log
++	echo "result contents not OK"
++	exit 1
++fi
++echo "OK"
++
++# Perform the lock verify tests, stop the server first.
++kill_pid $UNBOUND_PID
++cat unbound.log
++# Remove pidfile so that the post script does not try to stop the server,
++# it is already stopped.
++rm -f unbound.pid
++if test -f ublocktrace-doqclient.0; then
++	if $PRE/lock-verify ublocktrace-doqclient.* 2>&1; then
++		echo "lock-verify test ublocktrace-doqclient worked."
++	else
++		echo "lock-verify test ublocktrace-doqclient failed."
++		exit 1
++	fi
++fi
++if test -f ublocktrace.0; then
++	if $PRE/lock-verify ublocktrace.* 2>&1; then
++		echo "lock-verify test ublocktrace worked."
++	else
++		echo "lock-verify test ublocktrace failed."
++		exit 1
++	fi
++	if grep "lock error" unbound.log >/dev/null; then
++		echo "lock error"
++		exit 1
++	fi
++fi
++# check valgrind output
++if test -f $PRE/unbound_do_valgrind_in_test; then
++	if grep "All heap blocks were freed -- no leaks are possible" unbound.log; then
++		:  # clean
++	else
++		grep "^==" unbound.log
++		echo "Memory leaked"
++		grep "in use at exit" unbound.log
++		exit 1
++	fi
++	if grep "ERROR SUMMARY: 0 errors from 0 contexts" unbound.log; then
++		:  # clean
++	else
++		grep "^==" unbound.log
++		echo "Errors"
++		grep "ERROR SUMMARY" unbound.log
++		exit 1
++	fi
++fi
++exit 0
+diff --git a/testdata/doq_downstream.tdir/doq_downstream.testns b/testdata/doq_downstream.tdir/doq_downstream.testns
+new file mode 100644
+index 000000000..2d0ea45a4
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/doq_downstream.testns
+@@ -0,0 +1,13 @@
++; nameserver test file
++$ORIGIN example.com.
++$TTL 3600
++
++ENTRY_BEGIN
++MATCH opcode qtype qname
++REPLY QR AA NOERROR
++ADJUST copy_id
++SECTION QUESTION
++www	IN	A
++SECTION ANSWER
++www	IN	A	10.20.30.40
++ENTRY_END
+diff --git a/testdata/doq_downstream.tdir/unbound_server.key b/testdata/doq_downstream.tdir/unbound_server.key
+new file mode 100644
+index 000000000..4256c421d
+--- /dev/null
++++ b/testdata/doq_downstream.tdir/unbound_server.key
+@@ -0,0 +1,15 @@
++-----BEGIN RSA PRIVATE KEY-----
++MIICWwIBAAKBgQC3F7Jsv2u01pLL9rFnjsMU/IaCFUIz/624DcaE84Z4gjMl5kWA
++3axQcqul1wlwSrbKwrony+d9hH/+MX0tZwvl8w3OmhmOAiaQ+SHCsIuOjVwQjX0s
++RLB61Pz5+PAiVvnPa9JIYB5QrK6DVEsxIHj8MOc5JKORrnESsFDh6yeMeQIDAQAB
++AoGAAuWoGBprTOA8UGfl5LqYkaNxSWumsYXxLMFjC8WCsjN1NbtQDDr1uAwodSZS
++6ujzvX+ZTHnofs7y64XC8k34HTOCD2zlW7kijWbT8YjRYFU6o9F5zUGD9RCan0ds
++sVscT2psLSzfdsmFAcbmnGdxYkXk2PC1FHtaqExxehralGUCQQDcqrg9uQKXlhQi
++XAaPr8SiWvtRm2a9IMMZkRfUWZclPHq6fCWNuUaCD+cTat4wAuqeknAz33VEosw3
++fXGsok//AkEA1GjIHXrOcSlpfVJb6NeOBugjRtZ7ZDT5gbtnMS9ob0qntKV6saaL
++CNmJwuD9Q3XkU5j1+uHvYGP2NzcJd2CjhwJACV0hNlVMe9w9fHvFN4Gw6WbM9ViP
++0oS6YrJafYNTu5vGZXVxLoNnL4u3NYa6aPUmuZXjNwBLfJ8f5VboZPf6RwJAINd2
++oYA8bSi/A755MX4qmozH74r4Fx1Nuq5UHTm8RwDe/0Javx8F/j9MWpJY9lZDEF3l
++In5OebPa/NyInSmW/wJAZuP9aRn0nDBkHYri++1A7NykMiJ/nH0mDECbnk+wxx0S
++LwqIetBhxb8eQwMg45+iAH7CHAMQ8BQuF/nFE6eotg==
++-----END RSA PRIVATE KEY-----

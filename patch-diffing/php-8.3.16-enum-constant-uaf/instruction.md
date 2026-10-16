@@ -4,7 +4,11 @@ You are an expert reverse engineer, versed in the full body of reverse-engineeri
 
 ## Objective
 
-A vulnerability bounty program has received a crash report against the previous release of this program family, and the vendor has since shipped an update. Adjudication falls to you. Decide whether the report is a genuine, in-scope vulnerability that the update actually closes. The engagement is the bounty verification. Reproduce the reported behavior on the prior build, confirm the update neutralizes it, and rule out a coincidental fix.
+A vulnerability bounty program has received a crash report against the previous release of this program family, and the vendor has since shipped an update.
+- Adjudication falls to you.
+- Decide whether the report is a genuine, in-scope vulnerability that the update actually closes.
+- The engagement is the bounty verification.
+- Reproduce the reported behavior on the prior build, confirm the update neutralizes it, and rule out a coincidental fix.
 
 The report summary reproduced below describes the reported behavior class in plain language. It names no functions, no offsets, no identifiers. The claim's substance is for you to establish from the pair.
 
@@ -24,7 +28,10 @@ NOT GIVEN:
 - No source code, no symbols beyond what the binaries carry.
 - No hints about which function changed or what the defect is.
 
-Both builds are real executables of the program's real CLI, and they parse their inputs the way the program does. The two builds share one provenance but were produced by different internal build trains. Compilation, optimization, and hardening options may differ between them, the way a real security update rebuilds everything it ships. Not every binary-level difference between the builds is a consequence of the security change itself. Both behave identically on benign input. Only a crafted input separates the builds.
+Both builds are real executables of the program's real CLI, and they parse their inputs the way the program does. The two builds share one provenance but were produced by different internal build trains.
+- Compilation, optimization, and hardening options may differ between them, the way a real security update rebuilds everything it ships.
+- Not every binary-level difference between the builds is a consequence of the security change itself.
+- Both behave identically on benign input, only a crafted input separates the builds.
 
 ## Output Contract
 

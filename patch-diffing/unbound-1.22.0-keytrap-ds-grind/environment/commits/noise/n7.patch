@@ -1,0 +1,42 @@
+diff --git a/contrib/rc_d_unbound b/contrib/rc_d_unbound
+index 56516147f..9d98c5e05 100755
+--- a/contrib/rc_d_unbound
++++ b/contrib/rc_d_unbound
+@@ -22,4 +22,13 @@ pidfile=${unbound_pidfile:-"/usr/local/etc/unbound/unbound.pid"}
+ command_args=${unbound_flags:-"-c /usr/local/etc/unbound/unbound.conf"}
+ extra_commands="reload"
+ 
++if test "$1" = "stop" ; then
++	run_rc_command "$1"
++	ret=$?
++	if test $ret -eq 0; then
++		rm -f "$pidfile"
++	fi
++	exit $ret
++fi
++
+ run_rc_command "$1"
+diff --git a/contrib/unbound.init b/contrib/unbound.init
+index c5bb52bb4..70ab0134e 100644
+--- a/contrib/unbound.init
++++ b/contrib/unbound.init
+@@ -75,6 +75,7 @@ stop() {
+     retval=$?
+     echo
+     [ $retval -eq 0 ] && rm -f $lockfile
++    [ $retval -eq 0 ] && rm -f $pidfile
+     if egrep -q '^/[^[:space:]]+[[:space:]]+'${rootdir}'/dev/log' /proc/mounts; then
+ 	umount ${rootdir}/dev/log >/dev/null 2>&1
+     fi;
+diff --git a/contrib/unbound.init_fedora b/contrib/unbound.init_fedora
+index 989440341..75856777f 100644
+--- a/contrib/unbound.init_fedora
++++ b/contrib/unbound.init_fedora
+@@ -58,6 +58,7 @@ stop() {
+     killproc -p $pidfile unbound
+     retval=$?
+     [ $retval -eq 0 ] && rm -f $lockfile
++    [ $retval -eq 0 ] && rm -f $pidfile
+     for mountfile in /dev/log /dev/urandom /etc/localtime /etc/resolv.conf /var/run/unbound
+     do
+     if egrep -q '^/[^[:space:]]+[[:space:]]+'${rootdir}''${mountfile}'' /proc/mounts; then

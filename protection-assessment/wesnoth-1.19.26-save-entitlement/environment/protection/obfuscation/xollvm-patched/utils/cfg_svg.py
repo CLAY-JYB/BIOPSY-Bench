@@ -42,8 +42,8 @@ EDGE_RE = re.compile(r'^\s*(bb\d+)\s*->\s*(bb\d+)')
 NODE_W, NODE_H = 132, 46        # node box (height fixed so 2 text lines never collide)
 H_GAP, V_GAP = 30, 74           # gaps between boxes (V_GAP tightened by --dense)
 MARGIN = 40
-BANNER = 108                    # title + subtitle + legend row
-PANEL_LABEL = 30                # sub-caption above each panel in pair mode
+BANNER = 108 # title + subtitle + legend row
+PANEL_LABEL = 30 # sub-caption above each panel in pair mode
 
 
 # ---- parsing --------------------------------------------------------------

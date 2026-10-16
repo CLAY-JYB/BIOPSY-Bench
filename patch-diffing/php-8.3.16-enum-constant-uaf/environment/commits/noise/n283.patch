@@ -1,0 +1,1801 @@
+diff --git a/ext/sodium/libsodium.c b/ext/sodium/libsodium.c
+index 944ef28f..53d7f116 100644
+--- a/ext/sodium/libsodium.c
++++ b/ext/sodium/libsodium.c
+@@ -22,7 +22,6 @@
+ #include "php_ini.h"
+ #include "ext/standard/info.h"
+ #include "php_libsodium.h"
+-#include "zend_attributes.h"
+ #include "zend_exceptions.h"
+ 
+ #include <sodium.h>
+@@ -51,20 +50,6 @@ static zend_always_inline zend_string *zend_string_checked_alloc(size_t len, int
+ 	return zs;
+ }
+ 
+-#ifndef crypto_kdf_BYTES_MIN
+-# define crypto_kdf_BYTES_MIN 16
+-# define crypto_kdf_BYTES_MAX 64
+-# define crypto_kdf_CONTEXTBYTES 8
+-# define crypto_kdf_KEYBYTES 32
+-#endif
+-
+-#ifndef crypto_kx_SEEDBYTES
+-# define crypto_kx_SEEDBYTES 32
+-# define crypto_kx_SESSIONKEYBYTES 32
+-# define crypto_kx_PUBLICKEYBYTES 32
+-# define crypto_kx_SECRETKEYBYTES 32
+-#endif
+-
+ #include "libsodium_arginfo.h"
+ 
+ #ifndef crypto_aead_chacha20poly1305_IETF_KEYBYTES
+@@ -164,14 +149,243 @@ PHP_MINIT_FUNCTION(sodium)
+ 	sodium_exception_ce = register_class_SodiumException(zend_ce_exception);
+ 	sodium_exception_ce->create_object = sodium_exception_create_object;
+ 
++	REGISTER_STRING_CONSTANT("SODIUM_LIBRARY_VERSION",
++							 (char *) (void *) sodium_version_string(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_LIBRARY_MAJOR_VERSION",
++						   sodium_library_version_major(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_LIBRARY_MINOR_VERSION",
++						   sodium_library_version_minor(), CONST_CS | CONST_PERSISTENT);
++#ifdef HAVE_AESGCM
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES",
++						   crypto_aead_aes256gcm_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_NSECBYTES",
++						   crypto_aead_aes256gcm_NSECBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES",
++						   crypto_aead_aes256gcm_NPUBBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_ABYTES",
++						   crypto_aead_aes256gcm_ABYTES, CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES",
++						   crypto_aead_chacha20poly1305_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NSECBYTES",
++						   crypto_aead_chacha20poly1305_NSECBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES",
++						   crypto_aead_chacha20poly1305_NPUBBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_ABYTES",
++						   crypto_aead_chacha20poly1305_ABYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES",
++						   crypto_aead_chacha20poly1305_IETF_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NSECBYTES",
++						   crypto_aead_chacha20poly1305_IETF_NSECBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES",
++						   crypto_aead_chacha20poly1305_IETF_NPUBBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_ABYTES",
++						   crypto_aead_chacha20poly1305_IETF_ABYTES, CONST_CS | CONST_PERSISTENT);
++#ifdef crypto_aead_xchacha20poly1305_IETF_NPUBBYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES",
++						   crypto_aead_xchacha20poly1305_IETF_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NSECBYTES",
++						   crypto_aead_xchacha20poly1305_IETF_NSECBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES",
++						   crypto_aead_xchacha20poly1305_IETF_NPUBBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES",
++						   crypto_aead_xchacha20poly1305_IETF_ABYTES, CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AUTH_BYTES",
++						   crypto_auth_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AUTH_KEYBYTES",
++						   crypto_auth_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SEALBYTES",
++						   crypto_box_SEALBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SECRETKEYBYTES",
++						   crypto_box_SECRETKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_PUBLICKEYBYTES",
++						   crypto_box_PUBLICKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_KEYPAIRBYTES",
++						   crypto_box_SECRETKEYBYTES + crypto_box_PUBLICKEYBYTES,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_MACBYTES",
++						   crypto_box_MACBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_NONCEBYTES",
++						   crypto_box_NONCEBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SEEDBYTES",
++						   crypto_box_SEEDBYTES, CONST_CS | CONST_PERSISTENT);
++#ifndef crypto_kdf_BYTES_MIN
++# define crypto_kdf_BYTES_MIN 16
++# define crypto_kdf_BYTES_MAX 64
++# define crypto_kdf_CONTEXTBYTES 8
++# define crypto_kdf_KEYBYTES 32
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_BYTES_MIN",
++						   crypto_kdf_BYTES_MIN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_BYTES_MAX",
++						   crypto_kdf_BYTES_MAX, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_CONTEXTBYTES",
++						   crypto_kdf_CONTEXTBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_KEYBYTES",
++						   crypto_kdf_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++#ifndef crypto_kx_SEEDBYTES
++# define crypto_kx_SEEDBYTES 32
++# define crypto_kx_SESSIONKEYBYTES 32
++# define crypto_kx_PUBLICKEYBYTES 32
++# define crypto_kx_SECRETKEYBYTES 32
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SEEDBYTES",
++						   crypto_kx_SEEDBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SESSIONKEYBYTES",
++						   crypto_kx_SESSIONKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_PUBLICKEYBYTES",
++						   crypto_kx_PUBLICKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SECRETKEYBYTES",
++						   crypto_kx_SECRETKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_KEYPAIRBYTES",
++						   crypto_kx_SECRETKEYBYTES + crypto_kx_PUBLICKEYBYTES,
++						   CONST_CS | CONST_PERSISTENT);
++#ifdef crypto_secretstream_xchacha20poly1305_ABYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES",
++						   crypto_secretstream_xchacha20poly1305_ABYTES,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES",
++						   crypto_secretstream_xchacha20poly1305_HEADERBYTES,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES",
++						   crypto_secretstream_xchacha20poly1305_KEYBYTES,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX",
++						   crypto_secretstream_xchacha20poly1305_MESSAGEBYTES_MAX,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE",
++						   crypto_secretstream_xchacha20poly1305_TAG_MESSAGE,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_PUSH",
++						   crypto_secretstream_xchacha20poly1305_TAG_PUSH,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_REKEY",
++						   crypto_secretstream_xchacha20poly1305_TAG_REKEY,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL",
++						   crypto_secretstream_xchacha20poly1305_TAG_FINAL,
++						   CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES",
++						   crypto_generichash_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES_MIN",
++						   crypto_generichash_BYTES_MIN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES_MAX",
++						   crypto_generichash_BYTES_MAX, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES",
++						   crypto_generichash_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN",
++						   crypto_generichash_KEYBYTES_MIN, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX",
++						   crypto_generichash_KEYBYTES_MAX, CONST_CS | CONST_PERSISTENT);
++#ifdef crypto_pwhash_SALTBYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_ARGON2I13",
++						   crypto_pwhash_ALG_ARGON2I13, CONST_CS | CONST_PERSISTENT);
++# ifdef crypto_pwhash_ALG_ARGON2ID13
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13",
++						   crypto_pwhash_ALG_ARGON2ID13, CONST_CS | CONST_PERSISTENT);
++# endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_DEFAULT",
++						   crypto_pwhash_ALG_DEFAULT, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SALTBYTES",
++						   crypto_pwhash_SALTBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("SODIUM_CRYPTO_PWHASH_STRPREFIX",
++							 crypto_pwhash_STRPREFIX, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE",
++						   crypto_pwhash_opslimit_interactive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE",
++						   crypto_pwhash_memlimit_interactive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_MODERATE",
++						   crypto_pwhash_opslimit_moderate(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE",
++						   crypto_pwhash_memlimit_moderate(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE",
++						   crypto_pwhash_opslimit_sensitive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE",
++						   crypto_pwhash_memlimit_sensitive(), CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef crypto_pwhash_scryptsalsa208sha256_SALTBYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_SALTBYTES",
++						   crypto_pwhash_scryptsalsa208sha256_SALTBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_STRING_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_STRPREFIX",
++							 crypto_pwhash_scryptsalsa208sha256_STRPREFIX, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_INTERACTIVE",
++						   crypto_pwhash_scryptsalsa208sha256_opslimit_interactive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_INTERACTIVE",
++						   crypto_pwhash_scryptsalsa208sha256_memlimit_interactive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_SENSITIVE",
++						   crypto_pwhash_scryptsalsa208sha256_opslimit_sensitive(), CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_SENSITIVE",
++						   crypto_pwhash_scryptsalsa208sha256_memlimit_sensitive(), CONST_CS | CONST_PERSISTENT);
++#endif
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_BYTES",
++						   crypto_scalarmult_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_SCALARBYTES",
++						   crypto_scalarmult_SCALARBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SHORTHASH_BYTES",
++						   crypto_shorthash_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SHORTHASH_KEYBYTES",
++						   crypto_shorthash_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_KEYBYTES",
++						   crypto_secretbox_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_MACBYTES",
++						   crypto_secretbox_MACBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_NONCEBYTES",
++						   crypto_secretbox_NONCEBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_BYTES",
++						   crypto_sign_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_SEEDBYTES",
++						   crypto_sign_SEEDBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES",
++						   crypto_sign_PUBLICKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_SECRETKEYBYTES",
++						   crypto_sign_SECRETKEYBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_KEYPAIRBYTES",
++						   crypto_sign_SECRETKEYBYTES + crypto_sign_PUBLICKEYBYTES,
++						   CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_NONCEBYTES",
++						   crypto_stream_NONCEBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_KEYBYTES",
++						   crypto_stream_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++
++#ifdef crypto_stream_xchacha20_KEYBYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES",
++						   crypto_stream_xchacha20_NONCEBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES",
++						   crypto_stream_xchacha20_KEYBYTES, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef sodium_base64_VARIANT_ORIGINAL
++	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_ORIGINAL",
++						   sodium_base64_VARIANT_ORIGINAL, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING",
++						   sodium_base64_VARIANT_ORIGINAL_NO_PADDING, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_URLSAFE",
++						   sodium_base64_VARIANT_URLSAFE, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING",
++						   sodium_base64_VARIANT_URLSAFE_NO_PADDING, CONST_CS | CONST_PERSISTENT);
++#endif
++#ifdef crypto_core_ristretto255_HASHBYTES
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_BYTES",
++						   crypto_scalarmult_ristretto255_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_SCALARBYTES",
++						   crypto_scalarmult_ristretto255_SCALARBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_BYTES",
++						   crypto_core_ristretto255_BYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_HASHBYTES",
++						   crypto_core_ristretto255_HASHBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_SCALARBYTES",
++						   crypto_core_ristretto255_SCALARBYTES, CONST_CS | CONST_PERSISTENT);
++	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_NONREDUCEDSCALARBYTES",
++						   crypto_core_ristretto255_NONREDUCEDSCALARBYTES, CONST_CS | CONST_PERSISTENT);
++#endif
++
+ #if SODIUM_LIBRARY_VERSION_MAJOR > 9 || (SODIUM_LIBRARY_VERSION_MAJOR == 9 && SODIUM_LIBRARY_VERSION_MINOR >= 6)
+ 	if (FAILURE == PHP_MINIT(sodium_password_hash)(INIT_FUNC_ARGS_PASSTHRU)) {
+ 		return FAILURE;
+ 	}
+ #endif
+ 
+-	register_libsodium_symbols(module_number);
+-
+ 	return SUCCESS;
+ }
+ 
+@@ -1364,49 +1578,6 @@ PHP_FUNCTION(sodium_crypto_stream_xchacha20_xor)
+ 
+ 	RETURN_NEW_STR(ciphertext);
+ }
+-
+-PHP_FUNCTION(sodium_crypto_stream_xchacha20_xor_ic)
+-{
+-	zend_string   *ciphertext;
+-	unsigned char *key;
+-	unsigned char *msg;
+-	unsigned char *nonce;
+-	zend_long      ic;
+-
+-	size_t         ciphertext_len;
+-	size_t         key_len;
+-	size_t         msg_len;
+-	size_t         nonce_len;
+-
+-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ssls",
+-									&msg, &msg_len,
+-									&nonce, &nonce_len,
+-									&ic,
+-									&key, &key_len) == FAILURE) {
+-		sodium_remove_param_values_from_backtrace(EG(exception));
+-		RETURN_THROWS();
+-	}
+-	if (nonce_len != crypto_stream_xchacha20_NONCEBYTES) {
+-		zend_argument_error(sodium_exception_ce, 2, "must be SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES bytes long");
+-		RETURN_THROWS();
+-	}
+-	if (key_len != crypto_stream_xchacha20_KEYBYTES) {
+-		zend_argument_error(sodium_exception_ce, 3, "must be SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES bytes long");
+-		RETURN_THROWS();
+-	}
+-	ciphertext_len = msg_len;
+-	ciphertext = zend_string_checked_alloc((size_t) ciphertext_len, 0);
+-	if (crypto_stream_xchacha20_xor_ic((unsigned char *) ZSTR_VAL(ciphertext), msg,
+-									   (unsigned long long) msg_len, nonce,
+-									   (uint64_t) ic, key) != 0) {
+-		zend_string_free(ciphertext);
+-		zend_throw_exception(sodium_exception_ce, "internal error", 0);
+-		RETURN_THROWS();
+-	}
+-	ZSTR_VAL(ciphertext)[ciphertext_len] = 0;
+-
+-	RETURN_NEW_STR(ciphertext);
+-}
+ #endif
+ 
+ #ifdef crypto_pwhash_SALTBYTES
+diff --git a/ext/sodium/libsodium.stub.php b/ext/sodium/libsodium.stub.php
+index 8ae94ad3..af859c58 100644
+--- a/ext/sodium/libsodium.stub.php
++++ b/ext/sodium/libsodium.stub.php
+@@ -2,556 +2,61 @@
+ 
+ /** @generate-class-entries */
+ 
+-/**
+- * @var string
+- * @cvalue SODIUM_LIBRARY_VERSION()
+- */
+-const SODIUM_LIBRARY_VERSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue sodium_library_version_major()
+- */
+-const SODIUM_LIBRARY_MAJOR_VERSION = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue sodium_library_version_minor()
+- */
+-const SODIUM_LIBRARY_MINOR_VERSION = UNKNOWN;
+-#ifdef HAVE_AESGCM
+-/**
+- * @var int
+- * @cvalue crypto_aead_aes256gcm_KEYBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_aes256gcm_NSECBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_AES256GCM_NSECBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_aes256gcm_NPUBBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_aes256gcm_ABYTES
+- */
+-const SODIUM_CRYPTO_AEAD_AES256GCM_ABYTES = UNKNOWN;
+-#endif
+-
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_KEYBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_NSECBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NSECBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_NPUBBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_ABYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_ABYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_IETF_KEYBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_IETF_NSECBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NSECBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_IETF_NPUBBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_chacha20poly1305_IETF_ABYTES
+- */
+-const SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_ABYTES = UNKNOWN;
+-#ifdef crypto_aead_xchacha20poly1305_IETF_NPUBBYTES
+-/**
+- * @var int
+- * @cvalue crypto_aead_xchacha20poly1305_IETF_KEYBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_xchacha20poly1305_IETF_NSECBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NSECBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_xchacha20poly1305_IETF_NPUBBYTES
+- */
+-const SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_aead_xchacha20poly1305_IETF_ABYTES
+- */
+-const SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES = UNKNOWN;
+-#endif
+-/**
+- * @var int
+- * @cvalue crypto_auth_BYTES
+- */
+-const SODIUM_CRYPTO_AUTH_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_auth_KEYBYTES
+- */
+-const SODIUM_CRYPTO_AUTH_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_SEALBYTES
+- */
+-const SODIUM_CRYPTO_BOX_SEALBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_SECRETKEYBYTES
+- */
+-const SODIUM_CRYPTO_BOX_SECRETKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_PUBLICKEYBYTES
+- */
+-const SODIUM_CRYPTO_BOX_PUBLICKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SODIUM_CRYPTO_BOX_KEYPAIRBYTES()
+- */
+-const SODIUM_CRYPTO_BOX_KEYPAIRBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_MACBYTES
+- */
+-const SODIUM_CRYPTO_BOX_MACBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_NONCEBYTES
+- */
+-const SODIUM_CRYPTO_BOX_NONCEBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_box_SEEDBYTES
+- */
+-const SODIUM_CRYPTO_BOX_SEEDBYTES = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue crypto_kdf_BYTES_MIN
+- */
+-const SODIUM_CRYPTO_KDF_BYTES_MIN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kdf_BYTES_MAX
+- */
+-const SODIUM_CRYPTO_KDF_BYTES_MAX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kdf_CONTEXTBYTES
+- */
+-const SODIUM_CRYPTO_KDF_CONTEXTBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kdf_KEYBYTES
+- */
+-const SODIUM_CRYPTO_KDF_KEYBYTES = UNKNOWN;
+-
+-/**
+- * @var int
+- * @cvalue crypto_kx_SEEDBYTES
+- */
+-const SODIUM_CRYPTO_KX_SEEDBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kx_SESSIONKEYBYTES
+- */
+-const SODIUM_CRYPTO_KX_SESSIONKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kx_PUBLICKEYBYTES
+- */
+-const SODIUM_CRYPTO_KX_PUBLICKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_kx_SECRETKEYBYTES
+- */
+-const SODIUM_CRYPTO_KX_SECRETKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SODIUM_CRYPTO_KX_KEYPAIRBYTES()
+- */
+-const SODIUM_CRYPTO_KX_KEYPAIRBYTES = UNKNOWN;
+-#ifdef crypto_secretstream_xchacha20poly1305_ABYTES
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_ABYTES
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_HEADERBYTES
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_KEYBYTES
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_MESSAGEBYTES_MAX
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_TAG_MESSAGE
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_TAG_PUSH
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_PUSH = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_TAG_REKEY
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_REKEY = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretstream_xchacha20poly1305_TAG_FINAL
+- */
+-const SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL = UNKNOWN;
+-#endif
+-
+-/**
+- * @var int
+- * @cvalue crypto_generichash_BYTES
+- */
+-const SODIUM_CRYPTO_GENERICHASH_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_generichash_BYTES_MIN
+- */
+-const SODIUM_CRYPTO_GENERICHASH_BYTES_MIN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_generichash_BYTES_MAX
+- */
+-const SODIUM_CRYPTO_GENERICHASH_BYTES_MAX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_generichash_KEYBYTES
+- */
+-const SODIUM_CRYPTO_GENERICHASH_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_generichash_KEYBYTES_MIN
+- */
+-const SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_generichash_KEYBYTES_MAX
+- */
+-const SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX = UNKNOWN;
+-#ifdef crypto_pwhash_SALTBYTES
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_ALG_ARGON2I13
+- */
+-const SODIUM_CRYPTO_PWHASH_ALG_ARGON2I13 = UNKNOWN;
+-# ifdef crypto_pwhash_ALG_ARGON2ID13
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_ALG_ARGON2ID13
+- */
+-const SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13 = UNKNOWN;
+-# endif
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_ALG_DEFAULT
+- */
+-const SODIUM_CRYPTO_PWHASH_ALG_DEFAULT = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_SALTBYTES
+- */
+-const SODIUM_CRYPTO_PWHASH_SALTBYTES = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue crypto_pwhash_STRPREFIX
+- */
+-const SODIUM_CRYPTO_PWHASH_STRPREFIX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_opslimit_interactive()
+- */
+-const SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_memlimit_interactive()
+- */
+-const SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_opslimit_moderate()
+- */
+-const SODIUM_CRYPTO_PWHASH_OPSLIMIT_MODERATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_memlimit_moderate()
+- */
+-const SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_opslimit_sensitive()
+- */
+-const SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_memlimit_sensitive()
+- */
+-const SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE = UNKNOWN;
+-#endif
+-#ifdef crypto_pwhash_scryptsalsa208sha256_SALTBYTES
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_SALTBYTES
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_SALTBYTES = UNKNOWN;
+-/**
+- * @var string
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_STRPREFIX
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_STRPREFIX = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_opslimit_interactive()
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_INTERACTIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_memlimit_interactive()
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_INTERACTIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_opslimit_sensitive()
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_SENSITIVE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_pwhash_scryptsalsa208sha256_memlimit_sensitive()
+- */
+-const SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_SENSITIVE = UNKNOWN;
+-#endif
+-
+-/**
+- * @var int
+- * @cvalue crypto_scalarmult_BYTES
+- */
+-const SODIUM_CRYPTO_SCALARMULT_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_scalarmult_SCALARBYTES
+- */
+-const SODIUM_CRYPTO_SCALARMULT_SCALARBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_shorthash_BYTES
+- */
+-const SODIUM_CRYPTO_SHORTHASH_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_shorthash_KEYBYTES
+- */
+-const SODIUM_CRYPTO_SHORTHASH_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretbox_KEYBYTES
+- */
+-const SODIUM_CRYPTO_SECRETBOX_KEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretbox_MACBYTES
+- */
+-const SODIUM_CRYPTO_SECRETBOX_MACBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_secretbox_NONCEBYTES
+- */
+-const SODIUM_CRYPTO_SECRETBOX_NONCEBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_sign_BYTES
+- */
+-const SODIUM_CRYPTO_SIGN_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_sign_SEEDBYTES
+- */
+-const SODIUM_CRYPTO_SIGN_SEEDBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_sign_PUBLICKEYBYTES
+- */
+-const SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_sign_SECRETKEYBYTES
+- */
+-const SODIUM_CRYPTO_SIGN_SECRETKEYBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue SODIUM_CRYPTO_SIGN_KEYPAIRBYTES()
+- */
+-const SODIUM_CRYPTO_SIGN_KEYPAIRBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_stream_NONCEBYTES
+- */
+-const SODIUM_CRYPTO_STREAM_NONCEBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_stream_KEYBYTES
+- */
+-const SODIUM_CRYPTO_STREAM_KEYBYTES = UNKNOWN;
+-
+-#ifdef crypto_stream_xchacha20_KEYBYTES
+-/**
+- * @var int
+- * @cvalue crypto_stream_xchacha20_NONCEBYTES
+- */
+-const SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_stream_xchacha20_KEYBYTES
+- */
+-const SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES = UNKNOWN;
+-#endif
+-#ifdef sodium_base64_VARIANT_ORIGINAL
+-/**
+- * @var int
+- * @cvalue sodium_base64_VARIANT_ORIGINAL
+- */
+-const SODIUM_BASE64_VARIANT_ORIGINAL = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue sodium_base64_VARIANT_ORIGINAL_NO_PADDING
+- */
+-const SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue sodium_base64_VARIANT_URLSAFE
+- */
+-const SODIUM_BASE64_VARIANT_URLSAFE = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue sodium_base64_VARIANT_URLSAFE_NO_PADDING
+- */
+-const SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING = UNKNOWN;
+-#endif
+-#ifdef crypto_core_ristretto255_HASHBYTES
+-/**
+- * @var int
+- * @cvalue crypto_scalarmult_ristretto255_BYTES
+- */
+-const SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_scalarmult_ristretto255_SCALARBYTES
+- */
+-const SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_SCALARBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_core_ristretto255_BYTES
+- */
+-const SODIUM_CRYPTO_CORE_RISTRETTO255_BYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_core_ristretto255_HASHBYTES
+- */
+-const SODIUM_CRYPTO_CORE_RISTRETTO255_HASHBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_core_ristretto255_SCALARBYTES
+- */
+-const SODIUM_CRYPTO_CORE_RISTRETTO255_SCALARBYTES = UNKNOWN;
+-/**
+- * @var int
+- * @cvalue crypto_core_ristretto255_NONREDUCEDSCALARBYTES
+- */
+-const SODIUM_CRYPTO_CORE_RISTRETTO255_NONREDUCEDSCALARBYTES = UNKNOWN;
+-#endif
+-
+ function sodium_crypto_aead_aes256gcm_is_available(): bool {}
+ 
+ #ifdef HAVE_AESGCM
+-function sodium_crypto_aead_aes256gcm_decrypt(string $ciphertext, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string|false {}
++function sodium_crypto_aead_aes256gcm_decrypt(string $ciphertext, string $additional_data, string $nonce, string $key): string|false {}
+ 
+-function sodium_crypto_aead_aes256gcm_encrypt(#[\SensitiveParameter] string $message, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_aead_aes256gcm_encrypt(string $message, string $additional_data, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_aead_aes256gcm_keygen(): string {}
+ #endif
+ 
+-function sodium_crypto_aead_chacha20poly1305_decrypt(string $ciphertext, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string|false {}
++function sodium_crypto_aead_chacha20poly1305_decrypt(string $ciphertext, string $additional_data, string $nonce, string $key): string|false {}
+ 
+-function sodium_crypto_aead_chacha20poly1305_encrypt(#[\SensitiveParameter] string $message, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_aead_chacha20poly1305_encrypt(string $message, string $additional_data, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_aead_chacha20poly1305_keygen(): string {}
+ 
+-function sodium_crypto_aead_chacha20poly1305_ietf_decrypt(string $ciphertext, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string|false {}
++function sodium_crypto_aead_chacha20poly1305_ietf_decrypt(string $ciphertext, string $additional_data, string $nonce, string $key): string|false {}
+ 
+-function sodium_crypto_aead_chacha20poly1305_ietf_encrypt(#[\SensitiveParameter] string $message, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_aead_chacha20poly1305_ietf_encrypt(string $message, string $additional_data, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_aead_chacha20poly1305_ietf_keygen(): string {}
+ 
+ #ifdef crypto_aead_xchacha20poly1305_IETF_NPUBBYTES
+-function sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(string $ciphertext, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string|false {}
++function sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(string $ciphertext, string $additional_data, string $nonce, string $key): string|false {}
+ 
+ function sodium_crypto_aead_xchacha20poly1305_ietf_keygen(): string {}
+ 
+-function sodium_crypto_aead_xchacha20poly1305_ietf_encrypt(#[\SensitiveParameter] string $message, string $additional_data, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_aead_xchacha20poly1305_ietf_encrypt(string $message, string $additional_data, string $nonce, string $key): string {}
+ #endif
+ 
+-function sodium_crypto_auth(string $message, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_auth(string $message, string $key): string {}
+ 
+ function sodium_crypto_auth_keygen(): string {}
+ 
+-function sodium_crypto_auth_verify(string $mac, string $message, #[\SensitiveParameter] string $key): bool {}
++function sodium_crypto_auth_verify(string $mac, string $message, string $key): bool {}
+ 
+-function sodium_crypto_box(#[\SensitiveParameter] string $message, string $nonce, #[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_box(string $message, string $nonce, string $key_pair): string {}
+ 
+ function sodium_crypto_box_keypair(): string {}
+ 
+-function sodium_crypto_box_seed_keypair(#[\SensitiveParameter] string $seed): string {}
++function sodium_crypto_box_seed_keypair(string $seed): string {}
+ 
+-function sodium_crypto_box_keypair_from_secretkey_and_publickey(#[\SensitiveParameter] string $secret_key, string $public_key): string {}
++function sodium_crypto_box_keypair_from_secretkey_and_publickey(string $secret_key, string $public_key): string {}
+ 
+-function sodium_crypto_box_open(string $ciphertext, string $nonce, #[\SensitiveParameter] string $key_pair): string|false {}
++function sodium_crypto_box_open(string $ciphertext, string $nonce, string $key_pair): string|false {}
+ 
+-function sodium_crypto_box_publickey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_box_publickey(string $key_pair): string {}
+ 
+-function sodium_crypto_box_publickey_from_secretkey(#[\SensitiveParameter] string $secret_key): string {}
++function sodium_crypto_box_publickey_from_secretkey(string $secret_key): string {}
+ 
+-function sodium_crypto_box_seal(#[\SensitiveParameter] string $message, string $public_key): string {}
++function sodium_crypto_box_seal(string $message, string $public_key): string {}
+ 
+-function sodium_crypto_box_seal_open(string $ciphertext, #[\SensitiveParameter] string $key_pair): string|false {}
++function sodium_crypto_box_seal_open(string $ciphertext, string $key_pair): string|false {}
+ 
+-function sodium_crypto_box_secretkey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_box_secretkey(string $key_pair): string {}
+ 
+ #ifdef crypto_core_ristretto255_HASHBYTES
+ function sodium_crypto_core_ristretto255_add(string $p, string $q): string {}
+@@ -583,43 +88,39 @@ function sodium_crypto_core_ristretto255_sub(string $p, string $q): string {}
+ 
+ function sodium_crypto_kx_keypair(): string {}
+ 
+-function sodium_crypto_kx_publickey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_kx_publickey(string $key_pair): string {}
+ 
+-function sodium_crypto_kx_secretkey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_kx_secretkey(string $key_pair): string {}
+ 
+-function sodium_crypto_kx_seed_keypair(#[\SensitiveParameter] string $seed): string {}
++function sodium_crypto_kx_seed_keypair(string $seed): string {}
+ 
+-/**
+- * @return array<int, string>
+- */
+-function sodium_crypto_kx_client_session_keys(#[\SensitiveParameter] string $client_key_pair, string $server_key): array {}
++/** @return array<int, string> */
++function sodium_crypto_kx_client_session_keys(string $client_key_pair, string $server_key): array {}
+ 
+-/**
+- * @return array<int, string>
+- *
+- */
+-function sodium_crypto_kx_server_session_keys(#[\SensitiveParameter] string $server_key_pair, string $client_key): array {}
++/** @return array<int, string> */
++function sodium_crypto_kx_server_session_keys(string $server_key_pair, string $client_key): array {}
+ 
+-function sodium_crypto_generichash(string $message, #[\SensitiveParameter] string $key = "", int $length = SODIUM_CRYPTO_GENERICHASH_BYTES): string {}
++function sodium_crypto_generichash(string $message, string $key = "", int $length = SODIUM_CRYPTO_GENERICHASH_BYTES): string {}
+ 
+ function sodium_crypto_generichash_keygen(): string {}
+ 
+-function sodium_crypto_generichash_init(#[\SensitiveParameter] string $key = "", int $length = SODIUM_CRYPTO_GENERICHASH_BYTES): string {}
++function sodium_crypto_generichash_init(string $key = "", int $length = SODIUM_CRYPTO_GENERICHASH_BYTES): string {}
+ 
+-function sodium_crypto_generichash_update(string &$state, string $message): true {}
++/** @return true */
++function sodium_crypto_generichash_update(string &$state, string $message): bool {}
+ 
+ function sodium_crypto_generichash_final(string &$state, int $length = SODIUM_CRYPTO_GENERICHASH_BYTES): string {}
+ 
+-function sodium_crypto_kdf_derive_from_key(int $subkey_length, int $subkey_id, string $context, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_kdf_derive_from_key(int $subkey_length, int $subkey_id, string $context, string $key): string {}
+ 
+ function sodium_crypto_kdf_keygen(): string {}
+ 
+ #ifdef crypto_pwhash_SALTBYTES
+-function sodium_crypto_pwhash(int $length, #[\SensitiveParameter] string $password, string $salt, int $opslimit, int $memlimit, int $algo = SODIUM_CRYPTO_PWHASH_ALG_DEFAULT): string {}
++function sodium_crypto_pwhash(int $length, string $password, string $salt, int $opslimit, int $memlimit, int $algo = SODIUM_CRYPTO_PWHASH_ALG_DEFAULT): string {}
+ 
+-function sodium_crypto_pwhash_str(#[\SensitiveParameter] string $password, int $opslimit, int $memlimit): string {}
++function sodium_crypto_pwhash_str(string $password, int $opslimit, int $memlimit): string {}
+ 
+-function sodium_crypto_pwhash_str_verify(string $hash, #[\SensitiveParameter] string $password): bool {}
++function sodium_crypto_pwhash_str_verify(string $hash, string $password): bool {}
+ #endif
+ 
+ #if SODIUM_LIBRARY_VERSION_MAJOR > 9 || (SODIUM_LIBRARY_VERSION_MAJOR == 9 && SODIUM_LIBRARY_VERSION_MINOR >= 6)
+@@ -627,11 +128,11 @@ function sodium_crypto_pwhash_str_needs_rehash(string $password, int $opslimit,
+ #endif
+ 
+ #ifdef crypto_pwhash_scryptsalsa208sha256_SALTBYTES
+-function sodium_crypto_pwhash_scryptsalsa208sha256(int $length, #[\SensitiveParameter] string $password, string $salt, int $opslimit, int $memlimit): string {}
++function sodium_crypto_pwhash_scryptsalsa208sha256(int $length, string $password, string $salt, int $opslimit, int $memlimit): string {}
+ 
+-function sodium_crypto_pwhash_scryptsalsa208sha256_str(#[\SensitiveParameter] string $password, int $opslimit, int $memlimit): string {}
++function sodium_crypto_pwhash_scryptsalsa208sha256_str(string $password, int $opslimit, int $memlimit): string {}
+ 
+-function sodium_crypto_pwhash_scryptsalsa208sha256_str_verify(string $hash, #[\SensitiveParameter] string $password): bool {}
++function sodium_crypto_pwhash_scryptsalsa208sha256_str_verify(string $hash, string $password): bool {}
+ #endif
+ 
+ function sodium_crypto_scalarmult(string $n, string $p): string {}
+@@ -642,23 +143,21 @@ function sodium_crypto_scalarmult_ristretto255(string $n, string $p): string {}
+ function sodium_crypto_scalarmult_ristretto255_base(string $n): string {}
+ #endif
+ 
+-function sodium_crypto_secretbox(#[\SensitiveParameter] string $message, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_secretbox(string $message, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_secretbox_keygen(): string {}
+ 
+-function sodium_crypto_secretbox_open(string $ciphertext, string $nonce, #[\SensitiveParameter] string $key): string|false {}
++function sodium_crypto_secretbox_open(string $ciphertext, string $nonce, string $key): string|false {}
+ 
+ #ifdef crypto_secretstream_xchacha20poly1305_ABYTES
+ function sodium_crypto_secretstream_xchacha20poly1305_keygen(): string {}
+ 
+-/**
+- * @return array<int, string>
+- */
+-function sodium_crypto_secretstream_xchacha20poly1305_init_push(#[\SensitiveParameter] string $key): array {}
++/** @return array<int, string> */
++function sodium_crypto_secretstream_xchacha20poly1305_init_push(string $key): array {}
+ 
+-function sodium_crypto_secretstream_xchacha20poly1305_push(string &$state, #[\SensitiveParameter] string $message, string $additional_data = "", int $tag = SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE): string {}
++function sodium_crypto_secretstream_xchacha20poly1305_push(string &$state, string $message, string $additional_data = "", int $tag = SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE): string {}
+ 
+-function sodium_crypto_secretstream_xchacha20poly1305_init_pull(string $header, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_secretstream_xchacha20poly1305_init_pull(string $header, string $key): string {}
+ 
+ /** @return array<int, int|string>|false */
+ function sodium_crypto_secretstream_xchacha20poly1305_pull(string &$state, string $ciphertext, string $additional_data = ""): array|false {}
+@@ -666,77 +165,73 @@ function sodium_crypto_secretstream_xchacha20poly1305_pull(string &$state, strin
+ function sodium_crypto_secretstream_xchacha20poly1305_rekey(string &$state): void {}
+ #endif
+ 
+-function sodium_crypto_shorthash(string $message, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_shorthash(string $message, string $key): string {}
+ 
+ function sodium_crypto_shorthash_keygen(): string {}
+ 
+-function sodium_crypto_sign(string $message, #[\SensitiveParameter] string $secret_key): string {}
++function sodium_crypto_sign(string $message, string $secret_key): string {}
+ 
+-function sodium_crypto_sign_detached(string $message, #[\SensitiveParameter] string $secret_key): string {}
++function sodium_crypto_sign_detached(string $message, string $secret_key): string {}
+ 
+ function sodium_crypto_sign_ed25519_pk_to_curve25519(string $public_key): string {}
+ 
+-function sodium_crypto_sign_ed25519_sk_to_curve25519(#[\SensitiveParameter] string $secret_key): string {}
++function sodium_crypto_sign_ed25519_sk_to_curve25519(string $secret_key): string {}
+ 
+ function sodium_crypto_sign_keypair(): string {}
+ 
+-function sodium_crypto_sign_keypair_from_secretkey_and_publickey(#[\SensitiveParameter] string $secret_key, string $public_key): string {}
++function sodium_crypto_sign_keypair_from_secretkey_and_publickey(string $secret_key, string $public_key): string {}
+ 
+ function sodium_crypto_sign_open(string $signed_message, string $public_key): string|false {}
+ 
+-function sodium_crypto_sign_publickey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_sign_publickey(string $key_pair): string {}
+ 
+-function sodium_crypto_sign_secretkey(#[\SensitiveParameter] string $key_pair): string {}
++function sodium_crypto_sign_secretkey(string $key_pair): string {}
+ 
+-function sodium_crypto_sign_publickey_from_secretkey(#[\SensitiveParameter] string $secret_key): string {}
++function sodium_crypto_sign_publickey_from_secretkey(string $secret_key): string {}
+ 
+-function sodium_crypto_sign_seed_keypair(#[\SensitiveParameter] string $seed): string {}
++function sodium_crypto_sign_seed_keypair(string $seed): string {}
+ 
+ function sodium_crypto_sign_verify_detached(string $signature, string $message, string $public_key): bool {}
+ 
+-function sodium_crypto_stream(int $length, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_stream(int $length, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_stream_keygen(): string {}
+ 
+-function sodium_crypto_stream_xor(#[\SensitiveParameter] string $message, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_stream_xor(string $message, string $nonce, string $key): string {}
+ 
+ #if defined(crypto_stream_xchacha20_KEYBYTES)
+-function sodium_crypto_stream_xchacha20(int $length, string $nonce, #[\SensitiveParameter] string $key): string {}
++function sodium_crypto_stream_xchacha20(int $length, string $nonce, string $key): string {}
+ 
+ function sodium_crypto_stream_xchacha20_keygen(): string {}
+ 
+-function sodium_crypto_stream_xchacha20_xor(#[\SensitiveParameter] string $message, string $nonce, #[\SensitiveParameter] string $key): string {}
+-
+-function sodium_crypto_stream_xchacha20_xor_ic(#[\SensitiveParameter] string $message, string $nonce, int $counter,#[\SensitiveParameter]  string $key): string {}
++function sodium_crypto_stream_xchacha20_xor(string $message, string $nonce, string $key): string {}
+ #endif
+ 
+ function sodium_add(string &$string1, string $string2): void {}
+ 
+-function sodium_compare(#[\SensitiveParameter] string $string1, #[\SensitiveParameter] string $string2): int {}
++function sodium_compare(string $string1, string $string2): int {}
+ 
+ function sodium_increment(string &$string): void {}
+ 
+-function sodium_memcmp(#[\SensitiveParameter] string $string1, #[\SensitiveParameter] string $string2): int {}
++function sodium_memcmp(string $string1, string $string2): int {}
+ 
+-function sodium_memzero(#[\SensitiveParameter] string &$string): void {}
++function sodium_memzero(string &$string): void {}
+ 
+-function sodium_pad(#[\SensitiveParameter] string $string, int $block_size): string {}
++function sodium_pad(string $string, int $block_size): string {}
+ 
+-function sodium_unpad(#[\SensitiveParameter] string $string, int $block_size): string {}
++function sodium_unpad(string $string, int $block_size): string {}
+ 
+-function sodium_bin2hex(#[\SensitiveParameter] string $string): string {}
++function sodium_bin2hex(string $string): string {}
+ 
+-function sodium_hex2bin(#[\SensitiveParameter] string $string, string $ignore = ""): string {}
++function sodium_hex2bin(string $string, string $ignore = ""): string {}
+ 
+ #ifdef sodium_base64_VARIANT_ORIGINAL
+-function sodium_bin2base64(#[\SensitiveParameter] string $string, int $id): string {}
++function sodium_bin2base64(string $string, int $id): string {}
+ 
+-function sodium_base642bin(#[\SensitiveParameter] string $string, int $id, string $ignore = ""): string {}
++function sodium_base642bin(string $string, int $id, string $ignore = ""): string {}
+ #endif
+ 
+-/**
+- * @alias sodium_crypto_box_publickey_from_secretkey
+- */
+-function sodium_crypto_scalarmult_base(#[\SensitiveParameter] string $secret_key): string {}
++/** @alias sodium_crypto_box_publickey_from_secretkey */
++function sodium_crypto_scalarmult_base(string $secret_key): string {}
+ 
+ class SodiumException extends Exception {}
+diff --git a/ext/sodium/libsodium_arginfo.h b/ext/sodium/libsodium_arginfo.h
+index 8fb0b9a3..f0e7aed8 100644
+--- a/ext/sodium/libsodium_arginfo.h
++++ b/ext/sodium/libsodium_arginfo.h
+@@ -1,5 +1,5 @@
+ /* This is a generated file, edit the .stub.php file instead.
+- * Stub hash: 5711a4c90afa943e660fdc5fa15a0e91ae554057 */
++ * Stub hash: e172b900040a9d9ac98207c638fdeb3a0c6a13e6 */
+ 
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_aead_aes256gcm_is_available, 0, 0, _IS_BOOL, 0)
+ ZEND_END_ARG_INFO()
+@@ -223,7 +223,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_generichash_init,
+ 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, length, IS_LONG, 0, "SODIUM_CRYPTO_GENERICHASH_BYTES")
+ ZEND_END_ARG_INFO()
+ 
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_generichash_update, 0, 2, IS_TRUE, 0)
++ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_generichash_update, 0, 2, _IS_BOOL, 0)
+ 	ZEND_ARG_TYPE_INFO(1, state, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, message, IS_STRING, 0)
+ ZEND_END_ARG_INFO()
+@@ -445,15 +445,6 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_stream_xchacha20_x
+ ZEND_END_ARG_INFO()
+ #endif
+ 
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_crypto_stream_xchacha20_xor_ic, 0, 4, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, message, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, nonce, IS_STRING, 0)
+-	ZEND_ARG_TYPE_INFO(0, counter, IS_LONG, 0)
+-	ZEND_ARG_TYPE_INFO(0, key, IS_STRING, 0)
+-ZEND_END_ARG_INFO()
+-#endif
+-
+ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_sodium_add, 0, 2, IS_VOID, 0)
+ 	ZEND_ARG_TYPE_INFO(1, string1, IS_STRING, 0)
+ 	ZEND_ARG_TYPE_INFO(0, string2, IS_STRING, 0)
+@@ -671,9 +662,6 @@ ZEND_FUNCTION(sodium_crypto_stream_xchacha20_keygen);
+ #if defined(crypto_stream_xchacha20_KEYBYTES)
+ ZEND_FUNCTION(sodium_crypto_stream_xchacha20_xor);
+ #endif
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-ZEND_FUNCTION(sodium_crypto_stream_xchacha20_xor_ic);
+-#endif
+ ZEND_FUNCTION(sodium_add);
+ ZEND_FUNCTION(sodium_compare);
+ ZEND_FUNCTION(sodium_increment);
+@@ -856,9 +844,6 @@ static const zend_function_entry ext_functions[] = {
+ #endif
+ #if defined(crypto_stream_xchacha20_KEYBYTES)
+ 	ZEND_FE(sodium_crypto_stream_xchacha20_xor, arginfo_sodium_crypto_stream_xchacha20_xor)
+-#endif
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-	ZEND_FE(sodium_crypto_stream_xchacha20_xor_ic, arginfo_sodium_crypto_stream_xchacha20_xor_ic)
+ #endif
+ 	ZEND_FE(sodium_add, arginfo_sodium_add)
+ 	ZEND_FE(sodium_compare, arginfo_sodium_compare)
+@@ -884,377 +869,6 @@ static const zend_function_entry class_SodiumException_methods[] = {
+ 	ZEND_FE_END
+ };
+ 
+-static void register_libsodium_symbols(int module_number)
+-{
+-	REGISTER_STRING_CONSTANT("SODIUM_LIBRARY_VERSION", SODIUM_LIBRARY_VERSION(), CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_LIBRARY_MAJOR_VERSION", sodium_library_version_major(), CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_LIBRARY_MINOR_VERSION", sodium_library_version_minor(), CONST_PERSISTENT);
+-#if defined(HAVE_AESGCM)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES", crypto_aead_aes256gcm_KEYBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(HAVE_AESGCM)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_NSECBYTES", crypto_aead_aes256gcm_NSECBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(HAVE_AESGCM)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES", crypto_aead_aes256gcm_NPUBBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(HAVE_AESGCM)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_AES256GCM_ABYTES", crypto_aead_aes256gcm_ABYTES, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES", crypto_aead_chacha20poly1305_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NSECBYTES", crypto_aead_chacha20poly1305_NSECBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES", crypto_aead_chacha20poly1305_NPUBBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_ABYTES", crypto_aead_chacha20poly1305_ABYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES", crypto_aead_chacha20poly1305_IETF_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NSECBYTES", crypto_aead_chacha20poly1305_IETF_NSECBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES", crypto_aead_chacha20poly1305_IETF_NPUBBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_ABYTES", crypto_aead_chacha20poly1305_IETF_ABYTES, CONST_PERSISTENT);
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES", crypto_aead_xchacha20poly1305_IETF_KEYBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NSECBYTES", crypto_aead_xchacha20poly1305_IETF_NSECBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES", crypto_aead_xchacha20poly1305_IETF_NPUBBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES", crypto_aead_xchacha20poly1305_IETF_ABYTES, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AUTH_BYTES", crypto_auth_BYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_AUTH_KEYBYTES", crypto_auth_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SEALBYTES", crypto_box_SEALBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SECRETKEYBYTES", crypto_box_SECRETKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_PUBLICKEYBYTES", crypto_box_PUBLICKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_KEYPAIRBYTES", SODIUM_CRYPTO_BOX_KEYPAIRBYTES(), CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_MACBYTES", crypto_box_MACBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_NONCEBYTES", crypto_box_NONCEBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_BOX_SEEDBYTES", crypto_box_SEEDBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_BYTES_MIN", crypto_kdf_BYTES_MIN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_BYTES_MAX", crypto_kdf_BYTES_MAX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_CONTEXTBYTES", crypto_kdf_CONTEXTBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KDF_KEYBYTES", crypto_kdf_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SEEDBYTES", crypto_kx_SEEDBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SESSIONKEYBYTES", crypto_kx_SESSIONKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_PUBLICKEYBYTES", crypto_kx_PUBLICKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_SECRETKEYBYTES", crypto_kx_SECRETKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_KX_KEYPAIRBYTES", SODIUM_CRYPTO_KX_KEYPAIRBYTES(), CONST_PERSISTENT);
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES", crypto_secretstream_xchacha20poly1305_ABYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES", crypto_secretstream_xchacha20poly1305_HEADERBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES", crypto_secretstream_xchacha20poly1305_KEYBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX", crypto_secretstream_xchacha20poly1305_MESSAGEBYTES_MAX, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE", crypto_secretstream_xchacha20poly1305_TAG_MESSAGE, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_PUSH", crypto_secretstream_xchacha20poly1305_TAG_PUSH, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_REKEY", crypto_secretstream_xchacha20poly1305_TAG_REKEY, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL", crypto_secretstream_xchacha20poly1305_TAG_FINAL, CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES", crypto_generichash_BYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES_MIN", crypto_generichash_BYTES_MIN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_BYTES_MAX", crypto_generichash_BYTES_MAX, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES", crypto_generichash_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN", crypto_generichash_KEYBYTES_MIN, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX", crypto_generichash_KEYBYTES_MAX, CONST_PERSISTENT);
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_ARGON2I13", crypto_pwhash_ALG_ARGON2I13, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES) && defined(crypto_pwhash_ALG_ARGON2ID13)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13", crypto_pwhash_ALG_ARGON2ID13, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_ALG_DEFAULT", crypto_pwhash_ALG_DEFAULT, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SALTBYTES", crypto_pwhash_SALTBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_STRING_CONSTANT("SODIUM_CRYPTO_PWHASH_STRPREFIX", crypto_pwhash_STRPREFIX, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE", crypto_pwhash_opslimit_interactive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE", crypto_pwhash_memlimit_interactive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_MODERATE", crypto_pwhash_opslimit_moderate(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE", crypto_pwhash_memlimit_moderate(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE", crypto_pwhash_opslimit_sensitive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE", crypto_pwhash_memlimit_sensitive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_SALTBYTES", crypto_pwhash_scryptsalsa208sha256_SALTBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_STRING_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_STRPREFIX", crypto_pwhash_scryptsalsa208sha256_STRPREFIX, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_INTERACTIVE", crypto_pwhash_scryptsalsa208sha256_opslimit_interactive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_INTERACTIVE", crypto_pwhash_scryptsalsa208sha256_memlimit_interactive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_OPSLIMIT_SENSITIVE", crypto_pwhash_scryptsalsa208sha256_opslimit_sensitive(), CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_PWHASH_SCRYPTSALSA208SHA256_MEMLIMIT_SENSITIVE", crypto_pwhash_scryptsalsa208sha256_memlimit_sensitive(), CONST_PERSISTENT);
+-#endif
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_BYTES", crypto_scalarmult_BYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_SCALARBYTES", crypto_scalarmult_SCALARBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SHORTHASH_BYTES", crypto_shorthash_BYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SHORTHASH_KEYBYTES", crypto_shorthash_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_KEYBYTES", crypto_secretbox_KEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_MACBYTES", crypto_secretbox_MACBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SECRETBOX_NONCEBYTES", crypto_secretbox_NONCEBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_BYTES", crypto_sign_BYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_SEEDBYTES", crypto_sign_SEEDBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES", crypto_sign_PUBLICKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_SECRETKEYBYTES", crypto_sign_SECRETKEYBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SIGN_KEYPAIRBYTES", SODIUM_CRYPTO_SIGN_KEYPAIRBYTES(), CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_NONCEBYTES", crypto_stream_NONCEBYTES, CONST_PERSISTENT);
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_KEYBYTES", crypto_stream_KEYBYTES, CONST_PERSISTENT);
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES", crypto_stream_xchacha20_NONCEBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES", crypto_stream_xchacha20_KEYBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_ORIGINAL", sodium_base64_VARIANT_ORIGINAL, CONST_PERSISTENT);
+-#endif
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING", sodium_base64_VARIANT_ORIGINAL_NO_PADDING, CONST_PERSISTENT);
+-#endif
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_URLSAFE", sodium_base64_VARIANT_URLSAFE, CONST_PERSISTENT);
+-#endif
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-	REGISTER_LONG_CONSTANT("SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING", sodium_base64_VARIANT_URLSAFE_NO_PADDING, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_BYTES", crypto_scalarmult_ristretto255_BYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_SCALARMULT_RISTRETTO255_SCALARBYTES", crypto_scalarmult_ristretto255_SCALARBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_BYTES", crypto_core_ristretto255_BYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_HASHBYTES", crypto_core_ristretto255_HASHBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_SCALARBYTES", crypto_core_ristretto255_SCALARBYTES, CONST_PERSISTENT);
+-#endif
+-#if defined(crypto_core_ristretto255_HASHBYTES)
+-	REGISTER_LONG_CONSTANT("SODIUM_CRYPTO_CORE_RISTRETTO255_NONREDUCEDSCALARBYTES", crypto_core_ristretto255_NONREDUCEDSCALARBYTES, CONST_PERSISTENT);
+-#endif
+-
+-#if defined(HAVE_AESGCM)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_aes256gcm_decrypt", sizeof("sodium_crypto_aead_aes256gcm_decrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(HAVE_AESGCM)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_aes256gcm_encrypt", sizeof("sodium_crypto_aead_aes256gcm_encrypt") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_aes256gcm_encrypt", sizeof("sodium_crypto_aead_aes256gcm_encrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_decrypt", sizeof("sodium_crypto_aead_chacha20poly1305_decrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_encrypt", sizeof("sodium_crypto_aead_chacha20poly1305_encrypt") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_encrypt", sizeof("sodium_crypto_aead_chacha20poly1305_encrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_ietf_decrypt", sizeof("sodium_crypto_aead_chacha20poly1305_ietf_decrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_ietf_encrypt", sizeof("sodium_crypto_aead_chacha20poly1305_ietf_encrypt") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_chacha20poly1305_ietf_encrypt", sizeof("sodium_crypto_aead_chacha20poly1305_ietf_encrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_xchacha20poly1305_ietf_decrypt", sizeof("sodium_crypto_aead_xchacha20poly1305_ietf_decrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_aead_xchacha20poly1305_IETF_NPUBBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_xchacha20poly1305_ietf_encrypt", sizeof("sodium_crypto_aead_xchacha20poly1305_ietf_encrypt") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_aead_xchacha20poly1305_ietf_encrypt", sizeof("sodium_crypto_aead_xchacha20poly1305_ietf_encrypt") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_auth", sizeof("sodium_crypto_auth") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_auth_verify", sizeof("sodium_crypto_auth_verify") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box", sizeof("sodium_crypto_box") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box", sizeof("sodium_crypto_box") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_seed_keypair", sizeof("sodium_crypto_box_seed_keypair") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_keypair_from_secretkey_and_publickey", sizeof("sodium_crypto_box_keypair_from_secretkey_and_publickey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_open", sizeof("sodium_crypto_box_open") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_publickey", sizeof("sodium_crypto_box_publickey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_publickey_from_secretkey", sizeof("sodium_crypto_box_publickey_from_secretkey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_seal", sizeof("sodium_crypto_box_seal") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_seal_open", sizeof("sodium_crypto_box_seal_open") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_box_secretkey", sizeof("sodium_crypto_box_secretkey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kx_publickey", sizeof("sodium_crypto_kx_publickey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kx_secretkey", sizeof("sodium_crypto_kx_secretkey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kx_seed_keypair", sizeof("sodium_crypto_kx_seed_keypair") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kx_client_session_keys", sizeof("sodium_crypto_kx_client_session_keys") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kx_server_session_keys", sizeof("sodium_crypto_kx_server_session_keys") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_generichash", sizeof("sodium_crypto_generichash") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_generichash_init", sizeof("sodium_crypto_generichash_init") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_kdf_derive_from_key", sizeof("sodium_crypto_kdf_derive_from_key") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#if defined(crypto_pwhash_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash", sizeof("sodium_crypto_pwhash") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash_str", sizeof("sodium_crypto_pwhash_str") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_pwhash_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash_str_verify", sizeof("sodium_crypto_pwhash_str_verify") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash_scryptsalsa208sha256", sizeof("sodium_crypto_pwhash_scryptsalsa208sha256") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash_scryptsalsa208sha256_str", sizeof("sodium_crypto_pwhash_scryptsalsa208sha256_str") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_pwhash_scryptsalsa208sha256_SALTBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_pwhash_scryptsalsa208sha256_str_verify", sizeof("sodium_crypto_pwhash_scryptsalsa208sha256_str_verify") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretbox", sizeof("sodium_crypto_secretbox") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretbox", sizeof("sodium_crypto_secretbox") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretbox_open", sizeof("sodium_crypto_secretbox_open") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretstream_xchacha20poly1305_init_push", sizeof("sodium_crypto_secretstream_xchacha20poly1305_init_push") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretstream_xchacha20poly1305_push", sizeof("sodium_crypto_secretstream_xchacha20poly1305_push") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_secretstream_xchacha20poly1305_ABYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_secretstream_xchacha20poly1305_init_pull", sizeof("sodium_crypto_secretstream_xchacha20poly1305_init_pull") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_shorthash", sizeof("sodium_crypto_shorthash") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign", sizeof("sodium_crypto_sign") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_detached", sizeof("sodium_crypto_sign_detached") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_ed25519_sk_to_curve25519", sizeof("sodium_crypto_sign_ed25519_sk_to_curve25519") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_keypair_from_secretkey_and_publickey", sizeof("sodium_crypto_sign_keypair_from_secretkey_and_publickey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_publickey", sizeof("sodium_crypto_sign_publickey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_secretkey", sizeof("sodium_crypto_sign_secretkey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_publickey_from_secretkey", sizeof("sodium_crypto_sign_publickey_from_secretkey") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_sign_seed_keypair", sizeof("sodium_crypto_sign_seed_keypair") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream", sizeof("sodium_crypto_stream") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xor", sizeof("sodium_crypto_stream_xor") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xor", sizeof("sodium_crypto_stream_xor") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xchacha20", sizeof("sodium_crypto_stream_xchacha20") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xchacha20_xor", sizeof("sodium_crypto_stream_xchacha20_xor") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xchacha20_xor", sizeof("sodium_crypto_stream_xchacha20_xor") - 1), 2, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(crypto_stream_xchacha20_KEYBYTES)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xchacha20_xor_ic", sizeof("sodium_crypto_stream_xchacha20_xor_ic") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_stream_xchacha20_xor_ic", sizeof("sodium_crypto_stream_xchacha20_xor_ic") - 1), 3, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_compare", sizeof("sodium_compare") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_compare", sizeof("sodium_compare") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_memcmp", sizeof("sodium_memcmp") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_memcmp", sizeof("sodium_memcmp") - 1), 1, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_memzero", sizeof("sodium_memzero") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_pad", sizeof("sodium_pad") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_unpad", sizeof("sodium_unpad") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_bin2hex", sizeof("sodium_bin2hex") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_hex2bin", sizeof("sodium_hex2bin") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_bin2base64", sizeof("sodium_bin2base64") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-#if defined(sodium_base64_VARIANT_ORIGINAL)
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_base642bin", sizeof("sodium_base642bin") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-#endif
+-
+-	zend_add_parameter_attribute(zend_hash_str_find_ptr(CG(function_table), "sodium_crypto_scalarmult_base", sizeof("sodium_crypto_scalarmult_base") - 1), 0, ZSTR_KNOWN(ZEND_STR_SENSITIVEPARAMETER), 0);
+-}
+-
+ static zend_class_entry *register_class_SodiumException(zend_class_entry *class_entry_Exception)
+ {
+ 	zend_class_entry ce, *class_entry;
+diff --git a/ext/sodium/php_libsodium.h b/ext/sodium/php_libsodium.h
+index 3ea4571d..543a5cb3 100644
+--- a/ext/sodium/php_libsodium.h
++++ b/ext/sodium/php_libsodium.h
+@@ -26,14 +26,6 @@ extern zend_module_entry sodium_module_entry;
+ # include "TSRM.h"
+ #endif
+ 
+-#define SODIUM_LIBRARY_VERSION() (char *) (void *) sodium_version_string()
+-
+-#define SODIUM_CRYPTO_BOX_KEYPAIRBYTES() crypto_box_SECRETKEYBYTES + crypto_box_PUBLICKEYBYTES
+-
+-#define SODIUM_CRYPTO_KX_KEYPAIRBYTES() crypto_kx_SECRETKEYBYTES + crypto_kx_PUBLICKEYBYTES
+-
+-#define SODIUM_CRYPTO_SIGN_KEYPAIRBYTES() crypto_sign_SECRETKEYBYTES + crypto_sign_PUBLICKEYBYTES
+-
+ PHP_MINIT_FUNCTION(sodium);
+ PHP_MINIT_FUNCTION(sodium_password_hash);
+ PHP_MSHUTDOWN_FUNCTION(sodium);
+@@ -41,4 +33,108 @@ PHP_RINIT_FUNCTION(sodium);
+ PHP_RSHUTDOWN_FUNCTION(sodium);
+ PHP_MINFO_FUNCTION(sodium);
+ 
++PHP_FUNCTION(sodium_add);
++PHP_FUNCTION(sodium_base642bin);
++PHP_FUNCTION(sodium_bin2base64);
++PHP_FUNCTION(sodium_bin2hex);
++PHP_FUNCTION(sodium_compare);
++PHP_FUNCTION(sodium_crypto_aead_aes256gcm_decrypt);
++PHP_FUNCTION(sodium_crypto_aead_aes256gcm_encrypt);
++PHP_FUNCTION(sodium_crypto_aead_aes256gcm_is_available);
++PHP_FUNCTION(sodium_crypto_aead_aes256gcm_keygen);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_decrypt);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_encrypt);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_ietf_decrypt);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_ietf_encrypt);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_ietf_keygen);
++PHP_FUNCTION(sodium_crypto_aead_chacha20poly1305_keygen);
++PHP_FUNCTION(sodium_crypto_aead_xchacha20poly1305_ietf_decrypt);
++PHP_FUNCTION(sodium_crypto_aead_xchacha20poly1305_ietf_encrypt);
++PHP_FUNCTION(sodium_crypto_aead_xchacha20poly1305_ietf_keygen);
++PHP_FUNCTION(sodium_crypto_auth);
++PHP_FUNCTION(sodium_crypto_auth_keygen);
++PHP_FUNCTION(sodium_crypto_auth_verify);
++PHP_FUNCTION(sodium_crypto_box);
++PHP_FUNCTION(sodium_crypto_box_keypair);
++PHP_FUNCTION(sodium_crypto_box_keypair_from_secretkey_and_publickey);
++PHP_FUNCTION(sodium_crypto_box_open);
++PHP_FUNCTION(sodium_crypto_box_publickey);
++PHP_FUNCTION(sodium_crypto_box_publickey_from_secretkey);
++PHP_FUNCTION(sodium_crypto_box_seal);
++PHP_FUNCTION(sodium_crypto_box_seal_open);
++PHP_FUNCTION(sodium_crypto_box_secretkey);
++PHP_FUNCTION(sodium_crypto_box_seed_keypair);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_add);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_from_hash);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_is_valid_point);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_random);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_add);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_complement);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_invert);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_mul);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_negate);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_random);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_reduce);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_scalar_sub);
++PHP_FUNCTION(sodium_crypto_core_ristretto255_sub);
++PHP_FUNCTION(sodium_crypto_generichash);
++PHP_FUNCTION(sodium_crypto_generichash_final);
++PHP_FUNCTION(sodium_crypto_generichash_init);
++PHP_FUNCTION(sodium_crypto_generichash_keygen);
++PHP_FUNCTION(sodium_crypto_generichash_update);
++PHP_FUNCTION(sodium_crypto_kdf_derive_from_key);
++PHP_FUNCTION(sodium_crypto_kdf_keygen);
++PHP_FUNCTION(sodium_crypto_kx_client_session_keys);
++PHP_FUNCTION(sodium_crypto_kx_keypair);
++PHP_FUNCTION(sodium_crypto_kx_publickey);
++PHP_FUNCTION(sodium_crypto_kx_secretkey);
++PHP_FUNCTION(sodium_crypto_kx_seed_keypair);
++PHP_FUNCTION(sodium_crypto_kx_server_session_keys);
++PHP_FUNCTION(sodium_crypto_pwhash);
++PHP_FUNCTION(sodium_crypto_pwhash_scryptsalsa208sha256);
++PHP_FUNCTION(sodium_crypto_pwhash_scryptsalsa208sha256_str);
++PHP_FUNCTION(sodium_crypto_pwhash_scryptsalsa208sha256_str_verify);
++PHP_FUNCTION(sodium_crypto_pwhash_str);
++PHP_FUNCTION(sodium_crypto_pwhash_str_needs_rehash);
++PHP_FUNCTION(sodium_crypto_pwhash_str_verify);
++PHP_FUNCTION(sodium_crypto_scalarmult);
++PHP_FUNCTION(sodium_crypto_scalarmult_base);
++PHP_FUNCTION(sodium_crypto_scalarmult_ristretto255);
++PHP_FUNCTION(sodium_crypto_scalarmult_ristretto255_base);
++PHP_FUNCTION(sodium_crypto_secretbox);
++PHP_FUNCTION(sodium_crypto_secretbox_keygen);
++PHP_FUNCTION(sodium_crypto_secretbox_open);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_keygen);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_init_push);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_push);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_init_pull);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_pull);
++PHP_FUNCTION(sodium_crypto_secretstream_xchacha20poly1305_rekey);
++PHP_FUNCTION(sodium_crypto_shorthash);
++PHP_FUNCTION(sodium_crypto_shorthash_keygen);
++PHP_FUNCTION(sodium_crypto_sign);
++PHP_FUNCTION(sodium_crypto_sign_detached);
++PHP_FUNCTION(sodium_crypto_sign_ed25519_pk_to_curve25519);
++PHP_FUNCTION(sodium_crypto_sign_ed25519_sk_to_curve25519);
++PHP_FUNCTION(sodium_crypto_sign_keypair);
++PHP_FUNCTION(sodium_crypto_sign_keypair_from_secretkey_and_publickey);
++PHP_FUNCTION(sodium_crypto_sign_open);
++PHP_FUNCTION(sodium_crypto_sign_publickey);
++PHP_FUNCTION(sodium_crypto_sign_publickey_from_secretkey);
++PHP_FUNCTION(sodium_crypto_sign_secretkey);
++PHP_FUNCTION(sodium_crypto_sign_seed_keypair);
++PHP_FUNCTION(sodium_crypto_sign_verify_detached);
++PHP_FUNCTION(sodium_crypto_stream);
++PHP_FUNCTION(sodium_crypto_stream_keygen);
++PHP_FUNCTION(sodium_crypto_stream_xor);
++PHP_FUNCTION(sodium_crypto_stream_xchacha20);
++PHP_FUNCTION(sodium_crypto_stream_xchacha20_keygen);
++PHP_FUNCTION(sodium_crypto_stream_xchacha20_xor);
++PHP_FUNCTION(sodium_hex2bin);
++PHP_FUNCTION(sodium_increment);
++PHP_FUNCTION(sodium_memcmp);
++PHP_FUNCTION(sodium_memzero);
++PHP_FUNCTION(sodium_pad);
++PHP_FUNCTION(sodium_unpad);
++
+ #endif	/* PHP_LIBSODIUM_H */
+diff --git a/ext/sodium/tests/crypto_stream_xchacha20.phpt b/ext/sodium/tests/crypto_stream_xchacha20.phpt
+index 46673485..275e195a 100644
+--- a/ext/sodium/tests/crypto_stream_xchacha20.phpt
++++ b/ext/sodium/tests/crypto_stream_xchacha20.phpt
+@@ -34,22 +34,6 @@ $stream6 = sodium_crypto_stream_xchacha20_xor($stream5, $nonce, $key);
+ 
+ var_dump($stream6 === $stream);
+ 
+-// New test (with Initial Counter feature):
+-$n2 = random_bytes(SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES);
+-$left  = str_repeat("\x01", 64);
+-$right = str_repeat("\xfe", 64);
+-
+-// All at once:
+-$stream7_unified = sodium_crypto_stream_xchacha20_xor($left . $right, $n2, $key);
+-
+-// Piecewise, with initial counter:
+-$stream7_left  = sodium_crypto_stream_xchacha20_xor_ic($left, $n2, 0, $key);
+-$stream7_right = sodium_crypto_stream_xchacha20_xor_ic($right, $n2, 1, $key);
+-$stream7_concat = $stream7_left . $stream7_right;
+-
+-var_dump(strlen($stream7_concat));
+-var_dump($stream7_unified === $stream7_concat);
+-
+ try {
+     sodium_crypto_stream_xchacha20(-1, $nonce, $key);
+ } catch (SodiumException $ex) {
+@@ -87,8 +71,6 @@ bool(true)
+ bool(true)
+ bool(true)
+ bool(true)
+-int(128)
+-bool(true)
+ sodium_crypto_stream_xchacha20(): Argument #1 ($length) must be greater than 0
+ sodium_crypto_stream_xchacha20(): Argument #2 ($nonce) must be SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES bytes long
+ sodium_crypto_stream_xchacha20(): Argument #3 ($key) must be SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES bytes long
+diff --git a/ext/spl/php_spl.c b/ext/spl/php_spl.c
+index 710b2f97..86eb9d8d 100644
+--- a/ext/spl/php_spl.c
++++ b/ext/spl/php_spl.c
+@@ -36,6 +36,7 @@
+ #include "spl_heap.h"
+ #include "zend_exceptions.h"
+ #include "zend_interfaces.h"
++#include "ext/standard/php_mt_rand.h"
+ #include "main/snprintf.h"
+ 
+ #ifdef COMPILE_DL_SPL
+@@ -422,7 +423,7 @@ static zend_class_entry *spl_perform_autoload(zend_string *class_name, zend_stri
+ 		return NULL;
+ 	}
+ 
+-	/* We don't use ZEND_HASH_MAP_FOREACH here,
++	/* We don't use ZEND_HASH_FOREACH here,
+ 	 * because autoloaders may be added/removed during autoloading. */
+ 	HashPosition pos;
+ 	zend_hash_internal_pointer_reset_ex(spl_autoload_functions, &pos);
+@@ -476,7 +477,6 @@ PHP_FUNCTION(spl_autoload_call)
+ } /* }}} */
+ 
+ #define HT_MOVE_TAIL_TO_HEAD(ht)						        \
+-	ZEND_ASSERT(!HT_IS_PACKED(ht));						        \
+ 	do {												        \
+ 		Bucket tmp = (ht)->arData[(ht)->nNumUsed-1];				\
+ 		memmove((ht)->arData + 1, (ht)->arData,					\
+@@ -491,7 +491,7 @@ static Bucket *spl_find_registered_function(autoload_func_info *find_alfi) {
+ 	}
+ 
+ 	autoload_func_info *alfi;
+-	ZEND_HASH_MAP_FOREACH_PTR(spl_autoload_functions, alfi) {
++	ZEND_HASH_FOREACH_PTR(spl_autoload_functions, alfi) {
+ 		if (autoload_func_info_equals(alfi, find_alfi)) {
+ 			return _p;
+ 		}
+@@ -533,7 +533,7 @@ PHP_FUNCTION(spl_autoload_register)
+ 			/* Call trampoline has been cleared by zpp. Refetch it, because we want to deal
+ 			 * with it outselves. It is important that it is not refetched on every call,
+ 			 * because calls may occur from different scopes. */
+-			zend_is_callable_ex(&fci.function_name, NULL, IS_CALLABLE_SUPPRESS_DEPRECATIONS, NULL, &fcc, NULL);
++			zend_is_callable_ex(&fci.function_name, NULL, 0, NULL, &fcc, NULL);
+ 		}
+ 
+ 		if (fcc.function_handler->type == ZEND_INTERNAL_FUNCTION &&
+@@ -619,7 +619,7 @@ PHP_FUNCTION(spl_autoload_functions)
+ 
+ 	array_init(return_value);
+ 	if (spl_autoload_functions) {
+-		ZEND_HASH_MAP_FOREACH_PTR(spl_autoload_functions, alfi) {
++		ZEND_HASH_FOREACH_PTR(spl_autoload_functions, alfi) {
+ 			if (alfi->closure) {
+ 				GC_ADDREF(alfi->closure);
+ 				add_next_index_object(return_value, alfi->closure);
+@@ -695,7 +695,7 @@ PHP_MINFO_FUNCTION(spl)
+ 	array_init(&list);
+ 	SPL_LIST_CLASSES(&list, 0, 1, ZEND_ACC_INTERFACE)
+ 	strg = estrdup("");
+-	ZEND_HASH_MAP_FOREACH_VAL(Z_ARRVAL_P(&list), zv) {
++	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(&list), zv) {
+ 		spl_build_class_list_string(zv, &strg);
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_array_destroy(Z_ARR(list));
+@@ -705,7 +705,7 @@ PHP_MINFO_FUNCTION(spl)
+ 	array_init(&list);
+ 	SPL_LIST_CLASSES(&list, 0, -1, ZEND_ACC_INTERFACE)
+ 	strg = estrdup("");
+-	ZEND_HASH_MAP_FOREACH_VAL(Z_ARRVAL_P(&list), zv) {
++	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(&list), zv) {
+ 		spl_build_class_list_string(zv, &strg);
+ 	} ZEND_HASH_FOREACH_END();
+ 	zend_array_destroy(Z_ARR(list));
+diff --git a/ext/spl/php_spl.stub.php b/ext/spl/php_spl.stub.php
+index d3b5d44f..c879f1fa 100644
+--- a/ext/spl/php_spl.stub.php
++++ b/ext/spl/php_spl.stub.php
+@@ -48,6 +48,7 @@ function spl_object_id(object $object): int {}
+ 
+ function iterator_apply(Traversable $iterator, callable $callback, ?array $args = null): int {}
+ 
+-function iterator_count(iterable $iterator): int {}
++function iterator_count(Traversable $iterator): int {}
+ 
+-function iterator_to_array(iterable $iterator, bool $preserve_keys = true): array {}
++/** @refcount 1 */
++function iterator_to_array(Traversable $iterator, bool $preserve_keys = true): array {}

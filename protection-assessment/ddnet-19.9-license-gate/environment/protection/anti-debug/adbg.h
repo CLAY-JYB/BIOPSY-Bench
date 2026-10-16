@@ -22,9 +22,10 @@ extern "C" {
 #define ADBG_CHECK_BREAKPOINT     (1 << 7)   /* Breakpoint detection */
 #define ADBG_CHECK_TIMING         (1 << 8)   /* Timing-based detection */
 #define ADBG_CHECK_FRIDA          (1 << 9)   /* Frida/dynamic-instrumentation detection */
+#define ADBG_CHECK_SANDBOX        (1 << 10)  /* analysis-sandbox artifacts (NOT virtualization) */
 
 /* All checks combined */
-#define ADBG_CHECK_ALL            0x3FF
+#define ADBG_CHECK_ALL            0x7FF
 
 /* Common combinations */
 #define ADBG_CHECK_BASIC          (ADBG_CHECK_PTRACE | ADBG_CHECK_TRACER_PID)
@@ -142,6 +143,20 @@ int adbg_check_timing(void);
  * @return 1 if detected, 0 otherwise
  */
 int adbg_check_frida(void);
+
+/**
+ * Analysis-sandbox artifact detection. Three deterministic presence checks:
+ *   1. sandbox-convention usernames (Cuckoo "sandbox"/"currentuser", Joe
+ *      Sandbox "malware"/"virus"/"cuckoo") via getpwuid(getuid())
+ *   2. sandbox host artifacts (/cuckoo, /var/run/cuckoo, /cuckoo_root)
+ *   3. analysis-harness environment markers (SANDBOX, CUCKOO, MALWARE)
+ * The CPUID hypervisor bit is DELIBERATELY excluded: the tasks themselves
+ * deploy inside virtualized containers, so a hypervisor probe fires on the
+ * verifier's own replay and breaks the isolation law (adbg obstructs the
+ * analyst, never the grader).
+ * @return 1 if detected, 0 otherwise
+ */
+int adbg_check_sandbox(void);
 
 /* ============================================================
  * Main API Functions

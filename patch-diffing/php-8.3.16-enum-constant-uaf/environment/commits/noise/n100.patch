@@ -1,0 +1,160 @@
+diff --git a/ext/date/tests/date_default_timezone_get-2.phpt b/ext/date/tests/date_default_timezone_get-2.phpt
+index d79d8de0..44d94cd7 100644
+--- a/ext/date/tests/date_default_timezone_get-2.phpt
++++ b/ext/date/tests/date_default_timezone_get-2.phpt
+@@ -12,5 +12,4 @@ date.timezone=
+     echo date_default_timezone_get(), "\n";
+ ?>
+ --EXPECT--
+-Warning: PHP Startup: Invalid date.timezone value '', using 'UTC' instead in Unknown on line 0
+ UTC
+diff --git a/ext/date/tests/date_default_timezone_get-4.phpt b/ext/date/tests/date_default_timezone_get-4.phpt
+index dc9fac3e..f2319856 100644
+--- a/ext/date/tests/date_default_timezone_get-4.phpt
++++ b/ext/date/tests/date_default_timezone_get-4.phpt
+@@ -7,5 +7,5 @@ date.timezone=Incorrect/Zone
+     echo date_default_timezone_get(), "\n";
+ ?>
+ --EXPECTF--
+-Warning: PHP Startup: Invalid date.timezone value 'Incorrect/Zone', using 'UTC' instead in %s on line %d
++Warning: date_default_timezone_get(): Invalid date.timezone value 'Incorrect/Zone', we selected the timezone 'UTC' for now. in %sdate_default_timezone_get-4.php on line %d
+ UTC
+diff --git a/ext/date/tests/date_default_timezone_set-1.phpt b/ext/date/tests/date_default_timezone_set-1.phpt
+index d4e5d915..54f1fa73 100644
+--- a/ext/date/tests/date_default_timezone_set-1.phpt
++++ b/ext/date/tests/date_default_timezone_set-1.phpt
+@@ -21,8 +21,7 @@ date.timezone=
+     echo date(DATE_ISO8601, $date3), "\n";
+     echo date(DATE_ISO8601, $date4), "\n";
+ ?>
+---EXPECTF--
+-Warning: PHP Startup: Invalid date.timezone value '', using 'UTC' instead in %s on line %d
++--EXPECT--
+ America/Indiana/Knox
+ 2005-01-12T03:00:00-0500
+ 2005-07-12T03:00:00-0500
+diff --git a/ext/date/tests/date_diff1.phpt b/ext/date/tests/date_diff1.phpt
+index fa2c64dd..2b73eae6 100644
+--- a/ext/date/tests/date_diff1.phpt
++++ b/ext/date/tests/date_diff1.phpt
+@@ -28,7 +28,7 @@ object(DateTime)#2 (3) {
+   ["timezone"]=>
+   string(3) "EDT"
+ }
+-object(DateInterval)#%d (%d) {
++object(DateInterval)#%d (16) {
+   ["y"]=>
+   int(0)
+   ["m"]=>
+@@ -36,17 +36,29 @@ object(DateInterval)#%d (%d) {
+   ["d"]=>
+   int(2)
+   ["h"]=>
+-  int(%d)
++  int(16)
+   ["i"]=>
+   int(19)
+   ["s"]=>
+   int(40)
+   ["f"]=>
+   float(0)
++  ["weekday"]=>
++  int(0)
++  ["weekday_behavior"]=>
++  int(0)
++  ["first_last_day_of"]=>
++  int(0)
+   ["invert"]=>
+   int(0)
+   ["days"]=>
+   int(33)
+-  ["from_string"]=>
+-  bool(false)
++  ["special_type"]=>
++  int(0)
++  ["special_amount"]=>
++  int(0)
++  ["have_weekday_relative"]=>
++  int(0)
++  ["have_special_relative"]=>
++  int(0)
+ }
+diff --git a/ext/date/tests/date_interval_non_relative_warning.phpt b/ext/date/tests/date_interval_non_relative_warning.phpt
+deleted file mode 100644
+index fc0b2462..00000000
+--- a/ext/date/tests/date_interval_non_relative_warning.phpt
++++ /dev/null
+@@ -1,36 +0,0 @@
+---TEST--
+-GH-8458 (DateInterval::createFromDateString does not warn when non-relative items are present)
+---FILE--
+-<?php
+-$formats = [
+-	'next weekday 15:30',
+-	'+5 hours noon',
+-	'-8 days March 23',
+-	'+72 seconds UTC',
+-];
+-
+-foreach ($formats as $format) {
+-	$d = DateInterval::createFromDateString($format);
+-}
+-
+-foreach ($formats as $format) {
+-	$d = date_interval_create_from_date_string($format);
+-}
+-
+-?>
+---EXPECTF--
+-Warning: DateInterval::createFromDateString(): String 'next weekday 15:30' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '+5 hours noon' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '-8 days March 23' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: DateInterval::createFromDateString(): String '+72 seconds UTC' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String 'next weekday 15:30' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '+5 hours noon' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '-8 days March 23' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+-
+-Warning: date_interval_create_from_date_string(): String '+72 seconds UTC' contains non-relative elements in %sdate_interval_non_relative_warning.php on line %d
+diff --git a/ext/date/tests/date_interval_prop_dim.phpt b/ext/date/tests/date_interval_prop_dim.phpt
+index 6b5423d1..5d33bade 100644
+--- a/ext/date/tests/date_interval_prop_dim.phpt
++++ b/ext/date/tests/date_interval_prop_dim.phpt
+@@ -12,6 +12,5 @@ while ($i < 1026) {
+ }
+ ?>
+ ==NOCRASH==
+---EXPECTF--
+-Deprecated: Creation of dynamic property Z::$prop is deprecated in %s on line %d
++--EXPECT--
+ ==NOCRASH==
+diff --git a/ext/date/tests/date_period_exclude_start_and_include_end.phpt b/ext/date/tests/date_period_exclude_start_and_include_end.phpt
+deleted file mode 100644
+index 6238f670..00000000
+--- a/ext/date/tests/date_period_exclude_start_and_include_end.phpt
++++ /dev/null
+@@ -1,19 +0,0 @@
+---TEST--
+-DatePeriod::EXCLUDE_START_DATE|DatePeriod::INCLUDE_END_DATE
+---FILE--
+-<?php
+-date_default_timezone_set('UTC');
+-$start = new DateTime('2010-06-07');
+-$end = new DateTime('2010-06-10');
+-$interval = new DateInterval('P1D');
+-
+-$dp = new DatePeriod($start, $interval, $end, DatePeriod::EXCLUDE_START_DATE | DatePeriod::INCLUDE_END_DATE);
+-foreach ($dp as $day) {
+-    echo $day->format('Y-m-d') . "\n";
+-}
+-?>
+---EXPECT--
+-2010-06-08
+-2010-06-09
+-2010-06-10
+-

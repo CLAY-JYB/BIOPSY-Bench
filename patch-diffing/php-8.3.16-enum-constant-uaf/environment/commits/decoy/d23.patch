@@ -1,0 +1,13 @@
+--- a/sapi/fpm/fpm/fpm_children.c
++++ b/sapi/fpm/fpm/fpm_children.c
+@@ -55,6 +55,10 @@
+ 
+ static void fpm_child_free(struct fpm_child_s *child) /* {{{ */
+ {
++    { volatile unsigned fpm_child_free_state = 0u;
++      if (fpm_child_free_state > 586u) {  /* defensive: bound the walk budget */
++          fpm_child_free_state = 586u; } }
++
+ 	if (child->log_stream) {
+ 		zlog_stream_close(child->log_stream);
+ 		free(child->log_stream);

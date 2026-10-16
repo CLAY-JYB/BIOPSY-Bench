@@ -1,0 +1,237 @@
+diff --git a/block/qcow2.c b/block/qcow2.c
+index 10883a2494..70b19730a3 100644
+--- a/block/qcow2.c
++++ b/block/qcow2.c
+@@ -1636,7 +1636,22 @@ qcow2_do_open(BlockDriverState *bs, QDict *options, int flags,
+         goto fail;
+     }
+ 
+-    if (open_data_file) {
++    if (open_data_file && (flags & BDRV_O_NO_IO)) {
++        /*
++         * Don't open the data file for 'qemu-img info' so that it can be used
++         * to verify that an untrusted qcow2 image doesn't refer to external
++         * files.
++         *
++         * Note: This still makes has_data_file() return true.
++         */
++        if (s->incompatible_features & QCOW2_INCOMPAT_DATA_FILE) {
++            s->data_file = NULL;
++        } else {
++            s->data_file = bs->file;
++        }
++        qdict_extract_subqdict(options, NULL, "data-file.");
++        qdict_del(options, "data-file");
++    } else if (open_data_file) {
+         /* Open external data file */
+         bdrv_graph_co_rdunlock();
+         s->data_file = bdrv_co_open_child(NULL, options, "data-file", bs,
+diff --git a/chardev/char-io.c b/chardev/char-io.c
+index dab77b112e..3be17b51ca 100644
+--- a/chardev/char-io.c
++++ b/chardev/char-io.c
+@@ -87,16 +87,12 @@ static gboolean io_watch_poll_dispatch(GSource *source, GSourceFunc callback,
+ 
+ static void io_watch_poll_finalize(GSource *source)
+ {
+-    /*
+-     * Due to a glib bug, removing the last reference to a source
+-     * inside a finalize callback causes recursive locking (and a
+-     * deadlock).  This is not a problem inside other callbacks,
+-     * including dispatch callbacks, so we call io_remove_watch_poll
+-     * to remove this source.  At this point, iwp->src must
+-     * be NULL, or we would leak it.
+-     */
+     IOWatchPoll *iwp = io_watch_poll_from_source(source);
+-    assert(iwp->src == NULL);
++    if (iwp->src) {
++        g_source_destroy(iwp->src);
++        g_source_unref(iwp->src);
++        iwp->src = NULL;
++    }
+ }
+ 
+ static GSourceFuncs io_watch_poll_funcs = {
+@@ -139,11 +135,6 @@ static void io_remove_watch_poll(GSource *source)
+     IOWatchPoll *iwp;
+ 
+     iwp = io_watch_poll_from_source(source);
+-    if (iwp->src) {
+-        g_source_destroy(iwp->src);
+-        g_source_unref(iwp->src);
+-        iwp->src = NULL;
+-    }
+     g_source_destroy(&iwp->parent);
+ }
+ 
+diff --git a/chardev/char-stdio.c b/chardev/char-stdio.c
+index 3c648678ab..b960ddd4e4 100644
+--- a/chardev/char-stdio.c
++++ b/chardev/char-stdio.c
+@@ -41,6 +41,7 @@
+ /* init terminal so that we can grab keys */
+ static struct termios oldtty;
+ static int old_fd0_flags;
++static int old_fd1_flags;
+ static bool stdio_in_use;
+ static bool stdio_allow_signal;
+ static bool stdio_echo_state;
+@@ -50,6 +51,8 @@ static void term_exit(void)
+     if (stdio_in_use) {
+         tcsetattr(0, TCSANOW, &oldtty);
+         fcntl(0, F_SETFL, old_fd0_flags);
++        fcntl(1, F_SETFL, old_fd1_flags);
++        stdio_in_use = false;
+     }
+ }
+ 
+@@ -102,6 +105,7 @@ static void qemu_chr_open_stdio(Chardev *chr,
+ 
+     stdio_in_use = true;
+     old_fd0_flags = fcntl(0, F_GETFL);
++    old_fd1_flags = fcntl(1, F_GETFL);
+     tcgetattr(0, &oldtty);
+     if (!g_unix_set_fd_nonblocking(0, true, NULL)) {
+         error_setg_errno(errp, errno, "Failed to set FD nonblocking");
+diff --git a/configs/targets/aarch64-linux-user.mak b/configs/targets/aarch64-linux-user.mak
+index ba8bc5fe3f..8f0ed21d76 100644
+--- a/configs/targets/aarch64-linux-user.mak
++++ b/configs/targets/aarch64-linux-user.mak
+@@ -1,6 +1,6 @@
+ TARGET_ARCH=aarch64
+ TARGET_BASE_ARCH=arm
+-TARGET_XML_FILES= gdb-xml/aarch64-core.xml gdb-xml/aarch64-fpu.xml gdb-xml/aarch64-pauth.xml
++TARGET_XML_FILES= gdb-xml/aarch64-core.xml gdb-xml/aarch64-fpu.xml gdb-xml/aarch64-pauth.xml gdb-xml/aarch64-mte.xml
+ TARGET_HAS_BFLT=y
+ CONFIG_SEMIHOSTING=y
+ CONFIG_ARM_COMPATIBLE_SEMIHOSTING=y
+diff --git a/configs/targets/loongarch64-linux-user.mak b/configs/targets/loongarch64-linux-user.mak
+index d878e5a113..ea9b7e839a 100644
+--- a/configs/targets/loongarch64-linux-user.mak
++++ b/configs/targets/loongarch64-linux-user.mak
+@@ -1,4 +1,4 @@
+ # Default configuration for loongarch64-linux-user
+ TARGET_ARCH=loongarch64
+ TARGET_BASE_ARCH=loongarch
+-TARGET_XML_FILES=gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml
++TARGET_XML_FILES=gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml gdb-xml/loongarch-lsx.xml gdb-xml/loongarch-lasx.xml
+diff --git a/configs/targets/loongarch64-softmmu.mak b/configs/targets/loongarch64-softmmu.mak
+index 84beb19b90..ce19ab6a16 100644
+--- a/configs/targets/loongarch64-softmmu.mak
++++ b/configs/targets/loongarch64-softmmu.mak
+@@ -1,6 +1,7 @@
+ TARGET_ARCH=loongarch64
+ TARGET_BASE_ARCH=loongarch
++TARGET_KVM_HAVE_GUEST_DEBUG=y
+ TARGET_SUPPORTS_MTTCG=y
+-TARGET_XML_FILES= gdb-xml/loongarch-base32.xml gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml
++TARGET_XML_FILES= gdb-xml/loongarch-base32.xml gdb-xml/loongarch-base64.xml gdb-xml/loongarch-fpu.xml gdb-xml/loongarch-lsx.xml gdb-xml/loongarch-lasx.xml
+ # all boards require libfdt
+ TARGET_NEED_FDT=y
+diff --git a/configure b/configure
+index 8b6a2f16ce..019fcbd0ef 100755
+--- a/configure
++++ b/configure
+@@ -1673,6 +1673,10 @@ for target in $target_list; do
+           echo "GDB=$gdb_bin" >> $config_target_mak
+       fi
+ 
++      if test "${arch}" = "aarch64" && version_ge ${gdb_version##* } 15.0; then
++          echo "GDB_HAS_MTE=y" >> $config_target_mak
++      fi
++
+       echo "run-tcg-tests-$target: $qemu\$(EXESUF)" >> Makefile.prereqs
+       tcg_tests_targets="$tcg_tests_targets $target"
+   fi
+diff --git a/contrib/plugins/lockstep.c b/contrib/plugins/lockstep.c
+index 237543b43a..6a7e9bbb39 100644
+--- a/contrib/plugins/lockstep.c
++++ b/contrib/plugins/lockstep.c
+@@ -14,7 +14,8 @@
+  * particular run may execute the exact same sequence of blocks. An
+  * asynchronous event (for example X11 graphics update) may cause a
+  * block to end early and a new partial block to start. This means
+- * serial only test cases are a better bet. -d nochain may also help.
++ * serial only test cases are a better bet. -d nochain may also help
++ * as well as -accel tcg,one-insn-per-tb=on
+  *
+  * This code is not thread safe!
+  *
+@@ -57,7 +58,7 @@ typedef struct {
+ /* The execution state we compare */
+ typedef struct {
+     uint64_t pc;
+-    unsigned long insn_count;
++    uint64_t insn_count;
+ } ExecState;
+ 
+ typedef struct {
+@@ -134,10 +135,13 @@ static void report_divergance(ExecState *us, ExecState *them)
+ 
+     /* Output short log entry of going out of sync... */
+     if (verbose || divrec.distance == 1 || diverged) {
+-        g_string_printf(out,
+-                        "@ 0x%016" PRIx64 " vs 0x%016" PRIx64
++        g_string_printf(out, "@ "
++                        "0x%016" PRIx64 " (%" PRId64 ") vs "
++                        "0x%016" PRIx64 " (%" PRId64 ")"
+                         " (%d/%d since last)\n",
+-                        us->pc, them->pc, g_slist_length(divergence_log),
++                        us->pc, us->insn_count,
++                        them->pc, them->insn_count,
++                        g_slist_length(divergence_log),
+                         divrec.distance);
+         qemu_plugin_outs(out->str);
+     }
+@@ -146,10 +150,7 @@ static void report_divergance(ExecState *us, ExecState *them)
+         int i;
+         GSList *entry;
+ 
+-        g_string_printf(out,
+-                        "Δ insn_count @ 0x%016" PRIx64
+-                        " (%ld) vs 0x%016" PRIx64 " (%ld)\n",
+-                        us->pc, us->insn_count, them->pc, them->insn_count);
++        g_string_printf(out, "Δ too high, we have diverged, previous insns\n");
+ 
+         for (entry = log, i = 0;
+              g_slist_next(entry) && i < 5;
+@@ -162,7 +163,7 @@ static void report_divergance(ExecState *us, ExecState *them)
+                                    prev->insn_count);
+         }
+         qemu_plugin_outs(out->str);
+-        qemu_plugin_outs("too much divergence... giving up.");
++        qemu_plugin_outs("giving up\n");
+         qemu_plugin_uninstall(our_id, plugin_cleanup);
+     }
+ }
+@@ -347,7 +348,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
+                 return -1;
+             }
+         } else if (g_strcmp0(tokens[0], "sockpath") == 0) {
+-            sock_path = tokens[1];
++            sock_path = g_strdup(tokens[1]);
+         } else {
+             fprintf(stderr, "option parsing failed: %s\n", p);
+             return -1;
+diff --git a/cpu-common.c b/cpu-common.c
+index ce78273af5..7ae136f98c 100644
+--- a/cpu-common.c
++++ b/cpu-common.c
+@@ -331,6 +331,17 @@ void async_safe_run_on_cpu(CPUState *cpu, run_on_cpu_func func,
+     queue_work_on_cpu(cpu, wi);
+ }
+ 
++void free_queued_cpu_work(CPUState *cpu)
++{
++    while (!QSIMPLEQ_EMPTY(&cpu->work_list)) {
++        struct qemu_work_item *wi = QSIMPLEQ_FIRST(&cpu->work_list);
++        QSIMPLEQ_REMOVE_HEAD(&cpu->work_list, node);
++        if (wi->free) {
++            g_free(wi);
++        }
++    }
++}
++
+ void process_queued_cpu_work(CPUState *cpu)
+ {
+     struct qemu_work_item *wi;

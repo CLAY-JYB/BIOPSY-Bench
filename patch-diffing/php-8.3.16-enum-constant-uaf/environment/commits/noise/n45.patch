@@ -1,0 +1,193 @@
+diff --git a/Zend/tests/prop_const_expr/non_enums_catchable.phpt b/Zend/tests/prop_const_expr/non_enums_catchable.phpt
+deleted file mode 100644
+index 6f410ac7..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_catchable.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-RHS gets evaluated before throwing error when accessing properties on non-enums in constant expressions
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-class Printer {
+-    public function __construct() {
+-        echo "Printer\n";
+-        return 'printer';
+-    }
+-}
+-
+-const A_prop = (new A)->{new Printer ? 'printer' : null};
+-
+-?>
+---EXPECTF--
+-Printer
+-
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_cost.phpt b/Zend/tests/prop_const_expr/non_enums_cost.phpt
+deleted file mode 100644
+index 29311aa9..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_cost.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Disallow fetching properties in constant expressions on non-enums even if lhs is other const
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-const A = new A();
+-const A_prop = A->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt b/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt
+deleted file mode 100644
+index 428651c1..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_nullsafe.phpt
++++ /dev/null
+@@ -1,17 +0,0 @@
+---TEST--
+-Disallow nullsafe fetching properties in constant expressions on non-enums
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-const A_prop = (new A)?->prop;
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Fetching properties on non-enums in constant expressions is not allowed in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/non_enums_rhs.phpt b/Zend/tests/prop_const_expr/non_enums_rhs.phpt
+deleted file mode 100644
+index 0bffe9d8..00000000
+--- a/Zend/tests/prop_const_expr/non_enums_rhs.phpt
++++ /dev/null
+@@ -1,26 +0,0 @@
+---TEST--
+-Error when fetching properties on non-enums in constant expressions is catchable
+---FILE--
+-<?php
+-
+-class A {
+-    public $prop = 42;
+-}
+-
+-function foo($prop = (new A)->prop) {}
+-
+-function test() {
+-    try {
+-        foo();
+-    } catch (Error $e) {
+-        echo $e->getMessage(), "\n";
+-    }
+-}
+-
+-test();
+-test();
+-
+-?>
+---EXPECT--
+-Fetching properties on non-enums in constant expressions is not allowed
+-Fetching properties on non-enums in constant expressions is not allowed
+diff --git a/Zend/tests/prop_const_expr/property_initializer.phpt b/Zend/tests/prop_const_expr/property_initializer.phpt
+deleted file mode 100644
+index 3cfe5a87..00000000
+--- a/Zend/tests/prop_const_expr/property_initializer.phpt
++++ /dev/null
+@@ -1,28 +0,0 @@
+---TEST--
+-Property fetch in property initializer
+---FILE--
+-<?php
+-
+-enum A: int {
+-    case B = 42;
+-}
+-
+-class C {
+-    public string $d = A::B->name;
+-    public int $e = A::B->value;
+-    public string $f = A::B?->name;
+-    public int $g = A::B?->value;
+-}
+-
+-$c = new C();
+-var_dump($c->d);
+-var_dump($c->e);
+-var_dump($c->f);
+-var_dump($c->g);
+-
+-?>
+---EXPECT--
+-string(1) "B"
+-int(42)
+-string(1) "B"
+-int(42)
+diff --git a/Zend/tests/prop_const_expr/rhs_object.phpt b/Zend/tests/prop_const_expr/rhs_object.phpt
+deleted file mode 100644
+index d9d01b81..00000000
+--- a/Zend/tests/prop_const_expr/rhs_object.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Property constant expression rhs wrong type
+---FILE--
+-<?php
+-
+-class A {}
+-class B {}
+-
+-const A_prop = (new A)->{new B};
+-
+-var_dump(A_prop);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class B could not be converted to string in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d
+diff --git a/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt b/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt
+deleted file mode 100644
+index 72242b16..00000000
+--- a/Zend/tests/prop_const_expr/rhs_object_nullsafe.phpt
++++ /dev/null
+@@ -1,18 +0,0 @@
+---TEST--
+-Nullsafe property constant expression rhs wrong type
+---FILE--
+-<?php
+-
+-class A {}
+-class B {}
+-
+-const A_prop = (new A)?->{new B};
+-
+-var_dump(A_prop);
+-
+-?>
+---EXPECTF--
+-Fatal error: Uncaught Error: Object of class B could not be converted to string in %s:%d
+-Stack trace:
+-#0 {main}
+-  thrown in %s on line %d

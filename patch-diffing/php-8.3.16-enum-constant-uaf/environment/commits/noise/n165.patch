@@ -1,0 +1,211 @@
+diff --git a/ext/mbstring/tests/iso2022jp_kddi_encoding.phpt b/ext/mbstring/tests/iso2022jp_kddi_encoding.phpt
+index 06870569..6a0246b7 100644
+--- a/ext/mbstring/tests/iso2022jp_kddi_encoding.phpt
++++ b/ext/mbstring/tests/iso2022jp_kddi_encoding.phpt
+@@ -193,32 +193,10 @@ foreach (array_keys($invalidChars) as $invalid) {
+     testInvalidString("\x1B\$B" . $invalid, "\x00\x00\x00%", 'ISO-2022-JP-KDDI', 'UTF-32BE');
+   }
+ }
+-// Try Kanji which starts with a good byte, but the 2nd byte is junk
+-testInvalidString("\x1B\$B\x21\xFF", "%", 'ISO-2022-JP-KDDI', 'UTF-8');
+ 
+ foreach (array_keys($truncatedChars) as $truncated)
+   testInvalidString("\x1B\$B" . $truncated, "\x00\x00\x00%", 'ISO-2022-JP-KDDI', 'UTF-32BE');
+ 
+-testValidString("\x1B\$B\x76\x27", "\x00\x01\xF1\xEF\x00\x01\xF1\xF5", 'ISO-2022-JP-KDDI', 'UTF-32BE', false); // Japan flag emoji
+-testValidString("\x00#\x20\xE3", "\x1B\$B\x71\x69\x1B(B", 'UTF-16BE', 'ISO-2022-JP-KDDI', false); // Phone key emoji
+-
+-testValidString("\x1B\$(B\x21\x21", "\x30\x00", 'ISO-2022-JP-KDDI', 'UTF-16BE', false); // Try ESC $ ( B escape sequence
+-
+-// Switch from JISX 0208 Kanji to ASCII
+-testValidString("\x30\x00\x00A", "\x1B\$B\x21\x21\x1B(BA", "UTF-16BE", "ISO-2022-JP-KDDI", false);
+-// Switch from JISX 0208 Kanji to JISX 0201 Kana
+-testValidString("\x30\x00\xFF\x67", "\x1B\$B\x21\x21\x1B(I'\x1B(B", "UTF-16BE", "ISO-2022-JP-KDDI", false);
+-
+-/* Convert Unicode flag emoji to ISO-2022-JP-KDDI proprietary flag emoji
+- * I am not able to confirm that the kuten codes we are using for these proprietary emoji are the right ones
+- * (There doesn't seem to be any publically available reference, and I don't have a legacy KDDI device)
+- *
+- * However, the conversion does not work in the opposite direction; this is because of the test
+- * `if (s >= (84 * 94) && s < (91 * 94))`, which the kuten code which we are using for flag emoji doesn't match
+- * That test is inherited from the old implementation (from libmbfl), and I have no way to confirm that
+- * changing it won't break anything */
+-testValidString("\x00\x01\xF1\xF0\x00\x01\xF1\xF7", "\x1B\$B\x70\x55\x1B(B", "UTF-32BE", "ISO-2022-JP-KDDI", false);
+-
+ echo "JIS X 0208 (with MS extensions) and KDDI emoji support OK\n";
+ 
+ testValidString("\x00\xA5", "\x1B\$B!o\x1B(B", "UTF-16BE", "ISO-2022-JP-KDDI", false);
+@@ -227,8 +205,6 @@ testValidString("\xFF\x5E", "\x1B\$B!A\x1B(B", "UTF-16BE", "ISO-2022-JP-KDDI", f
+ 
+ echo "Other mappings from Unicode -> ISO-2022-JP-KDDI OK\n";
+ 
+-testInvalidString("\x1B\$B\x7F\x7E", "%", 'ISO-2022-JP-KDDI', 'UTF-8');
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\xE0", "%", "ISO-2022-JP-KDDI", "UTF-8");
+@@ -237,8 +213,6 @@ convertInvalidString("\x1B", "%", "ISO-2022-JP-KDDI", "UTF-8");
+ convertInvalidString("\x1B.", "%", "ISO-2022-JP-KDDI", "UTF-8");
+ convertInvalidString("\x1B\$", "%", "ISO-2022-JP-KDDI", "UTF-8");
+ convertInvalidString("\x1B\$.", "%", "ISO-2022-JP-KDDI", "UTF-8");
+-convertInvalidString("\x1B(", "%", "ISO-2022-JP-KDDI", "UTF-8");
+-convertInvalidString("\x1B(.", "%", "ISO-2022-JP-KDDI", "UTF-8");
+ convertInvalidString("\x1B\$(X", "%", "ISO-2022-JP-KDDI", "UTF-8");
+ convertInvalidString("\x1B\$B\x9F", "%", "ISO-2022-JP-KDDI", "UTF-8"); // 0x9F does not start any 2-byte character
+ convertInvalidString("\xE0\x00", "U+E000", "UTF-16BE", "ISO-2022-JP-KDDI");
+diff --git a/ext/mbstring/tests/iso2022kr_encoding.phpt b/ext/mbstring/tests/iso2022kr_encoding.phpt
+index d9e6ff93..05f00493 100644
+--- a/ext/mbstring/tests/iso2022kr_encoding.phpt
++++ b/ext/mbstring/tests/iso2022kr_encoding.phpt
+@@ -24,10 +24,8 @@ function testValid($from, $to, $bothWays = true) {
+       $from = substr($from, 1, strlen($from) - 1);
+     /* If the string switches to a different charset, it should switch back to
+      * ASCII at the end */
+-    if (strpos($from, "\x0E") !== false && $from[-1] !== "\x0F")
++    if (strpos($from, "\x1B\$C") !== false)
+       $from .= "\x0F";
+-    if (strpos($from, "\x1B\$)C") === false && $from !== '')
+-      $from = "\x1B\$)C" . $from;
+ 
+     convertValidString($to, $from, 'UTF-16BE', 'ISO-2022-KR', false);
+   }
+@@ -98,25 +96,6 @@ testValid("\x0E\x0E\x0F\x0E\x0Fabc", "\x00a\x00b\x00c", false);
+ 
+ echo "Escapes behave as expected\n";
+ 
+-// Test switching between KS X 1001 and ASCII when converting Unicode -> ISO-2022-KR
+-convertValidString("\x76\x20\x00a\x00b", "\x1B$)C\x0E\x74\x30\x0Fab", "UTF-16BE", "ISO-2022-KR", false);
+-
+-// Regression test: Our conversion table for KS X 1001 only goes up to 0x7D7E, but
+-// we previously accepted and tried to convert two-byte sequences starting with
+-// 0x7E, resulting in a failed assertion
+-convertInvalidString("\x0E~/", "%", "ISO-2022-KR", "UTF-8");
+-
+-// Regression test: The old implementation would wrongly convert some codepoints
+-// which are not in KS X 1001 at all to 'random' characters in KS X 1001
+-convertInvalidString("\xFF\x86", "\x1B\$)C%", "UTF-16BE", "ISO-2022-KR");
+-
+-// Regression test: The old implementation would sometimes emit an extra 0x0F ('shift out')
+-// character at the end of a string, although the string was already ending in ASCII mode
+-convertValidString("\x68\x46\x00a", "\x1B\$)C\x0E\x68\x46\x0Fa", "UTF-16BE", "ISO-2022-KR", false);
+-
+-// Regression test: Don't shift from KS X 1001 to ASCII mode on invalid escape sequence
+-convertInvalidString("\x0E\x1BX\x74\x30", "\x00%\x76\x20", "ISO-2022-KR", "UTF-16BE", false);
+-
+ // Test "long" illegal character markers
+ mb_substitute_character("long");
+ convertInvalidString("\x1B", "%", "ISO-2022-KR", "UTF-8");
+diff --git a/ext/mbstring/tests/iso8859_encodings.phpt b/ext/mbstring/tests/iso8859_encodings.phpt
+index 7aae113c..fac7ce8c 100644
+--- a/ext/mbstring/tests/iso8859_encodings.phpt
++++ b/ext/mbstring/tests/iso8859_encodings.phpt
+@@ -21,10 +21,6 @@ mb_substitute_character("long");
+ convertInvalidString("\xAE", "%", "ISO8859-7", "UTF-8");
+ convertInvalidString("\xFF", "%", "ISO8859-8", "UTF-8");
+ 
+-// Test illegal character marker which can't be represented in target encoding
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'ISO8859-7');
+-
+ echo "Done!\n";
+ ?>
+ --EXPECT--
+diff --git a/ext/mbstring/tests/koi8r_encoding.phpt b/ext/mbstring/tests/koi8r_encoding.phpt
+index 5c4f1657..ab543015 100644
+--- a/ext/mbstring/tests/koi8r_encoding.phpt
++++ b/ext/mbstring/tests/koi8r_encoding.phpt
+@@ -10,9 +10,6 @@ if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+ <?php
+ include('encoding_tests.inc');
+ testEncodingFromUTF16ConversionTable(__DIR__ . '/data/KOI8-R.txt', 'KOI8-R');
+-/* Try replacement character which cannot be encoded in KOI8-R; ? will be used instead */
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'KOI8-R');
+ ?>
+ --EXPECT--
+ Tested KOI8-R -> UTF-16BE
+diff --git a/ext/mbstring/tests/koi8u_encoding.phpt b/ext/mbstring/tests/koi8u_encoding.phpt
+index c28a640c..4bf64ad7 100644
+--- a/ext/mbstring/tests/koi8u_encoding.phpt
++++ b/ext/mbstring/tests/koi8u_encoding.phpt
+@@ -10,9 +10,6 @@ if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+ <?php
+ include('encoding_tests.inc');
+ testEncodingFromUTF16ConversionTable(__DIR__ . '/data/KOI8-U.txt', 'KOI8-U');
+-/* Try replacement character which cannot be encoded in KOI8-U; ? will be used instead */
+-mb_substitute_character(0x1234);
+-convertInvalidString("\x23\x45", '?', 'UTF-16BE', 'KOI8-U');
+ ?>
+ --EXPECT--
+ Tested KOI8-U -> UTF-16BE
+diff --git a/ext/mbstring/tests/mb_convert_encoding.phpt b/ext/mbstring/tests/mb_convert_encoding.phpt
+index bb460961..2c8353e6 100644
+--- a/ext/mbstring/tests/mb_convert_encoding.phpt
++++ b/ext/mbstring/tests/mb_convert_encoding.phpt
+@@ -77,6 +77,8 @@ $s = $euc_jp;
+ $s = mb_convert_encoding($s, 'JIS', 'auto');
+ print("JIS: ".base64_encode($s)."\n"); // JIS
+ 
++
++// Invalid Parameters
+ echo "== INVALID PARAMETER ==\n";
+ 
+ $s = mb_convert_encoding(1234, 'EUC-JP');
+@@ -85,22 +87,15 @@ print("INT: $s\n");
+ $s = mb_convert_encoding('', 'EUC-JP');
+ print("EUC-JP: $s\n");  // SJIS
+ 
+-function tryBadConversion($str, $encoding) {
+-    try {
+-        var_dump(mb_convert_encoding($str, $encoding));
+-    } catch (ValueError $e) {
+-        echo $e->getMessage(), "\n";
+-    }
++$s = $euc_jp;
++try {
++    var_dump(mb_convert_encoding($s, 'BAD'));
++} catch (\ValueError $e) {
++    echo $e->getMessage() . \PHP_EOL;
+ }
+ 
+-tryBadConversion($euc_jp, 'BAD');
+-
+-tryBadConversion('abc', 'Quoted-Printable');
+-tryBadConversion('abc', 'BASE64');
+-tryBadConversion('abc', 'HTML-ENTITIES');
+-
+ ?>
+---EXPECTF--
++--EXPECT--
+ == BASIC TEST ==
+ EUC-JP: c6fccbdcb8eca5c6a5ada5b9a5c8a4c7a4b9a1a33031323334a3b5a3b6a3b7a3b8a3b9a1a3
+ EUC-JP: c6fccbdcb8eca5c6a5ada5b9a5c8a4c7a4b9a1a33031323334a3b5a3b6a3b7a3b8a3b9a1a3
+@@ -123,12 +118,3 @@ JIS: GyRCRnxLXDhsJUYlLSU5JUgkRyQ5ISMbKEIwMTIzNBskQiM1IzYjNyM4IzkhIxsoQg==
+ INT: 1234
+ EUC-JP: 
+ mb_convert_encoding(): Argument #2 ($to_encoding) must be a valid encoding, "BAD" given
+-
+-Deprecated: mb_convert_encoding(): Handling QPrint via mbstring is deprecated; use quoted_printable_encode/quoted_printable_decode instead in %s on line %d
+-string(3) "abc"
+-
+-Deprecated: mb_convert_encoding(): Handling Base64 via mbstring is deprecated; use base64_encode/base64_decode instead in %s on line %d
+-string(4) "YWJj"
+-
+-Deprecated: mb_convert_encoding(): Handling HTML entities via mbstring is deprecated; use htmlspecialchars, htmlentities, or mb_encode_numericentity/mb_decode_numericentity instead in %s on line %d
+-string(3) "abc"
+diff --git a/ext/mbstring/tests/mb_convert_encoding_array_error_001.phpt b/ext/mbstring/tests/mb_convert_encoding_array_error_001.phpt
+deleted file mode 100644
+index 000235ed..00000000
+--- a/ext/mbstring/tests/mb_convert_encoding_array_error_001.phpt
++++ /dev/null
+@@ -1,10 +0,0 @@
+---TEST--
+-Test mb_convert_encoding() function : array functionality with objects not supported
+---EXTENSIONS--
+-mbstring
+---FILE--
+-<?php
+-mb_convert_encoding(["key" => new stdClass()], 'UTF-8');
+-?>
+---EXPECTF--
+-Warning: mb_convert_encoding(): Object is not supported in %s on line %d

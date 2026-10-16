@@ -1,0 +1,173 @@
+diff --git a/ext/mysqli/tests/mysqli_select_db.phpt b/ext/mysqli/tests/mysqli_select_db.phpt
+index 76f64df7..0a64a7b7 100644
+--- a/ext/mysqli/tests/mysqli_select_db.phpt
++++ b/ext/mysqli/tests/mysqli_select_db.phpt
+@@ -56,11 +56,11 @@ require_once('skipifconnectfailure.inc');
+     $current_db = $row['dbname'];
+ 
+     mysqli_report(MYSQLI_REPORT_OFF);
+-    mysqli_select_db($link, 'I cannot imagine that this database exists');
++    mysqli_select_db($link, 'I can not imagine that this database exists');
+     mysqli_report(MYSQLI_REPORT_ERROR);
+ 
+     ob_start();
+-    mysqli_select_db($link, 'I cannot imagine that this database exists');
++    mysqli_select_db($link, 'I can not imagine that this database exists');
+     $output = ob_get_contents();
+     ob_end_clean();
+     if (!stristr($output, "1049") && !stristr($output, "1044") && !stristr($output, "1045")) {
+diff --git a/ext/mysqli/tests/mysqli_set_charset.phpt b/ext/mysqli/tests/mysqli_set_charset.phpt
+index 50da0c21..1e7fa8d2 100644
+--- a/ext/mysqli/tests/mysqli_set_charset.phpt
++++ b/ext/mysqli/tests/mysqli_set_charset.phpt
+@@ -4,12 +4,14 @@ mysqli_set_charset()
+ mysqli
+ --SKIPIF--
+ <?php
++require_once('skipifconnectfailure.inc');
++
+ if (!function_exists('mysqli_set_charset'))
+     die("skip Function not available");
+ 
+-require_once 'connect.inc';
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('connect.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
++    die(sprintf("skip Cannot connect, [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+ 
+ if (!($res = mysqli_query($link, 'SELECT version() AS server_version')) ||
+         !($tmp = mysqli_fetch_assoc($res))) {
+@@ -44,7 +46,9 @@ if ((($res = mysqli_query($link, 'SHOW CHARACTER SET LIKE "latin1"', MYSQLI_STOR
+ ?>
+ --FILE--
+ <?php
+-    require 'table.inc';
++    require_once("connect.inc");
++
++    require('table.inc');
+ 
+     if (!$res = mysqli_query($link, 'SELECT @@character_set_connection AS charset, @@collation_connection AS collation'))
+         printf("[007] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+@@ -125,7 +129,7 @@ if ((($res = mysqli_query($link, 'SHOW CHARACTER SET LIKE "latin1"', MYSQLI_STOR
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECTF--
+ Exception: %s
+diff --git a/ext/mysqli/tests/mysqli_ssl_set.phpt b/ext/mysqli/tests/mysqli_ssl_set.phpt
+index 5ea79b96..6abc84fb 100644
+--- a/ext/mysqli/tests/mysqli_ssl_set.phpt
++++ b/ext/mysqli/tests/mysqli_ssl_set.phpt
+@@ -4,15 +4,13 @@ mysqli_ssl_set() - test is a stub!
+ mysqli
+ --SKIPIF--
+ <?php
+-die("skip test is a stub!");
+-
+-require_once 'skipifconnectfailure.inc';
++require_once('skipifconnectfailure.inc');
+ if (!function_exists('mysqli_ssl_set'))
+     die("skip function not available");
+ ?>
+ --FILE--
+ <?php
+-    require_once "connect.inc";
++    require_once("connect.inc");
+ 
+     /*
+     This function always returns TRUE value.
+diff --git a/ext/mysqli/tests/mysqli_stmt_bind_param_check_param_no_change.phpt b/ext/mysqli/tests/mysqli_stmt_bind_param_check_param_no_change.phpt
+index f33076d6..d7758dd4 100644
+--- a/ext/mysqli/tests/mysqli_stmt_bind_param_check_param_no_change.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_bind_param_check_param_no_change.phpt
+@@ -31,7 +31,7 @@ require_once('skipifconnectfailure.inc');
+     echo("$one\n\n");
+ 
+     // it is getting worse. Binding the same var twice with different
+-    // types you can get unexpected results e.g. binary trash for the
++    // types you can get unexpected results (e.g. binary trash for the
+     // string and misc data for the integer. See next 2 tests.
+ 
+     echo "Test 2:\n";
+diff --git a/ext/mysqli/tests/mysqli_stmt_bind_result.phpt b/ext/mysqli/tests/mysqli_stmt_bind_result.phpt
+index 597b4f39..0459133c 100644
+--- a/ext/mysqli/tests/mysqli_stmt_bind_result.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_bind_result.phpt
+@@ -202,7 +202,7 @@ require_once('skipifconnectfailure.inc');
+     func_mysqli_stmt_bind_result($link, $engine, "d", "FLOAT UNSIGNED", 18446744073709551615 + 1.1, 640);
+     func_mysqli_stmt_bind_result($link, $engine, "d", "FLOAT UNSIGNED ", NULL, 660);
+ 
+-    // Yes, we need the temporary variable. The PHP casting will foul us otherwise.
++    // Yes, we need the temporary variable. The PHP casting will fouls us otherwise.
+     $tmp = strval('-99999999.99');
+     func_mysqli_stmt_bind_result($link, $engine, "d", "DOUBLE(10,2)", $tmp, 680, "string");
+     func_mysqli_stmt_bind_result($link, $engine, "d", "DOUBLE(10,2)", NULL, 700);
+@@ -276,8 +276,12 @@ require_once('skipifconnectfailure.inc');
+     func_mysqli_stmt_bind_result($link, $engine, "b", "MEDIUMTEXT", "", 1640, 'string');
+ 
+     /* Is this one related? http://bugs.php.net/bug.php?id=35759 */
+-    func_mysqli_stmt_bind_result($link, $engine, "b", "LONGBLOB", "", 1660);
+-    func_mysqli_stmt_bind_result($link, $engine, "b", "LONGTEXT", "", 1680, 'string');
++    if (($IS_MYSQLND) || (!$IS_MYSQLND && (ini_get('memory_limit') > 4294967296))) {
++        /* NOTE: the MySQL Client Library - not mysqlnd - will allocate
++        a hugge max_length(type) = 4GB bind buffer */
++        func_mysqli_stmt_bind_result($link, $engine, "b", "LONGBLOB", "", 1660);
++        func_mysqli_stmt_bind_result($link, $engine, "b", "LONGTEXT", "", 1680, 'string');
++    }
+ 
+     func_mysqli_stmt_bind_result($link, $engine, "s", "ENUM('a', 'b')", "a", 1700, 'string');
+     func_mysqli_stmt_bind_result($link, $engine, "s", "ENUM('a', 'b')", NULL, 1720, 'string');
+diff --git a/ext/mysqli/tests/mysqli_stmt_close.phpt b/ext/mysqli/tests/mysqli_stmt_close.phpt
+index 03788c0c..39460fc9 100644
+--- a/ext/mysqli/tests/mysqli_stmt_close.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_close.phpt
+@@ -15,7 +15,7 @@ require_once('skipifconnectfailure.inc');
+     if (!$stmt = mysqli_stmt_init($link))
+         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+ 
+-    // Yes, amazing, eh? AFAIK a workaround of a constructor bug...
++    // Yes, amazing, eh? AFAIK a work around of a constructor bug...
+     try {
+         mysqli_stmt_close($stmt);
+     } catch (Error $exception) {
+diff --git a/ext/mysqli/tests/mysqli_stmt_execute.phpt b/ext/mysqli/tests/mysqli_stmt_execute.phpt
+index 90de4a78..3970b2ed 100644
+--- a/ext/mysqli/tests/mysqli_stmt_execute.phpt
++++ b/ext/mysqli/tests/mysqli_stmt_execute.phpt
+@@ -4,9 +4,9 @@ mysqli_stmt_execute()
+ mysqli
+ --SKIPIF--
+ <?php
+-require_once "connect.inc";
+-if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+-    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
++require_once('skipifconnectfailure.inc');
++if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
++    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
+ }
+ if (mysqli_get_server_version($link) <= 40100) {
+     die(sprintf('skip Needs MySQL 4.1+, found version %d.', mysqli_get_server_version($link)));
+@@ -14,7 +14,9 @@ if (mysqli_get_server_version($link) <= 40100) {
+ ?>
+ --FILE--
+ <?php
+-    require 'table.inc';
++    require_once("connect.inc");
++
++    require('table.inc');
+ 
+     if (!$stmt = mysqli_stmt_init($link))
+         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+@@ -132,7 +134,7 @@ if (mysqli_get_server_version($link) <= 40100) {
+ ?>
+ --CLEAN--
+ <?php
+-require_once "clean_table.inc";
++    require_once("clean_table.inc");
+ ?>
+ --EXPECT--
+ mysqli_stmt object is not fully initialized

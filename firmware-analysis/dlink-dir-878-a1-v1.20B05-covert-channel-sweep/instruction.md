@@ -6,10 +6,8 @@ You are an expert reverse engineer, versed in the full body of reverse-engineeri
 
 The SOC flagged periodic outbound behaviour on a fleet segment and wants the image checked for a hidden remote-management channel, an undocumented listener, beacon, or magic-port responder. Determine whether such a channel is PRESENT or ABSENT, with evidence from the image to back the call.
 
-
 GIVEN
 - firmware, /app/firmware.bin
-- previous firmware, /app/firmware_v1.1.bin
 
 NOT GIVEN
 - No documentation, no symbols, no layout hints, no header descriptions. What target code is inside, where it sits, and which protections are applied are part of the puzzle.
@@ -20,7 +18,7 @@ NOT GIVEN
  ├── extracted_fs/
  ├── firmware_repacked.bin
  ├── activation.keys
- ├── decrypted.bin
+decrypted.bin
 
 - extracted_fs/ (required), the unpacked firmware filesystem, the actual recovered files at their original in-image paths. Constraints as follows.
   - graded on how completely the image's original tree is recovered, file for file, and on how precisely your tree avoids material that is not in the image
@@ -28,21 +26,19 @@ NOT GIVEN
 - firmware_repacked.bin (required), an image rebuilt from your unpacked tree. Constraints as follows.
   - must parse as a firmware image with standard tooling and carry the rebuilt filesystem
   - reusing or embedding the original image's bytes (or the decrypted original's bytes), verbatim or spliced, scores nothing and voids the downstream rebuild axes
-
+  
 - activation.keys (required), the activation keys you recovered, one per line, `token=<value>` and `account=<value>`. Constraints as follows.
   - the values are scored ONLY through the executions they unlock inside your extracted binaries. They are never compared as strings, and placeholder or guessed values simply fail the gated executions
 - decrypted.bin (required), the decrypted image. Constraints as follows.
   - graded on size, header, and exact bytes
-- the engagement-specific deliverables (none beyond the fixed set). Constraints as follows.
-  - none beyond the fixed contract
 
 ## Scoring
 
-There is no report to fill. Every point is earned by a delivered artifact, verified by executing it or checking its bytes. Axes are task-weighted (the bucket weights vary by engagement, and the shapes below are fixed). The axes are as follows.
+There is no report to fill. Every point is earned by a delivered artifact, verified by executing it or checking its bytes. Three result axes (task-weighted at 40/30/30 shape; emulation is how the verifier runs things, not a separate axis). The axes are as follows.
 
-- extraction & emulation, tree fidelity (path recall, set precision, verifier-sampled provenance), component extraction (byte-exact at the in-image path) and version identification by actually running the component, gated activations (your keys run through the extracted binaries, and the observable decides), and decrypt delivery on encrypted engagements.
-- reconstruction, whether the repacked image parses with standard tooling (one class earns partial, two earn full), whether the rebuilt filesystem stream genuinely diverges from the shipped one (a splice reproduces the original stream and earns nothing), whether the rebuilt payload is consistent with your own extracted tree, and whether the rebuilt superblock reproduces the original geometry.
-- demonstration (scenario engagements only), the verifier itself boots your extracted, byte-verified component and drives the engagement's trigger against it. The service coming up, the trigger request being processed, and the trigger's effect showing. Nothing you script is executed.
+- extraction, two ways to earn. Content correctness (decrypt delivery on encrypted engagements, and your tree's fidelity measured by path recall, set precision, and verifier-sampled byte provenance) and emulation runs (each graded component boots from your own tree as its system root; a checkpoint chain inside the binary scores how far execution travels, and the gated activations pay only through the observable your keys unlock).
+- reconstruction, all dynamic. Standard tools must genuinely parse the repack, unsquashfs must genuinely unpack it with a payload consistent with your own tree, the geometry reported by the tools must match the original, and a run battery proves the rebuilt image is alive. On other engagements the battery runs the extracted components straight out of the rebuilt filesystem.
+- triggering, the engagement's special path driven for real. Where the engagement says you craft the input, your poc_input.bin is fed verbatim to the byte-verified component; where it rides recovered keys, your keys drive the gated path. Five ordered execution checkpoints pay process points by depth, the end effect pays result points, and five reruns pay stability. A benign control input must stay shallower than yours, or the process points void.
 
 Dependency chain. Upstream failures void downstream axes (an undelivered tree voids the component and rebuild axes, a gated component voids the gated executions, and a copied or spliced rebuild voids the rebuild axes that follow).
 
