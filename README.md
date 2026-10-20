@@ -20,7 +20,7 @@ BIOPSY-Bench covers five scenarios. Across all five, we require **verifiable out
 
 All tasks and agents share a single Claude Code scaffold. Performance is reported as pass@5 under a budget of two hours per attempt. Scoring is fully automated and deterministic, with an oracle solution earning 1.0, a no-op solution earning 0.0, and anti-cheating invariants keeping the ground truth out of plaintext.
 
-On the current task set, six frontier models driven through the shared scaffold score between **0.01 and 0.035** per instance, at per-instance costs ranging from roughly **$2 to $13**.
+On the current task set, six models driven through the shared scaffold score between **0.01 and 0.035** per instance, at per-instance costs ranging from roughly **$2 to $13**.
 
 ![BIOPSY-Bench leaderboard](assets/leaderboard.png)
 
