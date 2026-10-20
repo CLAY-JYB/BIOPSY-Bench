@@ -833,8 +833,10 @@ else:
     # vuln stamp voids ONLY the vuln-side axes that read it (cp 30 +
     # trigger 30 + signal 5 + state 2 = 67). A tampered patched stamp
     # voids ONLY the patched-side ones (cp 20 + normal-exit 10 = 30).
-    # Determinism (3) reads no stamp and stays live, bounded by the
-    # global binary-integrity gate. 67 + 30 + 3 = 100. A stubbed side
+    # Determinism (3) reads no stamp bytes but is engagement-gated on
+    # the vuln ladder (frac_v >= 0.5, the half-weight rule shared with
+    # the patched-side axes), so a stubbed vuln side zeros it
+    # structurally. 70 + 30 = 100. A stubbed side
     # routes into the cp branch with empty levels: the legacy ladder
     # never runs on tampered data, its zero is structural.
     def _side_intact(side_file):
@@ -917,7 +919,12 @@ else:
         full_v = depth_v == len(_cpv)
         b_score = d_score = e_score = e2 = f_score = 0.0
         ref_v = (pw_v.get("terminals") or {}).get("full") or {}
-        # determinism (3), ungated
+        # determinism (3), ENGAGEMENT-GATED: a stable termination
+        # signature credits only an input that engaged the vulnerability
+        # layer -- the same half-weight rule as the patched-side axes
+        # (cp pat + pat-normal). Below the bar it is
+        # determinism-of-nothing (the unbound case: cp 0/2 on both
+        # sides still drew 3 free points for a stable error exit).
         sigs_seen = []
         for _ in range(3):
             try:
@@ -930,9 +937,14 @@ else:
                 sigs_seen.append("err")
         maj = max(set(sigs_seen), key=sigs_seen.count)
         d_score = 3.0 * sigs_seen.count(maj) / 3.0
-        emit("%s determinism: %.1f/3 -- signature %dx%d"
+        _det_gate = frac_v >= 0.5
+        if not _det_gate:
+            d_score = 0.0
+        emit("%s determinism: %.1f/3 -- signature %dx%d%s"
              % ("\u2713" if d_score >= 3 else "\u2298", d_score,
-                sigs_seen.count(maj), 3))
+                sigs_seen.count(maj), 3,
+                "" if _det_gate else
+                " (gated: vulnerability layer not engaged)"))
         ledger("dyn.vuln.det", d_score >= 3, d_score, 3)
         # trigger (30) + signal (5) + state (2), gated on the full chain
         if _v_stub:

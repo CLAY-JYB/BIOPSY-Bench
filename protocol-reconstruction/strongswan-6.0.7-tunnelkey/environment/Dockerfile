@@ -345,27 +345,11 @@ RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
 
 # ============================================================================================
 # TARGET-DEPS — shared dependency stack both target binaries build against.
-# Build xollvm-patched (Obfuscator.so annotation-driven obfuscation pass
-# plugin, LLVM 22): the vendored patched tree (same lineage as the sibling
-# skills' copy) builds out-of-tree against the official prebuilt LLVM.
-# -fno-rtti: same task-local class as ensia above — RTTI-free LLVM release
-# binaries otherwise leave undefined _ZTI* refs in the plugin. Ninja comes
-# from apt-build; xollvm's CMakeLists aborts without an external clang on
-# PATH (provided by dl-llvm22).
-FROM dl-llvm22 AS xollvm-patched
-COPY --from=dl-cmake43 /opt/cmake-4.3.1-linux-x86_64 /opt/cmake-4.3.1-linux-x86_64
-COPY concealment/obfuscation/xollvm-patched /concealment/xollvm-patched
-RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
-    ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/ctest /usr/local/bin/ctest && \
-    cd /concealment/xollvm-patched && \
-    mkdir -p build && cd build && \
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-          -DLLVM_DIR=/opt/llvm-22/lib/cmake/llvm \
-          -DCMAKE_CXX_FLAGS="-fno-rtti" .. && \
-    ninja Obfuscator && \
-    cp Obfuscator.so /usr/local/lib/Obfuscator.so && \
-    rm -rf /concealment/xollvm-patched/build
-
+# (the xollvm-patched stage is unused at O0P0D0: the batch's protected
+# slots are filled by asterisk + mosh per the construction contract's
+# "at most one or two protected tasks" cap; the stage's COPY source tree
+# is never staged at O0P0D0, which would break a cold-cache build, and
+# nothing downstream references it.)
 FROM apt-build AS target-deps
 COPY --from=dl-cmake43 /opt/cmake-4.3.1-linux-x86_64 /opt/cmake-4.3.1-linux-x86_64
 RUN ln -sf /opt/cmake-4.3.1-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
@@ -419,65 +403,27 @@ RUN mkdir -p /gt/binaries && cc -O2 -o /gt/binaries/oracle_server /src/proto/ora
        /src/proto/proto_client.c /src/proto/protocol.c -lpthread
 
 # ============================================================================================
-# CHALLENGE-BINARY — full protection chain (O2 + D2), runs IN PARALLEL with
-# origin-binary: identical deps stage, own build tree, clang+plugin toolchain.
-# This stage's /src snapshot is PRIVATE — the D2 source injection and the
-# xollvm annotations below never reach origin-binary's copy, so the oracle
-# pair stays unconcealed.
+# CHALLENGE-BINARY — UNPROTECTED (O0P0D0: the
+# batch's protected slots belong to asterisk + mosh per the "at most one or
+# two protected tasks" cap). The engine TU compiles with plain cc; the
+# invariants that remain are the generated ones — XOR-encoded literals, the
+# masked+split schema registry, strip + leak assertions. This stage's /src snapshot stays
+# PRIVATE so origin-binary's oracle pair is byte-comparable.
 # ============================================================================================
 FROM target-deps AS challenge-binary
 # COPY concealment/ /concealment/   (O0P0D0: tree not staged)
-# clang (dl-llvm22) + the xollvm pass plugin for the O2 compile of the
-# protocol TU. NOTE: ensia (the ladder's other O2 tool) is LLVM
-# OLLVM-Next lineage and registers the same obf-* cl::options as xollvm —
-# LLVM refuses to load both plugins in one process ("Option 'obf-verbose'
-# registered more than once"), so the O2 ladder is delivered by xollvm
-# alone with an enriched pass spec (mba/substitution/constenc/strenc
-# standing in for ensia's expression/string passes).
-COPY --from=dl-llvm22 /opt/llvm-22 /opt/llvm-22
-ENV PATH="/opt/llvm-22/bin:${PATH}"
+# (the dl-llvm22 toolchain bring-up left with the retirement: nothing in
+# this stage references it — the engine and carrier compile with plain cc
+# and configure's default gcc; the runtime stage carries its own LLVM copy
+# for the analysis toolbox)
 # make the ldd closure resolve charon's custom libs (libstrongswan,
 # libcharon) under ${TARGET_DEPS}/lib — the deps.tar.gz / runtime-closure
 # contract
 ENV LD_LIBRARY_PATH=/opt/target-deps/lib
 WORKDIR /src
 
-# D2 binary concealment (seeded plan, concealment_config.json): inject the
-# standard anti-debug check set (ptrace self-attach + TracerPid + parent
-# process name + gdb fingerprints, ACTION_EXIT) into proto_server_entry —
-# anchored at the pc_full_tcp_listen() call so the checks run ONLY on the
-# hidden --proto-server path, never on a normal charon invocation.
-# proto_server_entry is defined in proto_core.c (which protocol.c
-# amalgamates); adbg.c rides in via #include from the same proto/ dir
-# (assets staged there by gen_concealment.py Step 6). The guards matter:
-# the injector edits the file even when anchor matching FAILS, so verify
-# the check landed in proto_core.c and nothing stray landed in protocol.c.
-# O2 binary concealment — xollvm. NOTE strenc is DROPPED (leak-audit fix
-# 2026-09-10): the Strenc pass's AES-CTR blob handling left a 26-byte
-# flag-derived artifact readable in .rodata.cst16 (caught by R7; the
-# engine's own literals are already XOR-encoded by the generator, so
-# the pass added nothing but the leak):
-# O2 binary concealment — xollvm, the ladder in one plugin:
-# control-flow + junk (flattening CFG dispatcher, bcf bogus control flow,
-# adec anti-decompiler trampolines/junk bytes — the O2 core) plus the
-# expression/string-level passes mba, substitution, constenc, strenc and
-# the anti-optimization shield. xollvm is annotation-driven: the spec is
-# injected before every engine function definition across
-# the amalgamated modules (protocol.c #includes these files, so the
-# annotations land in the compiled TU). The count guard turns a silently
-# missed annotation (that function would compile UNobfuscated) into a
-# build failure. proto/ (53 functions, seeded plan) covers the whole wire
-# path: entry/serve/client session ladder, codec, framing, concealment,
-# crypto and the state machine.
-# O2 compile: clang with the xollvm pass plugin — the annotated functions
-# (the whole engine) get flattened/bcf/adec/mba/substitution/constenc/
-# strenc/shield transformed, deterministically via -obf-seed=607
-# -obf-deterministic. The differ-check proves the passes actually
-# transformed the TU (a silent plugin no-op fails the build instead of
-# shipping an unprotected challenge).
-# NOTE the if-form: an `A && B || echo` chain would let a failed clang fall
-# through the || and fake a pass (that exact shape shipped a missing object
-# in an earlier iteration of this build).
+# The adbg.c asset ships in proto/ from the gen_concealment staging, but
+# nothing injects or compiles it into this build at O0P0D0.
 # -fvisibility=hidden: charon links plugins with exported symbols; the
 # engine object's px_/pf_/pc_/ps_/proto_ names must never ride along
 # UNPROTECTED BUILD (construction contract: at most two protected
@@ -590,10 +536,10 @@ if hits:
 print("host-binding assertions passed (no secret byte-sequence in binary)")
 PYEOF
 
-# ENGINE-LEAK ASSERTIONS (leak-audit fix 2026-08): the challenge binary
+# ENGINE-LEAK ASSERTIONS: the challenge binary
 # must ship NO engine internals. The reference client engine lives in
 # proto_client.c -- a TU the carrier build never links (a MITM'd argv +
-# code cave used to reproduce the whole session for free); engine
+# code cave that would reproduce the whole session for free); engine
 # symbols are compiled hidden (source attribute + -fvisibility=hidden)
 # so an -rdynamic carrier link cannot carry px_/pf_/pc_/ps_/pe_/proto_/
 # adbg_ names into .dynsym; strip removes .symtab. Any regression fails
@@ -632,14 +578,14 @@ RUN cp -r /src/proto /tmp/proto_plain_src && \
 RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
         /tmp/proto_client_plain.o /tmp/protocol_plain.o -lpthread -lm && \
     ( /app/binary --proto-server 17999 > /tmp/proto.o1 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 45 /tmp/ref_client 127.0.0.1 17999 > /tmp/proto.out 2>&1; rc=$?; \
+      timeout 420 /tmp/ref_client 127.0.0.1 17999 --sample > /tmp/proto.out 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       grep -q 'flag{' /tmp/proto.out || rc=1; \
       rm -f /tmp/proto.pid; \
       if [ $rc -ne 0 ]; then echo "FATAL: host-bound smoke failed (no flag)"; cat /tmp/proto.out; exit 1; fi ) && \
     mv /etc/strongswan.conf /etc/strongswan.conf.hidden && \
     ( /app/binary --proto-server 17998 > /tmp/proto.o2 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 25 /tmp/ref_client 127.0.0.1 17998 > /tmp/proto.o3 2>&1; rc=$?; \
+      timeout 90 /tmp/ref_client 127.0.0.1 17998 --sample > /tmp/proto.o3 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       mv /etc/strongswan.conf.hidden /etc/strongswan.conf; \
       rm -f /tmp/proto.pid; \
@@ -653,7 +599,7 @@ RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
 # extracts ONLY the ground-truth files (a scratch image holding nothing else).
-# In the parallel layout this target no longer drags the challenge chain: it
+# In the parallel layout this target does not drag the challenge chain: it
 # builds apt-build → dl-cmake43 → target-deps → origin-binary and nothing else.
 # ============================================================================================
 
@@ -816,12 +762,10 @@ COPY --from=ensia /usr/local /usr/local
 # Finished challenge binary from the builder stage
 COPY --from=challenge-binary /out/challenge_final /app/binary
 COPY --from=challenge-binary /out/testdata /app/testdata
-# Runtime library-closure overlay (leak-audit fix 2026-09-11): the
+# Runtime library-closure overlay: the
 # challenge stage resolves the carrier's CUSTOM shared libs (libfrr,
 # libsamba-*, libstrongswan/libcharon) into /out/challenge_libs; without
-# this overlay /app/binary cannot even load in the agent box (the
-# 2026-09-11 frr trial: the agent concluded "binary can't run" and
-# reversed the REAL carrier protocol instead of the injected engine).
+# this overlay /app/binary cannot even load in the agent box (an agent that cannot load it concludes "binary can't run" and reverses the REAL carrier protocol instead of the injected engine).
 # /opt/target-deps/lib is already on LD_LIBRARY_PATH.
 COPY --from=challenge-binary /out/challenge_libs/ /opt/target-deps/lib/
 # Host-bound wire state (site C): the carrier reads /etc/strongswan.conf

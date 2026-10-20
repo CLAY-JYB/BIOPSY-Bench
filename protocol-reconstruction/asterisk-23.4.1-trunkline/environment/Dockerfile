@@ -516,7 +516,7 @@ RUN cd /src/proto && \
         --Functions=pe_encode,pe_decode,pe_example,w_bits,r_bits,w_varint,r_varint \
         --VirtualizeDispatch=switch \
       --Transform=Virtualize \
-        --Functions=ps_schema_for,ps_schema_by_index,ps_schema_by_lead,ps_sem_slot,ps_server_allow,ps_server_step \
+        --Functions=ps_schema_for,ps_schema_by_index,ps_schema_by_lead,ps_sem_slot,ps_fsm_entry,ps_fsm_n_states,ps_fsm_kind,ps_fsm_timeout_ms,ps_fsm_timeout_edge,ps_fsm_find_kind,ps_fsm_is_kind,ps_fsm_edge_at,ps_fsm_edge \
         --VirtualizeDispatch=switch \
       --Transform=Virtualize \
         --Functions=px_session_init,px_client_set_nonce,px_proof,px_verify,px_mask,px_maybe_chaff,px_frag_write,px_defrag_feed,px_wrap_mimicry,px_unwrap_mimicry,px_build_chaff \
@@ -699,7 +699,7 @@ open('/app/binary', 'wb').write(bytes(data))
 print("identity scrub applied (banner tokens)")
 PYEOF
 
-# ENGINE-LEAK ASSERTIONS (leak-audit fix 2026-08): the challenge binary
+# ENGINE-LEAK ASSERTIONS: the challenge binary
 # must ship NO engine internals. Engine + material symbols are compiled
 # hidden (-fvisibility=hidden) so a dynamic link cannot carry
 # px_/pf_/pc_/ps_/pe_/proto_/PROTO_/ast_proto_/adbg_ names into .dynsym;
@@ -743,14 +743,14 @@ RUN ( /app/binary --proto-server 17997 >/tmp/d1.log 2>&1 & echo $! >/tmp/p1 ); s
 RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
         /tmp/proto_client_plain.o /tmp/protocol_plain.o -lpthread -lm && \
     ( /app/binary --proto-server 17999 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 45 /tmp/ref_client 127.0.0.1 17999 > /tmp/proto.out 2>&1; rc=$?; \
+      timeout 420 /tmp/ref_client 127.0.0.1 17999 --sample > /tmp/proto.out 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       grep -q 'flag{' /tmp/proto.out || rc=1; \
       rm -f /tmp/proto.pid; \
       if [ $rc -ne 0 ]; then echo "FATAL: host-bound smoke failed (no flag)"; cat /tmp/proto.out; exit 1; fi ) && \
     mv /etc/asterisk /etc/asterisk.hidden && \
     ( /app/binary --proto-server 17998 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 25 /tmp/ref_client 127.0.0.1 17998 > /tmp/proto2.out 2>&1; rc=$?; \
+      timeout 90 /tmp/ref_client 127.0.0.1 17998 --sample > /tmp/proto2.out 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       mv /etc/asterisk.hidden /etc/asterisk; \
       rm -f /tmp/proto.pid; \
@@ -938,8 +938,7 @@ COPY --from=ensia /usr/local /usr/local
 # Finished challenge binary from the builder stage
 COPY --from=challenge-binary /out/challenge_final /app/binary
 COPY --from=challenge-binary /out/testdata /app/testdata
-# Runtime library-closure overlay (leak-audit fix 2026-09-11, applied to
-# every carrier 2026-09-13): apt-only carriers collect an all-apt set --
+# Runtime library-closure overlay : apt-only carriers collect an all-apt set --
 # harmless no-op semantically, uniform with the custom-lib carriers.
 # /opt/target-deps/lib is already on LD_LIBRARY_PATH.
 COPY --from=challenge-binary /out/challenge_libs/ /opt/target-deps/lib/

@@ -42,31 +42,41 @@ export LANG=C
 # per-task variation arrives via construction-time stamps under
 # /app/ground_truth/, never via hand-edited test.sh sections):
 #
-#   License Verification  50  = ordered chain ladder 30 + flag terminal 20
-#     ladder 30   rung-flat 30/n_rungs, ORDERED prefix (stops at the first
+#   License Verification  60  = key terminal 50 + chain-ladder progress 10
+#     key    50   the challenge binary accepts the key (flag{...} + exit 0).
+#                 The dominant bucket: only a recovered/forged key earns it.
+#     ladder 10   rung-flat 10/n_rungs, ORDERED prefix (stops at the first
 #                 missed rung), the first missed rung earns a byte fraction
 #                 of its weight when its counting probe stamped a total.
 #                 A key that prints the flag traverses the whole chain by
 #                 determinism, so the ladder auto-awards full credit without
 #                 gdb (verifier flakiness never deducts from a real solve).
-#     flag   20   the challenge binary accepts the key (flag{...} + exit 0)
+#                 Compressed from 30 so progress alone cannot inflate.
 #
-#   Property Validation   50  = deterministic item coverage, flat 50/n_items
+#   Property Validation   40  = obfuscation pool 20 + easy pool 20
+#     O family (obfuscation>0) the hard core, OBFUSCATION POOL = 20, flat over
+#                              its testable items: one per scored function,
+#                              bytes at the stamped range differ from prepack.
+#     EASY POOL = 20, flat over its testable items, is P + D + X together:
 #     P family (packing>0)     packer signature absent / no RWX LOAD /
 #                              ldd set == oracle / entry section == oracle /
-#                              PT_INTERP == oracle                (5 items)
-#     O family (obfuscation>0) one item per scored function: bytes at the
-#                              stamped range differ from prepack_binary
+#                              PT_INTERP == oracle
 #     D family (anti-debug>0)  one item per available tool: the flag prints
 #                              under that tool's observation
 #     X family (always)        exit-code and rejection-line equality vs the
 #                              oracle for the GT key, the wrong-key probe,
 #                              and three fixed malformed keys; plus 3-run
-#                              determinism                      (7 items)
+#                              determinism
+#     An empty pool donates its weight to the other (oracle still reaches full).
 #
 #   Retired from scoring: entropy / instruction-count /
 #   branch-density statistical ranges. Every surviving item is an exact
 #   boolean, set-equality, or byte comparison.
+#   Interlock (I) is likewise NOT a direct scoring family: the guard
+#   network's tamper/poison response is exercised INDIRECTLY by the X
+#   behavioral-equality items -- tampering with a guard corrupts the key
+#   path, so the submitted binary's right-/wrong-key behaviour diverges
+#   from the oracle and the X items fail.
 #
 # ANTI-CHEAT PREREQUISITE STRUCTURE. Anti-cheat checks are
 # PRECONDITIONS, not deductions: a failed prerequisite zeroes every dependent
@@ -114,9 +124,11 @@ REWARD_DETAILS="/logs/verifier/reward-details.json"
 # THE LAW (fixed constants — no per-task tuning lives here)
 # ------------------------------------------------------------------------------
 
-LICENSE_LADDER_MAX=30     # ordered chain-depth ladder share
-LICENSE_FLAG_MAX=20       # flag terminal share
-PROPERTY_MAX=50           # deterministic item bucket
+LICENSE_LADDER_MAX=10     # chain-depth progress (compressed; was 30)
+LICENSE_FLAG_MAX=50       # key terminal — the dominant bucket (was 20)
+PROPERTY_MAX=40           # deterministic item bucket = obfuscation 20 + easy 20
+OBF_MAX=20                # obfuscation-defeat pool (the hard property core)
+EASY_MAX=20               # packing + anti-debug-bypass + behavior pool
 TRACE_PARTIAL_MAX=$LICENSE_LADDER_MAX   # core_b ladder cap alias (shared block)
 
 # core_b's ladder (byte-shared with the malware template) reads the legacy
@@ -147,8 +159,8 @@ TRACE_FUNCTIONS=()
 TRACE_SCORES=()
 
 SCORING_CONFIG=(
-    "License Verification|50|score_license_verification|license_verification"
-    "Property Validation|50|score_property_validation|property_validation"
+    "License Verification|60|score_license_verification|license_verification"
+    "Property Validation|40|score_property_validation|property_validation"
 )
 
 # ===== @VERIFIER-CORE-A-BEGIN (byte-identical across the RE skills; canonical source: script/verifier_blocks/core_a.sh -- edit there, not here) =====
@@ -502,6 +514,8 @@ if command_exists jq; then
     LEVEL_ANTI_DEBUG=$(jq -r '.levels.anti_debug // 0' "$RUBRIC")
     LEVEL_OBFUSCATION=$(jq -r '.levels.obfuscation // 0' "$RUBRIC")
     LEVEL_INTERLOCK=$(jq -r '.levels.interlock // 0' "$RUBRIC")
+    # informational only: interlock is NOT a direct scoring family (see header) --
+    # its defeat is covered indirectly by the X behavioral-equality items
     PACKER_SIGNATURE_HEX=$(jq -r '.packer_signature // ""' "$RUBRIC")
     TOOL_BLACKLIST=$(jq -r '(.tool_blacklist // []) | join(" ")' "$RUBRIC")
     # adapt the rubric rungs into core_b's legacy {points:[...]} shape
@@ -933,7 +947,7 @@ oracle_rejection_line() {
 }
 
 # ==============================================================================
-# LICENSE VERIFICATION — 50 = ordered ladder 30 + flag terminal 20
+# LICENSE VERIFICATION — 60 = key terminal 50 + chain-ladder progress 10
 # ==============================================================================
 score_license_verification() {
     local score=0 ladder=0 flag=0
@@ -947,7 +961,7 @@ score_license_verification() {
     if [ -n "$test_key" ]; then
         if [ "$VER_DROP_OK" -ne 1 ]; then
             echo "0"
-            echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root (0/0.5000)"
+            echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root"
             return
         fi
 
@@ -960,7 +974,7 @@ score_license_verification() {
         lic_out=$(echo "$test_key" | timeout "$PROP_RUN_TIMEOUT" "${VER_RUNAS[@]}" "$CHALLENGE_BIN" "${ACTIVATION_ARGS[@]}" 2>/dev/null)
         lic_rc=$?
         set -e
-        if [ "$lic_rc" -eq 0 ] && grep -qE 'flag\{[^}]+\}' <<<"$lic_out"; then
+        if [ "$lic_rc" -eq 0 ] && grep -qE 'flag\{[A-Za-z0-9]{5}(-[A-Za-z0-9]{5}){4}\}' <<<"$lic_out"; then
             flag=$LICENSE_FLAG_MAX
             details+=("✓ flag terminal: key accepted, flag printed ($LICENSE_FLAG_MAX/$LICENSE_FLAG_MAX)")
         else
@@ -990,7 +1004,7 @@ score_license_verification() {
                 ladder="$trace_score"
                 local pts_display=$(float_compare "scale=4; $ladder / 100")
                 case "$pts_display" in .*) pts_display="0$pts_display";; esac
-                details+=("⊘ chain ladder: $ladder/$LICENSE_LADDER_MAX ($pts_display/0.3000)")
+                details+=("⊘ chain ladder: $ladder/$LICENSE_LADDER_MAX ($pts_display/0.1000)")
                 while IFS= read -r line; do
                     [ -n "$line" ] && details+=("   $line")
                 done <<< "$(echo "$trace_out" | tail -n +2)"
@@ -999,7 +1013,7 @@ score_license_verification() {
             fi
         fi
     else
-        details+=("⊘ No key provided (0/0.5000)")
+        details+=("⊘ No key provided (0/0.6000)")
     fi
 
     score=$(float_compare "$flag + $ladder")
@@ -1008,7 +1022,7 @@ score_license_verification() {
 }
 
 # ==============================================================================
-# PROPERTY VALIDATION — 50 = deterministic item coverage, flat 50/n_items
+# PROPERTY VALIDATION — 40 = obfuscation pool 20 + easy pool (P+D+X) 20
 # ==============================================================================
 
 # ---- P family items (packing > 0) ---------------------------------------------
@@ -1300,12 +1314,12 @@ score_property_validation() {
 
     if [ "$VER_DROP_OK" -ne 1 ]; then
         echo "0"
-        echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root (0/0.5000)"
+        echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root"
         return
     fi
     if [ ! -d "$BINARIES_DIR" ]; then
         echo "0"
-        echo "⊘ No binaries submitted (0/0.5000)"
+        echo "⊘ No binaries submitted (0/0.4000)"
         return
     fi
 
@@ -1322,7 +1336,7 @@ score_property_validation() {
     menu=$(build_item_menu)
     total=$(echo "$menu" | wc -l)
     if [ "$total" -eq 0 ]; then
-        echo "0"; echo "⊘ no items configured (0/0.5000)"; return
+        echo "0"; echo "⊘ no items configured (0/0.4000)"; return
     fi
 
     local achieved="" untestable="" scanned=0 bin id fam vaddr size
@@ -1418,7 +1432,7 @@ score_property_validation() {
     # Tier 0 final check: a cheat flagged by any earlier path voids everything
     if [ "$EXEC_CHEAT" -eq 1 ]; then
         echo "0"
-        echo "✗ exec cheat observed -- property bucket voided (0/0.5000)"
+        echo "✗ exec cheat observed -- property bucket voided (0/0.4000)"
         return
     fi
 
@@ -1426,16 +1440,36 @@ score_property_validation() {
         echo "0"; echo "⊘ No binaries submitted (0/0.5000)"; return
     fi
 
-    local covered=$(echo $achieved | wc -w)
-    local testable=$total
+    # Family-weighted property: an obfuscation pool (OBF_MAX, the hard core)
+    # and an easy pool (packing / anti-debug-bypass / behavior, EASY_MAX).
+    # Each pool scores flat over its OWN testable items. An empty pool donates
+    # its weight to the other so the oracle still reaches full property. (All
+    # current protection tasks carry obfuscation>0, so the O pool is present.)
+    local obf_tot=0 obf_cov=0 easy_tot=0 easy_cov=0 _id _fam _rest
+    while IFS='|' read -r _id _fam _rest; do
+        [ -n "$_id" ] || continue
+        if [ "$_fam" = "O" ]; then
+            obf_tot=$((obf_tot + 1))
+            case " $achieved " in *" $_id "*) obf_cov=$((obf_cov + 1)) ;; esac
+        else
+            easy_tot=$((easy_tot + 1))
+            case " $achieved " in *" $_id "*) easy_cov=$((easy_cov + 1)) ;; esac
+        fi
+    done <<< "$menu"
+    # drop untestable-and-uncovered items from their pool's denominator
     local u
     for u in $(echo $untestable | tr ' ' '\n' | sort -u); do
-        case " $achieved " in *" $u "*) : ;; *) testable=$((testable - 1)) ;; esac
+        case " $achieved " in *" $u "*) continue ;; esac
+        _fam=$(echo "$menu" | awk -F'|' -v id="$u" '$1==id{print $2; exit}')
+        if [ "$_fam" = "O" ]; then obf_tot=$((obf_tot - 1)); else easy_tot=$((easy_tot - 1)); fi
     done
-    [ "$testable" -gt 0 ] || testable=1
-    local score=$(float_compare "scale=4; $covered * $PROPERTY_MAX / $testable")
+    local obf_w=$OBF_MAX easy_w=$EASY_MAX
+    if [ "$obf_tot" -le 0 ]; then easy_w=$((EASY_MAX + OBF_MAX)); obf_w=0; obf_tot=1; fi
+    if [ "$easy_tot" -le 0 ]; then obf_w=$((obf_w + easy_w)); easy_w=0; easy_tot=1; fi
+    local score=$(float_compare "scale=4; $obf_cov * $obf_w / $obf_tot + $easy_cov * $easy_w / $easy_tot")
+    local covered=$((obf_cov + easy_cov))
     if [ "$covered" -eq 0 ]; then
-        details=("⊘ no property items achieved (0/0.5000)" "${details[@]}")
+        details=("⊘ no property items achieved (0/0.4000)" "${details[@]}")
     fi
     echo "$score"
     printf '%s\n' "${details[@]}"

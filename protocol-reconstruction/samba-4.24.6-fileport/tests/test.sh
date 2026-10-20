@@ -34,39 +34,48 @@ export LANG=C
 # ===== UNIFIED VERIFIER BASELINE END =====
 
 # ==============================================================================
-# PROTOCOL RECONSTRUCTION - VERIFICATION TEST (V5.1, pure dynamic)
+# PROTOCOL RECONSTRUCTION - VERIFICATION TEST (pure dynamic)
 # ==============================================================================
 # Challenge: samba-4.24.6-fileport
 #
-# Scoring (reference/scoring.md -- V5.1: the meeting directive "drop the
-# direct answer-writing parts, maximize dynamic verification aimed at
-# the FINAL PRODUCT"):
+# Scoring (reference/scoring.md: the score is
+# the STATE-MACHINE COVERAGE the submitted client demonstrated):
 #
-#   ├── Session Ladder          70   DYNAMIC  the agent's submitted client
-#   │                                          against ONE clean live
-#   │                                          oracle run; every stage is
-#   │                                          graded element-wise from
-#   │                                          the oracle's per-frame
-#   │                                          FORMAT log (best attempt
-#   │                                          wins; dual-path decode
-#   │                                          separates grammar from
-#   │                                          crypto)
-#   │     ① handshake            20  7 format elements
-#   │     ② authentication       20  opcode/structure/mac value/KEX shape
-#   │     ③ data exchange        15  TX crypto, per-command grammar,
-#   │                                    same-key readback, round persistence
-#   │     ④ flag                 10  FLAG grammar, token value, flag
-#   │                                    DELIVERED on stdout (per-run
-#   │                                    derived flag -- a statically
-#   │                                    dumped constant never matches)
-#   │     ⑤ close                 5  BYE grammar, ACK delivered, clean FIN
-#   └── Robustness Battery     30   DYNAMIC  13 single-fault oracle runs
-#          chaff burst / corrupted reply (retransmit) / min-fragments /
-#          escape-dense chaff / stream noise / forced resync / slow
-#          reply / drip feed / ERR-on-HELLO / parallel isolation /
-#          hostile length / server drop (reconnect) / duplicated reply
-#          graded handled-fully / survived / died, renormalized over the
-#          level-applicable probe set
+#   FSM Coverage              100   DYNAMIC   the dialog graph's items,
+#                                            weighted and counted once,
+#                                            over the observation plan
+#                                            (3 clean runs + 1
+#                                            diagnostic run + the
+#                                            level-applicable fault
+#                                            runs -- a fresh oracle and
+#                                            a fresh log secret every
+#                                            run, evidence UNIONED)
+#
+#     success edges (accept/self/idle-timeout)    2.0 each
+#     value-gated edges (pass + fail sides)       3.0 each (0.5+0.5)
+#     recovery edges (error state's way back)     1.5 each
+#     declared error edges (probeable wrongness)  0.5 each
+#     success points (working states entered)     1.5 each
+#     error points (error states entered)         0.25 each
+#
+#     score = sum(weight x ratio) / sum(weight) x 100
+#
+#     The evidence is the oracle's own conn-attributed milestone log
+#     (edge on=<op> from=<s> to=<t> rc=<0|1>), so a submission earns
+#     items only by actually driving the dialog: the graph, the weights
+#     and the expected flag are root-only GT knowledge.
+#
+# Gates G1-G5 (anti-cheat as PREREQUISITES with targeted voiding -- a
+# failed gate voids the runs that depend on it, never the whole score
+# from an unrelated stage):
+#   G1 submission contract (path jail, size cap, exec bit)
+#   G2 fail-closed privilege drop (no root analysis, ever)
+#   G3 exec/wrapper gate per run (strace: nothing under /app /tests
+#      /solution is ever executed by the analyzed client)
+#   G4 connect witness per run (the client talked to THIS oracle's
+#      endpoint -- recorded bytes from elsewhere are worthless)
+#   G5 milestone-line integrity (each run's lines carry that run's
+#      random secret; the client cannot read the log it never sees)
 #
 # The written report is NOT scored and NOT required. The only submission
 # contract is the final product:
@@ -95,7 +104,7 @@ export LANG=C
 # ------------------------------------------------------------------------------
 
 GROUND_TRUTH_DIR="/app/ground_truth"
-GT_CONFIG='{"levels":{"F":4,"E":5,"C":9,"S":4,"X":7,"M":3,"L":6,"T":3},"messages":[{"name":"WAKE","role":"handshake_init","opcode":"0xdd","dir":"c2s","fields":[{"name":"fw_rev","type":"u32","width":4,"sem":"version","span":[8,32],"endian":"big","bits":32},{"name":"lock_class","type":"u16","width":2,"sem":"value","span":[40,16],"endian":"big","bits":16}],"example_payload_hex":"dd001000000110"},{"name":"WELCOME","role":"handshake_ack","opcode":"0x42","dir":"s2c","fields":[{"name":"fw_rev","type":"u32","width":4,"sem":"version","span":[8,32],"endian":"big","bits":32},{"name":"grant_id","type":"u32","width":4,"sem":"value","span":[40,32],"endian":"big","bits":32},{"name":"challenge","type":"bstr","width":16,"sem":"nonce","span":[72,128],"endian":"big","bits":0},{"name":"lock_pub","type":"bstr","width":32,"sem":"key","span":[200,256],"endian":"big","bits":0}],"example_payload_hex":"420010000001100000a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3"},{"name":"NEGOTIATE","role":"params","opcode":"0x47","dir":"c2s","fields":[{"name":"grant_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"pin_len","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"4700100110"},{"name":"NEGOTIATED","role":"params_ack","opcode":"0xca","dir":"s2c","fields":[{"name":"lock_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"master_code","type":"u32","width":4,"sem":"token","span":[24,32],"endian":"big","bits":32}],"example_payload_hex":"ca001001100000"},{"name":"PROVE","role":"auth","opcode":"0xb3","dir":"c2s","fields":[{"name":"proof_tag","type":"bstr","width":16,"sem":"key","span":[8,128],"endian":"big","bits":0}],"example_payload_hex":"b3a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"},{"name":"PROVEN","role":"auth_ack","opcode":"0xe7","dir":"s2c","fields":[{"name":"verdict","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8},{"name":"grant_sig","type":"bstr","width":8,"sem":"key","span":[16,64],"endian":"big","bits":0}],"example_payload_hex":"e740a1a1a1a1a1a1a1a1"},{"name":"CHECK","role":"read","opcode":"0xad","dir":"c2s","fields":[{"name":"credential_id","type":"str","width":16,"sem":"name","span":[8,32],"endian":"big","bits":0}],"example_payload_hex":"ad03657830"},{"name":"CREDENTIAL","role":"read_ack","opcode":"0xcd","dir":"s2c","fields":[{"name":"credential_id","type":"str","width":16,"sem":"name","span":[8,32],"endian":"big","bits":0},{"name":"pin_hash","type":"u32","width":4,"sem":"value","span":[40,32],"endian":"big","bits":32}],"example_payload_hex":"cd0365783001100000"},{"name":"ASSIGN","role":"write","opcode":"0x6c","dir":"c2s","fields":[{"name":"credential_id","type":"str","width":16,"sem":"name","span":[8,32],"endian":"big","bits":0},{"name":"pin_hash","type":"u32","width":4,"sem":"value","span":[40,32],"endian":"big","bits":32}],"example_payload_hex":"6c0365783001100000"},{"name":"ASSIGNED","role":"write_ack","opcode":"0x43","dir":"s2c","fields":[{"name":"verdict","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"4340"},{"name":"VALIDATE","role":"compute","opcode":"0x5c","dir":"c2s","fields":[{"name":"challenge_lo","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"challenge_hi","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"5c00100110"},{"name":"VERDICT","role":"compute_ack","opcode":"0x95","dir":"s2c","fields":[{"name":"verdict_code","type":"u32","width":4,"sem":"value","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"9500100000"},{"name":"MASTERKEY","role":"flag_req","opcode":"0x6e","dir":"c2s","fields":[{"name":"master_code","type":"u32","width":4,"sem":"token","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"6e00100000"},{"name":"MASTERKEY_RES","role":"flag_res","opcode":"0xae","dir":"s2c","fields":[{"name":"override_key","type":"str","width":48,"sem":"flag","span":[8,32],"endian":"big","bits":0}],"example_payload_hex":"ae03657830"},{"name":"DENY","role":"error","opcode":"0x8b","dir":"s2c","fields":[{"name":"deny_code","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"8b40"},{"name":"LOCK","role":"close","opcode":"0x88","dir":"c2s","fields":[{"name":"lock_reason","type":"u8","width":1,"sem":"reason","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"8840"},{"name":"LOCKED","role":"close_ack","opcode":"0xa1","dir":"s2c","fields":[{"name":"deny_code","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"a140"},{"name":"TICKLE","role":"ping","opcode":"0x99","dir":"c2s","fields":[{"name":"tickle_seq","type":"u32","width":4,"sem":"seq","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"9900100000"},{"name":"TICKLE_ACK","role":"ping_ack","opcode":"0xce","dir":"s2c","fields":[{"name":"tickle_echo","type":"u32","width":4,"sem":"value","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"ce00100000"},{"name":"AUDIT","role":"stat","opcode":"0x57","dir":"c2s","fields":[{"name":"audit_id","type":"u8","width":1,"sem":"value","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"5740"},{"name":"AUDIT_TRAIL","role":"stat_ack","opcode":"0x5e","dir":"s2c","fields":[{"name":"audit_text","type":"str","width":24,"sem":"value","span":[8,32],"endian":"big","bits":0}],"example_payload_hex":"5e03657830"},{"name":"REQUEST_FOB","role":"mux_open","opcode":"0x90","dir":"c2s","fields":[{"name":"grant_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"pin_len","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"9000100110"},{"name":"FOB_OK","role":"mux_ack","opcode":"0x8c","dir":"s2c","fields":[{"name":"grant_id","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"master_code","type":"u16","width":2,"sem":"token","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"8c00100110"}],"states":[{"name":"WAIT_HELLO","transitions":[{"input":"HELLO","next":"WAIT_PARAMS"}]},{"name":"WAIT_PARAMS","transitions":[{"input":"PARAMS","next":"WAIT_AUTH"}]},{"name":"WAIT_AUTH","transitions":[{"input":"AUTH","next":"SESSION"}]},{"name":"SESSION","transitions":[{"input":"GET|SET|SUM|FLAG","next":"SESSION"},{"input":"BYE","next":"CLOSED"},{"input":"protocol_error","next":"RESYNC"}]},{"name":"RESYNC","transitions":[{"input":"HELLO","next":"WAIT_PARAMS"},{"input":"duplicate_sequence","next":"SESSION","action":"retransmit_accepted"}]},{"name":"SESSION","idle_watchdog_seconds":"s_watchdog_knob","transitions":[{"input":"idle>watchdog","next":"CLOSED"}]}]}'
+GT_CONFIG='{"levels":{"F":4,"E":5,"C":9,"S":4,"X":7,"M":3,"L":6,"T":3},"messages":[{"name":"CAN_OPEN","role":"handshake_init","opcode":"0xa7","dir":"c2s","fields":[{"name":"bus_rev","type":"u32","width":4,"sem":"version","span":[8,32],"endian":"big","bits":32},{"name":"bus_class","type":"u16","width":2,"sem":"value","span":[40,16],"endian":"big","bits":16}],"example_payload_hex":"a7000800008008"},{"name":"CAN_ACK","role":"handshake_ack","opcode":"0xbd","dir":"s2c","fields":[{"name":"bus_rev","type":"u32","width":4,"sem":"version","span":[8,32],"endian":"big","bits":32},{"name":"can_session","type":"u32","width":4,"sem":"value","span":[40,32],"endian":"big","bits":32},{"name":"sec_nonce","type":"bstr","width":16,"sem":"nonce","span":[72,128],"endian":"big","bits":0},{"name":"gw_pub","type":"bstr","width":32,"sem":"key","span":[200,256],"endian":"big","bits":0}],"example_payload_hex":"bd000800008008000045454545454545454545454545454545c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5"},{"name":"FILTER_SET","role":"params","opcode":"0xee","dir":"c2s","fields":[{"name":"baud_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"max_dlc","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"ee00088008"},{"name":"FILTER_OK","role":"params_ack","opcode":"0x38","dir":"s2c","fields":[{"name":"gw_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"seed_code","type":"u32","width":4,"sem":"token","span":[24,32],"endian":"big","bits":32}],"example_payload_hex":"38000880080000"},{"name":"SECURITY_ACCESS","role":"auth","opcode":"0xe0","dir":"c2s","fields":[{"name":"sec_tag","type":"bstr","width":16,"sem":"key","span":[8,128],"endian":"big","bits":0}],"example_payload_hex":"e005050505050505050505050505050505"},{"name":"ACCESS_OK","role":"auth_ack","opcode":"0xf3","dir":"s2c","fields":[{"name":"tx_status","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8},{"name":"gw_confirm","type":"bstr","width":8,"sem":"key","span":[16,64],"endian":"big","bits":0}],"example_payload_hex":"f3028585858585858585"},{"name":"RECV_FRAME","role":"read","opcode":"0xfa","dir":"c2s","fields":[{"name":"can_id","type":"str","width":16,"sem":"name","span":[8,29],"endian":"big","bits":0}],"example_payload_hex":"fac530f060"},{"name":"FRAME_DATA","role":"read_ack","opcode":"0xa2","dir":"s2c","fields":[{"name":"can_id","type":"str","width":16,"sem":"name","span":[8,29],"endian":"big","bits":0},{"name":"dlc","type":"u32","width":4,"sem":"value","span":[37,32],"endian":"big","bits":32}],"example_payload_hex":"a2c530f06400400000"},{"name":"SEND_FRAME","role":"write","opcode":"0xf0","dir":"c2s","fields":[{"name":"can_id","type":"str","width":16,"sem":"name","span":[8,29],"endian":"big","bits":0},{"name":"dlc","type":"u32","width":4,"sem":"value","span":[37,32],"endian":"big","bits":32}],"example_payload_hex":"f0c530f06400400000"},{"name":"FRAME_SENT","role":"write_ack","opcode":"0xb0","dir":"s2c","fields":[{"name":"tx_status","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"b002"},{"name":"CHECKSUM_CALC","role":"compute","opcode":"0xca","dir":"c2s","fields":[{"name":"data_lo","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"data_hi","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"ca00088008"},{"name":"CHECKSUM_VAL","role":"compute_ack","opcode":"0xe3","dir":"s2c","fields":[{"name":"crc_val","type":"u32","width":4,"sem":"value","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"e300080000"},{"name":"SEED_KEY","role":"flag_req","opcode":"0x4f","dir":"c2s","fields":[{"name":"seed_code","type":"u32","width":4,"sem":"token","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"4f00080000"},{"name":"SEED_KEY_RES","role":"flag_res","opcode":"0x98","dir":"s2c","fields":[{"name":"security_key","type":"str","width":48,"sem":"flag","span":[8,29],"endian":"big","bits":0}],"example_payload_hex":"98c530f060"},{"name":"BUS_ERR","role":"error","opcode":"0xe8","dir":"s2c","fields":[{"name":"err_code","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"e802"},{"name":"CAN_CLOSE","role":"close","opcode":"0xb6","dir":"c2s","fields":[{"name":"close_reason","type":"u8","width":1,"sem":"reason","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"b602"},{"name":"CAN_CLOSED","role":"close_ack","opcode":"0x75","dir":"s2c","fields":[{"name":"err_code","type":"u8","width":1,"sem":"status","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"7502"},{"name":"BUS_CHK","role":"ping","opcode":"0x5d","dir":"c2s","fields":[{"name":"bus_seq","type":"u32","width":4,"sem":"seq","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"5d00080000"},{"name":"BUS_OK","role":"ping_ack","opcode":"0x6f","dir":"s2c","fields":[{"name":"bus_echo","type":"u32","width":4,"sem":"value","span":[8,32],"endian":"big","bits":32}],"example_payload_hex":"6f00080000"},{"name":"DTC_READ","role":"stat","opcode":"0x91","dir":"c2s","fields":[{"name":"dtc_id","type":"u8","width":1,"sem":"value","span":[8,8],"endian":"big","bits":8}],"example_payload_hex":"9102"},{"name":"DTC_INFO","role":"stat_ack","opcode":"0x5a","dir":"s2c","fields":[{"name":"dtc_text","type":"str","width":24,"sem":"value","span":[8,29],"endian":"big","bits":0}],"example_payload_hex":"5ac530f060"},{"name":"CLAIM_BUS","role":"mux_open","opcode":"0x25","dir":"c2s","fields":[{"name":"baud_window","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"max_dlc","type":"u16","width":2,"sem":"value","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"2500088008"},{"name":"BUS_CLAIMED","role":"mux_ack","opcode":"0xe2","dir":"s2c","fields":[{"name":"can_session","type":"u16","width":2,"sem":"value","span":[8,16],"endian":"big","bits":16},{"name":"seed_code","type":"u16","width":2,"sem":"token","span":[24,16],"endian":"big","bits":16}],"example_payload_hex":"e200088008"}],"states":[{"name":"LINK","kind":"handshake"},{"name":"NEG0","kind":"negotiate"},{"name":"NEG1","kind":"negotiate"},{"name":"NEG2","kind":"negotiate"},{"name":"NEG3","kind":"negotiate"},{"name":"AUTHGATE","kind":"auth"},{"name":"MODE0","kind":"mode"},{"name":"MODE1","kind":"mode"},{"name":"MODE2","kind":"mode"},{"name":"MODE3","kind":"mode"},{"name":"MODE4","kind":"mode"},{"name":"MODE5","kind":"mode"},{"name":"MODE6","kind":"mode"},{"name":"MODE7","kind":"mode"},{"name":"FLAGPORT","kind":"flag"},{"name":"E_RETRY","kind":"error"},{"name":"E_RESYNC","kind":"error"},{"name":"CLOSED","kind":"terminal"}],"fsm":{"form":"ftp-ctrl","entry":0,"terminal":17,"flag":14,"states":[{"id":0,"name":"LINK","kind":"handshake","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"handshake_init","cls":"accept","next":1,"err":null,"act":null,"down":false,"bracket":false}]},{"id":1,"name":"NEG0","kind":"negotiate","timeout_ms":8707,"timeout_edge":15,"edges":[{"on":"params","cls":"value","next":2,"err":"STATE","act":null,"down":false,"bracket":false,"cond":{"sem":"value","op":"GE","operand":29},"alt":1},{"on":"auth","cls":"err","next":1,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"err","next":1,"err":"VERSION","act":null,"down":false,"bracket":false},{"on":"ping","cls":"err","next":1,"err":"STATE","act":null,"down":false,"bracket":false}]},{"id":2,"name":"NEG1","kind":"negotiate","timeout_ms":9451,"timeout_edge":15,"edges":[{"on":"stat","cls":"value","next":3,"err":"STATE","act":null,"down":false,"bracket":false,"cond":{"sem":"value","op":"GE","operand":180},"alt":2},{"on":"mux_open","cls":"err","next":2,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"handshake_init","cls":"err","next":2,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"ping","cls":"err","next":2,"err":"VERSION","act":null,"down":false,"bracket":false}]},{"id":3,"name":"NEG2","kind":"negotiate","timeout_ms":8790,"timeout_edge":15,"edges":[{"on":"params","cls":"value","next":4,"err":"STATE","act":null,"down":false,"bracket":false,"cond":{"sem":"value","op":"LE","operand":216},"alt":3},{"on":"write","cls":"err","next":3,"err":"TOKEN","act":null,"down":false,"bracket":false},{"on":"ping","cls":"err","next":3,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":3,"err":"VERSION","act":null,"down":false,"bracket":false}]},{"id":4,"name":"NEG3","kind":"negotiate","timeout_ms":8117,"timeout_edge":15,"edges":[{"on":"stat","cls":"value","next":5,"err":"STATE","act":null,"down":false,"bracket":false,"cond":{"sem":"value","op":"LE","operand":55},"alt":4},{"on":"flag_req","cls":"err","next":4,"err":"VERSION","act":null,"down":false,"bracket":false},{"on":"read","cls":"err","next":4,"err":"VERSION","act":null,"down":false,"bracket":false},{"on":"handshake_init","cls":"err","next":4,"err":"VERSION","act":null,"down":false,"bracket":false}]},{"id":5,"name":"AUTHGATE","kind":"auth","timeout_ms":9603,"timeout_edge":null,"edges":[{"on":"auth","cls":"accept","next":6,"err":null,"act":null,"down":false,"bracket":false},{"on":"params","cls":"err","next":5,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"read","cls":"err","next":5,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":5,"err":"AUTH","act":null,"down":false,"bracket":false}]},{"id":6,"name":"MODE0","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"write","cls":"self","next":6,"err":null,"act":"kv_set","down":false,"bracket":false},{"on":"params","cls":"accept","next":7,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":6,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":6,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":6,"err":null,"act":null,"down":false,"bracket":false},{"on":"compute","cls":"err","next":16,"err":"RESYNC","act":null,"down":true,"bracket":false},{"on":"read","cls":"err","next":6,"err":"TOKEN","act":null,"down":false,"bracket":false},{"on":"compute","cls":"err","next":6,"err":"CREDIT","act":null,"down":false,"bracket":false},{"on":"handshake_init","cls":"err","next":6,"err":"RESYNC","act":null,"down":false,"bracket":false}]},{"id":7,"name":"MODE1","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"read","cls":"self","next":7,"err":null,"act":"kv_get","down":false,"bracket":false},{"on":"params","cls":"accept","next":8,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":7,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":7,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":7,"err":null,"act":null,"down":false,"bracket":false},{"on":"auth","cls":"err","next":7,"err":"RESYNC","act":null,"down":false,"bracket":false},{"on":"handshake_init","cls":"err","next":7,"err":"CHANNEL","act":null,"down":false,"bracket":false},{"on":"write","cls":"err","next":7,"err":"STATE","act":null,"down":false,"bracket":false}]},{"id":8,"name":"MODE2","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"compute","cls":"self","next":8,"err":null,"act":"kv_sum","down":false,"bracket":false},{"on":"params","cls":"accept","next":9,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":8,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":8,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":8,"err":null,"act":null,"down":false,"bracket":false},{"on":"read","cls":"err","next":8,"err":"REAUTH","act":null,"down":false,"bracket":false},{"on":"write","cls":"err","next":8,"err":"CHANNEL","act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":8,"err":"STATE","act":null,"down":false,"bracket":false}]},{"id":9,"name":"MODE3","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"write","cls":"self","next":9,"err":null,"act":"kv_set","down":false,"bracket":false},{"on":"params","cls":"accept","next":10,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":9,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":9,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":9,"err":null,"act":null,"down":false,"bracket":false},{"on":"read","cls":"err","next":9,"err":"RESYNC","act":null,"down":false,"bracket":false},{"on":"auth","cls":"err","next":9,"err":"REAUTH","act":null,"down":false,"bracket":false},{"on":"compute","cls":"err","next":9,"err":"REAUTH","act":null,"down":false,"bracket":false}]},{"id":10,"name":"MODE4","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"read","cls":"self","next":10,"err":null,"act":"kv_get","down":false,"bracket":false},{"on":"params","cls":"accept","next":11,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":10,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":10,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":10,"err":null,"act":null,"down":false,"bracket":false},{"on":"auth","cls":"err","next":10,"err":"RESYNC","act":null,"down":false,"bracket":false},{"on":"compute","cls":"err","next":10,"err":"RESYNC","act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":10,"err":"UNKNOWN","act":null,"down":false,"bracket":false}]},{"id":11,"name":"MODE5","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"compute","cls":"self","next":11,"err":null,"act":"kv_sum","down":false,"bracket":false},{"on":"params","cls":"accept","next":12,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":11,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":11,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":11,"err":null,"act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":11,"err":"RESYNC","act":null,"down":false,"bracket":false},{"on":"write","cls":"err","next":11,"err":"CHANNEL","act":null,"down":false,"bracket":false},{"on":"auth","cls":"err","next":11,"err":"CREDIT","act":null,"down":false,"bracket":false}]},{"id":12,"name":"MODE6","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"write","cls":"self","next":12,"err":null,"act":"kv_set","down":false,"bracket":false},{"on":"params","cls":"accept","next":13,"err":null,"act":null,"down":false,"bracket":false},{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"self","next":12,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":12,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":12,"err":null,"act":null,"down":false,"bracket":false},{"on":"read","cls":"err","next":12,"err":"CHANNEL","act":null,"down":false,"bracket":false},{"on":"handshake_init","cls":"err","next":12,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"flag_req","cls":"err","next":12,"err":"STATE","act":null,"down":false,"bracket":false}]},{"id":13,"name":"MODE7","kind":"mode","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"read","cls":"self","next":13,"err":null,"act":"kv_get","down":false,"bracket":false},{"on":"flag_req","cls":"accept","next":14,"err":null,"act":"token_check","down":false,"bracket":false},{"on":"ping","cls":"self","next":13,"err":null,"act":"heartbeat","down":false,"bracket":false},{"on":"stat","cls":"self","next":13,"err":null,"act":null,"down":false,"bracket":false},{"on":"mux_open","cls":"self","next":13,"err":null,"act":null,"down":false,"bracket":false},{"on":"params","cls":"err","next":13,"err":"REAUTH","act":null,"down":false,"bracket":false},{"on":"close","cls":"err","next":13,"err":"AUTH","act":null,"down":false,"bracket":false},{"on":"auth","cls":"err","next":13,"err":"AUTH","act":null,"down":false,"bracket":false}]},{"id":14,"name":"FLAGPORT","kind":"flag","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"close","cls":"accept","next":17,"err":null,"act":null,"down":false,"bracket":false},{"on":"ping","cls":"err","next":14,"err":"TOKEN","act":null,"down":false,"bracket":false},{"on":"stat","cls":"err","next":14,"err":"STATE","act":null,"down":false,"bracket":false},{"on":"compute","cls":"err","next":14,"err":"TOKEN","act":null,"down":false,"bracket":false}]},{"id":15,"name":"E_RETRY","kind":"error","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"params","cls":"accept","next":2,"err":null,"act":"resend","down":false,"bracket":false}]},{"id":16,"name":"E_RESYNC","kind":"error","timeout_ms":0,"timeout_edge":null,"edges":[{"on":"handshake_init","cls":"accept","next":0,"err":null,"act":"reladder","down":false,"bracket":false}]},{"id":17,"name":"CLOSED","kind":"terminal","timeout_ms":0,"timeout_edge":null,"edges":[]}]}}'
 
 AGENT_OUTPUT_DIR="/logs/artifacts/agent_output"
 CLIENT_BIN="$AGENT_OUTPUT_DIR/client"
@@ -116,8 +125,7 @@ RUN_DIR="$(mktemp -d /tmp/verrun.XXXXXX)"
 #   Challenge: samba-4.24.6-fileport
 
 SCORING_CONFIG=(
-    "Session Ladder|70|score_ladder|session_ladder"
-    "Robustness Battery|30|score_robustness|robustness_battery"
+    "FSM Coverage|100|score_coverage|fsm_coverage"
 )
 
 # ===== @VERIFIER-CORE-A-BEGIN (byte-identical across the RE skills; canonical source: script/verifier_blocks/core_a.sh -- edit there, not here) =====
@@ -171,7 +179,7 @@ confined_agent_path() {
     echo "$real"
 }
 
-# Confine an agent-supplied DIRECTORY (extracted trees / roots): must be a relative path, resolve inside agent_output, exist, and the entry itself must not be a symlink (a symlinked root used to walk the oracle tree for free).
+# Confine an agent-supplied DIRECTORY (extracted trees / roots): must be a relative path, resolve inside agent_output, exist, and the entry itself must not be a symlink (a symlinked root would walk the oracle tree for free).
 confined_agent_dir() {
     local p="$1" real
     [ -n "$p" ] || return 1
@@ -189,6 +197,9 @@ confined_agent_dir() {
 # --- baseline #3: privilege drop (FAIL-CLOSED on a root verifier) ---------------
 # Wraps EXECUTION of agent/analyzed code only; static analysis tools run as the verifier.
 # VERIFIER_RUNAS is exported so embedded python scorers can reuse the same drop via shlex.split(os.environ["VERIFIER_RUNAS"]).
+# VER_DROP_OK is exported for the python core's gate (verifier_core.drop_fail_closed): a root
+# verifier with no usable drop must REFUSE every agent-code run (denied observables, the
+# affected bucket scores 0) instead of executing analyzed code as root.
 VER_RUNAS=()
 VER_DROP_OK=1
 if command_exists setpriv && id nobody >/dev/null 2>&1 \
@@ -198,7 +209,9 @@ if command_exists setpriv && id nobody >/dev/null 2>&1 \
     export VERIFIER_RUNAS="${VER_RUNAS[*]}"
 elif [ "$(id -u)" = "0" ]; then
     VER_DROP_OK=0
+    echo "✗ fail-closed: privilege drop unavailable on a root verifier; agent-code execution refused (affected buckets score 0)" >&2
 fi
+export VER_DROP_OK
 
 # --- baseline #4: execve/execveat gate (plain-text strace logs) ------------------
 # rc 0 = violation (the traced run executed a verifier-side binary). $2 (optional) is the ONE exempted verifier-side target -- the binary under test when the activation command runs it directly (its first execve would otherwise void every legitimate run).
@@ -502,7 +515,7 @@ def confined_own_file(rel):
 def confined_agent_dir(rel):
     """The agent's own directory (extracted tree/root): relative path,
     realpath inside agent_output, exists, and the entry itself is not a
-    symlink (a symlinked root used to walk the oracle tree for free).
+    symlink (a symlinked root would walk the oracle tree for free).
     Returns the resolved real path, or None."""
     rel = str(rel or "").strip()
     if not rel or os.path.isabs(rel):
@@ -609,20 +622,43 @@ def runas_argv():
     return shlex.split(os.environ.get("VERIFIER_RUNAS", ""))
 
 
+_DROP_FAIL_NOTED = False
+
+
+def drop_fail_closed():
+    """True when the bash core flagged baseline #3's hard case: a ROOT
+    verifier with no usable privilege drop (VER_DROP_OK=0). Every
+    agent-code execution must then be REFUSED -- the denied-observable
+    failed-run shape every caller already scores as 0 -- never run as
+    root. Non-root dev verifiers never set the flag (their run-as-is is
+    the documented behavior)."""
+    global _DROP_FAIL_NOTED
+    if os.environ.get("VER_DROP_OK", "1") == "1":
+        return False
+    if not _DROP_FAIL_NOTED:
+        _DROP_FAIL_NOTED = True
+        print("✗ fail-closed: privilege drop unavailable on a root verifier; "
+              "agent-code runs are refused and score 0", file=sys.stderr)
+    return True
+
+
 def run_confined(argv, trace_path=None, timeout=60, strace_set=None, xx=False,
                  stdin_bytes=None):
     """Run agent/analyzed code under the unified privilege drop, optionally
     strace-wrapped so the caller can apply the exec gate and match syscall
     observables. argv MUST already be confined (confined_own_file / the
     verifier's own target binary). Returns (proc_or_None, stdout+stderr,
-    trace_text); proc is None on timeout OR spawn failure -- deliberately
-    indistinguishable, since both deny every observable symptom (the caller
-    labels them "timeout"/"failed" alike). With trace_path the tracer runs as
+    trace_text); proc is None on timeout OR spawn failure OR the baseline #3
+    fail-closed refusal -- deliberately indistinguishable, since all three
+    deny every observable symptom (the caller labels them "timeout"/"failed"
+    alike). With trace_path the tracer runs as
     the verifier and only the target is dropped (the trace file is
     verifier-written). xx=True hex-escapes every string (decode with _dehex
     before matching). stdin_bytes feeds the process (trigger-class inputs);
     capture is binary and decoded with errors='replace' so byte-exact
     stdin/stdout round-trips survive."""
+    if drop_fail_closed():
+        return None, "", ""
     prefix = []
     if trace_path is not None:
         prefix = ["strace", "-f", "-s", "4096"]
@@ -672,596 +708,336 @@ check_client() {
 }
 
 # ------------------------------------------------------------------------------
-# 1. SESSION LADDER (dynamic, 70) -- one clean oracle run
+# FSM COVERAGE (the single scorer, 100)
 # ------------------------------------------------------------------------------
-# The oracle serves on loopback with a fresh per-connection nonce and the
-# FORMAT/milestone log enabled. The submitted client runs ONCE under
-# strace (cheat gate + connect witness) and the unprivileged drop; the
-# python mapper grades the 23 ladder elements from the oracle's own
-# conn-attributed log lines.
-# ------------------------------------------------------------------------------
-
-score_ladder() {
-    local max=70 score=0
-    local portfile mslog outlog stracelog
-
-    if [ ! -x "$ORACLE_BIN" ]; then
-        echo "0"
-        echo "✗ oracle binary missing at $ORACLE_BIN"
-        return
-    fi
-    local client_real
-    client_real=$(check_client) || { echo "0"; echo "$client_real"; return; }
-
-    if [ "$VER_DROP_OK" -ne 1 ]; then
-        echo "0"
-        echo "✗ fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root"
-        return
-    fi
-
-    portfile="$RUN_DIR/port"; mslog="$RUN_DIR/ms"; outlog="$RUN_DIR/out"
-    stracelog="$RUN_DIR/strace"
-    local msecret="ms$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    PROTO_MILESTONE_LOG="$mslog" PROTO_MILESTONE_SECRET="$msecret" \
-        "$ORACLE_BIN" >"$portfile" 2>/dev/null &
-    local opid=$!
-    local tries=0
-    until [ -s "$portfile" ]; do
-        tries=$((tries+1)); [ $tries -ge 100 ] && break; sleep 0.1
-    done
-    local port
-    port=$(grep -a '^LISTENING ' "$portfile" 2>/dev/null | awk '{print $2}')
-    if [ -z "$port" ]; then
-        kill $opid 2>/dev/null || true
-        echo "0"
-        echo "✗ oracle failed to start"
-        return
-    fi
-
-    # run the FINAL PRODUCT once: full strace observation (cheat gate +
-    # connect witness) under the unprivileged drop
-    timeout 120 strace -f -s 4096 -xx \
-        -e trace=%network,execve,execveat,read,write -o "$stracelog" \
-        "${VER_RUNAS[@]}" "$client_real" 127.0.0.1 "$port" >"$outlog" 2>/dev/null || true
-    sleep 0.3
-    kill $opid 2>/dev/null || true
-
-    # cheat gate: the client never legitimately touches verifier-side
-    # trees (baseline #4, no exemptions)
-    if ! CHEAT=$(python3 - "$stracelog" <<'PYEOF'
-import sys
-sys.path.insert(0, "/tmp")
-import verifier_core as vc
-try:
-    log = open(sys.argv[1], errors="replace").read()
-    print(1 if vc.exec_gate(log) else 0)
-except Exception:
-    print(2)   # unreadable trace: fail CLOSED
-PYEOF
-    ); then CHEAT=2; fi
-    if [ "$CHEAT" != "0" ]; then
-        echo "0"
-        if [ "$CHEAT" = "2" ]; then
-            echo "✗ wire capture missing/unparseable -- ladder voided (task assembly defect)"
-        else
-            echo "✗ client executed a verifier-side binary (/app|/tests|/solution) -- ladder voided"
-        fi
-        return
-    fi
-    # witness: the client actually connected to THE oracle's endpoint --
-    # inet transports show the port in the sockaddr, the T3 unix carrier
-    # shows the socket path ($port carries whichever LISTENING printed).
-    # The trace runs with -xx, so ALSO try the fully hex-escaped form of
-    # the path (every byte as \xNN); one of the two must appear.
-    port_x=$(printf '%s' "$port" | python3 -c 'import sys; s=sys.stdin.read(); print("".join("\\x%02x" % b for b in s.encode()))')
-    if ! grep -q "sin_port=htons($port)" "$stracelog" 2>/dev/null \
-       && ! grep -qF "sun_path=\"$port\"" "$stracelog" 2>/dev/null \
-       && ! grep -qF "sun_path=\"$port_x\"" "$stracelog" 2>/dev/null; then
-        echo "0"
-        echo "✗ client never connected to the oracle's endpoint"
-        return
-    fi
-
-    # map the oracle's log to the 23 ladder elements
-    python3 - "$mslog" "$outlog" "$GT_CONFIG" "$max" <<'PYEOF'
-import json, re, sys
-
-mslog, outlog, gt_json, MAX = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4])
-gt = json.loads(gt_json)
-L = gt.get("levels", {})
-
-# message lookup by canonical ROLE (the semantic layer mints a per-task
-# name for every role; older reports without the role field fall back to
-# the canonical name, which equals the role's legacy spelling)
-def op_of(role):
-    for m in gt.get("messages", []):
-        if m.get("role") == role or m.get("name", "").upper() == role:
-            try:
-                return int(str(m.get("opcode", "")), 16)
-            except Exception:
-                return None
-    return None
-
-OP_HELLO = op_of("handshake_init")
-OP_AUTH = op_of("auth")
-OP_SET, OP_GET = op_of("write"), op_of("read")
-OP_SUM, OP_FLAG, OP_BYE = op_of("compute"), op_of("flag_req"), op_of("close")
-
-# ---- parse the conn-attributed log (sequentially: frame lines bucket
-# into pre-hello / post-hello per connection, so stage ① grades only
-# handshake ATTEMPTS, never later traffic) ------------------------------
-conns = {}
-try:
-    raw = open(mslog, errors="replace").read().splitlines()
-except Exception:
-    raw = []
-
-def conn(cid):
-    return conns.setdefault(cid, {"frames_pre": [], "frames_post": [],
-                                  "auth": [], "cmds": [], "rounds": 0,
-                                  "flag": [], "closes": [], "delivered": [],
-                                  "hello": False, "auth_ok": False})
-
-for line in raw:
-    m = re.match(r"^\S+ conn=(\d+) (.*)$", line)
-    if not m:
-        continue
-    cid, body = m.group(1), m.group(2)
-    c = conn(cid)
-    if body == "hello_ok":
-        c["hello"] = True
-    elif body == "auth_ok":
-        c["auth_ok"] = True
-    elif body == "round":
-        c["rounds"] += 1
-    elif body.startswith("frame "):
-        d = dict(kv.split("=", 1) for kv in body.split()[1:])
-        d = {k: int(v) for k, v in d.items()}
-        (c["frames_post"] if c["hello"] else c["frames_pre"]).append(d)
-    elif body.startswith("auth "):
-        d = dict(kv.split("=", 1) for kv in body.split()[1:])
-        c["auth"].append({k: int(v) for k, v in d.items()})
-    elif body.startswith("cmd "):
-        d = dict(kv.split("=", 1) for kv in body.split()[1:])
-        # op=<NAME> is a string; every other field is numeric
-        c["cmds"].append({k: (v if k == "op" else int(v))
-                          for k, v in d.items()})
-    elif body.startswith("flag "):
-        d = dict(kv.split("=", 1) for kv in body.split()[1:])
-        c["flag"].append({k: int(v) for k, v in d.items()})
-    elif body.startswith("flag_delivered "):
-        c["delivered"].append(body.split("value=", 1)[1])
-    elif body.startswith("close "):
-        d = dict(kv.split("=", 1) for kv in body.split()[1:])
-        # chaos=<name> is a string; every other field is numeric
-        c["closes"].append({k: (v if k == "chaos" else int(v))
-                            for k, v in d.items()})
-
-details = []
-score = 0.0
-
-# ---------- ① handshake: 7 elements over pre-hello frames ---------------
-# attempts from every connection, cut at its hello_ok: a successful
-# client's ① evidence is its HELLO attempts only, never later traffic
-hs_frames = []
-for c in conns.values():
-    hs_frames += c["frames_pre"]
-hello_frames = [f for f in hs_frames if f.get("op") == OP_HELLO]
-
-def anyf(frames, key):
-    return any(f.get(key) == 1 for f in frames)
-
-hs = 0.0
-if anyf(hello_frames, "bnd") or anyf(hs_frames, "bnd"):
-    hs += 3; details.append("✓ ① frame boundary (3)")
-else:
-    details.append("✗ ① frame boundary")
-if anyf(hello_frames, "magic") or anyf(hs_frames, "magic"):
-    hs += 4; details.append("✓ ① magic value (4)")
-else:
-    details.append("✗ ① magic value")
-if hello_frames:
-    hs += 2; details.append("✓ ① opcode HELLO (2)")
-elif any(f.get("op") == OP_HELLO for f in hs_frames):
-    hs += 2; details.append("✓ ① opcode HELLO (2)")
-else:
-    details.append("✗ ① opcode HELLO")
-ver_ok = any(f.get("ver") == 1 for f in hello_frames) or \
-         any(c["hello"] for c in conns.values())
-if ver_ok:
-    hs += 3; details.append("✓ ① version (3)")
-else:
-    details.append("✗ ① version")
-if anyf(hello_frames, "len") or anyf(hs_frames, "len"):
-    hs += 2; details.append("✓ ① length field (2)")
-else:
-    details.append("✗ ① length field")
-if anyf(hello_frames, "crc") or anyf(hs_frames, "crc"):
-    hs += 3; details.append("✓ ① checksum (3)")
-else:
-    details.append("✗ ① checksum")
-if anyf(hello_frames, "dec"):
-    hs += 3; details.append("✓ ① payload structure (3)")
-else:
-    details.append("✗ ① payload structure")
-score += hs
-
-# ---------- ② authentication: level-applicable element set -------------
-auth_lines = [a for c in conns.values() for a in c["auth"]]
-auth_frames = [f for c in conns.values()
-               for f in c["frames_pre"] + c["frames_post"]
-               if f.get("op") == OP_AUTH]
-au = 0.0
-if L.get("C", 0) in (3, 7, 8):   # kex levels: pubkey rides AUTH
-    if auth_lines:
-        au += 3 + 4                       # reached the handler: opcode+structure
-        a0 = auth_lines[0]
-        if a0.get("macval") == 1:
-            au += 8; details.append("✓ ② auth MAC value (8)")
-        else:
-            details.append("✗ ② auth MAC value")
-        if a0.get("pub") == 1:
-            au += 3; details.append("✓ ② KEX pubkey present (3)")
-        else:
-            details.append("✗ ② KEX pubkey present")
-        if a0.get("curve") == 1:
-            au += 2; details.append("✓ ② pubkey on curve (2)")
-        else:
-            details.append("✗ ② pubkey on curve")
-    else:
-        # never decoded: partial credit from the raw frames
-        if auth_frames:
-            au += 3
-            details.append("⊘ ② opcode AUTH only (3/20)")
-            if any(f.get("plain") == 1 and f.get("dec") == 1
-                   for f in auth_frames):
-                au += 4
-                details.append("⊘ ② structure via plaintext decode (+4)")
-        else:
-            details.append("✗ ② no AUTH attempt observed")
-else:
-    # static-key C (non-KEX): opcode/structure/value/keystream
-    if auth_lines:
-        au += 3 + 4
-        a0 = auth_lines[0]
-        if a0.get("macval") == 1:
-            au += 8
-        if a0.get("crypt") == 1:
-            au += 5
-    elif auth_frames:
-        au += 3
-        if any(f.get("plain") == 1 and f.get("dec") == 1
-               for f in auth_frames):
-            au += 4
-score += au
-
-# ---------- ③ data exchange ---------------------------------------------
-all_cmds = [d for c in conns.values() for d in c["cmds"]]
-all_frames = [f for c in conns.values()
-              for f in c["frames_pre"] + c["frames_post"]]
-total_rounds = sum(c["rounds"] for c in conns.values())
-ex = 0.0
-if any(d.get("op") == "SET" for d in all_cmds) or \
-   any(f.get("op") == OP_SET and f.get("plain") == 1 and f.get("dec") == 1
-       for f in all_frames):
-    ex += 3; details.append("✓ ③ SET grammar (3)")
-else:
-    details.append("✗ ③ SET grammar")
-get_lines = [d for d in all_cmds if d.get("op") == "GET"]
-get_plain = any(f.get("op") == OP_GET and f.get("plain") == 1
-                and f.get("dec") == 1 for f in all_frames)
-if get_lines or get_plain:
-    ex += 1.5
-    if any(d.get("samekey") == 1 for d in get_lines):
-        ex += 1.5; details.append("✓ ③ GET grammar + same-key readback (3)")
-    else:
-        details.append("⊘ ③ GET grammar only (1.5/3)")
-else:
-    details.append("✗ ③ GET grammar")
-if any(d.get("op") == "SUM" for d in all_cmds) or \
-   any(f.get("op") == OP_SUM and f.get("plain") == 1 and f.get("dec") == 1
-       for f in all_frames):
-    ex += 3; details.append("✓ ③ SUM grammar (3)")
-else:
-    details.append("✗ ③ SUM grammar")
-if any(d.get("crypt") == 1 for d in all_cmds):
-    ex += 3; details.append("✓ ③ TX session crypto (3)")
-else:
-    details.append("✗ ③ TX session crypto")
-if total_rounds >= 2:
-    ex += 1.5
-if total_rounds >= 3:
-    ex += 1.5
-if total_rounds >= 3:
-    details.append("✓ ③ multi-round persistence (3)")
-elif total_rounds == 2:
-    details.append("⊘ ③ two rounds only (1.5/3)")
-else:
-    details.append("✗ ③ multi-round persistence")
-score += ex
-
-# ---------- ④ flag --------------------------------------------------------
-flag_lines = [f0 for c in conns.values() for f0 in c["flag"]]
-flag_plain = any(f.get("op") == OP_FLAG and f.get("plain") == 1
-                 and f.get("dec") == 1 for f in all_frames)
-fl = 0.0
-if flag_lines or flag_plain:
-    fl += 2; details.append("✓ ④ FLAG request grammar (2)")
-else:
-    details.append("✗ ④ FLAG request grammar")
-if any(d.get("token_ok") == 1 for d in flag_lines):
-    fl += 4; details.append("✓ ④ flag token value (4)")
-else:
-    details.append("✗ ④ flag token value")
-delivered = [v for c in conns.values() for v in c["delivered"]]
-try:
-    stdout = open(outlog, errors="replace").read()
-except Exception:
-    stdout = ""
-if delivered and any(v in stdout for v in delivered):
-    fl += 4; details.append("✓ ④ flag delivered on stdout (4)")
-else:
-    details.append("✗ ④ flag delivered on stdout")
-score += fl
-
-# ---------- ⑤ close -------------------------------------------------------
-cl = 0.0
-bye_cmd = any(d.get("op") == "BYE" for d in all_cmds)
-bye_plain = any(f.get("op") == OP_BYE and f.get("plain") == 1
-                and f.get("dec") == 1 for f in all_frames)
-if bye_cmd or bye_plain:
-    cl += 2; details.append("✓ ⑤ BYE grammar (2)")
-else:
-    details.append("✗ ⑤ BYE grammar")
-bye_close = [d for c in conns.values() for d in c["closes"] if d.get("bye") == 1]
-if bye_close:
-    if bye_close[-1].get("sendfail") == 0:
-        cl += 1.5; details.append("✓ ⑤ BYE_ACK delivered (1.5)")
-    else:
-        details.append("✗ ⑤ BYE_ACK delivered")
-    if bye_close[-1].get("fin") == 1 and bye_close[-1].get("rst") == 0:
-        cl += 1.5; details.append("✓ ⑤ orderly close (1.5)")
-    else:
-        details.append("✗ ⑤ orderly close")
-score += cl
-
-score = round(min(score, MAX), 2)
-print(score)
-for d in details:
-    print(d)
-print("handshake %.1f/20, auth %.1f/20, exchange %.1f/15, "
-      "flag %.1f/10, close %.1f/5" % (hs, au, ex, fl, cl))
-
-# ---- state-machine coverage (reported metric; the stage points above
-# ARE the per-node accuracy grade) ----------------------------------
-states = [s.get("name", "?") for s in (gt.get("states") or [])]
-visited = []
-if any(c["hello"] for c in conns.values()):
-    visited.append("hello")
-if any(c["auth_ok"] for c in conns.values()):
-    visited.append("auth")
-if total_rounds >= 1:
-    visited.append("exchange")
-if flag_lines or flag_plain:
-    visited.append("flag")
-if bye_close:
-    visited.append("close")
-print("state machine coverage: %d of %d ladder nodes (%s)%s"
-      % (len(visited), 5, ",".join(visited),
-         ("; declared states: %s" % ",".join(states)) if states else ""))
-PYEOF
-}
-
-# ------------------------------------------------------------------------------
-# 2. ROBUSTNESS BATTERY (dynamic, 30) -- one single-fault oracle run per
-#    applicable probe, order randomized per verifier run
+# The score is the DIALOG-GRAPH coverage the submitted client demonstrated
+# against the oracle, over the observation plan:
+#
+#   3 clean runs + 1 diagnostic run + the level-applicable fault runs
+#
+# Every run gets a FRESH oracle (fresh nonce, fresh per-run log secret)
+# and is observed under strace; a run that fails a gate contributes
+# NOTHING (its log is excluded) instead of zeroing anything else.
+#
+# Items and weights (derived from the GT graph's cls/kind, never stored
+# in the binary):
+#   success edge (accept / self / timeout)      2.0
+#   value-gated edge (pass side + fail side)    3.0   (0.5 + 0.5)
+#   recovery edge (an error state's way back)   1.5
+#   declared error edge (probeable wrongness)   0.5
+#   success point (a working state entered)     1.5
+#   error point (an error state entered)        0.25
+#
+# score = sum(weight x ratio) / sum(weight) x 100, each item counted ONCE
+# across the whole plan (the union of every valid run's evidence).
+#
+# Gates G1-G5 are PREREQUISITES with targeted voiding (never a global
+# zero from an unrelated stage):
+#   G1 submission contract (path jail, size, exec bit)  -> voids all runs
+#   G2 fail-closed privilege drop                       -> voids all runs
+#   G3 exec/wrapper gate (per run, strace)              -> voids that run
+#   G4 connect witness (per run, strace)                -> voids that run
+#   G5 milestone-line integrity (per-run secret prefix) -> inherent: the
+#      scorer only parses lines carrying THIS run's secret
 # ------------------------------------------------------------------------------
 
-score_robustness() {
-    local max=30
+score_coverage() {
+    local max=100
     local client_real
     client_real=$(check_client) || { echo "0"; echo "$client_real"; return; }
     if [ "$VER_DROP_OK" -ne 1 ]; then
         echo "0"
-        echo "✗ fail-closed: privilege drop unavailable"
+        echo "G2 fail-closed: privilege drop unavailable on a root verifier -- analyzed binaries must never run as root"
         return
     fi
 
-    python3 - "$ORACLE_BIN" "$client_real" "$GT_CONFIG" "$RUN_DIR" "$max" <<'PYEOF'
+    python3 - "$ORACLE_BIN" "$client_real" "$GT_CONFIG" "$RUN_DIR" "$max" <<'PYSCORER'
 import json, os, random, re, shlex, subprocess, sys, time
 
 ORACLE, CLIENT, GT, RUN_DIR, MAX = (sys.argv[1], sys.argv[2], sys.argv[3],
                                     sys.argv[4], float(sys.argv[5]))
 gt = json.loads(GT)
 L = gt.get("levels", {})
+fsm = gt.get("fsm") or {}
+# the heaviest graphs (16+ FSM states, the asterisk-class S7) truncate
+# mid-plan inside the base deep clock under strace; their deep budget
+# doubles. A measurement-budget call, the expected maximum is the
+# structural one either way -- an earlier comment promised this and
+# the code never did it, and the S7 graph's tail starved on it.
+heavy_graph = len(fsm.get("states") or []) >= 16
 rnd = random.Random(int.from_bytes(os.urandom(8), "big"))
+drop = shlex.split(os.environ.get("VERIFIER_RUNAS", "") or "")
 
-# probe table: (name, points, applicability, parallel?, error node)
-# error-node weight per the construction contract: an error state entered
-# deeper in the dialog costs more to recover, so command-node faults weigh
-# 1.5x against framing-node and handshake-node faults at 1.0x. Points are
-# node-weighted before renormalization.
-NODE_W = {"frame": 1.0, "hello": 1.0, "command": 1.5}
-PROBES = [
-    ("chaffburst",   3.0, L.get("X", 0) >= 2, False, "frame"),
-    ("corruptreply", 3.0, L.get("F", 0) >= 3, False, "command"),
-    ("minfrag",      3.0, L.get("X", 0) >= 3, False, "frame"),
-    ("escapedense",  2.0, L.get("F", 0) == 5, False, "frame"),
-    ("noise",        2.0, L.get("F", 0) >= 3, False, "frame"),
-    ("resync",       3.0, L.get("S", 0) >= 3, False, "command"),
-    ("delay",        1.5, True,                   False, "command"),
-    ("drip",         1.5, True,                   False, "command"),
-    ("errhello",     1.0, L.get("S", 0) >= 1, False, "hello"),
-    ("parallel",     3.0, True,                   True, "command"),   # C10
-    ("badlen",       3.0, L.get("F", 0) >= 3, False, "frame"),
-    ("drop",         2.0, L.get("S", 0) >= 1, False, "command"),
-    ("dupreply",     2.0, True,                   False, "command"),
-]
-applicable = [(n, p * NODE_W[w], par, w)
-              for (n, p, ok, par, w) in PROBES if ok]
-if not applicable:
-    print("0"); print("⊘ no applicable probes at these levels"); sys.exit(0)
-rnd.shuffle(applicable)          # invocation-order fingerprinting is dead
+if not fsm.get("states"):
+    print("0"); print("GT config carries no fsm graph (task assembly defect)")
+    sys.exit(0)
 
-def start_oracle(chaos=None):
-    env = dict(os.environ)
-    ms = os.path.join(RUN_DIR, "ms-%s" % (chaos or "clean"))
+# ---- the item table, derived from cls/kind -------------------------------
+W_EDGE_OK, W_EDGE_VAL, W_EDGE_REC, W_EDGE_ERR = 2.0, 3.0, 1.5, 0.5
+W_POINT_OK, W_POINT_ERR = 1.5, 0.25
+
+role_op = {}
+for msg in gt.get("messages", []):
     try:
-        os.unlink(ms)
-    except OSError:
+        role_op[msg.get("role") or msg.get("name", "").upper()] = \
+            int(str(msg.get("opcode", "")), 16)
+    except Exception:
         pass
+
+items = []
+states = fsm["states"]
+# an error state whose ONLY incoming edges are S5 forced-reauth carriers
+# (the down-flagged REAUTH err edges) is structurally unreachable: the
+# carrier is answered by the once-per-connection interception and the
+# dialog HOLDS -- the declared transition never takes. Its recovery
+# edges and error-point credit are excluded from the expected maximum
+_incoming = {}
+for st in states:
+    for e in st.get("edges", []):
+        _incoming.setdefault(e["next"], []).append(e)
+def _orphaned(st):
+    if st["kind"] != "error":
+        return False
+    inc = _incoming.get(st["id"], [])
+    return len(inc) > 0 and all(
+        e.get("cls") == "err" and e.get("err") == "REAUTH"
+        and e.get("down") for e in inc)
+for st in states:
+    sid, kind = st["id"], st["kind"]
+    if _orphaned(st):
+        continue
+    for e in st.get("edges", []):
+        opv = role_op.get(e["on"])
+        if e["cls"] == "err":
+            items.append(("err", ("e_err", sid, opv), 0.5,
+                          "%s:%s(err)" % (st["name"], e["on"])))
+        elif e["cls"] == "value":
+            items.append(("val", ("e_val", sid, opv, e.get("next")), 3.0,
+                          "%s:%s(value)" % (st["name"], e["on"])))
+        elif kind == "error":
+            items.append(("rec", ("e_ok", sid, opv, e["next"]), 1.5,
+                          "%s:%s(recovery)" % (st["name"], e["on"])))
+        else:
+            items.append(("ok", ("e_ok", sid, opv, e["next"]), 2.0,
+                          "%s:%s" % (st["name"], e["on"])))
+    if st.get("timeout_edge") is not None:
+        items.append(("ok", ("e_ok", sid, -1, st["timeout_edge"]), 2.0,
+                      "%s:idle-timeout" % st["name"]))
+    if kind == "error":
+        items.append(("pt_err", ("pt", sid), 0.25,
+                      "%s(error state)" % st["name"]))
+    else:
+        items.append(("pt_ok", ("pt", sid), 1.5, st["name"]))
+
+# ---- the observation plan -------------------------------------------------
+FAULTS = [
+    ("chaffburst",   L.get("X", 0) >= 2), ("corruptreply", L.get("F", 0) >= 3),
+    ("minfrag",      L.get("X", 0) >= 3), ("escapedense",  L.get("F", 0) == 5),
+    ("noise",        L.get("F", 0) >= 3), ("resync",       L.get("S", 0) >= 3),
+    ("delay",        True),                ("drip",         True),
+    ("errhello",     L.get("S", 0) >= 1),  ("parallel",     True),
+    ("badlen",       L.get("F", 0) >= 3),  ("drop",         L.get("S", 0) >= 1),
+    ("dupreply",     True),
+    ("errstate",     L.get("S", 0) >= 6),  ("errauth",     L.get("S", 0) >= 5),
+    ("errtoken",     L.get("S", 0) >= 3),  ("errcredit",   L.get("L", 0) >= 3),
+    ("errchannel",   L.get("L", 0) >= 2),  ("errunknown",  L.get("S", 0) >= 3),
+]
+plan = ([("clean", None)] * 3) + [("diagnostic", None)] + \
+       [(n, (None if n == "parallel" else n))
+        for n, ok in FAULTS if ok]
+rnd.shuffle(plan[4:])
+
+seen_runs = [0]
+
+def one_run(tag, chaos):
+    ms = os.path.join(RUN_DIR, "ms-%s-%d" % (tag, os.getpid() * 1000
+                                                        + len(notes)))
+    sec = "s" + os.urandom(8).hex()
+    env = dict(os.environ)
     env["PROTO_MILESTONE_LOG"] = ms
-    env["PROTO_MILESTONE_SECRET"] = "probe"
+    env["PROTO_MILESTONE_SECRET"] = sec
+    # the deep clean runs pre-run the walker's timeout pass (the idle
+    # deadlines are otherwise unreachable organic timing on a heavy
+    # graph); short fault runs keep the default pass-last behavior.
+    # The knob rides the CLIENT's environment (the walker reads it);
+    # the oracle's env carries only the milestone log and secret
+    cenv = dict(os.environ)
+    if chaos is None and seen_runs[0] < 2:
+        cenv["PROTO_TMO_PASS"] = "1"
     cmd = [ORACLE, "0"] + (["--chaos", chaos] if chaos else [])
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, env=env)
     line = proc.stdout.readline().decode(errors="replace")
     m = re.search(r"LISTENING (\S+)", line)
-    return (proc, m.group(1), ms) if m else (proc, None, ms)
-
-def run_client(port, parallel=False):
-    cmd = [CLIENT, "127.0.0.1", str(port)]
-    if parallel:
-        cmd += ["--parallel", "2"]
-    # same unprivileged drop the ladder run uses (core_a exports the
-    # argv; an empty env means no setpriv -- the ladder already failed
-    # closed in that case, keep the belt here anyway)
-    drop = shlex.split(os.environ.get("VERIFIER_RUNAS", "") or "")
+    if not m:
+        proc.kill(); return None, None, "oracle failed to start"
+    port = m.group(1)
+    strace_log = ms.replace("ms-", "st-")
+    ccmd = [CLIENT, "127.0.0.1", port]
+    if tag == "parallel":
+        ccmd += ["--parallel", "2"]
     try:
-        out = subprocess.run(["timeout", "120"] + drop + cmd,
-                             capture_output=True, text=True, timeout=130)
-        return out.stdout, (out.returncode == 0)
+        # the first TWO clean runs carry the deep-walker budget: a
+        # heavy graph's tail edge is timing-dependent (which conn ate
+        # a -2), so a second full-plan pass is the union's backstop
+        deep = 2400 if heavy_graph else 1200
+        clock = str(deep) if chaos is None and seen_runs[0] < 2 else (
+            "60" if chaos is None else "45")
+        subprocess.run(["timeout", clock, "strace", "-f", "-s", "4096",
+                        "-xx", "-e", "trace=%network,execve,execveat",
+                        "-o", strace_log] + drop + ccmd,
+                       capture_output=True, env=cenv,
+                           timeout=(deep + 10 if (chaos is None
+                                                  and seen_runs[0] < 2)
+                                    else 50))
     except subprocess.TimeoutExpired:
-        return "", False
-
-def _role_opcodes():
-    """role -> opcode from the GT message table (the semantic layer mints
-    per-task names; roles are the invariant identifiers)"""
-    out = {}
-    for msg in gt.get("messages", []):
-        try:
-            out[msg.get("role") or msg.get("name", "").upper()] = \
-                int(str(msg.get("opcode", "")), 16)
-        except Exception:
-            pass
-    return out
-
-ROLES = _role_opcodes()
-
-def parse(ms):
-    """-> dict: conns with milestones + chaos markers + per-role frame
-    counts (decoded inbound frames, used for recovery-branch verdicts)"""
-    st = {"hello": 0, "auth": 0, "rounds": 0, "flag": 0,
-          "retrans": 0, "resync_rec": 0, "conn_ids": set(),
-          "hello_frames": 0, "auth_frames": 0, "close": 0}
-    try:
-        lines = open(ms, errors="replace").read().splitlines()
-    except Exception:
-        return st
-    for line in lines:
-        m = re.match(r"^\S+ conn=(\d+) (.*)$", line)
-        if not m:
-            continue
-        st["conn_ids"].add(m.group(1))
-        b = m.group(2)
-        if b == "hello_ok": st["hello"] += 1
-        elif b == "auth_ok": st["auth"] += 1
-        elif b == "round": st["rounds"] += 1
-        elif b == "flag_sent": st["flag"] += 1
-        elif b == "chaos_retrans observed=1": st["retrans"] = 1
-        elif b == "chaos_resync_recovered=1": st["resync_rec"] = 1
-        elif b.startswith("close bye=1"): st["close"] += 1
-        if b.startswith("frame rc=1 ") and " op=" in b:
-            try:
-                opv = int(b.rsplit(" op=", 1)[1].split()[0])
-            except Exception:
-                continue
-            if opv == ROLES.get("handshake_init"):
-                st["hello_frames"] += 1
-            elif opv == ROLES.get("auth"):
-                st["auth_frames"] += 1
-    return st
-
-def ladder_done(st):
-    return st["flag"] >= 1
-
-details, earned, denom = [], 0.0, sum(p for _, p, _, _ in applicable)
-
-for name, pts, parallel, node in applicable:
-    proc, port, ms = start_oracle(None if name == "parallel" else name)
-    if port is None:
-        details.append("✗ %s: oracle failed to start (probe voided)" % name)
-        proc.kill()
-        continue
-    out, clean_exit = run_client(port, parallel)
+        pass
     time.sleep(0.2)
     proc.kill(); proc.wait()
-    st = parse(ms)
-    # verdict levels: 1.0 handled with the correct recovery branch for the
-    # error code, 0.75 handled but the expected branch was not observed,
-    # 0.5 survived (engaged, orderly exit, no completion), 0 died
-    level = 0.0
-    verdict = "died"
-    if name == "parallel":
-        # C10: TWO concurrent ladders from one process invocation
-        if st["flag"] >= 2 and clean_exit:
-            level, verdict = 1.0, "handled"
-        elif st["flag"] >= 1:
-            level, verdict = 0.5, "survived"
-    elif name == "resync":
-        # command-node ERR(resync): the correct branch restarts the
-        # ladder in-band (HELLO again on the same connection)
-        if ladder_done(st) and st["resync_rec"]:
-            level, verdict = 1.0, "handled+branch(re-ladder)"
-        elif ladder_done(st) and st["hello_frames"] >= 2:
-            level, verdict = 1.0, "handled+branch(re-hello)"
-        elif ladder_done(st):
-            level, verdict = 0.75, "handled, branch unseen"
-        elif st["hello"] >= 1 and clean_exit:
-            level, verdict = 0.5, "survived"
-    elif name == "errhello":
-        # handshake-node ERR(version): the correct branch retries HELLO
-        if ladder_done(st) and clean_exit:
-            if st["hello_frames"] >= 2:
-                level, verdict = 1.0, "handled+branch(hello retry)"
-            else:
-                level, verdict = 0.75, "handled, branch unseen"
-        elif st["hello"] >= 1 and clean_exit:
-            level, verdict = 0.5, "survived"
-    elif name == "drop":
-        # command-node connection drop: the correct branch reconnects
-        # with a fresh session and completes the ladder
-        if len(st["conn_ids"]) >= 2 and ladder_done(st) and clean_exit:
-            level, verdict = 1.0, "handled+branch(reconnect)"
-        elif clean_exit and st["hello"] >= 1:
-            level, verdict = 0.5, "survived"
-    elif name == "corruptreply":
-        # command-node corrupted reply: the correct branch retransmits
-        # the request (the retrans marker fires on the second command)
-        if ladder_done(st) and st["retrans"]:
-            level, verdict = 1.0, "handled+branch(retransmit)"
-        elif ladder_done(st):
-            level, verdict = 0.75, "handled, branch unseen"
-        elif st["hello"] >= 1 and clean_exit:
-            level, verdict = 0.5, "survived"
-    else:
-        if ladder_done(st) and clean_exit:
-            level, verdict = 1.0, "handled"
-        elif st["hello"] >= 1 and clean_exit:
-            # survived: engaged the faulted server and exited orderly
-            # without completing (a client that never connects died)
-            level, verdict = 0.5, "survived"
-    tag = "✓" if level >= 1.0 else ("⊘" if level > 0 else "✗")
-    details.append("%s %s[%s]: %s" % (tag, name, node, verdict))
-    earned += pts * level
+    tlog = ""
+    try:
+        tlog = open(strace_log, errors="replace").read()
+    except OSError:
+        return None, None, "G3 voided: trace missing"
+    if not tlog:
+        return None, None, "G3 voided: trace empty"
+    sys.path.insert(0, "/tmp")
+    import verifier_core as vc
+    if vc.exec_gate(tlog):        # True = a verifier-side tree was exec'd
+        return None, None, "G3 voided: executed a verifier-side tree"
+    port_x = "".join("\\x%02x" % b for b in port.encode())
+    if ("sin_port=htons(%s)" % port) not in tlog \
+       and ('sun_path="%s"' % port) not in tlog \
+       and ('sun_path="%s"' % port_x) not in tlog:
+        return None, None, "G4 voided: never connected to the oracle"
+    if chaos is None:
+        seen_runs[0] += 1     # clean runs consumed a deep budget slot
+    ok, fail, pts = set(), set(), set()
+    try:
+        for ln in open(ms, errors="replace"):
+            mm = re.match(r"^%s conn=\d+ (.*)$" % re.escape(sec), ln)
+            if not mm:
+                continue
+            b = mm.group(1)
+            em = re.match(r"^edge on=(-?\d+) from=(\d+) to=(\d+) rc=(\d)", b)
+            if em:
+                opv, f_, t_, rc_ = (int(em.group(1)), int(em.group(2)),
+                                    int(em.group(3)), int(em.group(4)))
+                pts.add(f_); pts.add(t_)
+                if rc_ == 1:
+                    ok.add((f_, opv, t_))
+                else:
+                    fail.add((f_, opv, t_))
+    except OSError:
+        return None, None, "milestone log unreadable"
+    return ok, fail, pts
 
-score = round(earned / denom * MAX, 2)
+evidence_ok, evidence_fail, seen_pts = set(), set(), set()
+notes, valid_runs = [], 0
+for tag, chaos in plan:               # sequential: one oracle, one client,
+    try:                              # one trace at a time -- no shared
+        ok, fail, pts = one_run(tag, chaos)
+    except Exception as ex:           # scratch names, no thread state
+        notes.append("x %s: run crashed (%r)" % (tag, ex))
+        continue
+    if ok is None:
+        notes.append("x %s: %s" % (tag, pts))
+        continue
+    valid_runs += 1
+    evidence_ok |= ok
+    evidence_fail |= fail
+    seen_pts |= pts
+
+if valid_runs == 0:
+    print("0")
+    for n in notes[:8]:
+        print(n)
+    sys.exit(0)
+
+# ---- grade the union ------------------------------------------------------
+val_alt = {}
+val_probeable = {}
+for st in states:
+    for e in st.get("edges", []):
+        if e["cls"] == "value":
+            opv = role_op.get(e["on"])
+            val_alt[(st["id"], opv)] = e.get("alt")
+            # a gate whose field does not exist in the op's schema is
+            # vacuously true: nothing can violate it, so the fail side
+            # is structural, not behavioral (the walker's builder and
+            # the server's matcher resolve the same slot)
+            cond = e.get("cond") or {}
+            sem = cond.get("sem")
+            sems = set()
+            for msg in gt.get("messages") or []:
+                mv = msg.get("opcode")
+                if isinstance(mv, str):
+                    mv = int(mv, 16)
+                if mv == opv:
+                    sems.update(f.get("sem") for f in
+                                (msg.get("fields") or []))
+            val_probeable[(st["id"], opv)] = sem in sems
+
+earned = denom = 0.0
+cats = {}
+for kind, key, w, label in items:
+    denom += w
+    r = 0.0
+    if kind == "err":
+        r = 1.0 if (key[1], key[2]) in {(a, b) for a, b, _ in evidence_fail} else 0.0
+    elif kind == "val":
+        hit_pass = (key[1], key[2], key[3]) in evidence_ok
+        alt = val_alt.get((key[1], key[2]))
+        if val_probeable.get((key[1], key[2]), True):
+            hit_fail = (alt is not None
+                        and (key[1], key[2], alt) in evidence_fail)
+        else:
+            hit_fail = True   # vacuous gate: fail side is structural
+        r = (0.5 if hit_pass else 0.0) + (0.5 if hit_fail else 0.0)
+    elif kind in ("ok", "rec"):
+        r = 1.0 if (key[1], key[2], key[3]) in evidence_ok else 0.0
+    else:
+        r = 1.0 if key[1] in seen_pts else 0.0
+    earned += w * r
+    c = cats.setdefault(kind, [0, 0.0, 0.0])
+    c[0] += 1; c[1] += w; c[2] += w * r
+
+score = round(earned / denom * MAX, 2) if denom else 0.0
 print(score)
-for d in details:
-    print(d)
-print("battery: %.1f of %.1f applicable points (renormalized to %d)"
-      % (earned, denom, int(MAX)))
-PYEOF
+for kind, key, w, label in items:
+    # name the zero-credit items: a GT below max must say WHICH graph
+    # piece stayed dark (the walk's own coverage diagnosis)
+    r = None
+    if kind == "err":
+        r = 1.0 if (key[1], key[2]) in {(a, b) for a, b, _ in
+                                        evidence_fail} else 0.0
+    elif kind == "val":
+        hit_pass = (key[1], key[2], key[3]) in evidence_ok
+        alt = val_alt.get((key[1], key[2]))
+        if val_probeable.get((key[1], key[2]), True):
+            hit_fail = (alt is not None
+                        and (key[1], key[2], alt) in evidence_fail)
+        else:
+            hit_fail = True
+        r = (0.5 if hit_pass else 0.0) + (0.5 if hit_fail else 0.0)
+    elif kind in ("ok", "rec"):
+        r = 1.0 if (key[1], key[2], key[3]) in evidence_ok else 0.0
+    else:
+        r = 1.0 if key[1] in seen_pts else 0.0
+    if r == 0.0 or (kind == "val" and r < 1.0):
+        notes.append("MISSING %s (credit %.1f/%.1f)" % (label, r * w, w))
+print("plan: %d valid runs (%d voided by gates)" % (valid_runs,
+                                                    len(plan) - valid_runs))
+NAME = {"ok": "success edges", "val": "value-gated edges",
+        "rec": "recovery edges", "err": "error edges",
+        "pt_ok": "success points", "pt_err": "error points"}
+for k in ("ok", "val", "rec", "err", "pt_ok", "pt_err"):
+    if k in cats:
+        n, wmax, wgot = cats[k]
+        print("  %-18s %2d items  %4.1f / %4.1f" % (NAME[k], n, wgot, wmax))
+for n in notes[:8]:
+    print(n)
+PYSCORER
 }
 
 # ==============================================================================
@@ -1270,7 +1046,7 @@ PYEOF
 
 echo ""
 echo "==============================================================================="
-echo "PROTOCOL RECONSTRUCTION VERIFICATION (V5.1 pure dynamic)"
+echo "PROTOCOL RECONSTRUCTION VERIFICATION (pure dynamic)"
 echo "==============================================================================="
 echo "Challenge: samba-4.24.6-fileport"
 echo "Oracle: $ORACLE_BIN"
