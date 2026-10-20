@@ -1,31 +1,8 @@
 # BIOPSY-Bench
 
-**A reverse-engineering benchmark that remains difficult as agents become more capable.**
+**A realistic benchmark for agentic reverse engineering.**
 
-BIOPSY-Bench is a benchmark of realistic diagnostic reverse-engineering tasks built end-to-end from real open-source software. Each task seeds a security property into the source of a pinned real program, builds the program, and packages the result as a runnable [Harbor](https://github.com/harbor-framework/harbor) task that agents must solve from the binary alone.
-
-The benchmark is produced by **BIOPSY**, a construction methodology that uses agent performance itself to keep producing tasks that stay difficult as agents improve.
-
-## Motivation
-
-A fixed benchmark eventually becomes too easy. When nearly every agent solves the same tasks, scores cluster near the top, the benchmark stops discriminating, and we can no longer tell which agents are stronger or which parts of reverse engineering still challenge them.
-
-Our research question is how to keep constructing tasks that reveal those remaining bottlenecks.
-
-We utilize **agent performance to provide actionable feedback for constructing harder tasks**. Scores tell us when a task may have become too easy. Execution trajectories explain why, since they show which clues agents rely on and which analysis steps they manage to skip.
-
-## The BIOPSY Methodology
-
-BIOPSY turns this feedback into an iterative construction loop, and BIOPSY-Bench is the benchmark it currently produces.
-
-<img src="assets/workflow.png" alt="BIOPSY workflow" width="895">
-
-1. **Construct.** The Task Agent builds verifiable tasks grounded in real software and documented cases.
-2. **Evaluate.** Evaluation agents attempt the tasks while we collect scores and trajectories.
-3. **Propose.** The Task Agent mines the trajectories for candidate *hardness patterns*, which are changes to the task structure that might require more substantial analysis.
-4. **Reconstruct and re-evaluate.** The analysis subjects are rebuilt under those patterns and the agents are evaluated again.
-
-Hardness patterns are hypotheses rather than guaranteed improvements. Each pattern is tested on two questions, namely whether it makes the tasks harder and whether it helps distinguish agents.
+We synthesize analysis targets and couple them into real-world open-source projects, build and harden the resulting programs, and package each artifact together with its verifier as a runnable [Harbor](https://github.com/harbor-framework/harbor) task that agents must solve from the binary alone. Every agent submission is then checked automatically by the deterministic verifier.
 
 ## Scenarios
 
@@ -43,23 +20,9 @@ BIOPSY-Bench covers five scenarios. Across all five, we require **verifiable out
 
 All tasks and agents share a single Claude Code scaffold. Performance is reported as pass@5 under a budget of two hours per attempt. Scoring is fully automated, with an oracle solution earning 1.0, a no-op solution earning 0.0, and anti-cheating invariants keeping the ground truth out of plaintext.
 
-On the initial task set, agents score between **0.84 and 0.96**. After reconstruction under the mined hardness patterns, scores fall to between **0.03 and 0.15**, which shows that the reconstructed tasks are substantially harder.
+On the current task set, agents score between **0.03 and 0.15**.
 
 ![BIOPSY-Bench leaderboard](assets/leaderboard.png)
-
-## Hardness Patterns
-
-The table below summarizes representative patterns mined from agent trajectories, one for each scenario.
-
-| Pattern                                                              | Scenario                | Effect on the agent                                                                                                                        |
-|----------------------------------------------------------------------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| Interdependent protections                                           | Protection assessment   | protection layers must be defeated jointly rather than peeled one at a time, and no single unwrap exposes the license logic                |
-| Malicious behavior distributed across similar benign features        | Malware analysis        | no single code site reads as malicious, so the campaign must be reconstructed from behavior that resembles the carrier's own               |
-| Patch commits interleaved with decoys                                | Patch diffing           | the security-relevant change is buried among plausible neutral commits, so localization cannot rely on surface diff signals                |
-| Proprietary protocol format combined with complex session state      | Protocol reconstruction | format recovery alone is insufficient, since the client must also reproduce stateful session dynamics to interoperate                      |
-| Firmware behavior spread across components and runtime configuration | Firmware analysis       | the verdict hinges on correlating several components with configuration that is visible only at runtime rather than on any single artifact |
-
-Together, these patterns illustrate the core idea of BIOPSY, which is to use agent performance to construct and test new challenges as agents grow more capable.
 
 ## Task Catalog
 
