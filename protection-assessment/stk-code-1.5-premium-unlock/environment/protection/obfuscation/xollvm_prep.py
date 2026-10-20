@@ -2,7 +2,7 @@
 """
 xollvm Annotation Injector for C Files
 
-xollvm (und3ath/xollvm) is annotation-driven: its obfuscation passes
+xollvm (und3ath/xollvm ) is annotation-driven: its obfuscation passes
 (mba, substitution, bcf, flattening, shield, adec, vm, ...) only fire on
 functions carrying an ``obf:`` annotation, e.g.::
 
@@ -17,9 +17,9 @@ source-level, in-place editor run as the first step of the xollvm pipeline
 
 Usage::
 
-    ./xollvm_prep.py main.c "mba,bcf,flattening,shield,adec"
-    ./xollvm_prep.py main.c "mba(prob=70),flattening" --function verify
-    ./xollvm_prep.py main.c "obf: mba,bcf" --dry-run
+./xollvm_prep.py main.c "mba,bcf,flattening,shield,adec"
+./xollvm_prep.py main.c "mba(prob=70),flattening" --function verify
+./xollvm_prep.py main.c "obf: mba,bcf" --dry-run
 
 The spec may be given with or without the leading ``obf: `` prefix.
 """
@@ -40,7 +40,7 @@ def find_function_def(content: str, func_name: str):
     lines = content.split('\n')
     func_pattern = re.compile(
         rf'^\s*([\w\s\*]+)?\b{re.escape(func_name)}\s*\('
-    )
+)
     for i, line in enumerate(lines):
         if not func_pattern.search(line):
             continue
@@ -58,13 +58,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Inject a xollvm __attribute__((annotate(\"obf: ...\"))) "
                     "before a function definition (idempotent)."
-    )
+)
     parser.add_argument("source", help="C source file to edit in place")
     parser.add_argument(
         "spec",
         help='Annotation passes, e.g. "mba,bcf,flattening,shield,adec". '
              'A leading "obf: " prefix is accepted and stripped.',
-    )
+)
     parser.add_argument("--function", default="main",
                         help="Function to annotate (default: main)")
     parser.add_argument("--dry-run", action="store_true",
@@ -82,15 +82,10 @@ def main():
         print("Error: empty annotation spec", file=sys.stderr)
         return 1
 
-    annotation = f'__attribute__((annotate("obf: {obf}")))'
+    annotation = f'__attribute__((annotate("obf: {obf}"), noinline))'
 
     with open(args.source, 'r') as f:
         content = f.read()
-
-    # Idempotent: if this exact annotation is already present, do nothing.
-    if annotation in content:
-        print(f"[-] {args.source}: already annotated ({annotation})")
-        return 0
 
     idx = find_function_def(content, args.function)
     if idx is None:
@@ -99,6 +94,18 @@ def main():
         return 1
 
     lines = content.split('\n')
+
+    # Idempotent PER FUNCTION: skip only when THIS function's definition is
+    # already preceded by the annotation. A same-spec annotation on a
+    # different function in the same file must not block injection (the
+    # injected line always sits immediately above the signature, so a short
+    # lookback window above the definition is sufficient).
+    lookback = '\n'.join(lines[max(0, idx - 3):idx])
+    if annotation in lookback:
+        print(f"[-] {args.source}: {args.function}() already annotated "
+              f"({annotation})")
+        return 0
+
     lines.insert(idx, annotation)
     new_content = '\n'.join(lines)
 

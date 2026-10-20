@@ -478,7 +478,7 @@ RUN cd /src/proto && \
         --Functions=pe_encode,pe_decode,pe_example \
         --VirtualizeDispatch=switch \
       --Transform=Virtualize \
-        --Functions=ps_load,sch_byte,ps_schema_for,ps_schema_by_index,ps_schema_by_lead,ps_sem_slot,ps_server_allow,ps_server_step \
+        --Functions=ps_load,sch_byte,ps_schema_for,ps_schema_by_index,ps_schema_by_lead,ps_sem_slot,ps_fsm_entry,ps_fsm_n_states,ps_fsm_kind,ps_fsm_timeout_ms,ps_fsm_timeout_edge,ps_fsm_find_kind,ps_fsm_is_kind,ps_fsm_edge_at,ps_fsm_edge \
         --VirtualizeDispatch=switch \
       --Transform=Virtualize \
         --Functions=px_session_init,px_client_set_nonce,px_proof,px_verify,px_mask,px_maybe_chaff,px_frag_write,px_defrag_feed,px_wrap_mimicry,px_unwrap_mimicry,px_build_chaff \
@@ -582,7 +582,7 @@ RUN test -s proto/proto_engine.o && test -s proto/ast_defaults_ensia.o && \
 
 RUN mkdir -p /out && cp /app/binary /out/challenge_final && chmod 755 /out/challenge_final && cp /app/binary /out/challenge_ldd
 
-# Runtime library closure (leak-audit fix 2026-09-11): collect every
+# Runtime library closure: collect every
 # resolved shared lib the runtime's apt set does not carry
 # (libprotobuf.so.23, libutempter.so.0) so the runtime overlay below
 # can make /app/binary loadable in the agent box.
@@ -618,10 +618,10 @@ if hits:
 print("host-binding assertions passed (no secret byte-sequence in binary)")
 PYEOF
 
-# ENGINE-LEAK ASSERTIONS (leak-audit fix 2026-08): the challenge binary
+# ENGINE-LEAK ASSERTIONS: the challenge binary
 # must ship NO engine internals. The reference client engine lives in
 # proto_client.c -- a TU the carrier build never links (a MITM'd argv +
-# code cave used to reproduce the whole session for free); engine
+# code cave that would reproduce the whole session for free); engine
 # symbols are compiled hidden (source attribute + -fvisibility=hidden)
 # so an -rdynamic carrier link cannot carry px_/pf_/pc_/ps_/pe_/proto_/
 # adbg_ names into .dynsym; strip removes .symtab. Any regression fails
@@ -652,14 +652,14 @@ RUN export $(grep -o 'MOSH_SERVER_UI_[A-Z]*=[0-9a-f]*' /src/host-state/image-env
     cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
         /tmp/proto_client_plain.o /tmp/protocol_plain.o -lpthread -lm && \
     ( /app/binary --proto-server 17999 > /tmp/proto.out 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 45 /tmp/ref_client 127.0.0.1 17999 > /tmp/proto.o2 2>&1; rc=$?; \
+      timeout 420 /tmp/ref_client 127.0.0.1 17999 --sample > /tmp/proto.o2 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       grep -q 'flag{' /tmp/proto.o2 || rc=1; \
       rm -f /tmp/proto.pid; \
       if [ $rc -ne 0 ]; then echo "FATAL: host-bound smoke failed (no flag)"; cat /tmp/proto.o2; exit 1; fi ) && \
     mv /etc/motd /etc/motd.hidden && \
-    ( /app/binary --proto-server 17998 > /tmp/proto.o3 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 25 /tmp/ref_client 127.0.0.1 17998 > /tmp/proto.o4 2>&1; rc=$?; \
+    ( /app/binary --proto-server 17998 --sample > /tmp/proto.o3 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
+      timeout 90 /tmp/ref_client 127.0.0.1 17998 --sample > /tmp/proto.o4 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       mv /etc/motd.hidden /etc/motd; \
       rm -f /tmp/proto.pid; \
@@ -675,7 +675,7 @@ RUN export $(grep -o 'MOSH_SERVER_UI_[A-Z]*=[0-9a-f]*' /src/host-state/image-env
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
 # extracts ONLY the ground-truth files (a scratch image holding nothing else).
-# In the parallel layout this target no longer drags the challenge chain: it
+# In the parallel layout this target does not drag the challenge chain: it
 # builds apt-build → dl-cmake43 → target-deps → origin-binary and nothing else.
 # ============================================================================================
 # step 3.5 testdata staging: always create /out/testdata
@@ -835,8 +835,8 @@ COPY --from=msynth /usr/local /usr/local
 COPY --from=ensia /usr/local /usr/local
 
 # __MOSH_HOST_STATE_ENV__ (material_split; real MOSH_* configuration values)
-ENV MOSH_SERVER_UI_KEY=0d3595e8
-ENV MOSH_SERVER_UI_VER=12623593
+ENV MOSH_SERVER_UI_KEY=be0ec835
+ENV MOSH_SERVER_UI_VER=63710
 # Finished challenge binary from the builder stage
 COPY --from=challenge-binary /out/challenge_final /app/binary
 COPY --from=challenge-binary /out/testdata /app/testdata

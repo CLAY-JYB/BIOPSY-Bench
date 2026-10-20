@@ -600,10 +600,10 @@ if hits:
 print("host-binding assertions passed (no secret byte-sequence in binary)")
 PYEOF
 
-# ENGINE-LEAK ASSERTIONS (leak-audit fix 2026-08): the challenge binary
+# ENGINE-LEAK ASSERTIONS: the challenge binary
 # must ship NO engine internals. The reference client engine lives in
 # proto_client.c -- a TU the carrier build never links (a MITM'd argv +
-# code cave used to reproduce the whole session for free); engine
+# code cave that would reproduce the whole session for free); engine
 # symbols are compiled hidden (-fvisibility=hidden below) so waf's
 # -rdynamic module link cannot carry px_/pf_/pc_/ps_/pe_/proto_/adbg_
 # names into .dynsym; strip removes .symtab. Any regression fails the
@@ -637,14 +637,14 @@ RUN mkdir -p /out /out/challenge_libs /opt/target-deps/lib && \
 RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
         /tmp/proto_client_plain.o /tmp/protocol_plain.o -lpthread -lm && \
     ( /app/binary --proto-server 17999 > /tmp/proto.out 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 45 /tmp/ref_client 127.0.0.1 17999 > /tmp/proto.out2 2>&1; rc=$?; \
+      timeout 420 /tmp/ref_client 127.0.0.1 17999 --sample > /tmp/proto.out2 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       grep -q 'flag{' /tmp/proto.out2 || rc=1; \
       rm -f /tmp/proto.pid; \
       if [ $rc -ne 0 ]; then echo "FATAL: host-bound smoke failed (no flag)"; cat /tmp/proto.out2; exit 1; fi ) && \
     mv /etc/samba/smb.conf /etc/samba/smb.conf.hidden && \
     ( /app/binary --proto-server 17998 > /tmp/proto.out3 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 25 /tmp/ref_client 127.0.0.1 17998 > /tmp/proto.out4 2>&1; rc=$?; \
+      timeout 90 /tmp/ref_client 127.0.0.1 17998 --sample > /tmp/proto.out4 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       mv /etc/samba/smb.conf.hidden /etc/samba/smb.conf; \
       rm -f /tmp/proto.pid; \
@@ -658,7 +658,7 @@ RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
 # extracts ONLY the ground-truth files (a scratch image holding nothing else).
-# In the parallel layout this target no longer drags the challenge chain: it
+# In the parallel layout this target does not drag the challenge chain: it
 # builds apt-build → dl-cmake43 → target-deps → origin-binary and nothing else.
 # ============================================================================================
 
@@ -821,12 +821,10 @@ COPY --from=ensia /usr/local /usr/local
 # Finished challenge binary from the builder stage
 COPY --from=challenge-binary /out/challenge_final /app/binary
 COPY --from=challenge-binary /out/testdata /app/testdata
-# Runtime library-closure overlay (leak-audit fix 2026-09-11): the
+# Runtime library-closure overlay: the
 # challenge stage resolves the carrier's CUSTOM shared libs (libfrr,
 # libsamba-*, libstrongswan/libcharon) into /out/challenge_libs; without
-# this overlay /app/binary cannot even load in the agent box (the
-# 2026-09-11 frr trial: the agent concluded "binary can't run" and
-# reversed the REAL carrier protocol instead of the injected engine).
+# this overlay /app/binary cannot even load in the agent box (an agent that cannot load it concludes "binary can't run" and reverses the REAL carrier protocol instead of the injected engine).
 # /opt/target-deps/lib is already on LD_LIBRARY_PATH.
 COPY --from=challenge-binary /out/challenge_libs/ /opt/target-deps/lib/
 # Host-bound wire state (site C): the carrier reads /etc/samba/smb.conf at

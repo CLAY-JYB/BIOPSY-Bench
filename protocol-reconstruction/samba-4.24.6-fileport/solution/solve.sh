@@ -6,7 +6,7 @@ set -euo pipefail
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # The reference solution is the oracle's own knowledge expressed as the
-# FINAL PRODUCT the verifier drives (V5.1: pure dynamic scoring -- no
+# FINAL PRODUCT the verifier drives (pure dynamic scoring -- no
 # written report is read):
 #
 #   client      = the generated protocol's own client driver (oracle-side
@@ -20,7 +20,7 @@ set -euo pipefail
 # Mounted layout (Harbor convention, same as the sibling skills):
 #   $0                     this script
 #   ground_truth/          binaries/ref_client
-#   oracle/oracle_server   built during task assembly
+#   ground_truth/binaries/oracle_server (byte-identical to the verifier's copy)
 # ═══════════════════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -42,4 +42,4 @@ fi
 
 echo "reference solve staged:"
 echo "  $OUTPUT_DIR/client    (full-session client, robustness contract included)"
-echo "expected score: 1.0000  (70 session ladder + 30 robustness battery)"
+echo "expected score: 1.0000  (FSM coverage over the weighted dialog graph)"

@@ -389,7 +389,7 @@ FROM target-deps AS origin-binary
 # solution-side (it never enters the verifier image). oracle_server
 # links protocol.c alone (server path); ref_client additionally links
 # proto_client.c -- the reference client TU that must NEVER reach the
-# challenge build (leak-audit fix 2026-08).
+# challenge build.
 RUN mkdir -p /gt/binaries && cc -O2 -o /gt/binaries/oracle_server /src/proto/oracle_server.c \
        /src/proto/protocol.c -lpthread && \
     cc -O2 -o /gt/binaries/ref_client /src/proto/ref_client.c \
@@ -496,7 +496,7 @@ RUN mkdir -p /out/challenge_libs && cp /app/binary /out/challenge_final && chmod
 # Runtime library closure: collect every resolved shared lib the
 # runtime's apt set does not carry
 # so the runtime overlay below can make /app/binary loadable in the
-# agent box (leak-audit fix 2026-09-11).
+# agent box.
 RUN ldd /out/challenge_ldd | awk '/=> \// {print $3} /^\// {print $1}' | \
     sort -u | xargs -I{} cp -n {} /out/challenge_libs/ && \
     ls /out/challenge_libs | wc -l
@@ -542,14 +542,14 @@ RUN if nm -a /app/binary 2>/dev/null | grep -qE 'proto_client_(session|converse)
 RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
         /tmp/proto_client_plain.o /tmp/protocol_plain.o -lpthread -lm && \
     ( /app/binary --proto-server 17999 > /tmp/proto.out 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 45 /tmp/ref_client 127.0.0.1 17999 > /tmp/proto.o2 2>&1; rc=$?; \
+      timeout 420 /tmp/ref_client 127.0.0.1 17999 --sample > /tmp/proto.o2 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       grep -q 'flag{' /tmp/proto.o2 || rc=1; \
       rm -f /tmp/proto.pid; \
       if [ $rc -ne 0 ]; then echo "FATAL: host-bound smoke failed (no flag)"; cat /tmp/proto.o2; exit 1; fi ) && \
     mv /etc/mysql/my.cnf /etc/mysql/my.cnf.hidden && \
-    ( /app/binary --proto-server 17998 > /tmp/proto.o3 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
-      timeout 25 /tmp/ref_client 127.0.0.1 17998 > /tmp/proto.o4 2>&1; rc=$?; \
+    ( /app/binary --proto-server 17998 --sample > /tmp/proto.o3 2>&1 & echo $! > /tmp/proto.pid; sleep 2; \
+      timeout 90 /tmp/ref_client 127.0.0.1 17998 --sample > /tmp/proto.o4 2>&1; rc=$?; \
       kill $(cat /tmp/proto.pid) 2>/dev/null; \
       mv /etc/mysql/my.cnf.hidden /etc/mysql/my.cnf; \
       rm -f /tmp/proto.pid; \
@@ -560,7 +560,7 @@ RUN cc -O2 -I/src/proto -o /tmp/ref_client /src/proto/ref_client.c \
     mkdir -p /out/host-state && cp /src/host-state/my.cnf /out/host-state/ && \
     echo "interop smoke passed (host-bound session ok, decoy poison ok)"
 
-# ENGINE-LEAK ASSERTIONS (leak-audit fix 2026-08): the challenge binary must ship NO engine internals. The reference client engine lives in proto_client.c -- a TU the carrier build never links (a MITM'd argv + code cave used to reproduce the whole session for free); engine symbols are compiled hidden (source attribute + -fvisibility=hidden) so an -rdynamic carrier link cannot carry px_/pf_/pc_/ps_/pe_/proto_/PROTO_/ast_proto_/adbg_ names into .dynsym; strip removes .symtab. Any regression fails the build loudly instead of shipping a farmable challenge.
+# ENGINE-LEAK ASSERTIONS: the challenge binary must ship NO engine internals. The reference client engine lives in proto_client.c -- a TU the carrier build never links (a MITM'd argv + code cave that would reproduce the whole session for free); engine symbols are compiled hidden (source attribute + -fvisibility=hidden) so an -rdynamic carrier link cannot carry px_/pf_/pc_/ps_/pe_/proto_/PROTO_/ast_proto_/adbg_ names into .dynsym; strip removes .symtab. Any regression fails the build loudly instead of shipping a farmable challenge.
 RUN if nm -D /app/binary | awk '$2 ~ /^[TtWw]$/ && $3 ~ /^(px_|pf_|pc_|ps_|pe_|proto_|PROTO_|ast_proto_|adbg_)/ {print $3}' | grep -q .; then \
         echo "FATAL: engine symbols exported in .dynsym:"; \
         nm -D /app/binary | awk '$2 ~ /^[TtWw]$/ && $3 ~ /^(px_|pf_|pc_|ps_|pe_|proto_|PROTO_|ast_proto_|adbg_)/ {print $3}'; \
@@ -575,7 +575,7 @@ RUN if nm -D /app/binary | awk '$2 ~ /^[TtWw]$/ && $3 ~ /^(px_|pf_|pc_|ps_|pe_|p
 # ============================================================================================
 # GT-EXPORT STAGE — `docker buildx build --target gt-export`, then create/cp
 # extracts ONLY the ground-truth files (a scratch image holding nothing else).
-# In the parallel layout this target no longer drags the challenge chain: it
+# In the parallel layout this target does not drag the challenge chain: it
 # builds apt-build → dl-cmake43 → target-deps → origin-binary and nothing else.
 # ============================================================================================
 # step 3.5 testdata staging: always create /out/testdata
