@@ -18,9 +18,9 @@ BIOPSY-Bench covers five scenarios. Across all five, we require **verifiable out
 
 ## Evaluation
 
-All tasks and agents share a single Claude Code scaffold. Performance is reported as pass@5 under a budget of two hours per attempt. Scoring is fully automated, with an oracle solution earning 1.0, a no-op solution earning 0.0, and anti-cheating invariants keeping the ground truth out of plaintext.
+All tasks and agents share a single Claude Code scaffold. Performance is reported as pass@5 under a budget of two hours per attempt. Scoring is fully automated and deterministic, with an oracle solution earning 1.0, a no-op solution earning 0.0, and anti-cheating invariants keeping the ground truth out of plaintext.
 
-On the current task set, agents score between **0.03 and 0.15**.
+On the current task set, six frontier models driven through the shared scaffold score between **0.01 and 0.03** per instance, at per-instance costs ranging from roughly **$2 to $12**. Higher spend buys only marginal gains.
 
 ![BIOPSY-Bench leaderboard](assets/leaderboard.png)
 
@@ -104,7 +104,7 @@ Every task directory shares the same core shape, with scenario-specific extras u
 
 ## Usage
 
-Every task directory ships as a self-contained [Harbor](https://github.com/harbor-framework/harbor) task package, so agents are evaluated with the standard Harbor workflow. To test your own agent against BIOPSY-Bench, install Harbor and point it at a scenario directory or an individual task:
+Every task directory ships as a self-contained [Harbor](https://github.com/harbor-framework/harbor) task package, so agents are evaluated with the standard Harbor workflow. To test your own agent against BIOPSY-Bench, install Harbor and point it at a scenario directory or an individual task.
 
 ```bash
 harbor run --dataset <scenario-or-task-directory> --agent <agent> --model <model>
