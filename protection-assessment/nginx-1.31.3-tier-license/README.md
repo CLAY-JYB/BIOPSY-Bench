@@ -4,7 +4,7 @@ Operator-facing task card. This card never enters the agent image, and the detai
 
 ## Overview
 
-| Attribute           | Value                |
+| Attribute | Value |
 |---------------------|----------------------|
 | **Task ID**         | nginx-1.31.3-tier-license          |
 | **Domain**          | protection assessment |
@@ -31,13 +31,13 @@ This challenge instantiates a filed construction case. The filing records the fo
 
 The challenge composes independent protection axes. This task's values are recorded on this card as `P#D#O#I#` plus the A level.
 
-| Axis  | Covers                                                                                                        |
+| Axis | Covers |
 |-------|---------------------------------------------------------------------------------------------------------------|
-| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048)     |
-| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer                                        |
+| **A** | verification algorithm with tiers tutorial (CRC32), easy (RC4), medium (AES), hard (RSA-512), and expert (RSA-2048) |
+| **P** | packing with options none, UPX, UPX+stealth, hARMless, PageGuard, and multi-layer |
 | **D** | anti-debug with tiers none, basic, standard, and advanced. Advanced means many probes including frida detection and a self-ptrace DebugBlocker |
-| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum                                   |
-| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards                       |
+| **O** | obfuscation with tiers none, simple, medium, complex, VM virtualization, and maximum |
+| **I** | interdependency with tiers linear, simple circular, advanced circular, and extreme circular guards |
 
 **This task** is `A5 P2D2O3I3`. It has an expert algorithm (A5), stealth UPX packing (P2), standard anti-debug (D2) with DebugBlocker (D3), real xollvm obfuscation (O3), and an all-to-all interlock that binds the anti-debug into the checksum mesh (I3). The current four-band law (reference/levels.md) derives **expert** for this stack because `I3` is an all-to-all interlock.
 
@@ -72,10 +72,10 @@ A stub that prints the flag regardless of input is not a valid deliverable, and 
 
 ## Evaluation
 
-| Category             | Points | Type    | Action                                            |
+| Category | Points | Type | Action |
 |----------------------|--------|---------|---------------------------------------------------|
-| License verification | 50     | dynamic | the derived key actually validates against the binary |
-| Property validation  | 50     | dynamic | the defeat binaries genuinely carry the defeats  |
+| License verification | 50 | dynamic | the derived key actually validates against the binary |
+| Property validation | 50 | dynamic | the defeat binaries genuinely carry the defeats |
 
 - License verification (50, dynamic): the submitted key is fed to the binary with the privilege drop. Full marks require `flag{...}` and exit 0 together, and a rejected key earns partial credit for how deep it drives the verification chain in the oracle, capped at 20. The wrong-key control runs first: a submission whose wrong-key behavior no longer matches the original scores nothing.
 - Property validation (50, dynamic): order- and naming-free, matching the premise that protections have no fixed peel order. Any artifact in `binaries/` passing the full gate chain (real ELF with plausible code volume, not the original, still rejects wrong keys, reproduces the oracle flag) can earn the configured properties, and every surviving property item is an exact boolean, set-equality, or byte comparison. The score scales with the distinct properties covered out of the configured set.
@@ -88,23 +88,15 @@ A stub that prints the flag regardless of input is not a valid deliverable, and 
 The task source directory is as follows.
 
 ```
-README.md                      # this task card
-instruction.md                 # the agent-facing challenge (static by design)
-task.toml                      # harness metadata (id, difficulty, network policy)
-environment/                   # build context: the carrier source, protection build, the challenge binary
-tests/                         # the verifier (test.sh, ground truth, defeat properties)
-solution/                      # the reference solve + ground truth
+README.md # this task card instruction.md # the agent-facing challenge (static by design) task.toml # harness metadata (id, difficulty, network policy) environment/ # build context: the carrier source, protection build, the challenge binary tests/ # the verifier (test.sh, ground truth, defeat properties) solution/ # the reference solve + ground truth
 ```
 
 The challenge container at runtime is as follows.
 
 ```
-/app/
-└── binary                     # the protected challenge binary (read-only)
+/app/ └── binary # the protected challenge binary (read-only)
 
-/logs/artifacts/agent_output/  # the agent's writable deliverables (contract in instruction.md)
-├── input.txt
-└── binaries/                  # defeat-demonstrating binaries, any names
+/logs/artifacts/agent_output/ # the agent's writable deliverables (contract in instruction.md) ├── input.txt └── binaries/ # defeat-demonstrating binaries, any names
 ```
 
 The tool environment is disclosed to the agent in `instruction.md`. The installed inventory lives in `environment/Dockerfile` and in `reference/tools.md`.
